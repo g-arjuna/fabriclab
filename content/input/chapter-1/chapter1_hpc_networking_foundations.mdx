@@ -1,0 +1,1165 @@
+---
+title: "Chapter 1: HPC Networking Foundations"
+module: "Module 1 — RDMA and Transport Fundamentals"
+level: "Beginner"
+readingTime: "45–60 minutes"
+prerequisites: ["Basic networking (OSI model, Ethernet, IP routing)", "General data center familiarity"]
+version: "March 2026"
+---
+
+import { useState } from "react"
+
+{/* ============================================================
+    COMPONENT: CalloutBox
+    ============================================================ */}
+export const CalloutBox = ({ type = "info", title, children }) => {
+  const styles = {
+    info:    { bg: "#EFF6FF", border: "#3B82F6", text: "#1E40AF", label: "#1D4ED8" },
+    warning: { bg: "#FFFBEB", border: "#F59E0B", text: "#92400E", label: "#B45309" },
+    success: { bg: "#F0FDF4", border: "#22C55E", text: "#14532D", label: "#15803D" },
+    danger:  { bg: "#FEF2F2", border: "#EF4444", text: "#7F1D1D", label: "#B91C1C" },
+  }
+  const s = styles[type]
+  return (
+    <div style={{
+      background: s.bg,
+      borderLeft: `3px solid ${s.border}`,
+      borderRadius: "0 8px 8px 0",
+      padding: "14px 18px",
+      margin: "20px 0",
+      fontSize: "14px",
+      lineHeight: 1.65,
+      color: s.text,
+    }}>
+      {title && <strong style={{ color: s.label, display: "block", marginBottom: 4 }}>{title}</strong>}
+      {children}
+    </div>
+  )
+}
+
+{/* ============================================================
+    COMPONENT: SpecTable — clean two-column spec grid
+    ============================================================ */}
+export const SpecTable = ({ rows }) => (
+  <div style={{ margin: "16px 0", border: "0.5px solid #E5E7EB", borderRadius: 10, overflow: "hidden" }}>
+    {rows.map(([key, val], i) => (
+      <div key={i} style={{
+        display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+        padding: "9px 16px",
+        background: i % 2 === 0 ? "#FAFAFA" : "#FFFFFF",
+        borderBottom: i < rows.length - 1 ? "0.5px solid #F3F4F6" : "none",
+        gap: 16,
+      }}>
+        <span style={{ fontSize: 13, color: "#6B7280", flexShrink: 0 }}>{key}</span>
+        <span style={{ fontSize: 13, fontWeight: 500, textAlign: "right", color: "#111827" }}>{val}</span>
+      </div>
+    ))}
+  </div>
+)
+
+{/* ============================================================
+    COMPONENT: Pill — inline badge
+    ============================================================ */}
+export const Pill = ({ children, color = "blue" }) => {
+  const map = {
+    blue:   { bg: "#EFF6FF", color: "#1D4ED8" },
+    green:  { bg: "#F0FDF4", color: "#15803D" },
+    amber:  { bg: "#FFFBEB", color: "#B45309" },
+    gray:   { bg: "#F3F4F6", color: "#374151" },
+    purple: { bg: "#F5F3FF", color: "#6D28D9" },
+    teal:   { bg: "#F0FDFA", color: "#0F766E" },
+  }
+  const c = map[color] || map.blue
+  return (
+    <span style={{
+      background: c.bg, color: c.color,
+      fontSize: 11, fontWeight: 600, padding: "2px 8px",
+      borderRadius: 20, display: "inline-block", margin: "2px 2px",
+      letterSpacing: "0.02em",
+    }}>{children}</span>
+  )
+}
+
+{/* ============================================================
+    COMPONENT: MentalModelTable — enterprise vs HPC comparison
+    ============================================================ */}
+export const MentalModelTable = () => {
+  const rows = [
+    ["Latency target",     "1–10 ms acceptable",                    "Sub-2 µs required"],
+    ["Packet loss",        "Rare, recoverable with TCP",            "Zero tolerance — stalls entire job"],
+    ["Bandwidth",         "Shared, oversubscribed",                "Dedicated, non-blocking"],
+    ["Congestion mgmt",   "QoS queuing and dropping",              "Prevented — lossless fabric design"],
+    ["Switch role",       "Pure L2/L3 forwarding plane",           "Active compute (SHARP in-network)"],
+    ["NIC role",          "Commodity kernel-attached adapter",     "Active co-processor, kernel-bypassed"],
+    ["Primary protocol",  "TCP/IP",                                "RDMA, InfiniBand, RoCEv2"],
+    ["Topology",          "ECMP, spanning tree",                   "Fat-tree, rail-optimised, dragonfly"],
+  ]
+  return (
+    <div style={{ margin: "20px 0", overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: "#1E293B" }}>
+            <th style={{ padding: "10px 14px", textAlign: "left", color: "#94A3B8", fontWeight: 500, width: "22%" }}>Dimension</th>
+            <th style={{ padding: "10px 14px", textAlign: "left", color: "#94A3B8", fontWeight: 500 }}>Enterprise networking</th>
+            <th style={{ padding: "10px 14px", textAlign: "left", color: "#60A5FA", fontWeight: 500 }}>HPC / AI networking</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([dim, ent, hpc], i) => (
+            <tr key={i} style={{ background: i % 2 === 0 ? "#F8FAFC" : "#FFFFFF", borderBottom: "0.5px solid #E2E8F0" }}>
+              <td style={{ padding: "9px 14px", fontWeight: 500, color: "#374151", fontSize: 12 }}>{dim}</td>
+              <td style={{ padding: "9px 14px", color: "#6B7280" }}>{ent}</td>
+              <td style={{ padding: "9px 14px", color: "#1D4ED8", fontWeight: 500 }}>{hpc}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+{/* ============================================================
+    COMPONENT: AllReduceBarrier — animated step diagram
+    ============================================================ */}
+export const AllReduceBarrier = () => {
+  const [step, setStep] = useState(0)
+  const steps = [
+    {
+      label: "Step N — compute",
+      desc: "All 256 GPUs independently compute their local gradients on their batch of training data. They work in parallel — no communication needed yet.",
+      highlight: [0,1,2,3,4,5,6,7],
+      barColor: "#3B82F6",
+    },
+    {
+      label: "AllReduce begins",
+      desc: "Each GPU sends its local gradients to all other GPUs over InfiniBand. Every GPU is simultaneously sending and receiving — this is full bisection bandwidth utilisation.",
+      highlight: [0,1,2,3,4,5,6,7],
+      barColor: "#F59E0B",
+    },
+    {
+      label: "One GPU is slow",
+      desc: "GPU 5's NIC hits a congested switch port. Its gradients are delayed by a retransmission — just 200 microseconds extra. But 255 other GPUs are now idle at the barrier waiting.",
+      highlight: [5],
+      barColor: "#EF4444",
+    },
+    {
+      label: "Barrier stall — everyone waits",
+      desc: "Because AllReduce is a collective barrier, no GPU can proceed to Step N+1 until all GPUs have contributed. 255 GPU-hours idle. At 1000 steps/day, one bad port wastes ~72 GPU-hours daily.",
+      highlight: [0,1,2,3,4,6,7],
+      barColor: "#6B7280",
+    },
+    {
+      label: "Step N+1 — finally proceeds",
+      desc: "Once GPU 5's data finally arrives, all GPUs receive the summed gradients and can start the next step. The gap between HPC and enterprise latency requirements is now clear.",
+      highlight: [0,1,2,3,4,5,6,7],
+      barColor: "#22C55E",
+    },
+  ]
+  const s = steps[step]
+  return (
+    <div style={{ border: "0.5px solid #E5E7EB", borderRadius: 12, overflow: "hidden", margin: "20px 0" }}>
+      <div style={{ background: "#0F172A", padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "#94A3B8", fontSize: 12, fontFamily: "monospace" }}>AllReduce barrier — step-through</span>
+        <span style={{ color: "#475569", fontSize: 11 }}>{step + 1} / {steps.length}</span>
+      </div>
+      <div style={{ padding: "18px 20px" }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+          {[0,1,2,3,4,5,6,7].map(i => (
+            <div key={i} style={{
+              width: 44, height: 44, borderRadius: 8,
+              background: s.highlight.includes(i) ? s.barColor : "#F1F5F9",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 600,
+              color: s.highlight.includes(i) ? "#FFFFFF" : "#94A3B8",
+              transition: "background 0.3s, color 0.3s",
+              border: `1.5px solid ${s.highlight.includes(i) ? s.barColor : "#E2E8F0"}`,
+            }}>
+              GPU{i}
+            </div>
+          ))}
+        </div>
+        <div style={{
+          background: "#F8FAFC", borderRadius: 8, padding: "12px 14px",
+          marginBottom: 14, minHeight: 64,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", marginBottom: 4 }}>{s.label}</div>
+          <div style={{ fontSize: 13, color: "#4B5563", lineHeight: 1.6 }}>{s.desc}</div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setStep(Math.max(0, step - 1))}
+            disabled={step === 0}
+            style={{
+              padding: "7px 16px", fontSize: 13, border: "0.5px solid #D1D5DB",
+              borderRadius: 7, cursor: step === 0 ? "not-allowed" : "pointer",
+              background: "transparent", color: step === 0 ? "#D1D5DB" : "#374151",
+            }}
+          >← Previous</button>
+          <button
+            onClick={() => setStep(Math.min(steps.length - 1, step + 1))}
+            disabled={step === steps.length - 1}
+            style={{
+              padding: "7px 16px", fontSize: 13, border: "0.5px solid #D1D5DB",
+              borderRadius: 7, cursor: step === steps.length - 1 ? "not-allowed" : "pointer",
+              background: step === steps.length - 1 ? "transparent" : "#1E293B",
+              color: step === steps.length - 1 ? "#D1D5DB" : "#FFFFFF",
+            }}
+          >Next →</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+{/* ============================================================
+    COMPONENT: DGXGenerationExplorer — interactive spec tabs
+    ============================================================ */}
+export const DGXGenerationExplorer = () => {
+  const [active, setActive] = useState("h100")
+  const gens = {
+    a100: {
+      label: "DGX A100", year: "2020", color: "#6B7280",
+      badge: "HDR 200G",
+      rows: [
+        ["GPU", "8 × A100 SXM4 (80 GB HBM2e)"],
+        ["GPU memory total", "640 GB HBM2e"],
+        ["GPU–GPU interconnect", "NVSwitch gen2 — 600 GB/s per GPU"],
+        ["Network adapters", "8 × ConnectX-6"],
+        ["Fabric protocol", "HDR InfiniBand"],
+        ["Fabric speed per port", "200 Gb/s"],
+        ["Total fabric bandwidth", "1.6 Tb/s (8 × 200G)"],
+        ["Host CPUs", "2 × AMD EPYC 7742 (64-core)"],
+        ["System RAM", "2 TB DDR4"],
+        ["Form factor", "6U rackmount"],
+        ["Connector type", "QSFP56"],
+      ],
+      note: "First DGX with NVSwitch for all-to-all GPU connectivity. QSFP56 connectors — not compatible with OSFP on H100-era switches.",
+    },
+    h100: {
+      label: "DGX H100", year: "2022", color: "#3B82F6",
+      badge: "NDR 400G — current standard",
+      rows: [
+        ["GPU", "8 × H100 SXM5 (80 GB HBM3)"],
+        ["GPU memory total", "640 GB HBM3"],
+        ["GPU memory bandwidth", "3.35 TB/s per GPU"],
+        ["GPU–GPU interconnect", "NVSwitch gen3 — 900 GB/s per GPU"],
+        ["Network adapters", "8 × ConnectX-7"],
+        ["Fabric protocol", "NDR InfiniBand or 400GbE (VPI)"],
+        ["Fabric speed per port", "400 Gb/s NDR"],
+        ["Total fabric bandwidth", "3.2 Tb/s (8 × 400G)"],
+        ["Host CPUs", "2 × Intel Xeon Platinum 8480C (56-core)"],
+        ["System RAM", "2 TB DDR5"],
+        ["Form factor", "8U rackmount"],
+        ["Connector type", "OSFP"],
+        ["Storage", "30 TB NVMe (30 × 1TB U.2)"],
+      ],
+      note: "VPI (Virtual Protocol Interconnect) — ConnectX-7 can run IB or Ethernet, selected at firmware level. Doubles A100 per-port bandwidth.",
+    },
+    h200: {
+      label: "DGX H200", year: "2024", color: "#8B5CF6",
+      badge: "NDR 400G + HBM3e",
+      rows: [
+        ["GPU", "8 × H200 SXM5 (141 GB HBM3e)"],
+        ["GPU memory total", "1,128 GB HBM3e"],
+        ["GPU memory bandwidth", "4.8 TB/s per GPU"],
+        ["GPU–GPU interconnect", "NVSwitch gen3 (same as H100)"],
+        ["Network adapters", "8 × ConnectX-7 + 2 × BlueField-3 DPU"],
+        ["Fabric protocol", "NDR InfiniBand / 400GbE"],
+        ["Fabric speed per port", "400 Gb/s NDR"],
+        ["Total fabric bandwidth", "3.2 Tb/s (same fabric as H100)"],
+        ["Host CPUs", "2 × Intel Xeon Platinum 8480C"],
+        ["System RAM", "2 TB DDR5"],
+        ["Key upgrade vs H100", "76% more GPU memory — larger models fit per node"],
+      ],
+      note: "Fabric architecture identical to H100. H100 and H200 nodes are interchangeable in the same QM9700 leaf switch fabric. BlueField-3 DPUs enable storage/security offload.",
+    },
+    b200: {
+      label: "DGX B200", year: "2025", color: "#10B981",
+      badge: "NDR→XDR transition",
+      rows: [
+        ["GPU", "8 × B200 SXM6 (180 GB HBM3e)"],
+        ["GPU memory total", "1,440 GB HBM3e"],
+        ["GPU memory bandwidth", "8 TB/s per GPU"],
+        ["GPU–GPU interconnect", "NVSwitch gen4 — 1,800 GB/s per GPU"],
+        ["Network adapters", "8 × ConnectX-7 (NDR) or ConnectX-8 (XDR)"],
+        ["Fabric speed — NDR config", "400 Gb/s (backward compat with QM9700)"],
+        ["Fabric speed — XDR config", "800 Gb/s (requires Q3400 switches)"],
+        ["Total fabric BW — XDR", "6.4 Tb/s (8 × 800G)"],
+        ["Training vs H100", "~3× faster training, ~15× faster inference"],
+        ["Form factor", "8U air-cooled or GB200 NVL72 liquid-cooled"],
+      ],
+      note: "Ships with either ConnectX-7 (NDR, connects to existing QM9700 fabric) or ConnectX-8 (XDR, requires new Q3400 switches). GB200 NVL72 is a full liquid-cooled rack with 72 GPUs sharing NVLink internally.",
+    },
+  }
+  const g = gens[active]
+  return (
+    <div style={{ border: "0.5px solid #E5E7EB", borderRadius: 12, overflow: "hidden", margin: "20px 0" }}>
+      <div style={{ background: "#0F172A", padding: "0 0 0 0" }}>
+        <div style={{ display: "flex", gap: 0 }}>
+          {Object.entries(gens).map(([k, v]) => (
+            <button key={k} onClick={() => setActive(k)} style={{
+              padding: "12px 20px", fontSize: 13, fontWeight: 500,
+              background: active === k ? v.color : "transparent",
+              color: active === k ? "#FFFFFF" : "#64748B",
+              border: "none", cursor: "pointer",
+              borderBottom: active === k ? `2px solid ${v.color}` : "2px solid transparent",
+              transition: "all 0.15s",
+            }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ padding: "16px 20px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <span style={{
+            background: g.color, color: "#FFFFFF",
+            fontSize: 11, fontWeight: 700, padding: "3px 10px",
+            borderRadius: 20, letterSpacing: "0.03em",
+          }}>{g.badge}</span>
+          <span style={{ fontSize: 12, color: "#9CA3AF" }}>Released {g.year}</span>
+        </div>
+        <SpecTable rows={g.rows} />
+        <div style={{
+          background: "#F8FAFC", borderLeft: `3px solid ${g.color}`,
+          borderRadius: "0 6px 6px 0", padding: "10px 14px",
+          fontSize: 13, color: "#374151", lineHeight: 1.6,
+        }}>
+          <strong style={{ color: g.color }}>Networking note: </strong>{g.note}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+{/* ============================================================
+    COMPONENT: NICExplorer — HCA / NIC / ConnectX detail cards
+    ============================================================ */}
+export const NICExplorer = () => {
+  const [active, setActive] = useState(null)
+  const cards = [
+    {
+      id: "hca",
+      title: "HCA",
+      subtitle: "Host Channel Adapter",
+      color: "#3B82F6",
+      pills: ["InfiniBand native", "Queue Pairs", "RDMA verbs", "Credit-based FC"],
+      body: "When a ConnectX adapter is configured for InfiniBand it is called an HCA. It speaks IB protocol natively — with LIDs, GIDs, Queue Pairs, and RDMA verbs. All protocol processing happens in hardware: no CPU involvement in the data path. The HCA manages its own memory registration, QP state machines, and credit-based flow control. ibstat and ibnetdiscover see it as an HCA in the fabric topology.",
+    },
+    {
+      id: "nic",
+      title: "NIC / SuperNIC",
+      subtitle: "Ethernet / RoCEv2 mode",
+      color: "#8B5CF6",
+      pills: ["Ethernet / RoCEv2", "BlueField DPU", "DOCA offload", "Multi-tenant"],
+      body: "The same ConnectX hardware in Ethernet mode is a NIC — it speaks standard Ethernet but supports RDMA via RoCEv2. BlueField-3 is a 'SuperNIC' with an embedded 16-core Arm CPU running DOCA software. It offloads OVS, NVMe-oF storage, TLS/IPsec, firewall, and telemetry entirely from the host. The host sees a standard network interface; the DPU handles complex workloads independently.",
+    },
+    {
+      id: "cx7",
+      title: "ConnectX-7",
+      subtitle: "NDR 400G — current gen",
+      color: "#0EA5E9",
+      pills: ["400G NDR", "OSFP", "PCIe 4/5", "GPUDirect RDMA", "VPI dual-mode"],
+      body: "Part: MCX75310AAS-HEAT. Single-port OSFP at 400 Gb/s NDR InfiniBand or 400GbE. VPI — mode is software-selectable between IB and Ethernet. PCIe Gen 4/5 x16. GPUDirect RDMA: DMA directly to/from GPU HBM memory. SHARP v3 in-network compute. Adaptive routing per-packet or per-flow. Backward compat: NDR200 dual-port 200G mode. Ships in DGX H100 and H200.",
+    },
+    {
+      id: "cx8",
+      title: "ConnectX-8",
+      subtitle: "XDR 800G — Blackwell era",
+      color: "#10B981",
+      pills: ["800G XDR", "PCIe Gen 6", "Built-in PCIe switch", "SocketDirect", "Quantum-X800"],
+      body: "First 800G dual-protocol SuperNIC. Single-port OSFP224. PCIe Gen 6 x16 with integrated PCIe Gen 6 switch (48 lanes behind the x16 connector — eliminates external PCIe switch chips). SocketDirect variant (C8180 ST0) connects a single NIC to 2 host CPUs via dual x16. Fully backward compatible to NDR/HDR/EDR. Ships in GB200 NVL72. Pairs with Quantum-X800 Q3400 for end-to-end 800G.",
+    },
+  ]
+  return (
+    <div style={{ margin: "20px 0" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+        {cards.map(c => (
+          <div
+            key={c.id}
+            onClick={() => setActive(active === c.id ? null : c.id)}
+            style={{
+              border: `${active === c.id ? "1.5px" : "0.5px"} solid ${active === c.id ? c.color : "#E5E7EB"}`,
+              borderRadius: 10, padding: "14px 16px", cursor: "pointer",
+              background: active === c.id ? `${c.color}08` : "#FFFFFF",
+              transition: "all 0.15s",
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 2 }}>{c.title}</div>
+            <div style={{ fontSize: 12, color: "#6B7280" }}>{c.subtitle}</div>
+            <div style={{ marginTop: 8 }}>
+              {c.pills.slice(0, 2).map(p => (
+                <span key={p} style={{
+                  background: `${c.color}15`, color: c.color,
+                  fontSize: 10, fontWeight: 600, padding: "2px 7px",
+                  borderRadius: 10, marginRight: 4,
+                }}>{p}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {active && (() => {
+        const c = cards.find(x => x.id === active)
+        return (
+          <div style={{
+            border: `1.5px solid ${c.color}`,
+            borderRadius: 10, padding: "16px 18px",
+            background: `${c.color}06`,
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: c.color, marginBottom: 6 }}>{c.title} — {c.subtitle}</div>
+            <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.7, marginBottom: 10 }}>{c.body}</div>
+            <div>{c.pills.map(p => (
+              <span key={p} style={{
+                background: `${c.color}15`, color: c.color,
+                fontSize: 11, fontWeight: 600, padding: "2px 8px",
+                borderRadius: 12, marginRight: 4, marginBottom: 4, display: "inline-block",
+              }}>{p}</span>
+            ))}</div>
+          </div>
+        )
+      })()}
+    </div>
+  )
+}
+
+{/* ============================================================
+    COMPONENT: RDMAPipelineDiagram — the 7-step data path
+    ============================================================ */}
+export const RDMAPipelineDiagram = () => {
+  const [active, setActive] = useState(null)
+  const steps = [
+    { n: 1, label: "GPU kernel finishes", detail: "H100 GPU computes a gradient tensor. Result lives in GPU HBM memory at a registered address. NCCL (NVIDIA Collective Comms Library) is waiting for this completion.", color: "#8B5CF6" },
+    { n: 2, label: "Post Work Request", detail: "NCCL calls ibv_post_send() — posting a Work Request to the HCA's Send Queue. This is the only CPU involvement in the data transfer. The WR specifies: remote address, local address, operation type (RDMA Write).", color: "#3B82F6" },
+    { n: 3, label: "HCA DMA from GPU", detail: "ConnectX-7 HCA receives the Work Request. It performs GPUDirect RDMA — DMA-ing the tensor directly from GPU HBM memory via PCIe. No CPU copy. No system RAM involvement. The HCA has its own DMA engine.", color: "#0EA5E9" },
+    { n: 4, label: "Packetise + flow control", detail: "HCA packetises the data into InfiniBand packets, adds BTH/LRH/GRH headers, checks available credits on the QP (credit-based flow control). If credits available, transmits immediately.", color: "#06B6D4" },
+    { n: 5, label: "400G NDR transmission", detail: "Packets leave the OSFP port at 400 Gb/s. Sub-2 microsecond from Work Request post to first byte on wire. The InfiniBand fabric routes packets with sub-100ns per-hop latency.", color: "#10B981" },
+    { n: 6, label: "Remote HCA writes to GPU", detail: "The remote ConnectX-7 on the destination DGX node receives packets. It DMA-writes the tensor directly into the remote GPU's HBM memory. The remote CPU is never involved.", color: "#F59E0B" },
+    { n: 7, label: "Work Completion posted", detail: "Remote HCA posts a Work Completion to the Completion Queue. NCCL on the sender polls the CQ, sees completion, marks this rank's AllReduce contribution as done. Next step can proceed.", color: "#EF4444" },
+  ]
+  return (
+    <div style={{ margin: "20px 0", border: "0.5px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ background: "#0F172A", padding: "12px 18px" }}>
+        <span style={{ color: "#94A3B8", fontSize: 12, fontFamily: "monospace" }}>RDMA data path — click any step to expand</span>
+      </div>
+      <div style={{ padding: "14px 16px" }}>
+        {steps.map((s, i) => (
+          <div key={s.n}>
+            <div
+              onClick={() => setActive(active === s.n ? null : s.n)}
+              style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "10px 12px", borderRadius: 8, cursor: "pointer",
+                background: active === s.n ? `${s.color}10` : "transparent",
+                transition: "background 0.15s",
+              }}
+            >
+              <div style={{
+                width: 28, height: 28, borderRadius: "50%",
+                background: s.color, color: "#FFFFFF",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 12, fontWeight: 700, flexShrink: 0,
+              }}>{s.n}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>{s.label}</div>
+              <div style={{ marginLeft: "auto", color: "#9CA3AF", fontSize: 12 }}>{active === s.n ? "▲" : "▼"}</div>
+            </div>
+            {active === s.n && (
+              <div style={{
+                margin: "4px 52px 8px",
+                background: `${s.color}08`,
+                border: `1px solid ${s.color}30`,
+                borderRadius: 8, padding: "10px 14px",
+                fontSize: 13, color: "#374151", lineHeight: 1.65,
+              }}>{s.detail}</div>
+            )}
+            {i < steps.length - 1 && (
+              <div style={{ width: 1, height: 8, background: "#E5E7EB", margin: "0 0 0 25px" }} />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+{/* ============================================================
+    COMPONENT: ThreeNetworkDiagram — SVG architecture overview
+    ============================================================ */}
+export const ThreeNetworkDiagram = () => (
+  <div style={{ margin: "20px 0", border: "0.5px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+    <div style={{ background: "#0F172A", padding: "12px 18px" }}>
+      <span style={{ color: "#94A3B8", fontSize: 12, fontFamily: "monospace" }}>Three-network architecture — DGX BasePOD / SuperPOD</span>
+    </div>
+    <svg width="100%" viewBox="0 0 680 380" style={{ display: "block" }}>
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </marker>
+      </defs>
+
+      {/* DGX node block */}
+      <rect x="30" y="60" width="160" height="260" rx="12" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="0.5"/>
+      <text x="110" y="88" textAnchor="middle" fontSize="12" fontWeight="600" fill="#374151">DGX H100 node</text>
+      {[0,1,2,3,4,5,6,7].map(i => (
+        <rect key={i} x="46" y={104 + i*25} width="128" height="18" rx="4"
+          fill={i < 4 ? "#EFF6FF" : "#F0FDF4"} stroke={i < 4 ? "#93C5FD" : "#86EFAC"} strokeWidth="0.5"/>
+      ))}
+      {[0,1,2,3,4,5,6,7].map(i => (
+        <text key={i} x="110" y={117 + i*25} textAnchor="middle" fontSize="10" fill={i < 4 ? "#1D4ED8" : "#15803D"}>
+          {`GPU${i} + ConnectX-7`}
+        </text>
+      ))}
+
+      {/* Compute fabric switches */}
+      <rect x="260" y="50" width="140" height="130" rx="10" fill="#EFF6FF" stroke="#3B82F6" strokeWidth="1"/>
+      <text x="330" y="78" textAnchor="middle" fontSize="12" fontWeight="600" fill="#1D4ED8">Compute fabric</text>
+      <text x="330" y="96" textAnchor="middle" fontSize="11" fill="#3B82F6">InfiniBand / RoCEv2</text>
+      <rect x="274" y="108" width="112" height="28" rx="6" fill="#DBEAFE" stroke="#93C5FD" strokeWidth="0.5"/>
+      <text x="330" y="126" textAnchor="middle" fontSize="11" fontWeight="500" fill="#1E40AF">QM9700 (NDR 400G)</text>
+      <rect x="274" y="142" width="112" height="28" rx="6" fill="#DBEAFE" stroke="#93C5FD" strokeWidth="0.5"/>
+      <text x="330" y="160" textAnchor="middle" fontSize="11" fontWeight="500" fill="#1E40AF">Q3400 spine (XDR)</text>
+
+      {/* Storage fabric */}
+      <rect x="260" y="200" width="140" height="90" rx="10" fill="#F0FDF4" stroke="#22C55E" strokeWidth="1"/>
+      <text x="330" y="225" textAnchor="middle" fontSize="12" fontWeight="600" fill="#15803D">Storage fabric</text>
+      <text x="330" y="243" textAnchor="middle" fontSize="11" fill="#16A34A">400GbE / RoCEv2</text>
+      <rect x="274" y="252" width="112" height="28" rx="6" fill="#DCFCE7" stroke="#86EFAC" strokeWidth="0.5"/>
+      <text x="330" y="270" textAnchor="middle" fontSize="11" fontWeight="500" fill="#166534">SN4600C / SN5600</text>
+
+      {/* Management network */}
+      <rect x="260" y="310" width="140" height="50" rx="10" fill="#F3F4F6" stroke="#9CA3AF" strokeWidth="0.5"/>
+      <text x="330" y="332" textAnchor="middle" fontSize="12" fontWeight="600" fill="#374151">Management OOB</text>
+      <text x="330" y="350" textAnchor="middle" fontSize="11" fill="#6B7280">1GbE / 10GbE</text>
+
+      {/* Right side — destinations */}
+      <rect x="470" y="50" width="140" height="50" rx="8" fill="#DBEAFE" stroke="#93C5FD" strokeWidth="0.5"/>
+      <text x="540" y="70" textAnchor="middle" fontSize="11" fontWeight="500" fill="#1E40AF">Other DGX nodes</text>
+      <text x="540" y="88" textAnchor="middle" fontSize="10" fill="#3B82F6">AllReduce collectives</text>
+
+      <rect x="470" y="120" width="140" height="50" rx="8" fill="#DBEAFE" stroke="#93C5FD" strokeWidth="0.5"/>
+      <text x="540" y="140" textAnchor="middle" fontSize="11" fontWeight="500" fill="#1E40AF">Other DGX nodes</text>
+      <text x="540" y="158" textAnchor="middle" fontSize="10" fill="#3B82F6">Tensor transfers</text>
+
+      <rect x="470" y="205" width="140" height="50" rx="8" fill="#DCFCE7" stroke="#86EFAC" strokeWidth="0.5"/>
+      <text x="540" y="225" textAnchor="middle" fontSize="11" fontWeight="500" fill="#166534">Parallel storage</text>
+      <text x="540" y="243" textAnchor="middle" fontSize="10" fill="#16A34A">BeeGFS / WEKA / VAST</text>
+
+      <rect x="470" y="310" width="140" height="50" rx="8" fill="#F3F4F6" stroke="#D1D5DB" strokeWidth="0.5"/>
+      <text x="540" y="330" textAnchor="middle" fontSize="11" fontWeight="500" fill="#374151">BCM / UFM / IPMI</text>
+      <text x="540" y="348" textAnchor="middle" fontSize="10" fill="#6B7280">Cluster management</text>
+
+      {/* Arrows — node to switches */}
+      <line x1="190" y1="115" x2="258" y2="100" stroke="#3B82F6" strokeWidth="1.5" markerEnd="url(#arr)"/>
+      <line x1="190" y1="145" x2="258" y2="130" stroke="#3B82F6" strokeWidth="1.5" markerEnd="url(#arr)"/>
+      <line x1="190" y1="215" x2="258" y2="240" stroke="#22C55E" strokeWidth="1.5" markerEnd="url(#arr)"/>
+      <line x1="190" y1="280" x2="258" y2="280" stroke="#22C55E" strokeWidth="1.5" markerEnd="url(#arr)"/>
+      <line x1="190" y1="320" x2="258" y2="330" stroke="#9CA3AF" strokeWidth="1" markerEnd="url(#arr)"/>
+
+      {/* Arrows — switches to destinations */}
+      <line x1="400" y1="85" x2="468" y2="75" stroke="#3B82F6" strokeWidth="1.5" markerEnd="url(#arr)"/>
+      <line x1="400" y1="120" x2="468" y2="145" stroke="#3B82F6" strokeWidth="1.5" markerEnd="url(#arr)"/>
+      <line x1="400" y1="240" x2="468" y2="235" stroke="#22C55E" strokeWidth="1.5" markerEnd="url(#arr)"/>
+      <line x1="400" y1="335" x2="468" y2="335" stroke="#9CA3AF" strokeWidth="1" markerEnd="url(#arr)"/>
+
+      {/* Warning label */}
+      <rect x="30" y="330" width="160" height="38" rx="6" fill="#FEF3C7" stroke="#F59E0B" strokeWidth="0.5"/>
+      <text x="110" y="347" textAnchor="middle" fontSize="10" fontWeight="600" fill="#92400E">Never cross-connect these</text>
+      <text x="110" y="361" textAnchor="middle" fontSize="10" fill="#B45309">networks — PFC deadlock risk</text>
+    </svg>
+  </div>
+)
+
+{/* ============================================================
+    COMPONENT: DGXInternalDiagram — node anatomy SVG
+    ============================================================ */}
+export const DGXInternalDiagram = () => (
+  <div style={{ margin: "20px 0", border: "0.5px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+    <div style={{ background: "#0F172A", padding: "12px 18px" }}>
+      <span style={{ color: "#94A3B8", fontSize: 12, fontFamily: "monospace" }}>DGX H100 — internal rail-optimised architecture</span>
+    </div>
+    <svg width="100%" viewBox="0 0 680 400" style={{ display: "block" }}>
+      <defs>
+        <marker id="arrInt" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </marker>
+      </defs>
+
+      {/* Outer chassis */}
+      <rect x="20" y="20" width="640" height="360" rx="14" fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="1"/>
+      <text x="340" y="48" textAnchor="middle" fontSize="13" fontWeight="600" fill="#1E293B">DGX H100 — 8 GPUs, 4 × NVSwitch gen3, 8 × ConnectX-7</text>
+
+      {/* NVSwitch block */}
+      <rect x="230" y="68" width="220" height="44" rx="8" fill="#EDE9FE" stroke="#8B5CF6" strokeWidth="1"/>
+      <text x="340" y="87" textAnchor="middle" fontSize="12" fontWeight="600" fill="#5B21B6">4 × NVSwitch gen3</text>
+      <text x="340" y="103" textAnchor="middle" fontSize="10" fill="#7C3AED">900 GB/s per GPU — all-to-all non-blocking</text>
+
+      {/* GPUs */}
+      {[0,1,2,3,4,5,6,7].map(i => {
+        const x = 36 + i * 76
+        return (
+          <g key={i}>
+            <rect x={x} y={152} width={64} height={40} rx={6} fill="#EFF6FF" stroke="#3B82F6" strokeWidth="0.5"/>
+            <text x={x+32} y={167} textAnchor="middle" fontSize={10} fontWeight={600} fill="#1D4ED8">GPU {i}</text>
+            <text x={x+32} y={182} textAnchor="middle" fontSize={9} fill="#3B82F6">H100 SXM5</text>
+            {/* NVSwitch uplink */}
+            <line x1={x+32} y1={152} x2={270 + Math.min(i, 3)*25} y2={112}
+              stroke="#8B5CF6" strokeWidth="1" fill="none" markerEnd="url(#arrInt)"/>
+          </g>
+        )
+      })}
+
+      {/* ConnectX-7 NICs */}
+      {[0,1,2,3,4,5,6,7].map(i => {
+        const x = 36 + i * 76
+        return (
+          <g key={i}>
+            <rect x={x} y={244} width={64} height={36} rx={6} fill="#F0FDF4" stroke="#22C55E" strokeWidth="0.5"/>
+            <text x={x+32} y={258} textAnchor="middle" fontSize={9} fontWeight={600} fill="#15803D">CX-7</text>
+            <text x={x+32} y={271} textAnchor="middle" fontSize={9} fill="#16A34A">400G</text>
+            {/* PCIe link to GPU */}
+            <line x1={x+32} y1={244} x2={x+32} y2={192}
+              stroke="#6B7280" strokeWidth="1" strokeDasharray="3 2" fill="none" markerEnd="url(#arrInt)"/>
+          </g>
+        )
+      })}
+
+      {/* Rail labels */}
+      {[0,1,2,3,4,5,6,7].map(i => {
+        const x = 36 + i * 76
+        return (
+          <g key={i}>
+            {/* Dashed cable to fabric */}
+            <line x1={x+32} y1={280} x2={x+32} y2={330}
+              stroke="#22C55E" strokeWidth="1.5" strokeDasharray="4 2" fill="none" markerEnd="url(#arrInt)"/>
+            <rect x={x+2} y={334} width={60} height={22} rx={4} fill="#DCFCE7" stroke="#86EFAC" strokeWidth="0.5"/>
+            <text x={x+32} y={349} textAnchor="middle" fontSize={9} fontWeight={500} fill="#166534">Rail {i}</text>
+          </g>
+        )
+      })}
+
+      <text x="340" y="375" textAnchor="middle" fontSize="10" fill="#6B7280">Each rail connects to a different QM9700 leaf switch — 8 independent paths to the fabric</text>
+    </svg>
+  </div>
+)
+
+{/* ============================================================
+    COMPONENT: SwitchExplorer — interactive switch cards
+    ============================================================ */}
+export const SwitchExplorer = () => {
+  const [active, setActive] = useState("qm9700")
+  const switches = {
+    qm9700: {
+      label: "QM9700 / QM9790",
+      sub: "Quantum-2 NDR — leaf switch",
+      color: "#3B82F6",
+      badge: "NDR 400G",
+      rows: [
+        ["Port count", "40 × OSFP (400 Gb/s NDR IB each)"],
+        ["Total switching capacity", "16 Tb/s"],
+        ["Latency", "90 ns port-to-port"],
+        ["Routing algorithms", "FTREE, MINHOP, DFSSSP, SSSP"],
+        ["Adaptive routing", "Per-packet or per-flow AR"],
+        ["SHARP version", "SHARP v3 in-network compute"],
+        ["OS", "MLNX-OS (QM9700) / unmanaged (QM9790)"],
+        ["Form factor", "1U"],
+        ["In SuperPOD role", "8 × leaf switches (one per GPU rail)"],
+      ],
+      note: "The workhorse leaf switch for DGX H100/H200 SuperPOD. One QM9700 per GPU rail — 32 downlinks to DGX NICs, remaining ports as spine uplinks.",
+    },
+    q3400: {
+      label: "Q3400-RA",
+      sub: "Quantum-X800 XDR — spine switch",
+      color: "#8B5CF6",
+      badge: "XDR 800G",
+      rows: [
+        ["Physical cages", "72 OSFP"],
+        ["Logical port count", "144 × 800G (2 ports per cage)"],
+        ["Total switching capacity", "115.2 Tb/s"],
+        ["Port SerDes", "200 Gbps per lane (4 lanes per 800G port)"],
+        ["Latency", "Sub-100 ns port-to-port"],
+        ["SHARP version", "SHARP v4 — 14.4 TFLOPS in-network compute"],
+        ["SHARP improvement", "9× more compute vs NDR SHARP v3"],
+        ["Max cluster scale", "10,368 ConnectX-8 NICs (2-level fat-tree)"],
+        ["Form factor", "4U"],
+        ["Dedicated mgmt port", "Yes — separate OOB management"],
+      ],
+      note: "SHARP v4 can perform AllReduce reductions inside the switch fabric — up to 50% reduction in AllReduce communication time at scale. 9× more in-network compute than the QM9700.",
+    },
+    sn5600: {
+      label: "SN5600",
+      sub: "Spectrum-X800 — Ethernet AI fabric",
+      color: "#10B981",
+      badge: "800G Ethernet",
+      rows: [
+        ["Port count", "64 × OSFP (800G each)"],
+        ["Total switching capacity", "51.2 Tb/s"],
+        ["Protocol", "Ethernet / RoCEv2"],
+        ["Adaptive routing", "Per-packet AR (NVIDIA proprietary)"],
+        ["Congestion control", "Advanced ECN, per-flow marking"],
+        ["OS", "Onyx or SONiC"],
+        ["Multi-tenant", "Traffic isolation for shared clusters"],
+        ["Use case", "Spectrum-X800 AI fabric — RoCEv2 vs IB"],
+      ],
+      note: "Spectrum-X is NVIDIA's Ethernet-based alternative to InfiniBand for AI workloads. Eliminates ECMP hash imbalance via proprietary adaptive routing. Paired with ConnectX-7/8 in RoCEv2 mode.",
+    },
+    sn4600c: {
+      label: "SN4600C",
+      sub: "Spectrum — storage and management",
+      color: "#F59E0B",
+      badge: "400GbE",
+      rows: [
+        ["Port count", "64 × OSFP (400G) or 128 × 200G"],
+        ["Total capacity", "25.6 Tb/s"],
+        ["Protocol", "Ethernet"],
+        ["OS", "Onyx or Cumulus Linux"],
+        ["Use case", "Storage fabric + management network"],
+        ["Storage integration", "BeeGFS, WEKA, VAST, NetApp, DDN"],
+        ["GPUDirect Storage", "Supports GDS over RoCEv2"],
+        ["In BasePOD role", "Storage + OOB management switch"],
+      ],
+      note: "The recommended storage and management switch in the DGX BasePOD reference architecture. Separate from compute fabric — never mix compute RDMA traffic onto this switch.",
+    },
+  }
+  const sw = switches[active]
+  return (
+    <div style={{ border: "0.5px solid #E5E7EB", borderRadius: 12, overflow: "hidden", margin: "20px 0" }}>
+      <div style={{ background: "#0F172A", display: "flex" }}>
+        {Object.entries(switches).map(([k, v]) => (
+          <button key={k} onClick={() => setActive(k)} style={{
+            padding: "11px 16px", fontSize: 12, fontWeight: 500,
+            background: active === k ? v.color : "transparent",
+            color: active === k ? "#FFFFFF" : "#64748B",
+            border: "none", cursor: "pointer",
+            borderBottom: active === k ? `2px solid ${v.color}` : "2px solid transparent",
+            transition: "all 0.15s", whiteSpace: "nowrap",
+          }}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+      <div style={{ padding: "16px 20px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <span style={{
+            background: sw.color, color: "#FFFFFF",
+            fontSize: 11, fontWeight: 700, padding: "3px 10px",
+            borderRadius: 20,
+          }}>{sw.badge}</span>
+          <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{sw.sub}</span>
+        </div>
+        <SpecTable rows={sw.rows} />
+        <div style={{
+          background: "#F8FAFC", borderLeft: `3px solid ${sw.color}`,
+          borderRadius: "0 6px 6px 0", padding: "10px 14px",
+          fontSize: 13, color: "#374151", lineHeight: 1.6,
+        }}>
+          <strong style={{ color: sw.color }}>Deployment note: </strong>{sw.note}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+{/* ============================================================
+    COMPONENT: CableDecisionTree — interactive cable selector
+    ============================================================ */}
+export const CableDecisionTree = () => {
+  const [dist, setDist] = useState(3)
+  const getRecommendation = (d) => {
+    if (d <= 5)  return { type: "DAC — Direct Attach Copper", color: "#10B981", reason: "Passive copper. Cheapest option. No signal conversion = lowest possible latency. Ideal for in-rack DGX-to-leaf-switch connections.", cost: "$30–80 per cable" }
+    if (d <= 10) return { type: "LACC — Linear Active Copper", color: "#F59E0B", reason: "Active signal regeneration without optical conversion. Extends copper reach beyond DAC. Good for end-of-row switch placements slightly beyond DAC range.", cost: "$80–200 per cable" }
+    if (d <= 100) return { type: "AOC — Active Optical Cable", color: "#3B82F6", reason: "Fiber with fixed active transceivers. Handles inter-rack leaf-to-spine connections. Not field-replaceable — the transceiver is fixed to the cable.", cost: "$150–500 per cable" }
+    return { type: "Pluggable OSFP + MPO Fiber", color: "#8B5CF6", reason: "Separate pluggable transceiver + fiber cable. Field-replaceable — failed transceiver replaced independently of fiber run. Required for distances over 100m and preferred for spine-layer links.", cost: "$400–1,800 per link" }
+  }
+  const rec = getRecommendation(dist)
+  return (
+    <div style={{ border: "0.5px solid #E5E7EB", borderRadius: 12, overflow: "hidden", margin: "20px 0" }}>
+      <div style={{ background: "#0F172A", padding: "12px 18px" }}>
+        <span style={{ color: "#94A3B8", fontSize: 12, fontFamily: "monospace" }}>Cable type selector — drag to set connection distance</span>
+      </div>
+      <div style={{ padding: "18px 20px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+          <span style={{ fontSize: 13, color: "#6B7280", minWidth: 70 }}>Distance</span>
+          <input
+            type="range" min={1} max={500} step={1} value={dist}
+            onChange={e => setDist(Number(e.target.value))}
+            style={{ flex: 1 }}
+          />
+          <span style={{ fontSize: 16, fontWeight: 600, color: "#111827", minWidth: 64 }}>{dist} m</span>
+        </div>
+        <div style={{
+          border: `1.5px solid ${rec.color}`,
+          borderRadius: 10, padding: "14px 16px",
+          background: `${rec.color}08`,
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: rec.color, marginBottom: 6 }}>{rec.type}</div>
+          <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.65, marginBottom: 8 }}>{rec.reason}</div>
+          <div style={{ fontSize: 12, color: "#6B7280" }}>Typical cost: <strong style={{ color: "#111827" }}>{rec.cost}</strong></div>
+        </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 12, alignItems: "center" }}>
+          {[
+            { label: "DAC", max: 5, color: "#10B981" },
+            { label: "LACC", max: 10, color: "#F59E0B" },
+            { label: "AOC", max: 100, color: "#3B82F6" },
+            { label: "Pluggable", max: 500, color: "#8B5CF6" },
+          ].map(seg => (
+            <div key={seg.label} style={{ flex: seg.max, position: "relative" }}>
+              <div style={{ height: 6, background: seg.color, borderRadius: 3, opacity: dist <= seg.max ? 1 : 0.25 }}/>
+              <div style={{ fontSize: 10, color: seg.color, marginTop: 3, textAlign: "center" }}>{seg.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>
+          <span>0 m</span><span>5 m</span><span>10 m</span><span>100 m</span><span>500 m</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+{/* ============================================================
+    COMPONENT: KnowledgeCheck — 4 questions with scoring
+    ============================================================ */}
+export const KnowledgeCheck = () => {
+  const [answers, setAnswers] = useState({})
+  const [submitted, setSubmitted] = useState({})
+
+  const questions = [
+    {
+      id: "q1",
+      q: "A DGX H100 has 8 GPUs and 8 ConnectX-7 adapters. What is the primary reason for this 1:1 GPU-to-NIC ratio?",
+      options: [
+        "To ensure redundancy — if one NIC fails, the GPU can use another",
+        "Each GPU needs a dedicated path to a different fabric rail switch for maximum bandwidth and fault isolation",
+        "Eight NICs are required to saturate the PCIe Gen5 bus of the host CPUs",
+      ],
+      correct: 1,
+      explanation: "The 1:1 ratio enables the rail-optimised topology — each NIC connects to a different leaf switch, so maximum bandwidth is available to every GPU simultaneously and no single switch failure takes down the entire node. Redundancy is handled at the fat-tree fabric level, not by having multiple NICs per GPU.",
+    },
+    {
+      id: "q2",
+      q: "During AllReduce across 32 DGX H100 nodes (256 GPUs), one switch port develops intermittent errors causing retransmissions. What is the most likely impact?",
+      options: [
+        "Only the GPU connected to that port is affected; the other 255 GPUs continue normally",
+        "The storage fabric raises an alert but training continues at reduced bandwidth",
+        "The entire 256-GPU job stalls at each synchronisation barrier waiting for the retransmission",
+      ],
+      correct: 2,
+      explanation: "AllReduce is a collective barrier — all GPUs must contribute before any can proceed. A single retransmission on one port delays the entire AllReduce. At 1,000+ steps/day on a 256-GPU cluster, one bad port can waste hundreds of GPU-hours daily.",
+    },
+    {
+      id: "q3",
+      q: "You are cabling a DGX SuperPOD. Leaf switches are end-of-rack — one per 4-DGX rack. Spine switches are in a separate rack 15 metres away. Which cable for DGX node → leaf switch connections?",
+      options: [
+        "DAC (Direct Attach Copper) — passive, cheapest, sufficient for in-rack distances",
+        "AOC (Active Optical Cable) — required for all HPC connections",
+        "Single-mode fiber with OSFP transceivers — maximum performance",
+      ],
+      correct: 0,
+      explanation: "DAC is the right choice for in-rack connections under 5m — cheapest and lowest latency because there's no optical conversion. Use AOC or pluggable fiber for the 15m leaf-to-spine inter-rack runs.",
+    },
+    {
+      id: "q4",
+      q: "NVSwitch gen3 inside a DGX H100 provides 900 GB/s per GPU. ConnectX-7 provides 50 GB/s (400G) for inter-node. What does this 18:1 bandwidth gap mean for ML parallelism strategy?",
+      options: [
+        "Tensor parallelism (splitting layers across GPUs) should be scheduled across nodes over InfiniBand",
+        "Tensor parallelism should run within a single DGX node (NVLink), data parallelism across nodes (InfiniBand)",
+        "The gap is irrelevant — NCCL automatically optimises communication patterns regardless",
+      ],
+      correct: 1,
+      explanation: "The 18:1 ratio directly drives the 3D parallelism strategy. Tensor parallelism requires the highest bandwidth (splitting a single layer's computation) — schedule within one DGX node using 900 GB/s NVLink. Data parallelism (different data per node) can tolerate lower bandwidth — schedule across nodes over InfiniBand. This is why NVIDIA recommends tensor_parallel_degree=8 (one full DGX node).",
+    },
+  ]
+
+  const score = Object.entries(submitted).filter(([id]) => {
+    const q = questions.find(q => q.id === id)
+    return answers[id] === q.correct
+  }).length
+
+  return (
+    <div style={{ margin: "20px 0" }}>
+      {questions.map((q, qi) => (
+        <div key={q.id} style={{
+          border: "0.5px solid #E5E7EB", borderRadius: 12,
+          overflow: "hidden", marginBottom: 16,
+        }}>
+          <div style={{ background: "#F8FAFC", padding: "12px 16px", borderBottom: "0.5px solid #E5E7EB" }}>
+            <span style={{ fontSize: 12, color: "#9CA3AF", fontFamily: "monospace" }}>Question {qi + 1} of {questions.length}</span>
+          </div>
+          <div style={{ padding: "14px 16px" }}>
+            <p style={{ fontSize: 14, fontWeight: 500, color: "#111827", marginBottom: 12, lineHeight: 1.6 }}>{q.q}</p>
+            {q.options.map((opt, oi) => {
+              const isSelected = answers[q.id] === oi
+              const isSubmitted = submitted[q.id] !== undefined
+              const isCorrect = oi === q.correct
+              let bg = "#FFFFFF", border = "#E5E7EB", color = "#374151"
+              if (isSubmitted) {
+                if (isCorrect) { bg = "#F0FDF4"; border = "#22C55E"; color = "#166534" }
+                else if (isSelected && !isCorrect) { bg = "#FEF2F2"; border = "#EF4444"; color = "#7F1D1D" }
+              } else if (isSelected) {
+                bg = "#EFF6FF"; border = "#3B82F6"; color = "#1D4ED8"
+              }
+              return (
+                <div
+                  key={oi}
+                  onClick={() => !isSubmitted && setAnswers({ ...answers, [q.id]: oi })}
+                  style={{
+                    border: `0.5px solid ${border}`, borderRadius: 8,
+                    padding: "10px 14px", marginBottom: 8, cursor: isSubmitted ? "default" : "pointer",
+                    background: bg, color, fontSize: 13, lineHeight: 1.5,
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <span style={{ fontWeight: 600, marginRight: 8 }}>{["A", "B", "C"][oi]}.</span>
+                  {opt}
+                </div>
+              )
+            })}
+            {!submitted[q.id] && answers[q.id] !== undefined && (
+              <button
+                onClick={() => setSubmitted({ ...submitted, [q.id]: true })}
+                style={{
+                  padding: "8px 18px", fontSize: 13, background: "#1E293B",
+                  color: "#FFFFFF", border: "none", borderRadius: 7, cursor: "pointer", marginTop: 4,
+                }}
+              >Submit answer</button>
+            )}
+            {submitted[q.id] && (
+              <div style={{
+                marginTop: 10, padding: "10px 14px",
+                background: answers[q.id] === q.correct ? "#F0FDF4" : "#FEF2F2",
+                borderRadius: 8, fontSize: 13, lineHeight: 1.65,
+                color: answers[q.id] === q.correct ? "#166534" : "#7F1D1D",
+              }}>
+                <strong>{answers[q.id] === q.correct ? "Correct." : "Incorrect."}</strong> {q.explanation}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+      {Object.keys(submitted).length === questions.length && (
+        <div style={{
+          background: score === questions.length ? "#F0FDF4" : score >= 3 ? "#FFFBEB" : "#FEF2F2",
+          border: `1px solid ${score === questions.length ? "#22C55E" : score >= 3 ? "#F59E0B" : "#EF4444"}`,
+          borderRadius: 12, padding: "16px 20px", textAlign: "center",
+        }}>
+          <div style={{ fontSize: 28, fontWeight: 700, color: "#111827", marginBottom: 4 }}>{score}/{questions.length}</div>
+          <div style={{ fontSize: 14, color: "#374151" }}>
+            {score === questions.length
+              ? "Perfect score. You're ready for Chapter 2: InfiniBand Architecture."
+              : score >= 3
+              ? "Good understanding. Review the questions you missed before continuing."
+              : "Re-read the relevant sections above before moving to Chapter 2."}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+---
+
+# Chapter 1: HPC Networking Foundations
+
+**Module 1 — RDMA and Transport Fundamentals** · Beginner · 45–60 min
+
+---
+
+## 1. Why HPC networking is unlike anything you've done before
+
+You've spent years mastering TCP/IP, BGP, spanning tree, QoS, and MPLS. You can troubleshoot a flapping OSPF adjacency in your sleep. But when you walk into an AI data center for the first time, something immediately feels wrong — none of the familiar mental models apply cleanly.
+
+In enterprise networking, a 1 ms spike in latency is a footnote in a monitoring dashboard. In an AI training cluster running a large language model across 1,024 GPUs, that same 1 ms spike causes every GPU in the job to sit idle waiting for one straggler — and that idle time compounds across hundreds of training steps per hour. **The fabric isn't just moving data; it is the synchronisation mechanism for a massively parallel computation.**
+
+<MentalModelTable />
+
+<CalloutBox type="info" title="Prerequisite check">
+This module assumes familiarity with basic networking (OSI model, Ethernet, IP routing) and general data center familiarity. No HPC background required.
+</CalloutBox>
+
+---
+
+## 2. The AI training problem that drives everything
+
+AI model training is a mathematical process called gradient descent. The model makes predictions, measures how wrong it was (the "loss"), then adjusts hundreds of billions of internal parameters in the direction that reduces that loss. Repeat millions of times.
+
+The problem is scale. A 70B parameter model cannot fit in a single GPU's memory — it must be split across dozens or hundreds of GPUs simultaneously. After each training step, all GPUs must agree on the updated parameters. This requires **AllReduce**: every GPU exchanges gradient updates with all other GPUs, they are summed, and the result goes back to every GPU before the next step can begin.
+
+**That synchronisation point is where the network becomes the bottleneck.** Step through the sequence below to see exactly why:
+
+<AllReduceBarrier />
+
+The numbers that matter for the network design:
+
+| Metric | Enterprise standard | HPC requirement | Why |
+|--------|---------------------|-----------------|-----|
+| Latency | 1–5 ms | <2 µs | AllReduce stall × 1000s of steps/day |
+| Packet loss | <0.1% acceptable | Zero tolerance | One retransmission stalls the entire job |
+| Bandwidth per node | 10–100 Gbps | 3,200 Gbps (DGX H100) | Full bisection needed for AllReduce at scale |
+| Congestion response | QoS queuing | ECN + PFC lossless | Dropping packets is catastrophic |
+
+---
+
+## 3. HPC server platforms — the DGX generation guide
+
+NVIDIA DGX systems are the reference platform for AI infrastructure. Understanding the hardware generations and their networking is essential context. Each generation significantly increased per-port and aggregate bandwidth alongside GPU performance.
+
+<DGXGenerationExplorer />
+
+<CalloutBox type="warning" title="Connector compatibility warning">
+QSFP56 connectors (DGX A100 / HDR generation) are physically incompatible with OSFP ports (DGX H100/H200/B200 / NDR+ generation). If you are adding B200 nodes to an existing A100 cluster, every cable between new nodes and switches must be replaced.
+</CalloutBox>
+
+---
+
+## 4. The NIC is not just a NIC — understanding HCAs and SuperNICs
+
+In enterprise networking, a NIC is a commodity component — it moves packets between the server's kernel and the wire. In HPC, the network adapter is an **active compute element** with its own processor, memory, and instruction set. This distinction fundamentally changes how you think about the fabric.
+
+<NICExplorer />
+
+### The RDMA data path — what actually happens when a GPU sends data
+
+This is the most important pipeline to understand in this entire course. Follow it step by step:
+
+<RDMAPipelineDiagram />
+
+<CalloutBox type="success" title="The key insight">
+The CPU is only involved to post the Work Request and read the Completion — typically a few hundred nanoseconds of CPU time. The actual data movement (potentially gigabytes) happens entirely between the HCA and GPU memory with zero CPU involvement. This is how 400 Gb/s with sub-2 µs latency is achievable.
+</CalloutBox>
+
+---
+
+## 5. The three networks inside every DGX deployment
+
+A DGX BasePOD or SuperPOD is not one network — it is three physically separate networks running simultaneously, each with completely different requirements.
+
+<ThreeNetworkDiagram />
+
+### Network 1 — Compute fabric
+
+**Purpose:** GPU-to-GPU training traffic. AllReduce collectives, tensor transfers, RDMA operations.
+
+**Requirements:** Lossless (zero packet drops), ultra-low latency (sub-2 µs), full bisection bandwidth (every GPU simultaneously at line rate), non-blocking (no oversubscription).
+
+**Hardware (DGX H100 reference):** 8 × ConnectX-7 per node (400G each = 3.2 Tb/s per node). Leaf layer: QM9700 Quantum-2 NDR. Spine layer (larger clusters): QM9700 or Q3400 Quantum-X800.
+
+### Network 2 — Storage fabric
+
+**Purpose:** High-performance parallel storage access — training datasets, checkpoints, model artifacts.
+
+**Requirements:** High bandwidth (200–400 GbE), low latency for random I/O, RoCEv2 or NFS-over-RDMA for storage protocols. **GPUDirect Storage (GDS)** allows the GPU to read training data directly from NVMe storage without CPU or system RAM involvement.
+
+**Hardware:** Dedicated Ethernet NIC (or BlueField-3 DPU handles storage). Switches: SN4600C or SN5600. Storage: BeeGFS, WEKA, VAST Data, DDN.
+
+### Network 3 — Management OOB
+
+**Purpose:** Cluster management, health monitoring, provisioning, firmware updates, BMC/IPMI access, UFM/BCM orchestration.
+
+**Hardware:** Standard enterprise 1 GbE / 10 GbE switches. Completely separate physical switches from compute and storage.
+
+<CalloutBox type="danger" title="Critical rule — never cross-connect these networks">
+Routing compute RDMA traffic through the management switch — even temporarily during initial bring-up — can cause PFC deadlocks or congestion events that are extremely difficult to diagnose. The three networks must be physically separated from day one, every time.
+</CalloutBox>
+
+---
+
+## 6. Inside the DGX node — the full internal architecture
+
+Understanding what is inside a DGX node explains why the external fabric is designed the way it is. The node itself is already a high-performance interconnect problem — 8 GPUs must communicate with each other at terabytes-per-second before a single bit leaves the chassis.
+
+<DGXInternalDiagram />
+
+### The NVSwitch layer — intra-node GPU fabric
+
+| Generation | DGX system | BW per GPU | Total node BW |
+|-----------|-----------|------------|---------------|
+| NVSwitch gen2 | DGX A100 | 600 GB/s | 4.8 TB/s |
+| NVSwitch gen3 | DGX H100/H200 | 900 GB/s | 7.2 TB/s |
+| NVSwitch gen4 | DGX B200 / GB200 NVL72 | 1,800 GB/s | 14.4 TB/s |
+
+NVSwitch is NVIDIA's proprietary chip creating a full non-blocking all-to-all fabric between all 8 GPUs. GPU 0 can send to GPU 7 at 900 GB/s simultaneously with every other pair — non-blocking. This is why **intra-node** communication (tensor parallelism within a node) is 18× faster than **inter-node** communication over InfiniBand.
+
+### Why rail-optimised topology matters
+
+The 1:1 GPU-to-NIC ratio and rail design provides two critical benefits:
+
+**Maximum AllReduce performance:** When 32 DGX H100 nodes run AllReduce, GPU 0 on every node communicates via Rail-0 switches, GPU 1 via Rail-1, and so on. Each rail carries exactly 1/8 of the total AllReduce traffic with no switch fan-in conflict.
+
+**Fault isolation:** If Rail-3's leaf switch fails, only GPU 3 on every node loses inter-node connectivity — 7 GPUs per node remain fully operational. If all 8 NICs shared a single uplink switch, the entire node would go dark.
+
+---
+
+## 7. The switch landscape — from leaf to spine
+
+<SwitchExplorer />
+
+### Switch selection by deployment type
+
+| Deployment | Compute switch | Storage switch | Notes |
+|-----------|---------------|----------------|-------|
+| DGX H100 BasePOD (≤20 nodes) | QM9700 (leaf only) | SN4600C | Single-tier IB, no spine needed |
+| DGX H100 SuperPOD (32 nodes) | QM9700 leaf + spine | SN4600C | Two-tier IB fat-tree |
+| Large cluster (100+ nodes) | QM9700 leaf + Q3400 spine | SN5600 | XDR spine, NDR leaf |
+| DGX B200 (new build) | Q3400 leaf + spine | SN5600 | Full XDR end-to-end |
+| Ethernet-only RoCEv2 | SN5600 Spectrum-X800 | SN5600 | Spectrum-X platform |
+
+---
+
+## 8. Connectivity types — cables, transceivers, and form factors
+
+The physical layer in HPC is its own world. Connector types, cable categories, and distance limitations directly affect rack layout and cluster design. Drag the slider to explore cable recommendations by distance:
+
+<CableDecisionTree />
+
+### Connector form factor guide
+
+| Form factor | Speed | Use in |
+|-------------|-------|--------|
+| QSFP56 | 200G HDR | DGX A100, legacy IB infrastructure |
+| OSFP | 400G NDR | DGX H100/H200, QM9700, ConnectX-7 |
+| OSFP224 | 800G XDR | DGX B200, ConnectX-8, Q3400 |
+| QSFP-DD | 400G Ethernet | Spectrum Ethernet switches |
+
+<CalloutBox type="warning" title="OSFP cage density on Q3400">
+The Q3400 spec sheet says "72 ports OSFP, 144 ports 800G." Each physical OSFP cage carries two independent 800G logical ports — 72 cages × 2 ports each = 144 logical ports at 800G. This is a common source of confusion when calculating port counts for a SuperPOD design.
+</CalloutBox>
+
+---
+
+## 9. Knowledge check
+
+<KnowledgeCheck />
+
+---
+
+## Chapter summary
+
+The foundational mental models to carry into every remaining chapter:
+
+1. **HPC networking exists to serve a synchronisation barrier.** AllReduce is a collective operation — the fabric's job is to make that barrier as fast as possible, because every GPU waits for the slowest link.
+
+2. **The DGX node is already an HPC fabric problem.** NVSwitch solves intra-node at 900 GB/s; ConnectX-7 and InfiniBand solve inter-node at 400G per GPU. The 18:1 bandwidth ratio directly drives the 3D parallelism strategy.
+
+3. **The NIC (HCA) is an active compute element.** It bypasses the kernel, DMA's directly to and from GPU memory, and processes RDMA verbs in hardware. Think of it as a co-processor, not a commodity component.
+
+4. **Three networks, always physically separate.** Compute (InfiniBand/RoCEv2), storage (Ethernet + GDS), management (OOB). Never mix them.
+
+5. **Rail-optimised topology is the standard.** 1 GPU : 1 NIC : 1 leaf switch rail. Maximum bandwidth, maximum fault isolation.
+
+6. **Cable choice is a design decision.** DAC for in-rack, AOC for inter-rack, pluggable fiber for long reach. Generation and connector compatibility must be verified before ordering.
+
+---
+
+## What's next: Chapter 2 — InfiniBand Architecture
+
+- The IB layer stack: Physical → Link → Network → Transport
+- How the Subnet Manager (OpenSM, UFM) assigns LIDs and builds path records
+- Credit-based flow control — the mechanism that makes IB inherently lossless
+- Virtual Lanes (VLs), Service Levels (SLs), and Partitions (P_Keys)
+- Fat-tree routing algorithms: FTREE, MINHOP, DFSSSP
+- Your first CLI commands: `ibstat`, `ibnetdiscover`, `sminfo`
+
+---
+
+*Chapter 1 of 7 — HPCNet Academy · Content version: March 2026*  
+*Specs verified against: NVIDIA DGX H100 System Architecture, DGX B200 Datasheet, ConnectX-7/8 Product Brief, Quantum-X800 Datasheet, QM9700 Product Brief*

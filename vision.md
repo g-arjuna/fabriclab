@@ -1,34 +1,37 @@
 # FabricLab — Vision
 
-FabricLab is an interactive learning platform for HPC and AI infrastructure networking.
-
-It combines:
-- structured learning
-- visual explanations
-- CLI-based simulation
+> Context only. Do NOT implement from this file.
+> For what to build right now: read plan.md.
 
 ---
 
-## Long Term
+## What FabricLab will become
 
-- Full HPC networking curriculum
-- Advanced topology simulation
-- Scenario-based troubleshooting
-- AI-assisted learning
+An interactive learning platform for HPC and AI infrastructure networking.
+Structured MDX curriculum, CLI-based labs, visualisation-rich chapters,
+and eventually an AI tutor — all covering the HPC fabric stack engineers
+need as they move into AI infrastructure roles.
 
----
+The MVP proves the concept with zero running costs.
+API features (OpenAI tutor, Supabase analytics) are added progressively.
 
-## Principle
+## Content model
 
-Learning should be:
-- interactive
-- practical
-- simulation-backed
+All educational content is authored by Claude and delivered as:
+- MDX chapter files (`content/chapters/*.mdx`)
+- React visualisation components (`components/visualisations/*.tsx`)
+- Static knowledge base data (`content/knowledge/*.ts`)
 
----
+Codex renders what Claude writes. This separation means content quality
+is independent of engineering velocity — both can improve in parallel.
 
-## Note
+## Post-MVP expansion
 
-This vision is NOT for immediate implementation.
+See `extended_vision.md` for full platform roadmap:
+- 7-module curriculum (RDMA → IB → RoCEv2 → Congestion → Topology → SuperPOD → Troubleshooting)
+- Knowledge acquisition pipeline
+- Drag-drop topology canvas
+- Multi-scenario expert labs
+- Analytics dashboard
 
-Follow plan.md for execution.
+> Follow plan.md. Build the MVP first.

@@ -1,5 +1,13 @@
-import type { NextConfig } from "next";
+import path from "node:path";
+import createMDX from "@next/mdx";
 
-const nextConfig: NextConfig = {};
+const withMDX = createMDX({
+  options: { remarkPlugins: ["remark-gfm"] },
+});
 
-export default nextConfig;
+export default withMDX({
+  pageExtensions: ["ts", "tsx", "md", "mdx"],
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
+});
