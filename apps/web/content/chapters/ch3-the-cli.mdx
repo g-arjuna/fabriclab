@@ -1,0 +1,672 @@
+---
+title: "Chapter 3: The CLI — Reading the Fabric"
+module: "HPC Networking Foundations"
+level: "Beginner"
+estimatedMinutes: 45
+labLink: "/lab?lab=lab0-failed-rail"
+---
+
+## Before you type anything
+
+An alert fires at 2 AM. GPU training throughput on Cluster A has dropped to 62% of baseline. The monitoring dashboard shows elevated AllReduce latency and one GPU contributing nothing to the training job. Your job is to find out why.
+
+You open your laptop and SSH into the cluster. You have a terminal. You have a set of commands. What you type next — and in what order — determines whether you find the problem in ten minutes or spend three hours going in circles.
+
+This chapter is about the discipline of reading a fabric from the command line. Not a reference manual. A way of thinking. Every command in this chapter exists because it answers a specific question in a specific order. By the end, you will know not just what to type, but why you type it when you do.
+
+<InvestigationMindsetViz />
+
+The investigation always starts with the same three questions:
+
+**Question 1: Is the physical link up?** Before you look at counters or configuration, you need to know whether the link exists at all. A link that is physically down answers all other questions immediately.
+
+**Question 2: What is the traffic doing?** Counters tell you what is happening right now — drops, pauses, errors. They are the symptoms.
+
+**Question 3: What is the configuration?** Configuration tells you why the symptoms are happening. But you read it last, not first — because a perfectly valid configuration can still produce bad behaviour if the traffic pattern is wrong.
+
+This ordering matters. Jumping to configuration before checking counters is the most common mistake network engineers make when entering HPC environments. In enterprise networking, configuration problems dominate. In HPC, traffic behaviour problems dominate — a valid PFC configuration can still produce a pause storm.
+
+---
+
+## The device map — which commands live where
+
+This is the single most disorienting thing for network engineers coming from enterprise backgrounds. In a Cisco environment, you SSH into a switch and run commands on that switch. The switch is the authoritative source of information.
+
+In an AI cluster, the information is distributed across multiple devices running different operating systems. Before you can run a command, you need to know which device to run it on.
+
+<CommandDeviceMapViz />
+
+Here is the complete map:
+
+**On the DGX host (DGX OS — Ubuntu)**
+These commands run on the compute node itself, in a standard Linux shell after SSHing to the DGX management IP:
+
+```bash
+ibstat                     # Overview of all IB/RDMA NIC ports
+rdma link show             # Per-device RDMA link state
+ibdiagnet                  # Full fabric diagnostic sweep (run from one node)
+ethtool -S eth0            # NIC hardware statistics including pause counters
+dcb pfc show dev eth0      # PFC state (using the 'dcb' iproute2 tool)
+mlnx_qos -i eth0           # QoS configuration and counters
+```
+
+**On the Spectrum-X switch (Cumulus Linux)**
+These commands run after SSHing to the switch management IP:
+
+```bash
+show dcb pfc               # PFC state per interface
+show dcb ets               # ETS bandwidth allocation and ECN config
+show interface counters    # Per-port packet and byte counters
+show roce                  # RoCEv2 configuration summary
+net show bridge macs       # MAC table (for Ethernet forwarding)
+```
+
+**On the ONYX switch (InfiniBand)**
+These commands run after SSHing or connecting via console to the switch:
+
+```bash
+show interfaces ib status  # InfiniBand port state (Active/Down/Polling)
+show ib counters           # Per-port error counters
+show ib sm                 # Subnet manager status and master SM location
+show interface ib 1/1      # Detailed state of a specific IB port
+```
+
+**In the FabricLab simulator**
+The simulator gives each device its own terminal session. Click the DGX node in the topology to open a green-prompt DGX host session. Click a leaf switch to open a blue-prompt Cumulus Linux session. Each session has its own command set — you cannot run `show dcb pfc` in the DGX terminal or `ibstat` in the switch terminal, just as you cannot on real hardware.
+
+The commands in this chapter are grouped by which device they run on. The device context label before each command block tells you which terminal to open in the simulator when you reach the labs.
+
+---
+
+## Act 1 — Layer 1: Both ends of the link
+
+Every physical link has two ends. This sounds obvious but it is the single most important thing to internalise before you run your first diagnostic command, because most Layer 1 problems only show symptoms on one end — and if you only check one end, you will not find them.
+
+**On a RoCEv2 deployment (Spectrum-X):**
+The ConnectX-7 NIC in the DGX node operates in Ethernet mode. The link between the NIC and the leaf switch is an Ethernet link. It has a DGX end and a switch end. Both ends need to report the link as up for traffic to flow.
+
+**On an InfiniBand deployment (QM9700):**
+The ConnectX-7 NIC operates in InfiniBand mode. The link between the NIC and the leaf switch is an InfiniBand link. Same principle — DGX end and switch end.
+
+In both cases, a complete Layer 1 check means checking **both ends of the cable**. Not just the DGX. Not just the switch. Both.
+
+<LinkBothEndsViz />
+
+**Why both ends matter:**
+
+The most deceptive Layer 1 fault is when the two ends disagree. The NIC reports the link as Active — it is sending electrical or optical signals and receiving them back. The switch has disabled its port due to repeated link flaps. The NIC has no way to know the switch port is error-disabled from its own perspective — it just sees a physical signal present and reports up. This is exactly the fault in Lab 0, and it is invisible if you only check the DGX side.
+
+### Checking the DGX end
+
+**Open the DGX host terminal** (green prompt in FabricLab — click the DGX node in the topology).
+
+**`ibstat` — the NIC's view of every link**
+
+`ibstat` shows you all 8 ConnectX-7 NICs simultaneously from the DGX host's perspective. Run it first — it gives you the complete picture of all 8 rails in one output.
+
+The output looks different depending on whether your ConnectX-7 is in RoCEv2 mode or InfiniBand mode. The key diagnostic fields are `Link layer`, `Base lid`, and `SM lid`.
+
+<IbstatOutputViz />
+
+**RoCEv2 / Ethernet mode** — this is what FabricLab models:
+
+```
+dgx-node-a:~$ ibstat
+
+CA 'mlx5_0'
+        CA type: MT4129
+        Firmware version: 28.38.1002
+        Node GUID: 0x506b4b0300a1b200
+        Port 1:
+                State: Active
+                Physical state: LinkUp
+                Rate: 400
+                Base lid: 0          ← zero: no IB SM, no LID assignment
+                SM lid:   0          ← zero: no Subnet Manager on this fabric
+                Link layer: Ethernet ← RoCEv2 mode confirmed
+```
+
+**InfiniBand mode** — what you would see on a pure IB deployment:
+
+```
+dgx-node-a:~$ ibstat
+
+CA 'mlx5_0'
+        CA type: MT4129
+        Firmware version: 28.38.1002
+        Node GUID: 0x506b4b0300a1b200
+        Port 1:
+                State: Active
+                Physical state: LinkUp
+                Rate: 400
+                Base lid: 12          ← non-zero: SM assigned LID 12 to this port
+                SM lid:   1           ← non-zero: Subnet Manager is at LID 1
+                Link layer: InfiniBand ← IB mode confirmed
+```
+
+The `Base lid` and `SM lid` fields tell you immediately which mode you are on. **Non-zero = InfiniBand mode** with an active Subnet Manager. **Zero = Ethernet/RoCEv2 mode** with no SM. You should never see `Link layer: Ethernet` with a non-zero `Base lid` — if you do, something is misconfigured.
+
+**Reading the key fields:**
+
+`State: Active` — The RDMA state machine is fully operational. This is the DGX end saying "my side of the link is up and initialised." Other values: `Down` (no signal — cable unplugged or switch port disabled), `Polling` (signal present but handshake not completing — switch may still be booting), `Init` (SM has discovered but not yet armed this port — transient). If you have not read Ch0's RDMA internals section, QP errors will seem mysterious. The short version: a dropped packet causes a PSN gap, the QP enters error state, and the GPU on that rail cannot participate in AllReduce until the QP is reset.
+
+`Physical state: LinkUp` — Electrical or optical signal is present. You can have `Physical state: LinkUp` with `State: Polling` — meaning the physical signal is there but the RDMA initialisation handshake has not completed. Polling with LinkUp usually means the switch port is up but the RDMA layer is not ready. Polling without LinkUp means no signal at all.
+
+`Rate: 400` — The negotiated link speed in Gb/s. If this shows 200 or 100, the link negotiated down — usually a cable that does not meet NDR specification.
+
+`Link layer: Ethernet` — This NIC is in RoCEv2 mode, set via `mlxconfig LINK_TYPE_P1=ETH`. This is what you expect on a Spectrum-X deployment.
+
+**`rdma link show` — faster overview of all rails**
+
+Where `ibstat` gives verbose detail per NIC, `rdma link show` gives a compact summary of all rails at once. Use this for a quick check:
+
+```
+dgx-node-a:~$ rdma link show
+
+link mlx5_0/1 state ACTIVE physical_state LINK_UP
+  type RoCE  netdev eth0  roce_mode: RoCEv2
+
+link mlx5_1/1 state ACTIVE physical_state LINK_UP
+  type RoCE  netdev eth1  roce_mode: RoCEv2
+
+link mlx5_3/1 state ACTIVE physical_state LINK_UP
+  type RoCE  netdev eth3  roce_mode: RoCEv2
+  WARNING: PFC disabled -- lossless operation not guaranteed
+
+[... mlx5_4 through mlx5_7 all ACTIVE ...]
+```
+
+Notice: `netdev eth0`, `netdev eth3`. Each ConnectX-7 NIC has two names — `mlx5_N` at the RDMA layer and `ethN` at the Ethernet layer. Same physical card, two software identities. `mlx5_0` and `eth0` are the same hardware.
+
+The WARNING on mlx5_3 — `PFC disabled` — tells you the RDMA link is up physically, but PFC is not configured. The physical layer is fine; the lossless configuration layer is not. You will investigate this in Act 3.
+
+**What the DGX end tells you — and what it does not:**
+
+If all 8 NICs show `State: Active` and `Physical state: LinkUp`, the DGX is satisfied. But this only confirms the DGX end of each cable sees a signal and completed RDMA initialisation. It says nothing about whether the switch port is healthy, whether the switch has error-disabled the port, or whether the switch is seeing errors on its end of the cable.
+
+That is why you must also check the switch end.
+
+### Checking the switch end
+
+**Open the leaf switch terminal** (blue prompt in FabricLab — click the leaf switch in the topology).
+
+On a Spectrum-X deployment you use `show interface counters`. On an ONYX InfiniBand switch you use `show interfaces ib status`. Both show you the switch's perspective on the same physical cables that `ibstat` showed you from the DGX side.
+
+**For RoCEv2 / Spectrum-X — `show interface counters`:**
+
+```
+leaf-switch # show interface counters
+
+Interface eth0        ← the switch port connected to DGX mlx5_0
+  Admin state:   Up
+  Oper state:    Up
+  Link speed:    400G
+
+Interface eth3        ← the switch port connected to DGX mlx5_3
+  Admin state:   Up
+  Oper state:    Up
+  Link speed:    400G
+```
+
+The switch port names (`eth0`, `eth3`) correspond to the DGX NIC names (`eth0`, `eth3`). The naming is consistent end-to-end on a correctly wired and labelled deployment.
+
+**For InfiniBand / ONYX — `show interfaces ib status`:**
+
+```
+leaf-switch # show interfaces ib status
+
+IB Interface  Admin  Oper     Width  Speed
+IB1/1         Up     Active   4x     NDR     ← DGX node A, Rail 0
+IB1/2         Up     Active   4x     NDR
+IB1/3         Up     Active   4x     NDR
+IB1/4         Up     Polling  --     --      ← something wrong on Rail 3
+IB1/5         Up     Active   4x     NDR
+```
+
+Port IB1/4 shows `Oper: Polling`. The DGX end showed `State: Active` for mlx5_3. The DGX thinks the link is fine. The switch disagrees. This is the two-end asymmetry in action.
+
+### The asymmetry: when the two ends disagree
+
+```
+DGX end (ibstat):              State: Active      ← NIC says link is up
+Switch end (show interfaces):  Oper: Polling      ← switch says link is not ready
+```
+
+Or in the Lab 0 fault scenario:
+
+```
+DGX end (rdma link show):     state ACTIVE        ← NIC says fine
+Switch end (show topology):   ERROR-DISABLED      ← switch disabled the port
+```
+
+The NIC has no knowledge that the switch disabled its port. Signals are still flowing on the cable — the NIC sees them and reports Active. Only by checking `show topology` (which queries the switch side) do you discover the switch is error-disabled on Rail 3. This is precisely why the two-end check is mandatory. The DGX-only view is incomplete.
+
+---
+
+## Act 2 — Layer 2: Traffic counters — two perspectives on the same link
+
+Links are confirmed up on both ends. Now you look at what traffic is doing on those links. Counter commands also have a two-end perspective: the switch sees the **fabric view** (all flows aggregated at the port), and the DGX NIC sees its **own individual experience** (what was sent to it, what it received, what it was told to pause).
+
+You need both perspectives because they can tell different stories — and the difference between those stories is itself diagnostic.
+
+<CounterBothEndsViz />
+
+### Switch end: show interface counters — the fabric view
+
+**Device: leaf switch terminal (blue prompt)**
+
+`show interface counters` on the Spectrum-X switch shows you what the switch is doing to the traffic on each port. This is the aggregate view — drops and pauses from all flows combined, hitting the switch's egress buffer simultaneously.
+
+<InterfaceCountersViz />
+
+```
+leaf-switch # show interface counters
+
+Interface eth0
+  Input packets:     1,847,293,441
+  Output drops:      47,291          ← non-zero drops: problem
+  PFC pause frames:  12,847          ← non-zero pauses: PFC active
+  Buffer util:       87%             ← high buffer: congestion
+```
+
+`Output drops: 47,291` — The switch's output buffer filled and packets were discarded. In a lossless RDMA fabric this must be zero.
+
+`PFC pause frames: 12,847` — The switch sent PAUSE frames to stop the upstream sender. PFC is active. Whether this is good or bad depends on context — a small count under burst traffic is expected; rapidly growing means a pause storm.
+
+`Buffer util: 87%` — The output buffer is nearly full. Approaching 90% is where drops begin.
+
+**The key patterns:**
+- Drops, no pauses → PFC and ECN both absent or misconfigured. Traffic dropping uncontrolled.
+- Pauses, no drops → PFC working correctly. Lossless. Congestion is present but managed.
+- Both drops and pauses → PFC overwhelmed or on wrong priority. Congestion too severe or misconfigured.
+- Neither → Clean. No congestion.
+
+If you are seeing sustained pauses with uneven spine link utilisation (some links hot, others idle), the root cause is likely load balancing — not PFC misconfiguration. PFC is doing its job. The layer upstream of PFC is failing. Chapter 6 covers load balancing diagnostics.
+
+The switch view answers: *is this port healthy at the fabric level?*
+
+### DGX end: ethtool -S eth0 — the NIC's experience
+
+**Device: DGX host terminal (green prompt) — switch back to the DGX now**
+
+`ethtool -S eth0` runs on the DGX host. It shows hardware statistics from inside the ConnectX-7 NIC — what the NIC received, what it sent, and crucially, **how many times the switch told it to stop sending**.
+
+<EthtoolOutputViz />
+
+```
+dgx-node-a:~$ ethtool -S eth0
+
+NIC statistics:
+  rx_pfc_pause_frames:  12847    ← switch told this NIC to stop sending
+  tx_pfc_pause_frames:  8293     ← this NIC told the switch to stop sending to it
+  rx_ecn_marked:        0        ← no ECN signals being received
+  tx_dropped:           47291    ← NIC dropped packets on transmit
+  link_speed:           400Gb/s
+  link_state:           up
+```
+
+`rx_pfc_pause_frames: 12847` — The switch sent 12,847 PAUSE frames to this NIC. Notice this matches the `PFC pause frames` on the switch side — they are counting the same events from opposite ends of the cable.
+
+`tx_pfc_pause_frames: 8293` — This NIC sent 8,293 PAUSE frames to the switch. The NIC's own receive buffer was filling and it needed the switch to slow down.
+
+`rx_ecn_marked: 0` — No ECN-marked packets received. Even though drops are occurring, the switch is not sending early congestion signals. ECN is not configured — the switch is dropping instead of marking.
+
+**The story the NIC tells that the switch cannot:**
+
+Now imagine the switch showed no drops but training throughput is still degraded. The NIC's `rx_pfc_pause_frames` might be growing at 10,000 per second. The switch is successfully preventing drops through PFC — but the NIC is being held in a pause state almost continuously. The application sees near-zero throughput. The switch report looks clean. Only the NIC counter reveals the pause storm.
+
+**The two-counter rule:**
+Always read `show interface counters` (switch) and `ethtool -S eth0` (DGX) together. The switch tells you what the fabric is doing. The NIC tells you what the DGX experienced. They corroborate each other when everything is working and diverge — productively — when there is a subtle failure.
+
+## Act 3 — Layer 3: What is the configuration?
+
+You have read the symptoms. Now you look at the configuration to understand why.
+
+### show dcb pfc — reading PFC state
+
+PFC (Priority Flow Control) is the lossless mechanism. `show dcb pfc` shows whether it is configured, on which priorities, and whether it is functioning.
+
+<PFCCommandViz />
+
+**When PFC is correctly enabled:**
+
+```
+$ show dcb pfc
+
+Interface eth0
+  Priority Flow Control:  enabled
+  PFC enabled priorities: 3 (cos3)
+  Pause quanta:           0xffff
+  Watchdog:               enabled
+  Watchdog interval:      200ms
+```
+
+**Reading the output:**
+
+`Priority Flow Control: enabled` — PFC is active on this interface. When disabled, any congestion will result in drops rather than pauses.
+
+`PFC enabled priorities: 3 (cos3)` — PFC is applied to traffic class 3. This is the standard DSCP marking for RoCEv2 traffic (priority 3, cos3). If your RoCEv2 traffic is marked differently, PFC will not apply to it — you will get drops even with PFC enabled.
+
+`Pause quanta: 0xffff` — The duration of each PAUSE frame, measured in pause quanta (512-bit times). 0xffff is the maximum value — the receiver should stop sending for the maximum possible duration. This is standard for storage and HPC traffic.
+
+`Watchdog: enabled` — The PFC watchdog monitors for deadlocks. If a port has been continuously paused for longer than the watchdog interval, it kills the PFC pause to break the deadlock. **Always keep the watchdog enabled.** It is your last line of defence against permanent pause storms.
+
+`Watchdog interval: 200ms` — If this port is continuously paused for 200ms, the watchdog fires.
+
+**When PFC is disabled:**
+
+```
+$ show dcb pfc
+
+Interface eth0
+  Priority Flow Control:  disabled
+  PFC enabled priorities: none
+  Pause quanta:           N/A
+  Watchdog:               disabled
+```
+
+This is the fault state in Lab 1. Disabled PFC on a RoCEv2 port means any congestion causes drops. Training jobs will experience retransmissions. NCCL will log timeout errors. AllReduce operations will stall.
+
+**The PFC priority mismatch trap:**
+
+One of the most common PFC misconfigurations is enabling PFC on the wrong priority. If your RoCEv2 traffic is marked DSCP 26 (CoS 3) but PFC is configured for priority 0, PFC provides no protection to your training traffic. This does not show up as "PFC disabled" — PFC reports as enabled. You need to verify that `PFC enabled priorities` matches the CoS marking of your actual RoCEv2 traffic.
+
+### show dcb ets — reading ETS and ECN configuration
+
+ETS (Enhanced Transmission Selection) controls how bandwidth is allocated between traffic classes. ECN (Explicit Congestion Notification) is configured within the ETS framework.
+
+```
+$ show dcb ets
+
+Interface eth0 -- ETS Configuration
+  Traffic class  Priority  Bandwidth  Algorithm
+  TC0            0,1,2     30%        ETS
+  TC3 (RoCE)     3         50%        Strict Priority
+  TC7 (mgmt)     7         20%        ETS
+
+  ECN marking:  enabled (DSCP 26)
+  DCQCN:        active
+```
+
+**Reading the output:**
+
+`TC3 (RoCE) — Strict Priority` — RoCEv2 traffic (priority 3) uses strict priority scheduling. This means TC3 traffic always gets served before TC0 or TC7 traffic. This is correct for latency-sensitive RDMA traffic.
+
+`ECN marking: enabled (DSCP 26)` — ECN is active. The switch will mark packets with the CE (Congestion Experienced) bit when queues exceed the ECN threshold, signalling senders to reduce their rate before buffers overflow. This is DCQCN in action.
+
+`DCQCN: active` — The Data Center Quantized Congestion Notification algorithm is running. The switch is marking ECN, the NIC firmware is reacting by reducing injection rate, congestion is being managed proactively.
+
+**When ECN is disabled:**
+
+```
+  ECN marking:  disabled
+  DCQCN:        inactive -- congestion unmanaged
+```
+
+This is the fault state in Lab 2. Without ECN, the only congestion mechanism is PFC (if configured). Congestion builds until PFC pauses the sender or until buffers overflow and drops occur. DCQCN is the more elegant solution — it signals congestion before buffers fill.
+
+### show roce — the RoCEv2 summary
+
+`show roce` gives you a consolidated view of the RoCEv2 configuration on a specific interface. It is the first command to check when validating a newly configured port.
+
+```
+$ show roce
+
+RoCE Configuration -- eth0
+  RoCE version:   RoCEv2
+  State:          active
+  PFC:            enabled (priority 3)
+  ECN:            enabled -- DCQCN active
+  DSCP marking:   26 (RoCE traffic)
+  MTU:            9000
+  GID:            fe80::506b:4b03:00a1:b200
+```
+
+`RoCE version: RoCEv2` — Confirms this is RoCEv2 (UDP/IP encapsulation), not RoCE v1 (Ethernet-only, non-routable).
+
+`DSCP marking: 26` — Traffic is being marked DSCP 26 for correct QoS treatment. If this shows "not configured", your RoCEv2 traffic will not receive priority scheduling.
+
+`MTU: 9000` — Jumbo frames are enabled. This is required for efficient RDMA. If MTU shows 1500, your RDMA performance will be severely degraded — every large RDMA transfer will be fragmented into thousands of small packets, each with its own header overhead.
+
+`GID: fe80::...` — The Global Identifier for this RDMA interface. This is the routable address that other nodes use to establish RDMA connections. If this is missing, RDMA connections cannot be established.
+
+---
+
+## Act 4 — Layer 4: What does the switch see?
+
+So far all commands have been run from the DGX host. Now we look at the switch side. This matters because the DGX NIC and the switch port can disagree about link state.
+
+### show topology — the rail map
+
+`show topology` is a FabricLab command that represents the view you would get from UFM or from querying the fabric topology. It shows the rail-to-NIC mapping — which NIC on which rail connects to which switch.
+
+<ShowTopologyViz />
+
+```
+$ show topology
+
+DGX H100 -- Rail topology map
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Rail  NIC       GUID                  NIC state  Switch port
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  0     mlx5_0    0x506b4b0300a1b200    UP          UP
+  1     mlx5_1    0x506b4b0300a1b201    UP          UP
+  2     mlx5_2    0x506b4b0300a1b202    UP          UP
+  3     mlx5_3    0x506b4b0300a1b203    UP          ERROR-DISABLED  ← fault
+  4     mlx5_4    0x506b4b0300a1b204    UP          UP
+  5     mlx5_5    0x506b4b0300a1b205    UP          UP
+  6     mlx5_6    0x506b4b0300a1b206    UP          UP
+  7     mlx5_7    0x506b4b0300a1b207    UP          UP
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  8 rails total  |  7/8 active
+```
+
+This output reveals something that `rdma link show` might not: the NIC side shows UP but the switch port shows ERROR-DISABLED. The NIC thinks the link is fine — it is sending signals into the cable. But the switch has disabled its port due to repeated link flaps.
+
+This asymmetry is one of the trickiest things to diagnose without a topology-aware tool. `rdma link show` on the DGX would show `state ACTIVE` for mlx5_3. Only when you look at the switch side do you discover the problem.
+
+### show switch port rail3 — the switch-side detail
+
+When the topology map shows an anomaly on a specific rail, the next step is to inspect that switch port in detail.
+
+```
+$ show switch port rail3
+
+QM9700 Leaf Switch -- Rail 3 port status
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Interface:      Rail3/port1
+  NIC connected:  mlx5_3 (0x506b4b0300a1b203)
+  Admin state:    Up (admin enabled)
+  Oper state:     Err-disabled
+  Err reason:     link-flap
+  Last flap:      00:07:43 ago
+  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Port disabled by errdisable recovery. Detected 6 link
+  flaps in 30 seconds. Possible causes: faulty cable,
+  transceiver issue, or physical layer problem.
+  Re-enable: no shutdown (after resolving physical fault)
+```
+
+`Err-disabled` with reason `link-flap` tells you exactly what happened: the switch detected the link going up and down repeatedly (6 times in 30 seconds) and disabled the port to protect the fabric from instability. The administrative state is still `Up` — a human has not deliberately shut this port. The switch disabled it automatically.
+
+**What causes link flaps:**
+- Faulty optical transceiver (the most common cause at scale — optics fail frequently)
+- Damaged fiber cable (bent beyond minimum bend radius, crushed, connector contamination)
+- Loose QSFP connector not fully seated
+- Firmware bug in NIC or switch causing the link state machine to oscillate
+
+**What to do:**
+1. Reseat the cable at both ends (NIC side and switch side)
+2. Replace the optical transceiver with a known-good unit
+3. If the problem persists, swap the cable
+4. After fixing the physical problem: `no shutdown` on the switch port to re-enable it
+
+---
+
+## Act 5 — The diagnostic workflow
+
+You now have all the commands. The next step is knowing which order to run them in. The workflow is not random — it follows the OSI model from physical layer upward.
+
+<DiagnosticWorkflowViz />
+
+**Phase 1 — Physical layer (Links)**
+
+```
+ibstat                     → Is every NIC State: Active?
+rdma link show             → Are all Rails showing state ACTIVE?
+show topology              → Does NIC state match switch port state?
+```
+
+If any link is down at this layer, everything else is irrelevant until you fix the physical problem. Never skip this phase.
+
+**Phase 2 — Traffic layer (Counters)**
+
+```
+show interface counters    → Are there drops? Are there pauses? Buffer utilisation?
+ethtool -S eth0            → rx_pfc_pause_frames growing? tx_dropped non-zero?
+```
+
+Read counters before reading configuration. Counters tell you the symptom. Configuration tells you the cause. You need the symptom first to know what cause you are looking for.
+
+**Phase 3 — Configuration layer**
+
+```
+show dcb pfc               → Is PFC enabled on the right priority?
+show dcb ets               → Is ECN active? Is DCQCN running?
+show roce                  → Does RoCEv2 show a clean summary?
+```
+
+Only read configuration after you know what symptom you are diagnosing. If counters show drops with no pauses, you know PFC is the issue — go directly to `show dcb pfc`. If counters show rapidly growing pauses but no drops, PFC is working but congestion is severe — look at `show dcb ets` to check ECN.
+
+**Phase 4 — Switch-side investigation**
+
+```
+show topology              → Which rail has the anomaly?
+show switch port rail<N>   → What does the switch say about that port?
+```
+
+Only go to the switch side if the DGX-side commands do not fully explain the problem.
+
+**Phase 5 — Full fabric diagnostics**
+
+If the above phases do not identify the problem, escalate to:
+
+```
+ibdiagnet                  → Full fabric sweep: checks all IB ports, routing tables,
+                             LID assignments, path records, and error counters.
+                             Run from any node with fabric access.
+                             Takes 5–15 minutes for a large fabric.
+                             Output is a comprehensive diagnostic report.
+```
+
+`ibdiagnet` is the nuclear option — it tells you everything about the fabric but takes time and generates enormous output. Use it when you have ruled out simpler causes.
+
+**When to call NVIDIA support:**
+- `ibdiagnet` reports routing table inconsistencies
+- Multiple rails on multiple nodes are showing the same error simultaneously
+- UFM shows SM restarts in the event log
+- The problem reappears immediately after you fix it
+
+---
+
+## Act 6 — Command reference by scenario
+
+Different symptoms lead you to different commands. Here is the map.
+
+<ScenarioCommandMapViz />
+
+**Scenario: Training throughput dropped to 87.5%**
+```
+1. ibstat → look for any NIC not in State: Active
+2. show topology → confirm which rail is affected
+3. show switch port rail<N> → check switch-side state
+→ Most likely: link-flap errdisable. Fix physical problem, re-enable port.
+```
+
+**Scenario: Training throughput degraded across all GPUs (not one)**
+```
+1. show interface counters → check for drops and pauses
+2. ethtool -S eth0 → check rx_pfc_pause_frames growth rate
+3. show dcb pfc → confirm PFC is enabled and on correct priority
+→ Most likely: pause storm or PFC misconfiguration.
+```
+
+**Scenario: Training throughput degraded, no drops in counters**
+```
+1. ethtool -S eth0 → check rx_pfc_pause_frames (may be growing fast)
+2. show dcb pfc → check watchdog status
+→ Most likely: pause storm with no drops (PFC is working, preventing drops,
+  but holding the NIC in pause state — effective as a deadlock)
+```
+
+**Scenario: AllReduce latency high but no drops or pauses**
+```
+1. show dcb ets → check ECN status
+2. show roce → check DCQCN status
+3. show interface counters → check buffer utilisation %
+→ Most likely: ECN not configured. Congestion builds silently until
+  PFC kicks in or drops occur. Enable ECN for proactive rate control.
+```
+
+**Scenario: Node not appearing in UFM after boot**
+```
+1. ibstat on that node → check State and Base lid
+2. systemctl status nvidia-fabricmanager → FM daemon running?
+3. show ib sm on switch → is SM running and is it seeing this node?
+→ Most likely: FM daemon not started, or UFM not running when node booted.
+```
+
+---
+
+## The FabricLab simulator — how it works
+
+You have been reading about real commands on real devices. The FabricLab simulator is your practice environment. Before you enter the labs, you need to understand exactly how it is structured — because the structure mirrors how you would work in a real cluster.
+
+<SimulatorExplainerViz />
+
+**The core design principle: one terminal per device**
+
+In a real AI cluster investigation, you have multiple SSH sessions open simultaneously. One window is your DGX host. Another is the leaf switch. A third might be the UFM server. You never mix commands across sessions — you know exactly which device you are on because the prompt tells you, and your muscle memory knows which commands belong in which session.
+
+FabricLab mirrors this exactly. The lab topology diagram is your map. **Click a device on the map and a terminal session opens for that device.** The prompt changes, the colour scheme changes, and the command set changes. You cannot type `show dcb pfc` in a DGX terminal and expect it to work — just as you cannot on real hardware. The simulator enforces device context.
+
+This means you will work with multiple terminal tabs open simultaneously during a lab:
+- **Green prompt** — DGX host (DGX OS) — `ibstat`, `rdma link show`, `ethtool`
+- **Blue prompt** — Leaf switch (Cumulus/Spectrum) — `show dcb pfc`, `show interface counters`
+- **Purple prompt** — Spine switch (ONYX) — `show interfaces ib status`, `show ib counters`
+
+**What each device context models accurately:**
+
+The DGX host context faithfully represents the RDMA diagnostic commands you would run after SSHing to a real DGX node running DGX OS. The leaf switch context faithfully represents the Cumulus Linux / Spectrum-X CLI. When you type `show dcb pfc` on the switch tab and see PFC enabled, that output format, those fields, and the state changes you trigger with `disable pfc` all match what real Spectrum hardware produces.
+
+Specifically, each context models:
+
+*DGX host:* RDMA link state per rail, NIC topology map, per-NIC statistics
+
+*Leaf switch:* PFC state (enabled/disabled, priority, pause quanta, watchdog), ECN/DCQCN state, interface counters (drops, pauses, buffer utilisation), RoCEv2 configuration summary, switch port error states
+
+**What the simulator does not model:**
+
+The simulator is a teaching tool, not a full emulator. It does not model packet-level RDMA behaviour, real-time congestion dynamics, the UFM management plane, the full NCCL communication pattern, or hardware failure modes beyond the specific scenarios in each lab. What it does model, it models correctly — the commands are real, the output format is real, the diagnostic logic is real.
+
+**How to get the most from the labs:**
+
+Treat the topology like your real cluster map. Click the device you want to investigate, work in that terminal session, then click another device when you need a different perspective. The diagnostic workflow from this chapter — physical first, counters second, configuration third — maps directly onto which device tab you open and in what order.
+
+When you finish a lab, ask: what would real hardware give me that the simulator does not show? That reflection is where the learning compounds.
+
+---
+
+## What you now know
+
+You can now sit down at a terminal with a fabric problem and know exactly what to type.
+
+You know the device map: which commands run on the DGX host, which run on the switch, which require UFM. You know the command families: ibstat and rdma link show for physical layer, show interface counters and ethtool for traffic layer, show dcb pfc and show dcb ets for configuration layer.
+
+You know the discipline: physical first, counters second, configuration third. You know the asymmetry between the NIC side and the switch side, and why show topology can reveal problems that rdma link show cannot.
+
+And you know how the simulator works: one terminal tab per device, device-specific command sets, colour-coded prompts. The topology diagram is your map. Click a device, open a session, work that device's CLI. Exactly as you would in a real cluster.
+
+The labs are waiting. In Lab 0, a GPU rail has gone dark. Click the DGX node in the topology to open your first session. You have everything you need to find the problem.
+
+[Go to Lab 0: Identify the failed rail →](/lab?lab=lab0-failed-rail)

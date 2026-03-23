@@ -1,32 +1,5 @@
 import type { ClassifiedCommand } from "@/types";
-
-const KNOWN_COMMANDS = [
-  "show dcb pfc",
-  "show dcb ets",
-  "show interface counters",
-  "ethtool -s eth0",
-  "rdma link show",
-  "show roce",
-  "disable pfc",
-  "enable pfc",
-  "enable ecn",
-  "disable ecn",
-  "clear counters eth0",
-  "help",
-  "hint",
-] as const;
-
-const KNOWN_VERBS = [
-  "show",
-  "disable",
-  "enable",
-  "no",
-  "clear",
-  "help",
-  "hint",
-  "ethtool",
-  "rdma",
-] as const;
+import { KNOWN_COMMANDS, KNOWN_VERBS } from "@/lib/commandCatalog";
 
 function levenshteinDistance(source: string, target: string): number {
   const rows = source.length + 1;
@@ -56,12 +29,14 @@ function levenshteinDistance(source: string, target: string): number {
 }
 
 export function classifyCommand(input: string): ClassifiedCommand {
-  const normalized = input.trim().toLowerCase();
+  const trimmed = input.trim();
+  const normalized = trimmed.toLowerCase();
+  const exactMatch = KNOWN_COMMANDS.find((command) => command === trimmed);
 
-  if (KNOWN_COMMANDS.includes(normalized as (typeof KNOWN_COMMANDS)[number])) {
+  if (exactMatch) {
     return {
       type: "exact",
-      handler: normalized,
+      handler: exactMatch,
       penalty: "none",
     };
   }
@@ -70,7 +45,7 @@ export function classifyCommand(input: string): ClassifiedCommand {
   let closestDistance = Number.POSITIVE_INFINITY;
 
   for (const command of KNOWN_COMMANDS) {
-    const distance = levenshteinDistance(normalized, command.toLowerCase());
+    const distance = levenshteinDistance(trimmed, command);
 
     if (distance < closestDistance) {
       closestDistance = distance;

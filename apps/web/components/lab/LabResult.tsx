@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { getScoreBand } from "@/lib/labEngine";
 import { useLabStore } from "@/store/labStore";
 
@@ -13,14 +14,23 @@ const bandClasses = {
 export function LabResult({
   score,
   onReset,
+  labId,
 }: {
   score: number;
   onReset: () => void;
+  labId?: string;
 }) {
   const lab = useLabStore((state) => state.lab);
   const band = getScoreBand(score);
   const perfectRun =
     lab.mistakeCount === 0 && lab.nearMissCount === 0 && lab.hintsUsed === 0;
+  const nextChapterMap: Record<string, { slug: string; label: string }> = {
+    "lab0-failed-rail": { slug: "ch4-infiniband-operations", label: "Chapter 4: InfiniBand Operations" },
+    "lab1-pfc-fix": { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },
+    "lab2-congestion": { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },
+    "lab4-topology-sizing": { slug: "ch8-nccl-performance", label: "Chapter 8: NCCL" },
+  };
+  const nextChapter = labId ? nextChapterMap[labId] : undefined;
 
   const breakdown = [
     {
@@ -78,13 +88,40 @@ export function LabResult({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={onReset}
-        className="mt-8 inline-flex rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-      >
-        Try again
-      </button>
+      <div className="mt-8 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={onReset}
+          className="inline-flex rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+        >
+          Try again
+        </button>
+
+        {nextChapter && (
+          <Link
+            href={`/learn/${nextChapter.slug}`}
+            className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-5 py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400/20"
+          >
+            {nextChapter.label} →
+          </Link>
+        )}
+
+        <Link
+          href="/curriculum"
+          className="inline-flex rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-slate-300 transition hover:border-white/30 hover:text-white"
+        >
+          View curriculum →
+        </Link>
+      </div>
+
+      <div className="mt-4">
+        <Link
+          href="/learn/ch3-the-cli"
+          className="text-xs text-slate-600 transition hover:text-slate-400 underline underline-offset-2"
+        >
+          ← Back to The CLI chapter
+        </Link>
+      </div>
     </div>
   );
 }

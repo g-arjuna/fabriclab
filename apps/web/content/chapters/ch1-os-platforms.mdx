@@ -1,0 +1,257 @@
+---
+title: "Chapter 1: Operating Systems, Management Platforms, and First Power-On"
+module: "HPC Networking Foundations"
+level: "Beginner"
+estimatedMinutes: 35
+labLink: ""
+---
+
+## Before you touch anything
+
+Chapter 0 showed you what the hardware looks like. Now you need to understand what runs on it, how you reach it, and what happens the first time you power it all on. This is the operational context that every CLI command in later chapters assumes you already have.
+
+A senior engineer walking into an AI data center for the first time knows exactly what questions to ask: What OS is on that switch? Does UFM manage the fabric or is it manually configured? Is there a console cable on these nodes or do I need IPMI? Can I make changes from the CLI or does the orchestration layer own the config?
+
+This chapter answers those questions.
+
+---
+
+## The software stack — what runs where
+
+Every piece of hardware in an AI cluster runs its own software stack. These are not interchangeable. Understanding which OS lives on which device is the foundation of everything.
+
+<SoftwareStackViz />
+
+Here is the complete picture:
+
+**DGX H100 host OS: DGX OS (Ubuntu-based)**
+NVIDIA ships DGX nodes with DGX OS — a customised Ubuntu 22.04 LTS image with pre-installed NVIDIA drivers, CUDA, NCCL, container runtime, and fabric management agents. Underneath it is standard Ubuntu. You can SSH in, run apt, use systemctl, inspect logs in /var/log. The customisation adds NVIDIA-specific services: nvsm (NVIDIA System Management), dcgm (Data Center GPU Manager), and the fabric manager daemon that initialises NVLink and InfiniBand connections.
+
+**QM9700 InfiniBand switches: ONYX**
+NVIDIA ONYX is the operating system for Quantum-series InfiniBand switches (formerly called MLNX-OS before the rebrand). It presents a Cisco IOS-style CLI — you will recognise the verb patterns immediately: `show`, `configure terminal`, `no`, `interface`. It runs on a Linux kernel underneath but exposes only the ONYX CLI surface by default. The web GUI (WebUI) is available on the management port.
+
+**SN5600 / SN4600 Ethernet switches: Cumulus Linux or SONiC**
+Spectrum-X Ethernet switches can run either Cumulus Linux (a Debian-based network OS) or SONiC (Software for Open Networking in the Cloud, originally developed by Microsoft for Azure). Both expose standard Linux underneath with a network abstraction layer on top. Cumulus uses NCLU or NVUE for configuration; SONiC uses the SONiC CLI. Operators with a Linux background find these more familiar than ONYX.
+
+**BlueField-3 DPU: BF-Bundle OS**
+Each BlueField-3 DPU runs its own independent Ubuntu instance — called the Arm-side OS. It boots from its own eMMC storage, completely independent of the host DGX. You SSH into it separately: it has its own IP address on the management network. From the host DGX, you can reach it via rshim (a PCIe-based console interface). This matters operationally: you can reimage or reconfigure the DPU without touching the host OS.
+
+**UFM: runs on a dedicated management server**
+NVIDIA UFM (Unified Fabric Manager) is a software application — not an embedded OS. It runs on a dedicated x86 management server (or VM) on your management network, running standard RHEL or Ubuntu. UFM is the central brain of the InfiniBand fabric. It discovers all switches and nodes, assigns LIDs, computes routing tables, monitors performance, and pushes configuration to every switch. You do not configure InfiniBand switches directly — UFM does it.
+
+**Base Command Manager: runs on a head node**
+BCM (formerly DGX System Software) runs on a designated head node. It handles DGX provisioning (PXE boot, OS imaging), job scheduling integration (Slurm), telemetry collection, and health monitoring. It exposes a web GUI and an API. Your first interaction with a new DGX cluster is usually through BCM's provisioning interface.
+
+---
+
+## The management philosophy — centralised vs distributed
+
+This is the most important conceptual difference between InfiniBand and Ethernet management, and it changes how you operate the fabric.
+
+<ManagementPhilosophyViz />
+
+**InfiniBand: centralised control via the Subnet Manager**
+
+InfiniBand's architecture requires a Subnet Manager (SM). The SM is a software process that runs on one node in the fabric (typically on the UFM server, or as a backup on a switch). It has a complete view of the entire fabric topology and is responsible for:
+
+- Discovering all switches and nodes by querying the fabric
+- Assigning every port a LID (Local Identifier) — a 16-bit address unique within the subnet
+- Computing optimal paths between all LID pairs (using algorithms like FTREE or SSSP)
+- Programming every switch's forwarding table based on computed paths
+- Detecting topology changes (link failures, new nodes) and re-routing automatically
+
+When you add a new DGX node to an InfiniBand fabric, you do not configure the switches — you let UFM discover the new node, assign it LIDs, and update the routing tables. The switches are passive recipients of UFM's decisions. This is fundamentally different from Ethernet where each switch builds its own routing table via distributed protocols.
+
+**Practical implication:** On InfiniBand, the CLI on individual ONYX switches is primarily for monitoring and diagnostics. You use `show` commands to check port state, link speed, and error counters. You rarely use `configure terminal` to set InfiniBand parameters — UFM handles that. The CLI you will use most often on an ONYX switch is `show ib sm` (subnet manager status), `show interface ib` (port states), and `show ib counters` (performance).
+
+**Ethernet (Spectrum-X): distributed configuration**
+
+Spectrum-X Ethernet switches are configured individually — either via the Cumulus/SONiC CLI, or via a fabric controller (NVIDIA Air, or a third-party NMS). There is no centralised equivalent of the InfiniBand subnet manager for Ethernet. RoCEv2 configuration (PFC, ECN, DCQCN) is applied per-switch and per-port. This gives more flexibility but requires more consistent configuration management — a PFC misconfiguration on one switch affects the entire fabric.
+
+---
+
+## Is it all CLI? Or all orchestrated?
+
+The honest answer is: both, depending on what you are doing.
+
+<OperationsModeViz />
+
+**Day 0 (initial setup):** Mostly orchestrated. You use BCM to provision DGX OS. UFM discovers the fabric automatically. You configure Spectrum-X switches via NCLU templates or SONiC config push. Very little manual CLI work — the platforms do the heavy lifting.
+
+**Day 1 (operations):** Mixed. Monitoring happens through UFM GUI, BCM dashboard, and Grafana dashboards connected to DCGM. Diagnostics require CLI — you SSH into switches to check port state, run `show ib counters`, use `ibdiagnet` from a management host. Job scheduling is entirely through Slurm or Kubernetes.
+
+**Day 2 (troubleshooting):** Mostly CLI. When a GPU rail goes dark, a PFC storm starts, or AllReduce latency spikes, you are in SSH sessions on switches and DGX nodes running diagnostic commands. UFM helps you correlate what you find with the fabric topology. But the raw data comes from CLIs.
+
+**What you cannot do from CLI:**
+- Change UFM's routing algorithm selection (requires UFM GUI or API)
+- Provision a new DGX OS image (requires BCM)
+- Monitor per-job GPU utilisation (requires DCGM or NGC dashboards)
+- Upgrade switch firmware at scale (requires UFM or Ansible)
+
+**What you can only do from CLI:**
+- Real-time per-port error counter inspection
+- Fabric loop detection and diagnosis
+- Cable testing and qualification
+- Detailed PFC/ECN counters that UFM does not surface
+- Any urgent change when the management plane is unavailable
+
+---
+
+## The platforms you need to know — and why NVIDIA dominates
+
+A minimal working AI cluster requires these specific software components. Some are mandatory, some are optional alternatives.
+
+<PlatformLandscapeViz />
+
+**Mandatory for any DGX InfiniBand cluster:**
+- DGX OS (or vanilla Ubuntu with NVIDIA drivers — but then you lose NVSM integration)
+- ONYX on all Quantum switches (no alternative — it is the only OS for these switches)
+- UFM on a management server (technically optional but practically required at any scale — without it you run OpenSM manually, which is painful)
+- Fabric Manager (FM) daemon on each DGX host (required for NVLink initialisation)
+
+**Mandatory for Spectrum-X RoCEv2 clusters:**
+- Cumulus Linux or SONiC on Spectrum switches (your choice)
+- MLNX-OFED driver on each DGX host (for ConnectX-7 RDMA support)
+
+**Optional but standard:**
+- Base Command Manager (BCM) for provisioning and job management
+- DCGM (Data Center GPU Manager) for GPU health monitoring
+- NCCL (NVIDIA Collective Communications Library) — ships with DGX OS, required for distributed training
+
+**Why NVIDIA specifically?** Three reasons. First, vertical integration: if you deploy DGX nodes, you are using NVIDIA GPUs, and NVIDIA owns the GPU-to-fabric interface. ConnectX-7 NICs are designed to work with DGX's NVLink topology. The Quantum switches are designed for the rail-optimised DGX topology. UFM is aware of DGX's 8-NIC architecture. Nothing from another vendor integrates at this depth. Second, CUDA: nearly all AI training frameworks are CUDA-native. The networking stack (NCCL, GPUDirect) is built around CUDA semantics. Third, reference architecture: DGX SuperPOD is a validated, documented, widely-deployed design. When something breaks, there is a known-good configuration to compare against.
+
+This does not mean NVIDIA is always the right choice. Chapter 0 covers the alternatives. But it explains why this curriculum focuses on NVIDIA's stack.
+
+---
+
+## First power-on — what actually happens
+
+You have racked the hardware, run the cables, and you are ready to power on. The order matters.
+
+<PowerOnSequenceViz />
+
+**Step 1: Power on the out-of-band management network first**
+
+The 1GbE management switches and BMC ports need to be up before anything else powers on. You need to be able to reach each device's BMC for power control and console access even if the device has not booted yet.
+
+**Step 2: Power on the spine switches**
+
+The InfiniBand spine switches (Q3400) come up next. ONYX boots in about 3–5 minutes. During this time it loads its configuration, initialises ASICs, and brings up interfaces. The InfiniBand Subnet Manager may start on the spine if configured as the SM location (common in smaller deployments).
+
+**Step 3: Power on the leaf switches**
+
+The QM9700 leaf switches boot next (2–3 minutes). They connect upward to the spine and outward to the DGX nodes. At this point the fabric structure is physically present but no nodes are connected.
+
+**Step 4: Start UFM**
+
+If UFM is running on a dedicated management server (recommended for production), start it now. UFM begins its discovery process — it will discover the switches and build the initial topology map. No LIDs are assigned yet because no nodes are connected.
+
+**Step 5: Power on DGX nodes**
+
+DGX nodes take 8–12 minutes to POST and boot. During boot: the BIOS initialises hardware, DGX OS starts, NVIDIA drivers load, and the Fabric Manager daemon starts. When FM starts, it initialises the NVSwitch fabric inside the node and then registers the node's ConnectX-7 NICs with UFM. UFM sees the new endpoints, assigns LIDs, and updates routing tables across all switches.
+
+**Critical: why order matters**
+If DGX nodes come up before the switches and UFM are ready, the FM daemon cannot find the fabric. It enters a retry loop. Once switches and UFM are ready, FM retries and eventually succeeds — but the initial training job may fail if it started before FM completed initialisation. Always bring up the fabric before the compute.
+
+---
+
+## First access — what you expect to see
+
+You have powered everything on. Now you need to verify the system is healthy. Here is what you look at and in what order.
+
+<FirstAccessViz />
+
+**1. Switch console: ONYX login**
+
+Connect a console cable to the switch (micro-USB or RJ45 to DB9 adapter, 115200 baud, 8N1). You will see the ONYX boot sequence — Linux kernel messages, service starts, then the login prompt:
+
+```
+ONYX - Mellanox Networks
+switch login: admin
+Password: admin    ← default, change immediately
+
+switch > enable
+switch # show version
+Product name:      ONYX
+Product release:   3.11.2012
+Build ID:          #1-dev
+Build date:        2024-08-12 08:15:54
+
+switch # show interfaces ib status
+```
+
+If interfaces show `DOWN`, the DGX nodes are not connected yet or have not finished booting.
+
+**2. DGX BMC: iDRAC web interface**
+
+Open a browser to the BMC IP address. Default credentials are on the iDRAC service tag label (or set during provisioning). The iDRAC dashboard shows power state, hardware health (all green is what you want), and gives you a virtual console to see what is displayed on the node's video output.
+
+When DGX OS finishes booting, you can SSH directly to the node's management IP. The first thing to run:
+
+```bash
+nvidia-smi
+```
+
+This shows all 8 GPUs are visible, their memory, driver version, and current state. If any GPU is missing from this output, the node has a hardware problem.
+
+```bash
+ibstat
+```
+
+This shows all InfiniBand/RoCE ports (all 8 ConnectX-7 NICs). Each should show `State: Active` and `Physical state: LinkUp`. If any show `Polling` or `Down`, that NIC has not connected to the fabric.
+
+**3. UFM: fabric discovery dashboard**
+
+Open the UFM web interface. After initial discovery you should see:
+- All switches in the topology map (green = up, red = down)
+- All DGX nodes appearing as fabric endpoints
+- LID assignments visible for each node
+
+If a node is not appearing in UFM after 15 minutes, check: is the FM daemon running on the node? Is the ConnectX-7 physically connected to the correct leaf switch? Does UFM show the port as `Active` on the switch side?
+
+---
+
+## How the connectivity looks — the full picture
+
+Now that you understand the software, you can map it onto the physical connections you saw in Chapter 0.
+
+<ConnectivityMapViz />
+
+Three management planes, completely separated:
+
+**Out-of-band management (1GbE)**
+- Path: Management workstation → 1GbE switch → iDRAC port on each DGX → BMC CPU
+- Also: Management workstation → 1GbE switch → ONYX switch management port
+- Also: UFM server → 1GbE switch → ONYX switch management port (UFM needs this to talk to switches)
+- Software: iDRAC web, IPMI, SSH to ONYX management interface
+- Purpose: Power control, console access, OS provisioning, firmware updates. Works even when compute network is down.
+
+**In-band management (10GbE/25GbE)**
+- Path: DGX eth0 (management NIC, not ConnectX-7) → 10GbE switch → UFM server → BCM server
+- Software: SSH to DGX OS, BCM provisioning, job scheduling
+- Purpose: OS-level management, job submission, health monitoring
+
+**Compute fabric (400G InfiniBand)**
+- Path: DGX mlx5_0 → Rail 0 leaf switch → spine switches → Rail N leaf switch → mlx5_N on other DGX
+- Software: MLNX-OFED, NCCL, Fabric Manager, UFM manages routing
+- Purpose: GPU-to-GPU AllReduce during training. No management traffic here.
+
+**Storage fabric (400G Ethernet)**
+- Path: DGX BlueField-3 DPU ports → Spectrum Ethernet switch → NVMe-oF storage arrays
+- Software: NVMe-oF, GPUDirect Storage
+- Purpose: Reading training datasets, writing checkpoints
+
+---
+
+## What you now know
+
+You can now answer the questions a network engineer asks on day one:
+
+- DGX nodes run DGX OS (Ubuntu-based). Quantum switches run ONYX. Spectrum switches run Cumulus or SONiC. BlueField DPUs run their own Ubuntu instance.
+- InfiniBand is centrally managed by UFM — you do not configure individual switches for routing. Ethernet is distributed — each switch is configured individually.
+- Day-to-day operations use both GUI (UFM, BCM) and CLI (ONYX SSH, DGX SSH). Troubleshooting is mostly CLI.
+- Power-on order: out-of-band management → spine switches → leaf switches → UFM → DGX nodes.
+- First access: ONYX console cable at 115200 baud, iDRAC web GUI for DGX, UFM web GUI for fabric view.
+- First commands: `nvidia-smi` on DGX to verify GPUs, `ibstat` to verify NIC state, UFM discovery to verify fabric topology.
+
+The next chapter introduces the CLI formally — the commands you will use every day to monitor and troubleshoot this infrastructure.

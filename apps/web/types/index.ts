@@ -1,3 +1,11 @@
+export interface RailState {
+  id: number
+  nicName: string
+  nicState: 'up' | 'down'
+  switchPort: 'up' | 'down' | 'error-disabled' | 'admin-down'
+  guid: string
+}
+
 export interface TopologyState {
   nic: {
     name: string
@@ -7,7 +15,21 @@ export interface TopologyState {
   pfcEnabled: boolean
   ecnEnabled: boolean
   congestionDetected: boolean
+  silentCongestion: boolean
+  unevenSpine?: boolean
+  lbMode?: 'hash' | 'adaptive' | 'per-packet'
   bufferUtilPct: number
+  rails?: RailState[]
+  ncclTransport?: 'socket' | 'net'
+  ncclIbHca?: string
+  ncclSocketIfname?: string
+  ncclTestsBusbw?: number
+  ncclTestsFixed?: boolean
+  proposalAInspected?: boolean
+  proposalBInspected?: boolean
+  proposalACalculated?: boolean
+  proposalBCalculated?: boolean
+  recommendationMade?: boolean
 }
 
 export interface LabState {
@@ -61,4 +83,34 @@ export interface ClassifiedCommand {
   handler?: string
   suggestion?: string
   penalty: 'none' | 'light' | 'full'
+}
+
+export type DeviceType = 'dgx' | 'leaf-switch' | 'spine-switch' | 'ufm-server'
+
+export interface LabDevice {
+  id: string
+  type: DeviceType
+  label: string
+  sublabel?: string
+  prompt: string
+  osLabel: string
+  allowedCommands: string[]
+  position: { x: number; y: number }
+  status: 'up' | 'down' | 'error-disabled' | 'degraded'
+  railId?: number
+}
+
+export interface DeviceSession {
+  deviceId: string
+  history: Array<{
+    type: 'input' | 'output' | 'error' | 'info'
+    text: string
+    timestamp: number
+  }>
+  isActive: boolean
+}
+
+export interface MultiDeviceLabConfig {
+  devices: LabDevice[]
+  initialActiveDeviceId: string
 }

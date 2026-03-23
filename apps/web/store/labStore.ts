@@ -1,11 +1,13 @@
 import { create } from "zustand";
 
-import type { LabConfig, LabState, TopologyState } from "@/types";
+import type { DeviceSession, LabConfig, LabState, TopologyState } from "@/types";
 
 type StoreState = {
   topology: TopologyState;
   lab: LabState;
   activeConceptId: string | null;
+  deviceSessions: Record<string, DeviceSession>;
+  activeDeviceId: string | null;
   setTopology: (patch: Partial<TopologyState>) => void;
   loadLab: (config: LabConfig) => void;
   setCondition: (key: string, value: boolean) => void;
@@ -16,6 +18,14 @@ type StoreState = {
   completeLab: () => void;
   resetLab: () => void;
   setActiveConceptId: (id: string | null) => void;
+  setActiveDevice: (deviceId: string) => void;
+  openDeviceSession: (deviceId: string) => void;
+  appendToDeviceHistory: (
+    deviceId: string,
+    entry: DeviceSession["history"][0],
+  ) => void;
+  clearDeviceSession: (deviceId: string) => void;
+  closeDeviceSession: (deviceId: string) => void;
 };
 
 const defaultTopology: TopologyState = {
@@ -23,7 +33,8 @@ const defaultTopology: TopologyState = {
   pfcEnabled: true,
   ecnEnabled: false,
   congestionDetected: false,
-  bufferUtilPct: 20,
+  silentCongestion: false,
+  bufferUtilPct: 15,
 };
 
 const createDefaultLabState = (): LabState => ({
@@ -43,6 +54,8 @@ export const useLabStore = create<StoreState>((set) => ({
   topology: defaultTopology,
   lab: createDefaultLabState(),
   activeConceptId: null,
+  deviceSessions: {},
+  activeDeviceId: null,
   setTopology: (patch) =>
     set((state) => ({
       topology: {
@@ -52,6 +65,7 @@ export const useLabStore = create<StoreState>((set) => ({
           ...state.topology.nic,
           ...(patch.nic ?? {}),
         },
+        rails: patch.rails ?? state.topology.rails,
       },
     })),
   loadLab: (config) =>
@@ -63,6 +77,7 @@ export const useLabStore = create<StoreState>((set) => ({
           ...defaultTopology.nic,
           ...(config.initialTopology.nic ?? {}),
         },
+        rails: config.initialTopology.rails ?? defaultTopology.rails,
       },
       lab: {
         ...createDefaultLabState(),
@@ -70,6 +85,8 @@ export const useLabStore = create<StoreState>((set) => ({
         startTime: Date.now(),
       },
       activeConceptId: null,
+      deviceSessions: {},
+      activeDeviceId: null,
     })),
   setCondition: (key, value) =>
     set((state) => ({
@@ -119,10 +136,10 @@ export const useLabStore = create<StoreState>((set) => ({
         Math.min(
           100,
           Math.round(
-            100 -
-              state.lab.mistakeCount * 8 -
-              state.lab.nearMissCount * 3 -
-              state.lab.hintsUsed * 10,
+            100
+              - state.lab.mistakeCount * 8
+              - state.lab.nearMissCount * 3
+              - state.lab.hintsUsed * 10,
           ),
         ),
       );
@@ -140,6 +157,68 @@ export const useLabStore = create<StoreState>((set) => ({
       topology: state.topology,
       lab: createDefaultLabState(),
       activeConceptId: state.activeConceptId,
+      deviceSessions: {},
+      activeDeviceId: null,
     })),
   setActiveConceptId: (id) => set(() => ({ activeConceptId: id })),
+  setActiveDevice: (deviceId) =>
+    set((state) => ({
+      activeDeviceId: deviceId,
+      deviceSessions: state.deviceSessions[deviceId]
+        ? state.deviceSessions
+        : {
+            ...state.deviceSessions,
+            [deviceId]: {
+              deviceId,
+              history: [],
+              isActive: true,
+            },
+          },
+    })),
+  openDeviceSession: (deviceId) =>
+    set((state) => ({
+      deviceSessions: {
+        ...state.deviceSessions,
+        [deviceId]: state.deviceSessions[deviceId] ?? {
+          deviceId,
+          history: [],
+          isActive: true,
+        },
+      },
+    })),
+  appendToDeviceHistory: (deviceId, entry) =>
+    set((state) => {
+      const existing = state.deviceSessions[deviceId];
+      if (!existing) return state;
+      return {
+        deviceSessions: {
+          ...state.deviceSessions,
+          [deviceId]: {
+            ...existing,
+            history: [...existing.history, entry],
+          },
+        },
+      };
+    }),
+  clearDeviceSession: (deviceId) =>
+    set((state) => {
+      const existing = state.deviceSessions[deviceId];
+      if (!existing) return state;
+      return {
+        deviceSessions: {
+          ...state.deviceSessions,
+          [deviceId]: { ...existing, history: [] },
+        },
+      };
+    }),
+  closeDeviceSession: (deviceId) =>
+    set((state) => {
+      const sessions = { ...state.deviceSessions };
+      delete sessions[deviceId];
+      const newActiveId = Object.keys(sessions)[0] ?? null;
+      return {
+        deviceSessions: sessions,
+        activeDeviceId: newActiveId,
+      };
+    }),
 }));

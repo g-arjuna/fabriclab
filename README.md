@@ -1,153 +1,81 @@
 # FabricLab
 
-RoCEv2 networking learning platform with CLI simulation and MDX content.
-Zero setup. Zero API costs. Content from Claude, engineering from Codex.
+FabricLab is an offline-first HPC networking learning platform focused on RoCEv2, InfiniBand operations, topology design, and NCCL diagnostics.
 
----
+The current repo contains a working Next.js app in `apps/web` with:
 
-## Status
+- 9 chapter routes covering hardware foundations through NCCL performance
+- 6 interactive labs with a state-driven CLI simulator
+- a multi-device terminal with per-device command sets
+- lab-specific topology views and a reference drawer
+- MDX chapter rendering plus a large visualisation/component registry
 
-MVP in progress — RoCEv2 module, two scenario labs, MDX rendering engine.
+## Current Scope
 
----
+- Module: `RoCEv2`
+- Chapters: `ch0` through `ch8`
+- Labs:
+  - `lab0-failed-rail`
+  - `lab1-pfc-fix`
+  - `lab2-congestion`
+  - `lab3-uneven-spine`
+  - `lab4-topology-sizing`
+  - `lab5-nccl-diagnosis`
 
-## Getting started
+## Running The App
+
+The runnable app lives under `apps/web`.
 
 ```bash
+cd apps/web
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000/module/rocev2`
+Open [http://localhost:3000](http://localhost:3000).
 
-No `.env` file. No API keys. No configuration. Works immediately.
+Useful routes:
 
----
+- [http://localhost:3000/](http://localhost:3000/) — landing page
+- [http://localhost:3000/curriculum](http://localhost:3000/curriculum) — chapter + lab index
+- [http://localhost:3000/learn](http://localhost:3000/learn) — chapter browser
+- [http://localhost:3000/lab?lab=lab0-failed-rail](http://localhost:3000/lab?lab=lab0-failed-rail) — lab entrypoint
+- [http://localhost:3000/module/rocev2](http://localhost:3000/module/rocev2) — module home
 
-## Tooling guide
+## Project Structure
 
-### Which tool for which job
+Key directories:
 
-| Task | Tool |
-|------|------|
-| Build the initial platform scaffold | Codex Web |
-| Integrate a Claude-written MDX chapter | VSCode + Codex CLI |
-| Integrate a Claude-written component | VSCode + Codex CLI |
-| Fix a TypeScript error | VSCode + Codex CLI |
-| Large feature (new lab, new page) | Codex Web |
-| Write chapter content | Claude |
-| Write visualisation components | Claude |
-| Write knowledge base content | Claude |
+- `apps/web/app` — Next.js routes
+- `apps/web/content/chapters` — MDX chapter content
+- `apps/web/content/knowledge` — reference content
+- `apps/web/data/labs` — lab configs and device layouts
+- `apps/web/lib/commands` — simulator command handlers
+- `apps/web/components/terminal` — terminal UI
+- `apps/web/components/topology` — topology visualisations
+- `apps/web/components/visualisations` — chapter visuals
+- `apps/web/store` — Zustand state
 
-### Setting up Codex CLI in VSCode
+## How The Simulator Works
 
-```bash
-npm install -g @openai/codex
-# In your project terminal:
-codex
-```
+- Device tabs map to DGX hosts, Spectrum-X leaf switches, spine switches, or workstation contexts.
+- Commands are routed through lab-aware handlers in `apps/web/components/terminal/commandHandler.ts`.
+- Lab state lives in Zustand and drives command output, hints, and completion.
+- Chapters and reference content are rendered from MDX/static content files in the repo.
 
-### First Codex Web prompt — copy this exactly
+## Workflow Notes
 
-```
-Read AGENTS.md then plan.md in this repository carefully.
+- Read `AGENTS.md` first in every coding session.
+- Read `plan.md` second.
+- Content and visualisations are dropped into the repo and integrated into the app.
+- For the content-delivery workflow, see `CONTENT_PIPELINE.md`.
 
-I am building FabricLab — an HPC networking learning platform.
-Your job is ENGINEERING ONLY. All content comes from Claude separately.
+## Validation
 
-Build Phase A from plan.md (Steps 1–11):
-  types/index.ts, store/labStore.ts, lib/commandClassifier.ts,
-  lib/labEngine.ts, lib/commands/*.ts, lib/mdxComponents.ts,
-  components/terminal/, components/lab/, components/topology/,
-  components/knowledge/ (shell only), data/labs/
-
-Critical rules:
-- CLI output must come from Zustand state — never hardcoded
-- Do NOT write MDX content or educational text
-- Do NOT add any API calls or .env variables
-- Use exact folder structure from AGENTS.md
-- Use exact state shape from plan.md
-- tsc --noEmit must pass after each step
-```
-
-### Codex CLI prompt when Claude delivers a new MDX chapter
+Type-check the app with:
 
 ```bash
-codex "New MDX file added: content/chapters/ch1-foundations.mdx
-It uses these components: <MentalModelTable />, <AllReduceBarrier />, <DGXGenerationExplorer />
-Component files are at components/visualisations/*.tsx (already there)
-1. Register each component in lib/mdxComponents.ts
-2. Verify the chapter renders at /module/rocev2/ch1-foundations
-3. Fix any TypeScript or import errors — do not touch component logic
-4. Run tsc --noEmit"
+apps/web/node_modules/.bin/tsc.cmd --noEmit --project apps/web/tsconfig.json
 ```
 
-### Codex CLI prompt when Claude delivers a new visualisation component
-
-```bash
-codex "New component delivered by Claude: components/visualisations/PFCPauseStormViz.tsx
-1. Add it to lib/mdxComponents.ts as PFCPauseStormViz
-2. Run tsc --noEmit and fix any TypeScript errors
-3. Do not modify the component logic — only fix imports if needed"
-```
-
----
-
-## Content workflow
-
-```
-You → ask Claude for a chapter or component
-Claude → generates MDX + React components
-You → save files to the repo
-You → tell Codex CLI to integrate (use prompts above)
-Codex → registers, fixes errors, confirms it compiles
-You → check in browser at localhost:3000/module/rocev2/[chapter]
-If visual issue → describe to Claude → Claude fixes → repeat
-If TypeScript error → tell Codex to fix → Codex fixes
-```
-
----
-
-## Document hierarchy
-
-| File | Read when | Purpose |
-|------|-----------|---------|
-| `AGENTS.md` | Every Codex session (first) | Rules, folder structure, tooling, prompts |
-| `plan.md` | Every Codex session (second) | Full implementation spec |
-| `vision.md` | Context only | Product direction |
-| `extended_vision.md` | Future reference | Full platform blueprint |
-
----
-
-## Project structure
-
-```
-fabriclab/
-├── content/
-│   ├── chapters/          MDX files from Claude → rendered at /module/rocev2/[chapter]
-│   └── knowledge/         Static knowledge base from Claude → rendered in knowledge panel
-├── components/
-│   ├── terminal/          CLI terminal (Codex-built)
-│   ├── lab/               Lab panel + result (Codex-built)
-│   ├── topology/          Static SVG topology (Codex-built)
-│   ├── knowledge/         Knowledge panel shell (Codex-built)
-│   └── visualisations/    Interactive React components from Claude
-├── lib/
-│   ├── commands/          CLI command handlers (Codex-built)
-│   ├── mdxComponents.ts   Registry — Codex maintains, registers Claude's components
-│   ├── labEngine.ts       Scoring + hints (Codex-built)
-│   └── commandClassifier.ts
-├── store/labStore.ts      Zustand state (Codex-built)
-├── data/labs/             Lab config files (Codex-built per plan.md spec)
-├── app/module/rocev2/     Next.js pages (Codex-built)
-└── types/index.ts         All interfaces (Codex-built)
-```
-
----
-
-## Core rules
-
-1. CLI output always comes from Zustand topology state — never hardcoded
-2. Zero API calls — works fully offline
-3. Content (MDX, components, knowledge) comes from Claude, not Codex
-4. Codex integrates what Claude produces — never modifies component logic
+The app is designed to work without external APIs or runtime configuration.

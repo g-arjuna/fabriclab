@@ -1,4 +1,7 @@
-import type { LabConfig } from "@/types";
+import { lab1Devices } from "@/data/labs/lab1-pfc-fix";
+import type { LabConfig, LabDevice } from "@/types";
+
+export const lab2Devices: LabDevice[] = lab1Devices;
 
 export const lab2: LabConfig = {
   id: "lab2-congestion",
@@ -6,11 +9,12 @@ export const lab2: LabConfig = {
   difficulty: "intermediate",
   expectedMinutes: 15,
   scenario:
-    "GPU training throughput has dropped 40% across this node's RoCEv2 links.\nMonitoring shows elevated buffer utilisation but the team cannot identify\nthe root cause.\n\nUse CLI tools to diagnose why congestion is occurring, then configure\nthe correct mechanism to manage it without disabling PFC entirely.",
+    "GPU training throughput has dropped 40% across this node's RoCEv2 links.\nMonitoring shows elevated buffer utilisation but the team cannot identify\nthe root cause.\n\nUse CLI tools to diagnose why congestion is occurring, then add the correct congestion signalling mechanism alongside PFC.",
   initialTopology: {
     pfcEnabled: true,
     ecnEnabled: false,
-    congestionDetected: true,
+    congestionDetected: false,
+    silentCongestion: true,
     bufferUtilPct: 87,
   },
   requiredConditions: ["congestionChecked", "ecnEnabled", "ecnVerified"],

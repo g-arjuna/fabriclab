@@ -10,7 +10,7 @@ export function showRoce(): CommandResult {
   }
 
   return {
-    output: `RoCE Configuration -- eth0
+    output: `RoCE Configuration -- Spectrum-X SN5600 (swp1-32)
   RoCE version:   RoCEv2
   State:          ${topology.nic.state === "up" ? "active" : "down"}
   PFC:            ${

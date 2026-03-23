@@ -22,10 +22,7 @@ function formatElapsed(startTime: number | null, now: number): string {
 }
 
 export function LabPanel({ config }: { config: LabConfig }) {
-  const conditions = useLabStore((state) => state.lab.conditions);
-  const verifiedConditions = useLabStore((state) => state.lab.verifiedConditions);
-  const shownHintLevels = useLabStore((state) => state.lab.shownHintLevels);
-  const startTime = useLabStore((state) => state.lab.startTime);
+  const labState = useLabStore((state) => state.lab);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -37,13 +34,13 @@ export function LabPanel({ config }: { config: LabConfig }) {
   }, []);
 
   const latestHint = useMemo(() => {
-    if (shownHintLevels.size === 0) {
+    if (labState.shownHintLevels.size === 0) {
       return null;
     }
 
-    const highestShownLevel = Math.max(...Array.from(shownHintLevels));
+    const highestShownLevel = Math.max(...Array.from(labState.shownHintLevels));
     return config.hints.find((hint) => hint.level === highestShownLevel) ?? null;
-  }, [config.hints, shownHintLevels]);
+  }, [config.hints, labState.shownHintLevels]);
 
   return (
     <section className="flex h-full flex-col rounded-3xl border border-white/10 bg-slate-950/80 p-6 text-slate-100 shadow-2xl shadow-slate-950/30 backdrop-blur">
@@ -60,25 +57,27 @@ export function LabPanel({ config }: { config: LabConfig }) {
       </div>
 
       <div className="mt-6 rounded-2xl border border-white/10 bg-slate-900/80 p-4">
-        <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Elapsed</p>
-        <p className="mt-2 font-mono text-3xl text-cyan-300">
-          {formatElapsed(startTime, now)}
-        </p>
-      </div>
+          <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Elapsed</p>
+          <p className="mt-2 font-mono text-3xl text-cyan-300">
+            {formatElapsed(labState.startTime, now)}
+          </p>
+        </div>
 
       <div className="mt-6">
         <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Scenario</p>
-        <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-300">
-          {config.scenario}
-        </p>
+        <div className="mt-3 max-h-[200px] overflow-y-auto pr-1">
+          <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
+            {config.scenario}
+          </p>
+        </div>
       </div>
 
-      <div className="mt-8 flex-1">
+      <div className="mt-6 flex-1 min-h-0 overflow-y-auto">
         <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Conditions</p>
         <ul className="mt-4 space-y-3">
           {config.requiredConditions.map((condition) => {
-            const isMet = conditions[condition] === true;
-            const isVerified = verifiedConditions.has(condition);
+            const isMet = labState.conditions[condition] === true;
+            const isVerified = labState.verifiedConditions.has(condition);
 
             let icon = <span className="h-4 w-4 rounded-full border border-slate-600 bg-transparent" />;
             let textClass = "text-slate-400";

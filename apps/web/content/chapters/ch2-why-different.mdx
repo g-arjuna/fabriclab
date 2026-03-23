@@ -1,0 +1,130 @@
+﻿---
+title: "Chapter 2: Why HPC Networking Is Different"
+module: "RoCEv2 + Lossless Ethernet"
+level: "Beginner"
+estimatedMinutes: 20
+labLink: "/lab?lab=lab1-pfc-fix"
+---
+
+> **New to HPC networking?** Start with
+> [Chapter 0: The Hardware Layer](/learn/ch0-hardware-foundations)
+> before reading this chapter.
+
+## The mental model shift
+
+You have spent years mastering TCP/IP, BGP, spanning tree, and QoS.
+You can troubleshoot a flapping OSPF adjacency without looking at documentation.
+But when you walk into an AI data center for the first time, the familiar mental
+models stop working.
+
+In enterprise networking, a 1ms latency spike is a footnote in a monitoring
+dashboard. In an AI training cluster running a large language model across 256
+GPUs, that same 1ms spike causes every GPU in the job to sit idle — waiting for
+one straggler. That idle time compounds across thousands of training steps per
+hour. The network is not just moving data. It is the synchronisation mechanism
+for a massively parallel computation.
+
+Here is how the requirements compare:
+
+| Dimension | Enterprise networking | HPC / AI networking |
+|-----------|----------------------|---------------------|
+| Latency target | 1–10ms acceptable | Sub-2 microseconds required |
+| Packet loss | Rare, recoverable with TCP | Zero tolerance — stalls entire job |
+| Bandwidth | Shared, oversubscribed | Dedicated, non-blocking |
+| Congestion | QoS queuing and dropping | Prevented with lossless fabric |
+| Switch role | Pure forwarding plane | Active compute participant |
+| NIC role | Commodity, kernel-attached | Active co-processor, kernel-bypassed |
+
+## The AllReduce problem
+
+AI model training splits work across many GPUs simultaneously. After each
+training step, all GPUs must agree on updated parameters. This requires an
+operation called AllReduce: every GPU sends its gradient updates to all other
+GPUs, they are summed, and the result goes back to all GPUs before the next
+step can begin.
+
+That synchronisation point — the AllReduce — is a barrier. No GPU can proceed
+to the next step until every other GPU has finished. If one GPU's network path
+has a retransmission due to a dropped packet, every other GPU sits idle waiting.
+
+At 1000 training steps per hour on a 256-GPU cluster, one bad switch port
+can waste hundreds of GPU-hours per day at significant cost.
+
+## Job completion time — the KPI everything is measured against
+
+Every conversation in AI infrastructure eventually comes back to one number: **Job Completion Time (JCT)**. This is the elapsed time from when a training job starts to when it finishes. It is the primary KPI that operations teams, ML engineers, and network teams are all held accountable for.
+
+A training job is split into thousands of parallel tasks running simultaneously across many GPUs. When all tasks complete, the job advances to the next step. The critical constraint — and the one that makes networking so important — is this:
+
+**The slowest task determines when the job completes.**
+
+It does not matter if 255 out of 256 GPUs finish their AllReduce in 2 milliseconds. If the 256th GPU's network path has a retransmission and takes 200 milliseconds, every other GPU waits at the synchronisation barrier for those full 200 milliseconds. JCT is determined by the worst-performing participant, not the average.
+
+This has a direct consequence for how you think about fabric quality:
+- A fabric that drops 0.1% of packets does not give you 99.9% throughput
+- It gives you throughput determined by how often *any* of your 256 GPUs hits that 0.1%
+- With 256 GPUs each sending and receiving continuously, your 0.1% drop rate becomes a near-constant source of AllReduce stalls
+
+JCT = f(slowest thread) = f(worst network path in the cluster)
+
+This is why zero packet loss is not a performance goal — it is a correctness requirement.
+
+## Tail latency — why scale makes the math brutal
+
+**Tail latency** is the formal term for the problem just described. It refers to the high-percentile latency responses — the slow outliers that define the worst-case performance of a system.
+
+In a single-server application, 99th percentile latency is a useful metric. If 99% of requests complete in under 10ms, the experience is generally good. The 1% that take longer are an acceptable trade-off.
+
+In distributed AI training, the math inverts completely.
+
+Consider a fabric that performs poorly on 1 in 1,000 packets — an excellent performance by most networking standards. Now run a training step that requires 1,000 RDMA operations across the fabric. The probability that *at least one* of those operations hits the bad case is approximately:
+
+```
+P(at least one failure) = 1 - (999/1000)^1000 ≈ 63%
+```
+
+A fabric with a 0.1% failure rate causes roughly 63% of training steps to experience a stall. Scale to a realistic training run — millions of steps, thousands of GPUs — and "performs badly 1 in 1,000 times" means performs badly on nearly every step.
+
+This is the mathematical reason that "low loss" is not sufficient. The required target is zero loss — not because individual packet drops are catastrophic in isolation, but because at the scale of modern AI training, any non-zero loss rate compounds into near-constant stalls.
+
+**Tail latency also affects inference — differently**
+
+Training and inference have different relationships with tail latency. In training, tail latency extends JCT — the job takes longer. In inference clusters (where a deployed model serves real user queries), tail latency degrades user experience — individual requests feel slow. Inference has no AllReduce barrier, no synchronisation point, and no job completion constraint. Each request is independent. But the p99 and p99.9 latency of individual inference requests is directly visible to end users. The networking requirements are different — inference values consistent low latency per request rather than aggregate throughput across a synchronised operation. This course focuses on training infrastructure, where JCT and the AllReduce barrier define the requirements.
+
+## What makes this hard to learn
+
+HPC networking knowledge lives in:
+
+- Vendor runbooks that are not publicly available
+- Pre-sales conversations with NVIDIA field engineers
+- Conference papers written for researchers, not practitioners
+- Internal documentation at hyperscalers
+
+There is no Packet Tracer equivalent for InfiniBand or RoCEv2.
+This platform is built to fill that gap.
+
+## What you will learn in this module
+
+This module covers RoCEv2 and lossless Ethernet — the most widely deployed
+HPC fabric technology in enterprise AI clusters today.
+
+By the end of this module you will be able to:
+
+- Explain why RDMA requires lossless delivery and what happens when it does not get it
+- Understand JCT and tail latency — the KPIs that connect fabric quality to training performance
+- Configure Priority Flow Control (PFC) correctly and diagnose pause storms
+- Enable and verify ECN for congestion management
+- Use real diagnostic CLI commands to assess fabric health
+- Complete two graded scenario labs based on real production incidents
+
+## Try it now
+
+The lab environment is waiting. Open it, type `show dcb pfc` into the terminal,
+and you will see the current PFC state of the virtual fabric.
+
+That is the starting point for Lab 1.
+
+[Go to Lab Environment](/lab)
+
+[Continue to Chapter 3 →](/learn/ch3-the-cli)
+

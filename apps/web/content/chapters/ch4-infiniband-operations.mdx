@@ -1,0 +1,609 @@
+---
+title: "Chapter 4: InfiniBand Operations — The ONYX CLI and Fabric Management"
+module: "HPC Networking Foundations"
+level: "Intermediate"
+estimatedMinutes: 50
+labLink: "/lab?lab=lab1-pfc-fix"
+---
+
+## The InfiniBand difference
+
+In Chapter 3 you learned to read a Spectrum-X switch running Cumulus Linux. You typed `show dcb pfc` and `show interface counters` and learned what each field means. That CLI felt familiar — it has the same verb patterns as enterprise networking, similar output formats, similar diagnostic logic.
+
+InfiniBand is different. Not slightly different. Architecturally different in ways that change how you think about the entire fabric.
+
+In Ethernet, every switch independently builds its own routing table through BGP or OSPF. You SSH into a switch and configure it directly. When something breaks, you trace the path hop by hop, checking each device's forwarding table.
+
+In InfiniBand, the Subnet Manager computes the entire fabric's routing table centrally and programs every switch. The switches are passive — they do exactly what the SM tells them. When you SSH into an ONYX switch, you can see what the SM programmed, but you cannot change InfiniBand routing parameters without going through UFM. The ONYX CLI is primarily a monitoring and diagnostics interface, not a configuration interface for routing.
+
+This changes everything about how you investigate a problem.
+
+<IBvEthernetMindsetViz />
+
+**What this means in practice:**
+
+When an InfiniBand link fails, the SM automatically reroutes around it within seconds. You may not even see a training job failure — the SM handles it. But if the SM itself has a problem, if routing tables are inconsistent, or if LID assignment has gone wrong, the entire fabric may behave unpredictably in ways that no individual switch's CLI will explain. You need UFM and ibdiagnet to see the full picture.
+
+This chapter teaches you the ONYX CLI for monitoring and diagnostics, the Subnet Manager commands for fabric health, ibdiagnet for full fabric sweeps, and UFM correlation for connecting CLI findings to the management plane.
+
+---
+
+## The ONYX CLI — getting oriented
+
+### Physical access and login
+
+You reach an ONYX switch the same way you reach any switch: console cable or SSH. Console is always your first option during bring-up or when SSH is not working.
+
+```
+Console settings: 115200 baud · 8N1 · No hardware flow control
+Connector: Micro-USB (front panel) on QM9700, RJ45 on Q3400
+```
+
+The ONYX login sequence:
+
+```
+ONYX - Mellanox Networks
+switch login: admin
+Password: admin
+
+switch >
+```
+
+You land in user mode. For any diagnostic command you need to enter privileged mode:
+
+```
+switch > enable
+switch #
+```
+
+For configuration (rare in IB operations):
+
+```
+switch # configure terminal
+switch (config) #
+```
+
+**The first commands after login:**
+
+```
+switch # show version
+```
+
+```
+Product name:      ONYX
+Product release:   3.11.2012
+Build ID:          #1-dev
+Build date:        2024-08-12 08:15:54
+Target arch:       x86_64
+Built by:          jenkins@...
+
+switch uptime:     17 days, 4:23:11
+System memory:     8192 MB total, 5847 MB free
+Swap:              0 MB total, 0 MB free
+Management IP:     10.0.1.1/24
+
+Slot 1:
+  Product name:    QM9700
+  Part number:     MQM9700-NS2F
+  Revision:        A9
+  Serial number:   MT2327X12345
+  Firmware version: fw-QM9700-rel-24_03_0216-...
+```
+
+`Product release: 3.11.2012` — The ONYX software version. Check NVIDIA's release notes for this version for known bugs affecting your deployment.
+
+`switch uptime: 17 days` — If uptime is unexpectedly low, the switch rebooted recently — check the event log for why.
+
+`Firmware version: fw-QM9700-rel-24_03_0216` — The ASIC firmware version. This is different from the ONYX OS version. Both matter for bug fixes and compatibility.
+
+<ONYXNavigationViz />
+
+---
+
+## Reading InfiniBand port state
+
+### show interfaces ib status — the overview
+
+`show interfaces ib status` gives you the state of all InfiniBand ports on the switch at once. This is your starting point.
+
+```
+switch # show interfaces ib status
+
+IB Interface  Admin  Oper   Width  Speed  PortGUID
+------------- -----  ------  -----  -----  --------
+IB1/1         Up     Active  4x     NDR    0x506b4b0300a1b200
+IB1/2         Up     Active  4x     NDR    0x506b4b0300a1b201
+IB1/3         Up     Down    --     --     0x000000000000000
+IB1/4         Up     Polling --     --     0x000000000000000
+IB1/5         Up     Active  4x     NDR    0x506b4b0300a1b204
+...
+```
+
+<IBPortStatusViz />
+
+**Reading the columns:**
+
+`Admin: Up` — An administrator has not manually disabled this port. If you see `Admin: Down`, someone ran `shutdown` on that interface. Check if it was intentional.
+
+`Oper: Active` — The operational state. This is what matters. States you will see:
+
+- `Active` — Port is fully operational. InfiniBand state machine has completed. SM has assigned a LID and programmed the routing table for this port. Traffic flows.
+- `Down` — No physical signal. Cable unplugged, broken, or the device on the other end is powered off.
+- `Polling` — Physical signal detected but InfiniBand init has not completed. The port is sending InfiniBand polling signals. Usually seen when a device is booting or when the SM has not yet discovered this port.
+- `Init` — Physical link established, port entered IB state machine Init state. SM has discovered it but not yet armed it. Brief transient state.
+- `Armed` — SM has armed the port. One more transition to Active. Should be very brief.
+
+`Width: 4x` — The lane count. NDR InfiniBand uses 4 lanes per port. If you see `1x` or `2x`, lanes have failed — check the cable or transceiver. Width directly affects bandwidth: 4x NDR = 400 Gb/s, 2x NDR = 200 Gb/s, 1x NDR = 100 Gb/s.
+
+`Speed: NDR` — The link speed tier. NDR (Next Data Rate) = 400 Gb/s at 4x. You might also see HDR (200 Gb/s), EDR (100 Gb/s), or FDR (56 Gb/s) if the link has negotiated down. Negotiation down to a lower speed usually means one side cannot run NDR — check cable compatibility and NIC firmware.
+
+`PortGUID: 0x506b4b...` — The hardware-burned GUID of the device on the other end of this cable. A GUID of all zeros means no device is connected or the device is in a non-IB state.
+
+### show interface ib 1/1 — the detail
+
+When you need more than the overview provides, inspect a specific port:
+
+```
+switch # show interface ib 1/1
+```
+
+```
+IB1/1 is up, line protocol is up (connected)
+  Hardware is InfiniBand, address is 506b:4b03:00a1:b200
+  Interface index: 1
+  MTU 4096 bytes
+  Current Speed: NDR, Width: 4x
+  Supported Speeds: NDR, HDR, EDR
+  Auto-negotiate: enabled
+  Link layer: InfiniBand
+  Local Identifier (LID): 12
+  Remote Identifier (Remote LID): 24
+  SM LID: 1
+  Capability mask: 0x2514afc8
+  Description: "dgx-node-01-rail-0"
+  Input rate: 142,847 Mb/s (35.7% utilisation)
+  Output rate: 141,293 Mb/s (35.3% utilisation)
+  5 minute input rate: 139,482 Mb/s
+  5 minute output rate: 138,917 Mb/s
+```
+
+`LID: 12` — This port's Local Identifier as assigned by the SM. LIDs are the routing addresses in InfiniBand — they are analogous to IP addresses but assigned by the SM, not configured statically.
+
+`Remote LID: 24` — The LID of the device on the other end of this cable. You can use this to find the port's counterpart in UFM.
+
+`SM LID: 1` — The LID of the Subnet Manager. If this shows 0, no SM is active — the fabric cannot route traffic.
+
+`Description: "dgx-node-01-rail-0"` — Interface descriptions are gold for troubleshooting. If your team has labelled ports with the connected device and rail number, a problem report immediately tells you which DGX node and which GPU rail is affected.
+
+`Input rate: 142,847 Mb/s (35.7%)` — Current bandwidth utilisation as a percentage of the 400 Gb/s port capacity. 35% utilisation on a training cluster means AllReduce is in progress. Near 100% sustained means a bottleneck.
+
+---
+
+## Reading InfiniBand error counters
+
+This is the most diagnostically important section in this chapter. IB error counters are the primary tool for identifying cable and transceiver problems before they cause training failures.
+
+### show ib counters — the full view
+
+```
+switch # show ib counters
+```
+
+<IBCountersViz />
+
+```
+IB Port Counters Summary
+  Interface  SymbolErrors  LinkErrors  RcvErrors  XmtDiscards  VL15Drops
+  ---------  ------------  ----------  ---------  -----------  ---------
+  IB1/1      0             0           0          0            0
+  IB1/2      0             0           0          0            0
+  IB1/3      147           2           0          0            0  ← problem
+  IB1/4      0             0           0          0            0
+  IB1/5      0             0           0          0            0
+```
+
+**Understanding each counter type:**
+
+**SymbolErrors** — The count of bad or uncorrectable symbol errors at the physical layer. A symbol error occurs when a received bit pattern does not match any valid InfiniBand symbol. This is the most sensitive indicator of physical layer problems.
+
+- Zero: perfect physical layer
+- 1–100: watch carefully, may be a marginal cable or transceiver
+- 100+: replace the cable or transceiver immediately
+- Rapidly growing: an active signal integrity problem — likely a faulty optical transceiver running at elevated temperature, or a dirty connector
+
+**LinkErrors** — The count of link layer recoveries. When symbol errors accumulate beyond a threshold, the InfiniBand link layer attempts to recover by cycling the port through Init/Armed/Active. Each recovery is a LinkError.
+
+- Zero: no recoveries needed
+- 1–5: occasional marginal events, monitor
+- Growing: the link is unstable and cycling repeatedly — training jobs will see timeouts during each recovery
+
+**RcvErrors** — Receive-side packet errors that passed physical layer but failed packet-level validation (CRC errors, packet length errors). These indicate problems higher up than the physical layer — possible firmware bugs, switch buffer problems, or software configuration issues.
+
+**XmtDiscards** — Packets the switch discarded on transmit because the output buffer was full. In InfiniBand's credit-based flow control, discards should never happen because credits prevent buffer overflow. If you see XmtDiscards, something is wrong with the credit flow mechanism — possibly a credit loop, a routing loop, or a misconfigured VL (Virtual Lane).
+
+**VL15Drops** — Drops on Virtual Lane 15, which carries InfiniBand management traffic (SM communication, diagnostic packets). VL15 drops mean the SM cannot communicate reliably with the fabric — this is serious. It can cause LID reassignment failures, routing table corruption, and SM failover.
+
+### The counter baseline workflow
+
+Error counters are cumulative — they never decrease unless you explicitly clear them. This means you cannot tell from a non-zero counter whether the errors are happening right now or happened three months ago.
+
+**Best practice: establish a baseline and monitor deltas.**
+
+```
+# Record current counter values
+switch # show ib counters
+# (note the values in a spreadsheet or monitoring system)
+
+# Wait 5 minutes under normal traffic
+
+# Check again — compare deltas
+switch # show ib counters
+```
+
+If SymbolErrors increased by 500 in 5 minutes, you have an active problem. If SymbolErrors is 500 but has not increased in 24 hours, the problem may have been a temporary physical disturbance (someone bumped a cable rack) that has self-corrected.
+
+**Clearing counters:**
+
+```
+switch # clear counters ib 1/3
+```
+
+Clear counters only after you have recorded the baseline. Clearing counters to "make the problem go away" is the single most destructive thing you can do during a diagnostic — you erase the evidence.
+
+### What counters tell you about root cause
+
+<CounterRootCauseViz />
+
+**Growing SymbolErrors + Zero LinkErrors:**
+Early-stage physical layer degradation. The link is still stable enough to avoid recovery, but the physical signal quality is marginal. Causes: dirty optical connector, cable near bend radius limit, transceiver approaching end of life. Action: clean connectors, check cable routing, replace transceiver.
+
+**Growing SymbolErrors + Growing LinkErrors:**
+Active link instability. The link is cycling through recovery. Every recovery causes a brief traffic interruption. In a training cluster, this manifests as intermittent AllReduce timeouts. Action: replace the cable first (more common failure), then the transceiver.
+
+**Non-zero XmtDiscards:**
+Credit flow problem. This should never happen in InfiniBand. Possible causes: routing loop (SM routing table error), VL credit misconfiguration, or switch ASIC bug. Action: check UFM for routing errors, try restarting UFM and letting it recompute routes. If persistent, engage NVIDIA support.
+
+**Non-zero VL15Drops:**
+SM communication is impaired. The SM cannot reliably discover and manage the fabric. Possible causes: SM server overloaded, management network packet loss, SM software bug. Action: check UFM health, restart SM if safe, ensure management network is clean.
+
+---
+
+## The Subnet Manager
+
+The Subnet Manager is the most important software component in an InfiniBand fabric, and the least visible until it fails.
+
+### show ib sm — what is running your fabric
+
+```
+switch # show ib sm
+```
+
+```
+Subnet Manager:
+  Master SM:
+    Node GUID:    0x506b4b0300000001
+    Port GUID:    0x506b4b0300000002
+    LID:          1
+    Priority:     14
+    SM type:      UFM
+    SM version:   6.8.0
+    SM state:     Master
+
+  Standby SM:
+    Node GUID:    0x506b4b0300000003
+    LID:          2
+    Priority:     12
+    SM type:      OpenSM
+    SM state:     Standby
+
+Subnet prefix:    0xfe80000000000000
+Subnet size:      256 nodes, 512 ports
+Last sweep:       00:01:23 ago
+Sweep interval:   5 seconds
+```
+
+<SubnetManagerViz />
+
+**Reading the output:**
+
+`Master SM: UFM — SM state: Master` — UFM is running the fabric and is the active SM. This is the healthy state.
+
+`Standby SM: OpenSM — SM state: Standby` — A backup SM is running on another host. If the master SM fails, the standby takes over within 30–60 seconds. The transition causes a brief fabric disruption as the new SM does a full fabric sweep and reprograms routing tables.
+
+`Priority: 14 / 12` — SM priority determines which SM becomes master in an election. Higher priority wins. If UFM and OpenSM are both running, UFM (priority 14) is master. If UFM fails, OpenSM (priority 12) takes over.
+
+`Last sweep: 00:01:23 ago` — The SM periodically sweeps the fabric to detect topology changes. If this shows a very long time (hours), the SM is not performing maintenance sweeps — it may be stuck or overloaded.
+
+`Subnet size: 256 nodes, 512 ports` — This tells you what the SM has discovered. If the node count is less than expected, some nodes are not registered with the SM.
+
+### What happens when the SM restarts
+
+When the SM (UFM) restarts, the following sequence occurs:
+
+1. SM enters discovery mode — queries every port with management datagrams (MADs)
+2. SM builds complete topology map (takes 30 seconds to several minutes depending on fabric size)
+3. SM assigns LIDs to all newly discovered or modified ports
+4. SM computes routing tables for all path pairs
+5. SM programs forwarding tables on every switch
+6. Fabric becomes fully operational again
+
+During this sequence, InfiniBand traffic still flows on previously programmed paths. The fabric does not go dark during an SM restart — it uses cached routing tables. However, any new connections that require path records will fail until the SM completes its sweep.
+
+**The SM storm:**
+
+A "Subnet Manager storm" happens when two or more SM instances are running simultaneously and both believe they are the master. They send conflicting MADs, trying to overwrite each other's LID assignments and routing tables. Symptoms: LIDs changing rapidly, training jobs getting random connection failures, `show ib sm` showing multiple Masters.
+
+Cause: UFM failover where the old master did not properly relinquish control before the standby took over, or someone accidentally started OpenSM on a DGX node.
+
+Fix: Identify which SM is correct (usually UFM). Stop all other SM instances. Wait for the surviving SM to complete a clean sweep.
+
+```
+# Check for rogue SM instances on DGX nodes
+# On each DGX host:
+ps aux | grep -E "opensm|ufm"
+systemctl status opensm  # should be inactive on compute nodes
+```
+
+### Routing algorithm selection
+
+The SM's choice of routing algorithm significantly affects training performance. The algorithms differ in how they distribute traffic across available paths.
+
+<RoutingAlgorithmViz />
+
+**FTREE (Fat Tree):** Designed specifically for fat-tree topologies like DGX SuperPOD. Routes traffic along the shortest path in the fat-tree, maximising bisection bandwidth. This is the correct algorithm for a properly built SuperPOD. UFM selects it automatically when it detects a fat-tree topology.
+
+**MINHOP:** Minimises hop count for each path. Good for general topologies. Does not specifically optimise for fat-tree bisection bandwidth.
+
+**SSSP (Shortest Shortest Path):** Distributes traffic across equal-cost paths. Better load balancing than MINHOP for irregular topologies or partially failed fabrics.
+
+**DFSSSP:** Deterministic variant of SSSP. Produces consistent routing tables across SM restarts (same inputs always produce same output). Important for reproducible performance benchmarking.
+
+Changing the routing algorithm requires a full SM sweep to reprogram all switches. Do this during a maintenance window, not during active training.
+
+---
+
+## ibdiagnet — the full fabric sweep
+
+`ibdiagnet` is the most powerful InfiniBand diagnostic tool. It is not a switch CLI command — it runs on any host with access to the fabric (typically a management host or a DGX node) and performs a complete fabric audit.
+
+### What ibdiagnet does
+
+```
+# Run from a DGX host or management server with IB connectivity
+$ ibdiagnet --extended_speeds all --pc --ls --vlq
+```
+
+ibdiagnet performs these checks in sequence:
+
+1. **Fabric discovery** — Queries every switch and NIC to build the complete topology
+2. **LID consistency** — Verifies every port has a unique LID and no duplicates exist
+3. **Path record validation** — Checks that all path records are populated and correct
+4. **Routing table consistency** — Verifies switch forwarding tables match the SM's routing
+5. **Port state check** — Reports any port not in Active state
+6. **Error counter sweep** — Collects error counters from every port in the fabric
+7. **Performance counters** — Measures bandwidth utilisation on every link
+8. **VL credit check** — Verifies Virtual Lane credit configuration
+
+<IBDiagnetOutputViz />
+
+### Running ibdiagnet and reading its output
+
+```
+$ ibdiagnet --ls --pc --sm
+
+-I- Loading IBDIAGNET plugins ...
+-I- Discovering the subnet ...
+-I- Loaded fabric: 32 switches, 256 nodes, 512 IB ports
+-I- ----------------- SM Configuraion ------------------
+-I- Master SM: 0x506b4b0300000001 (UFM) - MASTER
+-I- Standby SM: 0x506b4b0300000003 (OpenSM) - STANDBY
+-I- SUBNET MANAGER: OK
+
+-I- ------------ Fabric Discovery Summary ---------------
+-I- Nodes: 256 (32 DGX nodes * 8 NICs each = 256 HCAs)
+-I- Switches: 32 (8 leaf + 4 spine * ... )
+-I- DISCOVERY: OK
+
+-I- --------------- Link Speed Check --------------------
+-W- Link Speed Degraded: Switch QM9700-1 port 3 <-> DGX-node-07 mlx5_2
+    Expected: NDR (4x)    Actual: HDR (4x)
+    This link is running at HDR speed instead of NDR.
+    Check cable compatibility: requires NDR-certified cable.
+
+-I- ------------------- Errors -------------------------
+-E- High Symbol Error Rate: Switch QM9700-2 port 7
+    SymbolErrors: 14,827 (threshold: 100)
+    Last reset: 72 hours ago
+    Delta in last hour: 8,293
+    RECOMMENDATION: Replace cable or transceiver
+
+-W- Non-zero XmtDiscards: Switch QM9700-5 port 12
+    XmtDiscards: 47
+    RECOMMENDATION: Check for routing loop on this path
+
+-I- -------------- Performance Summary ------------------
+-I- Average link utilisation: 34.2%
+-I- Peak link utilisation: 87.3% (Switch QM9700-3 port 1)
+-I- Bottleneck port: QM9700-3/1 (87.3% utilisation)
+-I- Bottleneck connected to: DGX-node-14 Rail-0
+
+-I- -------------- Summary ------------------------------
+-I- PASS: Discovery, SM, LID uniqueness, routing consistency
+-I- WARN: 1 link speed degraded, 1 non-zero XmtDiscards
+-I- ERROR: 1 high symbol error rate port
+
+-I- Total run time: 4 minutes 37 seconds
+```
+
+**Reading the ibdiagnet output:**
+
+`Link Speed Degraded: QM9700-1 port 3 <-> DGX-node-07 mlx5_2` — This link is running at HDR instead of NDR. The link negotiated down because one side cannot run NDR. Most likely cause: a non-NDR-rated cable. NDR requires 50 Gb/s per lane electrical specification — older HDR cables (25 Gb/s per lane) will cause negotiation to HDR. This halves the bandwidth for that GPU rail.
+
+`High Symbol Error Rate: Switch QM9700-2 port 7` — 14,827 symbol errors with 8,293 accumulating in the last hour. This port is actively degrading. The physical layer is failing. Replace the transceiver or cable on this link before it causes link cycling and training failures.
+
+`Non-zero XmtDiscards: QM9700-5 port 12` — 47 transmit discards. Small number, but in InfiniBand this should be zero. Check for a routing anomaly on paths that traverse this port.
+
+`Bottleneck port: QM9700-3/1 (87.3%)` — One port is running at 87.3% utilisation while average is 34.2%. This indicates traffic is not distributed evenly across the fabric — some paths are heavily loaded while others are underutilised. In a fat-tree with FTREE routing this should not happen. Check if the SM has a complete topology view and is routing correctly. This can also indicate a topology fault — if several links have failed, the SM routes around them and concentrates traffic on surviving paths.
+
+### When to run ibdiagnet
+
+- At cluster bring-up: before first training job, run ibdiagnet to establish a clean baseline
+- After any physical work: after adding nodes, replacing cables, or upgrading firmware
+- When performance degrades without obvious cause: ibdiagnet often finds problems that individual switch CLIs miss
+- Weekly in production: automated scheduled runs catch slow-developing problems (gradual transceiver degradation)
+
+---
+
+## UFM correlation
+
+The CLI and ibdiagnet give you raw data. UFM gives you context — it shows you where a problem is in the physical topology, what events led up to it, and what other symptoms appeared at the same time.
+
+### UFM event log — reading fabric history
+
+```
+# UFM CLI (or web GUI Events tab)
+ufm_cluster -u admin -p password events list --severity ERROR --hours 24
+```
+
+<UFMEventLogViz />
+
+```
+Timestamp           Severity  Event                          Component
+------------------  --------  ----------------------------   --------------------
+2024-03-15 02:14:33  ERROR    Port down                     QM9700-2/port7
+2024-03-15 02:14:35  WARNING  Link recovery                 QM9700-2/port7
+2024-03-15 02:14:37  ERROR    Port down                     QM9700-2/port7
+2024-03-15 02:14:38  WARNING  Link recovery                 QM9700-2/port7
+2024-03-15 02:14:41  ERROR    Port down                     QM9700-2/port7
+2024-03-15 02:14:43  WARNING  Link recovery                 QM9700-2/port7
+2024-03-15 02:21:18  ERROR    SM rerouted around fault      QM9700-2/port7
+2024-03-15 02:21:22  INFO     Routing tables reprogrammed   All switches
+2024-03-15 02:21:24  WARNING  Training job NCCL timeout     dgx-node-07
+```
+
+**Reading this event sequence:**
+
+Events at 02:14:33–02:14:43 show a port flapping — going down and recovering six times in ten seconds. This is a link instability event, almost certainly a bad cable or transceiver.
+
+At 02:21:18, after the port flapping stabilised (or the port finally stayed down), UFM detected the topology change and started rerouting. At 02:21:22, new routing tables were programmed across all switches. At 02:21:24, the NCCL timeout on dgx-node-07 is the training job failure that resulted from the brief routing disruption during the SM's reroute sweep.
+
+**The timeline tells the story:** Physical fault → link flapping → SM detects topology change → SM reroutes (brief disruption) → training job times out. Without the UFM event log, you would only see the training job timeout and have no idea why it happened.
+
+### UFM topology view for physical location
+
+UFM's topology view maps fabric events to physical rack and slot positions. When ibdiagnet says "QM9700-2 port 7", UFM can show you:
+- Which rack holds QM9700-2
+- Which cable runs from port 7
+- Which DGX node that cable connects to
+- Which GPU rail is affected
+- The physical path through the data center to get to that switch
+
+This physical location context is what makes UFM indispensable for large clusters. Without it, finding the right cable in a SuperPOD with thousands of cables is extremely time-consuming.
+
+### UFM REST API — programmatic monitoring
+
+For integration with external monitoring systems (Grafana, PagerDuty, custom dashboards), UFM exposes a REST API:
+
+```python
+import requests
+
+UFM_BASE = "https://ufm-server:443/ufmRest/v2"
+AUTH = ("admin", "password")
+
+# Get all ports with errors
+response = requests.get(
+    f"{UFM_BASE}/monitoring/portcounters",
+    auth=AUTH,
+    verify=False,  # Accept self-signed cert
+    params={"filter": "symbol_error_counter>100"}
+)
+
+ports_with_errors = response.json()
+for port in ports_with_errors:
+    print(f"Port {port['guid']} on {port['switch']}: {port['symbol_error_counter']} symbol errors")
+```
+
+The REST API gives you:
+- Real-time port counters (symbol errors, link errors, bandwidth utilisation)
+- Topology queries (what is connected to what)
+- SM status and routing table contents
+- Event history
+- Fabric health scores
+
+Most production clusters run automated UFM API polling every 60 seconds, feeding into Prometheus, which triggers PagerDuty alerts when error counters exceed thresholds.
+
+---
+
+## The complete InfiniBand diagnostic workflow
+
+Now you have all the tools. Here is how they work together in a real investigation.
+
+<IBDiagnosticWorkflowViz />
+
+### The investigation sequence — IB fabric
+
+**Step 1: Check the alert context (UFM first)**
+
+Before touching any CLI, check UFM's event log. What happened, and when? Was there a port flap? An SM restart? A routing change? The event log tells you where to look.
+
+```
+ufm_cluster events list --hours 1 --severity WARNING,ERROR
+```
+
+**Step 2: Locate the affected component (UFM topology)**
+
+Use UFM topology view to find the physical location of the reported component. Which rack, which switch, which port, which cable, which DGX node.
+
+**Step 3: Check port state on the affected switch (ONYX)**
+
+SSH to the identified switch. Check the specific port:
+
+```
+switch # show interface ib 1/7
+switch # show ib counters
+```
+
+Are SymbolErrors growing? Is the link stable or flapping?
+
+**Step 4: Check the DGX side**
+
+SSH to the DGX node on the other end of the problematic cable:
+
+```
+ibstat                     # Is mlx5_N in Active state?
+rdma link show             # Does this rail show state ACTIVE?
+```
+
+**Step 5: Cross-reference SM view**
+
+```
+switch # show ib sm
+```
+
+Is the SM aware of this node? Does it show the port as active in its discovered topology?
+
+**Step 6: Full sweep if the above does not explain it**
+
+```
+ibdiagnet --ls --pc --sm
+```
+
+Let ibdiagnet sweep the entire fabric. Check the errors section. Look for unexpected speed negotiation, error counter violations, or routing inconsistencies.
+
+**Step 7: Corrective action**
+
+- Physical problem (symbol errors, speed degradation): replace cable, clean connectors, replace transceiver
+- SM problem (routing inconsistency, VL15 drops): restart UFM during a maintenance window, let it do a clean sweep
+- Credit flow problem (XmtDiscards): check for routing loops, engage NVIDIA support if persistent
+
+---
+
+## What you now know
+
+You can now read an InfiniBand fabric from the ONYX CLI and correlate what you find with UFM. You know that InfiniBand's centralised SM model means most routing problems require UFM to fix, not individual switch configuration. You understand that error counters — especially SymbolErrors — are the most sensitive early warning of physical layer problems.
+
+You know ibdiagnet as the tool that sees the whole fabric at once: speed mismatches, error hotspots, routing inconsistencies, and performance bottlenecks. And you know how to read the UFM event log to understand not just what failed but when and why.
+
+The next chapter covers the performance layer: NCCL and training communication, how to benchmark the fabric, and how to tune DCQCN parameters to optimise AllReduce performance.
+
+[Continue to Chapter 5 →](/learn/ch5-pfc-ecn-congestion)

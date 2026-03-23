@@ -76,15 +76,8 @@ export function KnowledgePanel() {
   };
 
   return (
-    <section className="flex h-full flex-col rounded-3xl border border-white/10 bg-slate-950/80 p-6 text-slate-100 shadow-2xl shadow-slate-950/30 backdrop-blur">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Knowledge panel</p>
-          <h2 className="mt-2 text-2xl font-semibold text-white">Claude-ready context</h2>
-        </div>
-      </div>
-
-      <label className="mt-6 block">
+    <div className="flex flex-col">
+      <label className="block">
         <span className="mb-2 block text-xs uppercase tracking-[0.24em] text-slate-500">Keyword search</span>
         <input
           type="text"
@@ -137,6 +130,6 @@ export function KnowledgePanel() {
           </div>
         )}
       </div>
-    </section>
+    </div>
   );
 }

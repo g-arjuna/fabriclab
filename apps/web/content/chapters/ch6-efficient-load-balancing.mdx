@@ -1,0 +1,509 @@
+---
+title: "Chapter 6: Efficient Load Balancing — Preventing Congestion Before It Starts"
+module: "HPC Networking Foundations"
+level: "Intermediate"
+estimatedMinutes: 50
+labLink: "/lab?lab=lab3-uneven-spine"
+---
+
+## The layer you have not seen yet
+
+Chapters 3 and 5 taught you to read congestion — the counters that reveal it, the mechanisms that contain it. PFC pauses senders before buffers overflow. ECN signals senders to reduce rate before PFC is needed. You understand both mechanisms well.
+
+But there is a layer that sits above both, and it is the one that should make PFC and ECN unnecessary most of the time. **Load balancing.** If the fabric distributes AllReduce traffic correctly across all available paths, no single link ever fills. ECN thresholds are never crossed. PFC frames are never sent. Training proceeds at line rate without interruption.
+
+When you see PFC counters growing continuously in production — not occasional bursts, but sustained, constant pausing — that is usually not a PFC configuration problem. PFC is working exactly as designed. The problem is that load balancing is failing to distribute traffic, so one path is permanently congested while adjacent paths sit idle. Tuning PFC thresholds will not fix this. Understanding why the traffic ended up concentrated on one path, and how to fix the distribution, is what this chapter is about.
+
+The picture from Chapter 5 is now complete:
+
+<ProactiveReactiveViz />
+
+Load balancing is proactive. It acts on every packet decision, before any buffer fills. ECN is the early warning. PFC is the emergency brake. You want the emergency brake to be almost never needed.
+
+---
+
+## Act 1 — Why AI traffic breaks standard load balancing
+
+### The enterprise assumption that fails
+
+Standard load balancing — ECMP — was designed around a specific assumption: different flows will have different 5-tuples (source IP, destination IP, protocol, source port, destination port), and hashing those 5-tuples will distribute flows roughly evenly across available paths. For web traffic, this works well. Millions of clients connecting to thousands of services produce enormously varied 5-tuples. The hash distributes them evenly by construction.
+
+AI training traffic violates this assumption structurally.
+
+Consider what the 5-tuple looks like for two DGX nodes communicating during AllReduce on a 32-node cluster:
+
+```
+Source IP:        10.0.0.1  (one of 32 DGX node addresses)
+Destination IP:   10.0.0.7  (one of 32 DGX node addresses)
+Protocol:         UDP
+Destination port: 4791      (fixed — IANA-assigned RoCEv2 port, never changes)
+Source port:      49183      (derived from Queue Pair number — small range)
+```
+
+The destination port is always 4791. Every RoCEv2 packet from every GPU to every other GPU uses destination port 4791. This single fixed field eliminates most of the entropy that ECMP depends on. The source and destination IPs come from a pool of 32 addresses — a far narrower range than web traffic. The source port derives from the QP number, which is a small integer.
+
+The result: the ECMP hash function sees nearly identical inputs for all AllReduce traffic and produces nearly identical outputs — routing all flows to the same spine links, leaving others idle. This is not bad luck. It is a structural property of RoCEv2 traffic.
+
+<LowEntropyFlowletsViz />
+
+### Elephant flows: large, sustained, and indistinguishable
+
+Individual AllReduce transfers are large. A gradient tensor for a 70B parameter model is measured in gigabytes. A single AllReduce step transfers that tensor from every GPU to every other GPU simultaneously. Each of these transfers is a sustained, high-bandwidth flow that lasts hundreds of milliseconds.
+
+These large sustained flows are called **elephant flows**. In enterprise networks, elephant flows are the exception — most traffic is bursty and short-lived. In AI training, every AllReduce produces elephant flows. The entire traffic matrix is elephant flows, running simultaneously, all with nearly identical headers.
+
+When elephant flows hash to the same spine link, the resulting congestion is not brief. It lasts for the duration of the AllReduce — hundreds of milliseconds. And because AllReduce runs continuously throughout training, the congestion is essentially permanent on those overloaded links.
+
+### Flowlets: when ECMP cannot tell flows apart
+
+The low-entropy problem becomes even more acute at the flow level. A **flowlet** is an individual stream that a switch cannot distinguish from adjacent streams because their headers are identical.
+
+Two types cause problems:
+
+**Simultaneous flowlets** occur when multiple GPU pairs are communicating at the same moment. GPU 0 on Node A sends to GPU 0 on Node B. GPU 0 on Node C sends to GPU 0 on Node D. From the switch's perspective, examining only the IP/UDP headers, these may look identical — same source port range, same destination port. The switch hashes both to the same path. Both flows are now competing for the same spine link.
+
+**Sequential flowlets** occur when one job ends and another begins between the same GPU pair. Job 1 completes between GPU A and GPU B. Job 2 starts between the same two GPUs. The headers are byte-for-byte identical. The switch treats Job 2 as a continuation of Job 1's flow and keeps it pinned to the same path — even if a better path became available during the pause between jobs. From the switch's perspective this looks like one long-lived elephant flow that never needs rebalancing.
+
+### East-west: why AI fabric is different from enterprise fabric
+
+Enterprise data center traffic is predominantly **north-south** — from servers toward the internet, from users toward applications. The traffic pattern is asymmetric: many clients (north) connecting to fewer servers (south), with most paths flowing toward the internet edge.
+
+AI training traffic is almost exclusively **east-west** — server to server, GPU to GPU, across the fabric interior. Every node is both a sender and a receiver simultaneously. The traffic matrix is dense and symmetric: every GPU is sending to every other GPU at the same time.
+
+This changes where congestion occurs and how you read it:
+
+In a north-south fabric, overloaded links are typically near the internet edge or core routers. Spine link utilisation is uneven by design — some spines carry more north-south traffic than others based on routing decisions.
+
+In an east-west AI fabric, every spine link should carry roughly equal traffic during AllReduce. **Any asymmetry in spine link utilisation is a load balancing failure, not an expected design behaviour.** When you open `show interface counters` on a spine switch and see links at 90% and 10% simultaneously during training, the fabric is not working correctly — even if the 90% link is not dropping packets yet.
+
+---
+
+## Act 2 — The load balancing taxonomy
+
+There are four distinct approaches to load balancing, each with different trade-offs between visibility, accuracy, and implementation complexity.
+
+<LoadBalancingTaxonomyViz />
+
+### SLB — Static Load Balancing
+
+**What it does**: Assigns flows to paths using a static hash of the packet headers (the 5-tuple). Every packet in a flow follows the same path. The path is chosen once and never revisited.
+
+**Why it fails for AI**: This is standard ECMP. All the problems described in Act 1 apply directly. Low entropy means most flows hash to the same paths. Elephant flows pile up on those paths while others are idle. No adaptation to real-time congestion.
+
+**When you still see it**: Legacy Ethernet fabrics, any switch without DLB or GLB capability, and as the fallback when more sophisticated methods encounter issues.
+
+### DLB — Dynamic Load Balancing
+
+**What it does**: The switch monitors real-time bandwidth utilisation and buffer depth on each equal-cost output port. When a new flow arrives (or periodically for existing flows), the switch selects the output port with the lowest current utilisation rather than hashing to a fixed port.
+
+**The improvement over SLB**: DLB can detect that a spine link is congested and route new flows to a less-loaded link. It responds to local conditions.
+
+**The limitation**: DLB only has visibility into its own ports — it knows how loaded its own uplinks are but cannot see what is happening at the next switch downstream. If all of Switch A's uplinks are healthy but Switch B's downlinks are congested, DLB on Switch A will route traffic toward Switch B without knowing it is sending into a bottleneck.
+
+**When to use it**: Any AI fabric that cannot run per-packet spraying (see sDLB). DLB is a significant improvement over SLB and is available on most modern data center switches.
+
+### GLB — Global Load Balancing
+
+**What it does**: Extends DLB with **next-to-next-hop (NNH) awareness**. The switch knows not just the state of its own output ports but also the state of the links one hop further downstream. A leaf switch running GLB considers both the utilisation of its own uplinks to the spine AND the utilisation of the spine's uplinks to the far-side leaf switches.
+
+**The improvement over DLB**: GLB avoids routing into a path that is locally uncongested but downstream-congested. It selects the path with the best end-to-end utilisation profile, not just the best local utilisation.
+
+**The limitation**: GLB requires inter-switch communication to share utilisation state. This adds protocol overhead and latency to the path selection decision. At very high packet rates (400G), the state can go stale between updates.
+
+**When to use it**: Large-scale fabrics with multiple spine tiers where spine utilisation is heterogeneous — for example, a cluster where storage and compute traffic share some spine switches.
+
+### sDLB — Selective Dynamic Load Balancing / Per-packet spraying
+
+**What it does**: Instead of routing entire flows to a single path, sDLB sprays individual packets across all available equal-cost paths. Every packet can take a different path, independently of what the previous packet from the same flow did.
+
+**Why this solves the entropy problem fundamentally**: Per-packet distribution does not depend on the 5-tuple at all. It does not matter that all RoCEv2 flows have the same destination port. Each packet is distributed to the least-loaded path at the moment it is forwarded. Low entropy in the headers becomes irrelevant.
+
+**The challenge this creates**: Packets from the same flow can arrive at the destination out of order. If Packet 3 takes a slower path than Packet 4, Packet 4 arrives first. The receiver's RDMA engine, which expects packets in PSN order, sees a gap. Under native InfiniBand, this is handled by the protocol. Under RoCEv2, out-of-order arrival has historically caused the receiver to treat missing packets as dropped — triggering retransmissions.
+
+**How NVIDIA Spectrum-X solves it**: RSHP (Resilient Hashing and Per-packet reordering) adds a reorder buffer at the NIC. The ConnectX-7 in RoCEv2 mode can buffer out-of-order packets and present them to the RDMA engine in the correct sequence. This makes per-packet spraying viable on Ethernet without causing spurious retransmissions.
+
+**InfiniBand adaptive routing**: InfiniBand has done per-packet routing since its inception. The Subnet Manager, which has complete topology visibility, programs the routing tables to measure per-port congestion and forward each packet to the least-loaded output port. This is what Ch0 Act 6 describes as the "adaptive routing vs ECMP" advantage.
+
+**When to use it**: Any Spectrum-X deployment with RSHP-capable NICs (ConnectX-7 or later). Any InfiniBand deployment with adaptive routing enabled in UFM. This is the target state for production AI fabrics.
+
+---
+
+## Act 3 — In-cast: the congestion pattern AllReduce creates
+
+Understanding load balancing requires understanding the specific traffic pattern that makes it hard. AllReduce creates **in-cast congestion** — a pattern where many senders simultaneously send to a single destination port.
+
+<IncastCongestionViz />
+
+### What in-cast looks like at the switch
+
+During a rail-optimised AllReduce, every GPU 0 on every DGX node simultaneously sends its gradient tensor to the same leaf switch — Leaf Switch 0. That leaf switch receives 32 simultaneous 400G flows (one from each DGX node in a 32-node cluster) all destined for the same egress ports.
+
+The aggregate input rate during this moment is 32 × 400G = 12.8 Tb/s. The leaf switch's uplinks to the spine can carry 8 × 400G = 3.2 Tb/s (assuming 8 uplinks). The switch must queue the 9.6 Tb/s excess while forwarding at full uplink rate.
+
+This is not a misconfiguration. It is the expected traffic pattern of AllReduce, and it repeats on every synchronisation barrier — thousands of times per hour. The switch's buffer management, ECN threshold, and PFC headroom are all sized specifically for this burst pattern. Getting the sizing wrong means drops on every AllReduce step.
+
+### How in-cast shows in counters
+
+In-cast congestion has a diagnostic signature that distinguishes it from other congestion types:
+
+**Drops concentrated on specific egress ports**: In in-cast, the congestion is on the output side of the switch — the uplinks toward the spine, or the ports toward specific destination nodes. Input ports are not congested. If you see drops on specific egress ports while input ports show normal utilisation, you are looking at in-cast.
+
+**Simultaneous PFC activity across multiple input ports**: Because many senders are contributing to the in-cast, the switch sends PFC PAUSE frames out on multiple input ports simultaneously — one to each DGX node that is contributing traffic. You will see `PFC pause frames` growing on multiple input interfaces at the same time.
+
+**Burst-shaped counter growth**: In-cast from AllReduce is bursty. Counter values spike during the AllReduce barrier and then stabilise between barriers. If you sample `show interface counters` twice 5 seconds apart, you may see large counter increments during a training step and near-zero increments between steps.
+
+```bash
+# Leaf switch terminal (blue prompt)
+show interface counters
+
+# What in-cast looks like:
+Interface eth0  (→ DGX Node A)      ← input port
+  Input packets:    847,293,441
+  Output drops:     0               ← input side clean
+
+Interface uplink0  (→ Spine Switch) ← output port
+  Input packets:    6,234,918,441
+  Output drops:     47,291          ← drops on uplink: in-cast
+  PFC pause frames: 12,847
+  Buffer util:      87%
+```
+
+The drops are on the uplink toward the spine, not on the ports facing the DGX nodes. This is the in-cast signature.
+
+---
+
+## Act 4 — Reading load balancing health from the CLI
+
+Load balancing problems have specific counter signatures. Knowing what to look for lets you distinguish a load balancing problem from a PFC/ECN configuration problem before you start tuning the wrong layer.
+
+### The spine utilisation check
+
+The first diagnostic for a load balancing problem is not PFC counters — it is spine link utilisation. Open terminal sessions on two or more spine switches and compare link utilisation across uplinks.
+
+```bash
+# Spine switch terminal (open multiple sessions)
+show interface counters
+
+# Healthy load balancing — all links similar:
+Interface eth0 (→ Leaf 0):   Buffer util: 28%
+Interface eth1 (→ Leaf 1):   Buffer util: 31%
+Interface eth2 (→ Leaf 2):   Buffer util: 29%
+Interface eth3 (→ Leaf 3):   Buffer util: 27%
+
+# Load balancing failure — hot links + idle links:
+Interface eth0 (→ Leaf 0):   Buffer util: 89%  ← hot
+Interface eth1 (→ Leaf 1):   Buffer util: 91%  ← hot
+Interface eth2 (→ Leaf 2):   Buffer util:  4%  ← idle
+Interface eth3 (→ Leaf 3):   Buffer util:  3%  ← idle
+```
+
+In the second output, the fabric has the same aggregate bandwidth — but two links are approaching saturation while two are nearly empty. This is the flowlet problem in production. AllReduce traffic has hashed onto eth0 and eth1. eth2 and eth3 are available but unused.
+
+The fix is not to add more bandwidth to eth0 and eth1. The fix is to enable per-packet load balancing (sDLB / RSHP) so traffic distributes across all four links.
+
+### Correlating with leaf counter patterns
+
+When you see hot spine links, check the leaf switches feeding them to understand which flows are the source.
+
+```bash
+# Leaf switch terminal
+show interface counters
+
+# High utilisation on uplinks feeding hot spine ports:
+Interface uplink0 (→ Spine eth0):
+  Input packets:    6,234,918,441
+  Buffer util:      88%
+  PFC pause frames: 23,847
+
+Interface uplink1 (→ Spine eth1):
+  Input packets:    6,198,441,223
+  Buffer util:      86%
+  PFC pause frames: 19,231
+
+Interface uplink2 (→ Spine eth2):  ← feeds idle spine port
+  Input packets:    298,441
+  Buffer util:      2%
+  PFC pause frames: 0
+```
+
+The leaf switch is sending almost all its AllReduce traffic through uplink0 and uplink1. uplink2, which connects to the idle spine port, carries almost nothing. DLB or sDLB on this leaf switch would have detected the utilisation imbalance and distributed traffic across all three uplinks.
+
+### The diagnostic pattern that separates LB failure from PFC misconfiguration
+
+This is the key diagnostic decision that the previous chapters set up:
+
+| Counter pattern | Root cause | Fix |
+|---|---|---|
+| PFC pauses growing, drops zero, **spine links even** | Normal AllReduce burst, PFC working | No action — healthy |
+| PFC pauses growing, drops zero, **some spine links hot** | Load balancing failure | Enable DLB/sDLB |
+| Drops growing, PFC pauses zero | ECN or PFC not configured | Configure ECN + PFC |
+| Drops growing despite PFC, **spine links even** | Oversubscription or capacity limit | Capacity planning |
+| Drops growing despite PFC, **some spine links hot** | LB failure causing local oversubscription | Fix LB first |
+
+The spine link utilisation comparison is the diagnostic that routes you to the correct layer. Without it, PFC activity looks the same whether the cause is a load balancing failure or a genuine congestion spike — and you will tune the wrong thing.
+
+---
+
+## Act 5 — Configuring load balancing on Spectrum-X
+
+Spectrum-X Ethernet switches support multiple load balancing modes. The correct configuration for an AI fabric is RSHP with per-packet distribution enabled.
+
+### Checking current load balancing mode
+
+```bash
+# Leaf switch terminal (blue prompt)
+show ecmp load-balance
+
+Load-balance mode:  hash
+Hash fields:        src-ip, dst-ip, src-port, dst-port, protocol
+Adaptive:           disabled
+Per-packet:         disabled
+RSHP:               disabled
+```
+
+This output shows standard SLB (ECMP hash). `Adaptive: disabled` means no real-time utilisation feedback. `Per-packet: disabled` means all packets in a flow go to the same path.
+
+### Enabling DLB (Dynamic Load Balancing)
+
+```bash
+# Leaf switch terminal
+nv set interface swp1-32 qos load-balance adaptive enable on
+nv config apply
+
+# Verify
+show ecmp load-balance
+
+Load-balance mode:  adaptive
+Adaptive:           enabled
+Local utilisation:  monitored
+Per-packet:         disabled
+```
+
+DLB monitors output port utilisation and redirects new flows to less-loaded ports. This handles the simultaneous flowlet problem — new AllReduce flows are routed away from congested links. It does not fully solve the sequential flowlet problem (old flows stay pinned) or the fundamental low-entropy problem (all flows may still look identical).
+
+### Enabling RSHP (per-packet spraying)
+
+RSHP requires ConnectX-7 NICs with reorder buffer support. Verify the DGX nodes have ConnectX-7 or later before enabling.
+
+```bash
+# Leaf switch terminal
+nv set interface swp1-32 qos load-balance per-packet enable on
+nv set interface swp1-32 qos load-balance rshp enable on
+nv config apply
+
+# Verify
+show ecmp load-balance
+
+Load-balance mode:  per-packet
+Adaptive:           enabled
+Per-packet:         enabled
+RSHP:               enabled
+Reorder tolerance:  200 microseconds
+```
+
+With RSHP enabled, the switch distributes individual packets across all equal-cost paths. The ConnectX-7 NIC receives out-of-order packets but reassembles them before presenting to the RDMA engine. The `Reorder tolerance` is the maximum time the NIC will wait for out-of-order packets before treating them as lost — 200 microseconds at 400G is sufficient for typical leaf-spine latency variation.
+
+### Verifying load balancing is working
+
+After enabling RSHP, re-check spine utilisation:
+
+```bash
+# Spine switch terminal
+show interface counters
+
+# Expected after RSHP:
+Interface eth0 (→ Leaf 0):   Buffer util: 29%
+Interface eth1 (→ Leaf 1):   Buffer util: 27%
+Interface eth2 (→ Leaf 2):   Buffer util: 28%
+Interface eth3 (→ Leaf 3):   Buffer util: 31%
+```
+
+All spine links should now show similar utilisation during AllReduce. The variance across links during active training should be less than 10%. Larger variance indicates that RSHP is not fully distributing traffic — check that all leaf switches have RSHP enabled (a single leaf without RSHP will still hash all its flows to the same uplinks).
+
+---
+
+## Act 6 — Load balancing on InfiniBand
+
+InfiniBand has had per-packet adaptive routing since its design. The Subnet Manager (UFM) programs routing tables that include real-time congestion feedback from every switch port.
+
+### How IB adaptive routing works
+
+When a packet arrives at an InfiniBand switch, the forwarding decision is not made by looking up a pre-computed table entry. Instead, the switch measures the current credit count (the proxy for congestion) on each potential output port and forwards the packet to the port with the most available credits — the least congested port.
+
+This decision happens per-packet, in hardware, at line rate. Every packet from the same QP can take a different path through the fabric. Unlike RSHP on Ethernet, there is no reorder buffer required on the NIC side — InfiniBand's transport protocol handles out-of-order delivery natively at the QP level.
+
+### Checking adaptive routing status on ONYX
+
+```bash
+# ONYX switch terminal (spine switch — purple prompt)
+show ib counters
+
+IB Port Counters Summary
+  Interface  SymbolErrors  LinkErrors  XmtDiscards  VL15Drops
+  IB1/1      0             0           0            0
+  IB1/2      0             0           0            0
+  IB1/3      0             0           0            0
+
+# Check per-port utilisation
+show interface ib 1/1
+
+  Input rate:  139,482 Mb/s  (34.9% utilisation)
+  Output rate: 138,917 Mb/s  (34.7% utilisation)
+
+show interface ib 1/2
+
+  Input rate:  138,944 Mb/s  (34.7% utilisation)
+  Output rate: 139,201 Mb/s  (34.8% utilisation)
+```
+
+On a correctly operating IB fabric with adaptive routing enabled, all spine ports should show similar utilisation during AllReduce. The near-equal distribution (34.9% vs 34.7%) is adaptive routing working correctly.
+
+### UFM routing algorithm selection
+
+UFM controls which routing algorithm the SM uses. The choice of algorithm affects both performance and failure recovery behaviour:
+
+```bash
+# UFM server terminal
+show ufm routing
+
+Current algorithm:   DFSSSP
+Adaptive routing:    enabled
+Reroute on failure:  immediate
+```
+
+**FTREE** (fat-tree): Designed specifically for fat-tree topologies. Distributes routes evenly across all paths by construction. Good baseline for most DGX deployments.
+
+**DFSSSP** (Destination-First Shortest Sub-optimal Symmetric Path): Handles asymmetric topologies and link failures more gracefully. Recommended when the fabric has experienced link failures or has a heterogeneous topology.
+
+**SSSP** (Shortest Sub-optimal Symmetric Path): Useful for mixed InfiniBand generations where some switches run HDR and others NDR.
+
+The routing algorithm does not affect per-packet adaptive routing — that happens in hardware regardless of algorithm. The algorithm determines the base routing table that adaptive routing adjusts around.
+
+---
+
+## Act 7 — Flow pinning: when you want determinism
+
+Per-packet spraying is not always the right choice. Some workloads benefit from keeping flows on a fixed path.
+
+**Flow pinning** assigns flows to output paths in a configured pattern — typically round-robin based on flow characteristics (source IP, QP number) at the time the flow is established. Once assigned, the flow stays on that path for its lifetime.
+
+When is flow pinning preferable to per-packet spraying?
+
+**Ordered protocols without reorder support**: Some storage protocols and older RDMA implementations cannot handle out-of-order packet delivery even briefly. If reorder buffers are not available (non-RSHP NICs), flow pinning ensures ordered delivery by keeping all packets on the same path.
+
+**Debugging and performance analysis**: When investigating a performance problem, per-packet spraying makes it difficult to attribute counters to specific flows (because flow packets are spread across multiple paths). Flow pinning makes each flow traceable through the fabric. Production clusters sometimes switch to flow pinning temporarily during deep diagnostic investigations.
+
+**Latency-sensitive inference workloads**: Inference requests are typically small and latency-sensitive. The per-packet reordering latency introduced by RSHP (up to the reorder tolerance window) can add measurable latency to small requests. For inference, flow pinning with good initial distribution (round-robin assignment) is often preferable to per-packet spraying.
+
+```bash
+# Leaf switch terminal
+# Configure flow pinning with round-robin assignment
+nv set interface swp1-32 qos load-balance flow-pinning enable on
+nv set interface swp1-32 qos load-balance flow-pinning mode round-robin
+nv config apply
+```
+
+---
+
+## Act 8 — Lab 3 preparation: diagnosing uneven spine utilisation
+
+Lab 3 presents a specific scenario: AllReduce throughput has dropped 25% across the cluster. No packet drops are visible. PFC pause frames are present but modest. The question is not whether PFC or ECN is misconfigured — both are correctly configured. The question is why the fabric is not distributing traffic efficiently.
+
+### The scenario
+
+A 16-node training cluster is running data-parallel training. The monitoring system shows AllReduce bandwidth at 75% of expected. JCT has increased by 35%. No alerts have fired — no drops, no PFC storms, no link failures.
+
+Your task:
+1. Confirm the issue is load balancing, not congestion management
+2. Identify which spine links are hot and which are idle
+3. Check the current load balancing mode on the leaf switches
+4. Enable per-packet load balancing
+5. Verify that spine utilisation has equalised
+
+### The diagnostic path
+
+**Step 1: Check leaf interface counters — confirm no drops, modest pauses**
+
+```bash
+# Leaf switch terminal
+show interface counters
+
+Interface eth0 (→ DGX Node A)
+  Output drops:      0
+  PFC pause frames:  847     ← modest, expected during burst
+
+Interface uplink0 (→ Spine)
+  Output drops:      0
+  PFC pause frames:  2,341   ← somewhat elevated
+  Buffer util:       61%     ← elevated but not critical
+```
+
+No drops, modest pauses. This rules out PFC/ECN misconfiguration as the primary cause.
+
+**Step 2: Check spine utilisation — identify hot vs idle links**
+
+```bash
+# Spine switch terminal
+show interface counters
+
+Interface eth0 (→ Leaf Rail 0):   Buffer util: 72%  ← hot
+Interface eth1 (→ Leaf Rail 1):   Buffer util: 68%  ← hot
+Interface eth2 (→ Leaf Rail 2):   Buffer util:  8%  ← idle
+Interface eth3 (→ Leaf Rail 3):   Buffer util:  6%  ← idle
+```
+
+Hot and idle links simultaneously. This is the load balancing failure signature.
+
+**Step 3: Check current load balancing mode**
+
+```bash
+# Leaf switch terminal
+show dcb load-balance
+
+Load-balance mode:  hash     ← static ECMP
+Adaptive:           disabled
+Per-packet:         disabled
+```
+
+Static ECMP is confirmed. AllReduce flows with low-entropy headers are hashing to eth0 and eth1 on the spine. eth2 and eth3 are not being used.
+
+**Step 4: Enable per-packet load balancing**
+
+```bash
+# Leaf switch terminal
+enable load-balance per-packet    ← FabricLab simulator command
+```
+
+**Step 5: Verify**
+
+```bash
+# Spine switch terminal
+show interface counters
+
+Interface eth0 (→ Leaf Rail 0):   Buffer util: 31%  ← balanced
+Interface eth1 (→ Leaf Rail 1):   Buffer util: 29%  ← balanced
+Interface eth2 (→ Leaf Rail 2):   Buffer util: 28%  ← balanced
+Interface eth3 (→ Leaf Rail 3):   Buffer util: 27%  ← balanced
+```
+
+Spine links are now within 4% of each other. AllReduce bandwidth recovers to full expected throughput.
+
+---
+
+## What you now know
+
+Load balancing is the layer that sits above PFC and ECN. Get it right and reactive congestion management rarely needs to fire. Get it wrong and no amount of PFC or ECN tuning will fix a fabric where all AllReduce traffic is pinned to the same two spine links.
+
+You know why RoCEv2 traffic is structurally low-entropy — the fixed destination port 4791, the narrow IP pool, the QP-derived source port range — and why this makes ECMP fail for AI fabrics in a predictable, structural way rather than a random one.
+
+You know the four load balancing modes: SLB (static ECMP, worst for AI), DLB (local utilisation-aware, good), GLB (next-hop-aware, better for multi-tier fabrics), and sDLB/per-packet spraying (best for AI, requires RSHP on ConnectX-7).
+
+You know elephant flows and flowlets — the two patterns that defeat flow-level load balancing — and why per-packet spraying solves both by making header entropy irrelevant.
+
+You know in-cast as the specific congestion pattern AllReduce creates: many senders to one destination simultaneously. You know its counter signature: drops on egress uplinks, not on input ports, with PFC activity across multiple input ports simultaneously.
+
+You know the diagnostic decision that routes you to the right layer: compare spine utilisation first. Even distribution during AllReduce means load balancing is working — investigate PFC/ECN. Uneven distribution means fix load balancing before anything else.
+
+And you know that on InfiniBand, this problem is largely solved by hardware — adaptive routing in the switch ASIC makes per-packet distribution automatic. On Ethernet, it requires RSHP configuration and ConnectX-7 NICs.
+
+[Continue to Chapter 7 →](/learn/ch7-topology-design)
