@@ -6,7 +6,7 @@ Reference hardware: NVIDIA DGX H100, ConnectX-7 NICs, QM9700 / SN5600 switches, 
 
 The current repo contains a working Next.js app in `apps/web` with:
 
-- 11 chapter routes available locally (Ch0-Ch10 present in the repo)
+- 11 chapter routes available locally (Ch0-Ch10 present and discoverable by the app)
 - 6 interactive labs with a state-driven multi-device CLI simulator
 - 80+ React visualisation components registered in `mdxComponents.ts`
 - Lab-specific topology views and a reference drawer
@@ -26,8 +26,8 @@ The current repo contains a working Next.js app in `apps/web` with:
 | 6 | ch6-load-balancing | Efficient Load Balancing | ✅ live |
 | 7 | ch7-topology-design | Topology Design | ✅ live |
 | 8 | ch8-nccl-performance | NCCL — The Application Layer | ✅ live |
-| 9 | ch9-optics-cabling | Optics, Cabling, and the Physical Layer | in repo |
-| 10 | ch10-storage-fabric | The Storage Fabric | in repo |
+| 9 | ch9-optics-cabling | Optics, Cabling, and the Physical Layer | ✅ live |
+| 10 | ch10-storage-fabric | The Storage Fabric | ✅ live |
 | 11 | ch11-monitoring-telemetry | Monitoring, Telemetry, and Observability | 📋 next to write |
 
 ## Labs
@@ -64,7 +64,7 @@ Useful routes:
 ```
 apps/web/
   app/                        ← Next.js routes (learn/, lab/, curriculum/)
-  content/chapters/           ← MDX chapter files (ch0-ch10 currently in repo)
+  content/chapters/           ← MDX chapter files (ch0-ch10 currently live in this repo)
   components/visualisations/  ← React viz components (80+ registered)
   lib/mdxComponents.ts        ← Registers all viz components for MDX
   components/visualisations/COMPONENTS_REGISTRY.md  ← Registry table
