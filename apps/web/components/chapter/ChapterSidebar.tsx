@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import type { ChapterPage, ChapterSummary } from "@/lib/chapters";
@@ -22,9 +23,14 @@ export function ChapterSidebar({
 }: Props) {
   const completedPages = useProgressStore((state) => state.completedPages);
   const getChapterProgress = useProgressStore((state) => state.getChapterProgress);
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const isPageComplete = (pageIndex: number) =>
-    (completedPages[currentChapter] ?? []).includes(pageIndex);
+    hasMounted && (completedPages[currentChapter] ?? []).includes(pageIndex);
 
   return (
     <aside className="hidden lg:block">
@@ -32,7 +38,7 @@ export function ChapterSidebar({
         <p className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-600">Chapters</p>
         <ul className="mb-8 space-y-2">
           {allChapters.map(({ slug, title }) => {
-            const progress = getChapterProgress(slug, chapterPageCounts[slug] ?? 0);
+            const progress = hasMounted ? getChapterProgress(slug, chapterPageCounts[slug] ?? 0) : 0;
             const isCurrent = slug === currentChapter;
 
             return (

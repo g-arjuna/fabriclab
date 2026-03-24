@@ -1,0 +1,109 @@
+<svg width="1200" height="700" viewBox="0 0 1200 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="700" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#09111f"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132034"/>
+      <stop offset="1" stop-color="#0b1526"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#020617" flood-opacity="0.45"/>
+    </filter>
+    <style>
+      .label { font-family: ui-sans-serif, system-ui, sans-serif; fill: #e2e8f0; }
+      .muted { font-family: ui-sans-serif, system-ui, sans-serif; fill: #94a3b8; }
+      .mono { font-family: ui-monospace, SFMono-Regular, monospace; fill: #cbd5e1; }
+      .pulse-slow { animation: pulseSlow 2.2s ease-in-out infinite; }
+      .pulse-wait { animation: pulseWait 1.6s ease-in-out infinite; }
+      .pulse-green { animation: pulseGreen 1.8s ease-in-out infinite; }
+      @keyframes pulseSlow {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 1; }
+      }
+      @keyframes pulseWait {
+        0%, 100% { opacity: 0.35; }
+        50% { opacity: 0.85; }
+      }
+      @keyframes pulseGreen {
+        0%, 100% { opacity: 0.55; }
+        50% { opacity: 1; }
+      }
+    </style>
+  </defs>
+
+  <rect width="1200" height="700" rx="32" fill="url(#bg)"/>
+
+  <text x="60" y="70" class="label" font-size="30" font-weight="700">Training vs inference: the same slow event has different consequences</text>
+  <text x="60" y="104" class="muted" font-size="18">Training has a barrier. Inference usually does not.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="48" y="140" width="528" height="500" rx="28" fill="url(#panel)" stroke="#1e293b"/>
+    <rect x="624" y="140" width="528" height="500" rx="28" fill="url(#panel)" stroke="#1e293b"/>
+  </g>
+
+  <text x="84" y="192" class="label" font-size="24" font-weight="700">Training</text>
+  <text x="84" y="222" class="muted" font-size="16">One straggler delays the whole synchronized step.</text>
+
+  <text x="660" y="192" class="label" font-size="24" font-weight="700">Inference</text>
+  <text x="660" y="222" class="muted" font-size="16">A slow request mostly affects only itself.</text>
+
+  <line x1="86" y1="490" x2="538" y2="490" stroke="#475569" stroke-width="2" stroke-dasharray="7 7"/>
+  <text x="544" y="496" class="mono" font-size="13">barrier</text>
+
+  <g>
+    <rect x="92" y="280" width="96" height="28" rx="10" fill="#0f172a" stroke="#334155"/>
+    <rect x="206" y="280" width="96" height="28" rx="10" fill="#0f172a" stroke="#334155"/>
+    <rect x="320" y="280" width="96" height="28" rx="10" fill="#0f172a" stroke="#334155"/>
+    <rect x="434" y="280" width="96" height="28" rx="10" fill="#0f172a" stroke="#334155"/>
+    <text x="140" y="299" class="mono" text-anchor="middle" font-size="12">GPU 0</text>
+    <text x="254" y="299" class="mono" text-anchor="middle" font-size="12">GPU 1</text>
+    <text x="368" y="299" class="mono" text-anchor="middle" font-size="12">GPU 2</text>
+    <text x="482" y="299" class="mono" text-anchor="middle" font-size="12">GPU 3</text>
+
+    <rect x="92" y="340" width="96" height="28" rx="10" fill="#0f172a" stroke="#334155"/>
+    <rect x="206" y="340" width="96" height="28" rx="10" fill="#0f172a" stroke="#334155"/>
+    <rect x="320" y="340" width="96" height="28" rx="10" fill="#0f172a" stroke="#334155"/>
+    <rect x="434" y="340" width="96" height="28" rx="10" fill="#0f172a" stroke="#334155"/>
+    <text x="140" y="359" class="mono" text-anchor="middle" font-size="12">GPU 4</text>
+    <text x="254" y="359" class="mono" text-anchor="middle" font-size="12">GPU 5</text>
+    <text x="368" y="359" class="mono" text-anchor="middle" font-size="12">GPU 6</text>
+    <text x="482" y="359" class="mono" text-anchor="middle" font-size="12">GPU 7</text>
+
+    <rect x="100" y="408" width="80" height="16" rx="8" fill="#22c55e" class="pulse-green"/>
+    <rect x="214" y="408" width="80" height="16" rx="8" fill="#22c55e" class="pulse-green"/>
+    <rect x="328" y="408" width="80" height="16" rx="8" fill="#22c55e" class="pulse-green"/>
+    <rect x="442" y="408" width="80" height="16" rx="8" fill="#22c55e" class="pulse-green"/>
+    <rect x="100" y="448" width="80" height="16" rx="8" fill="#22c55e" class="pulse-green"/>
+    <rect x="214" y="448" width="58" height="16" rx="8" fill="#ef4444" class="pulse-slow"/>
+    <rect x="328" y="448" width="80" height="16" rx="8" fill="#22c55e" class="pulse-green"/>
+    <rect x="442" y="448" width="80" height="16" rx="8" fill="#22c55e" class="pulse-green"/>
+
+    <rect x="100" y="506" width="80" height="18" rx="9" fill="#f59e0b" class="pulse-wait"/>
+    <rect x="214" y="506" width="80" height="18" rx="9" fill="#ef4444" class="pulse-slow"/>
+    <rect x="328" y="506" width="80" height="18" rx="9" fill="#f59e0b" class="pulse-wait"/>
+    <rect x="442" y="506" width="80" height="18" rx="9" fill="#f59e0b" class="pulse-wait"/>
+    <text x="308" y="560" class="muted" text-anchor="middle" font-size="16">7 GPUs wait for the slowest path to finish</text>
+  </g>
+
+  <g>
+    <rect x="664" y="274" width="430" height="36" rx="12" fill="#0f172a" stroke="#334155"/>
+    <rect x="684" y="320" width="390" height="18" rx="9" fill="#22c55e" class="pulse-green"/>
+    <text x="682" y="255" class="mono" font-size="13">request 1</text>
+
+    <rect x="664" y="370" width="430" height="36" rx="12" fill="#0f172a" stroke="#334155"/>
+    <rect x="684" y="416" width="390" height="18" rx="9" fill="#22c55e" class="pulse-green"/>
+    <text x="682" y="351" class="mono" font-size="13">request 2</text>
+
+    <rect x="664" y="466" width="430" height="36" rx="12" fill="#0f172a" stroke="#334155"/>
+    <rect x="684" y="512" width="240" height="18" rx="9" fill="#ef4444" class="pulse-slow"/>
+    <text x="682" y="447" class="mono" font-size="13">request 3</text>
+
+    <rect x="664" y="562" width="430" height="36" rx="12" fill="#0f172a" stroke="#334155"/>
+    <rect x="684" y="608" width="390" height="18" rx="9" fill="#22c55e" class="pulse-green"/>
+    <text x="682" y="543" class="mono" font-size="13">request 4</text>
+
+    <text x="879" y="646" class="muted" text-anchor="middle" font-size="16">One slow request hurts p99, not the whole batch</text>
+  </g>
+</svg>

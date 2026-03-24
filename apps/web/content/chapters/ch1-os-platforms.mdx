@@ -42,6 +42,16 @@ NVIDIA UFM (Unified Fabric Manager) is a software application — not an embedde
 **Base Command Manager: runs on a head node**
 BCM (formerly DGX System Software) runs on a designated head node. It handles DGX provisioning (PXE boot, OS imaging), job scheduling integration (Slurm), telemetry collection, and health monitoring. It exposes a web GUI and an API. Your first interaction with a new DGX cluster is usually through BCM's provisioning interface.
 
+<Image
+  src="/images/ch1-os-platforms/nvidia-base-command-manager-overview.png"
+  alt="Official NVIDIA Base Command Manager cluster overview interface screenshot."
+  width={2988}
+  height={1576}
+  style={{ objectFit: "contain", backgroundColor: "#020617" }}
+/>
+
+*Figure: Official NVIDIA Base Command Manager interface screenshot. This is the kind of cluster-level view the chapter is referring to when it says Day 0 work is often orchestrated through BCM rather than performed node by node.*
+
 ---
 
 ## The management philosophy — centralised vs distributed
@@ -146,6 +156,16 @@ The QM9700 leaf switches boot next (2–3 minutes). They connect upward to the s
 
 If UFM is running on a dedicated management server (recommended for production), start it now. UFM begins its discovery process — it will discover the switches and build the initial topology map. No LIDs are assigned yet because no nodes are connected.
 
+<Image
+  src="/images/ch1-os-platforms/superpod-h100-management-rack.png"
+  alt="Official NVIDIA DGX SuperPOD H100 management rack configuration diagram."
+  width={1200}
+  height={900}
+  style={{ objectFit: "contain", backgroundColor: "#020617" }}
+/>
+
+*Figure: Official NVIDIA DGX SuperPOD H100 management rack example. It makes the bring-up order more concrete: management switches, UFM appliances, and supporting servers are all separate infrastructure that need to be available before the compute nodes come online.*
+
 **Step 5: Power on DGX nodes**
 
 DGX nodes take 8–12 minutes to POST and boot. During boot: the BIOS initialises hardware, DGX OS starts, NVIDIA drivers load, and the Fabric Manager daemon starts. When FM starts, it initialises the NVSwitch fabric inside the node and then registers the node's ConnectX-7 NICs with UFM. UFM sees the new endpoints, assigns LIDs, and updates routing tables across all switches.
@@ -186,6 +206,16 @@ If interfaces show `DOWN`, the DGX nodes are not connected yet or have not finis
 
 Open a browser to the BMC IP address. Default credentials are on the iDRAC service tag label (or set during provisioning). The iDRAC dashboard shows power state, hardware health (all green is what you want), and gives you a virtual console to see what is displayed on the node's video output.
 
+<Image
+  src="/images/ch1-os-platforms/nvidia-dgx-h100-bmc-dashboard.png"
+  alt="Official NVIDIA DGX H100 BMC dashboard screenshot."
+  width={900}
+  height={467}
+  style={{ objectFit: "contain", backgroundColor: "#020617" }}
+/>
+
+*Figure: Official NVIDIA DGX H100 BMC dashboard screenshot. This is the real out-of-band management view behind the chapter's guidance to verify power state, hardware health, and remote-console availability before moving on to OS-level checks.*
+
 When DGX OS finishes booting, you can SSH directly to the node's management IP. The first thing to run:
 
 ```bash
@@ -206,6 +236,16 @@ Open the UFM web interface. After initial discovery you should see:
 - All switches in the topology map (green = up, red = down)
 - All DGX nodes appearing as fabric endpoints
 - LID assignments visible for each node
+
+<Image
+  src="/images/ch1-os-platforms/nvidia-ufm-topology-map.png"
+  alt="Official NVIDIA UFM topology map screenshot showing discovered fabric elements."
+  width={1207}
+  height={817}
+  style={{ objectFit: "contain", backgroundColor: "#020617" }}
+/>
+
+*Figure: Official NVIDIA UFM topology map screenshot. Exact labels and icons vary by deployment, but this is the real operational view behind the chapter’s “all switches and endpoints should appear in the fabric map” guidance.*
 
 If a node is not appearing in UFM after 15 minutes, check: is the FM daemon running on the node? Is the ConnectX-7 physically connected to the correct leaf switch? Does UFM show the port as `Active` on the switch side?
 

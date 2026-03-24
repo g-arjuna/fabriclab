@@ -30,6 +30,7 @@ type LabItem = {
   description: string;
 };
 
+// ── Part 1: Foundations (Ch0–Ch2) ─────────────────────────────────────────
 const foundationChapters: AvailableItem[] = [
   {
     number: "0",
@@ -57,13 +58,17 @@ const foundationChapters: AvailableItem[] = [
     number: "2",
     title: "Why HPC Networking Is Different",
     href: "/learn/ch2-why-different",
-    duration: "20 min",
+    duration: "25 min",
     status: "Available",
-    tags: ["AllReduce", "Lossless", "RDMA", "Mental model"],
+    tags: ["AllReduce", "Lossless", "RDMA", "JCT", "Tail latency"],
     description:
-      "The AllReduce barrier, why TCP fails, lossless requirements, the mental model shift from enterprise to AI.",
+      "The AllReduce barrier, why TCP fails, tail latency math, and the mental model shift from enterprise to AI networking.",
     slug: "ch2-why-different",
   },
+];
+
+// ── Part 2: Fabric Operations (Ch3–Ch8) ───────────────────────────────────
+const fabricChapters: AvailableItem[] = [
   {
     number: "3",
     title: "The CLI — Reading the Fabric",
@@ -132,9 +137,67 @@ const foundationChapters: AvailableItem[] = [
   },
 ];
 
-const roceChapters: UpcomingItem[] = [];
+// ── Part 3: Physical Layer and Infrastructure (Ch9–Ch11) ──────────────────
+const infrastructureChapters: AvailableItem[] = [
+  {
+    number: "9",
+    title: "Optics, Cabling, and the Physical Layer",
+    href: "/learn/ch9-optics-cabling",
+    duration: "40 min",
+    status: "Available",
+    tags: ["Optics", "Cabling", "Fiber", "OSFP", "CPO", "Signal integrity"],
+    description:
+      "The physical layer beneath the fabric: 400G/800G optics, DSPs, fiber types, form factors, cable selection, and why signal integrity and power density now shape AI cluster design.",
+    slug: "ch9-optics-cabling",
+  },
+  {
+    number: "10",
+    title: "The Storage Fabric",
+    href: "/learn/ch10-storage-fabric",
+    duration: "45 min",
+    status: "Available",
+    tags: ["Storage", "GDS", "NVMe-oF", "Parallel file systems", "Checkpointing"],
+    description:
+      "The separate network that feeds and protects training: storage isolation, GDS data paths, NVMe-oF transports, parallel file systems, checkpoint economics, and storage topology choices.",
+    slug: "ch10-storage-fabric",
+  },
+  {
+    number: "11",
+    title: "Monitoring, Telemetry, and Observability",
+    href: "/learn/ch11-monitoring-telemetry",
+    duration: "48 min",
+    status: "Available",
+    tags: ["UFM API", "DCGM", "Prometheus", "Grafana", "Alert calibration", "Correlation"],
+    description:
+      "Know about problems before the ML engineer's Slack message arrives. UFM REST API, DCGM GPU metrics, Prometheus alert design, threshold calibration, and cross-layer correlation across four monitoring streams.",
+    slug: "ch11-monitoring-telemetry",
+  },
+];
 
-const architectureChapters: UpcomingItem[] = [];
+// ── Upcoming chapters ──────────────────────────────────────────────────────
+const upcomingChapters: UpcomingItem[] = [
+  {
+    number: "12",
+    title: "Scale-Up Networking — NVLink Switch System",
+    status: "Coming soon",
+    tags: ["NVLink Switch", "57.6 TB/s", "Scale-up", "SHARP"],
+    description: "External NVLink Switch modules, 57.6 TB/s all-to-all at 256 GPUs, NVLink Network addressing, and the scale-up vs scale-out architecture decision.",
+  },
+  {
+    number: "13",
+    title: "Alternative Topologies",
+    status: "Coming soon",
+    tags: ["Torus", "Dragonfly", "Google TPU", "Fat-tree"],
+    description: "Torus, folded torus, and dragonfly topologies — why they dominated HPC and why fat-tree wins for AI training.",
+  },
+  {
+    number: "14",
+    title: "GPU Hardware Generations",
+    status: "Coming soon",
+    tags: ["NVLink", "SXM", "PCIe", "GH200", "MIG"],
+    description: "Network-relevant implications of GPU generations: NVLink/NVSwitch generation table, SXM vs PCIe form factors, GH200, H100 CNX, and Confidential Computing.",
+  },
+];
 
 const labs: LabItem[] = [
   {
@@ -189,7 +252,7 @@ const labs: LabItem[] = [
     duration: "20 min",
     status: "Available",
     description:
-      "A 16-node cluster shows 3 GB/s busbw instead of 380 GB/s. All hardware is healthy. Diagnose why NCCL is using socket transport and fix the environment variable misconfiguration.",
+      "A 16-node cluster shows 3 GB/s busbw instead of expected performance. All hardware is healthy. Diagnose why NCCL is using socket transport and fix the environment variable misconfiguration.",
   },
 ];
 
@@ -271,9 +334,14 @@ function LabCard({ item }: { item: LabItem }) {
 export default async function CurriculumPage() {
   const chapters = await getChapterSummaries();
   const availableSlugs = new Set(chapters.map((chapter) => chapter.slug));
-  const visibleFoundations = foundationChapters.filter((chapter) =>
-    chapter.slug ? availableSlugs.has(chapter.slug) : true,
-  );
+
+  function filterAvailable(items: AvailableItem[]) {
+    return items.filter((item) => (item.slug ? availableSlugs.has(item.slug) : true));
+  }
+
+  const visibleFoundations     = filterAvailable(foundationChapters);
+  const visibleFabric          = filterAvailable(fabricChapters);
+  const visibleInfrastructure  = filterAvailable(infrastructureChapters);
 
   return (
     <main className="min-h-screen bg-[#020617] px-6 py-16 text-slate-100">
@@ -294,48 +362,75 @@ export default async function CurriculumPage() {
           </p>
         </header>
 
-        <section className="mt-14">
-          <div className="mb-6">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Part 1 — Foundations</p>
-            <p className="mt-2 text-sm text-slate-500">No prerequisites</p>
-          </div>
-          <div className="space-y-5">
-            {visibleFoundations.map((chapter) => (
-              <AvailableCard key={chapter.number} item={chapter} />
-            ))}
-          </div>
-        </section>
+        {/* Part 1 — Foundations */}
+        {visibleFoundations.length > 0 && (
+          <section className="mt-14">
+            <div className="mb-6">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Part 1 — Foundations</p>
+              <p className="mt-2 text-sm text-slate-500">No prerequisites · Ch 0–2</p>
+            </div>
+            <div className="space-y-5">
+              {visibleFoundations.map((chapter) => (
+                <AvailableCard key={chapter.number} item={chapter} />
+              ))}
+            </div>
+          </section>
+        )}
 
+        {/* Part 2 — Fabric Operations */}
+        {visibleFabric.length > 0 && (
+          <section className="mt-14">
+            <div className="mb-6">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
+                Part 2 — Fabric Operations
+              </p>
+              <p className="mt-2 text-sm text-slate-500">Requires Part 1 · Ch 3–8</p>
+            </div>
+            <div className="space-y-5">
+              {visibleFabric.map((chapter) => (
+                <AvailableCard key={chapter.number} item={chapter} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Part 3 — Physical Layer and Infrastructure */}
+        {visibleInfrastructure.length > 0 && (
+          <section className="mt-14">
+            <div className="mb-6">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
+                Part 3 — Physical Layer and Infrastructure
+              </p>
+              <p className="mt-2 text-sm text-slate-500">Requires Part 2 · Ch 9–11</p>
+            </div>
+            <div className="space-y-5">
+              {visibleInfrastructure.map((chapter) => (
+                <AvailableCard key={chapter.number} item={chapter} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Coming soon */}
         <section className="mt-14">
           <div className="mb-6">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-              Part 2 — RoCEv2 + Lossless Ethernet
+              Part 4 — Scale and Architecture
             </p>
-            <p className="mt-2 text-sm text-slate-500">Requires Part 1</p>
+            <p className="mt-2 text-sm text-slate-500">Requires Part 3 · Ch 12–14</p>
           </div>
           <div className="space-y-5">
-            {roceChapters.map((chapter) => (
+            {upcomingChapters.map((chapter) => (
               <UpcomingCard key={chapter.number} item={chapter} />
             ))}
           </div>
         </section>
 
-        <section className="mt-14">
-          <div className="mb-6">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Part 3 — Architecture</p>
-            <p className="mt-2 text-sm text-slate-500">Requires Part 2</p>
-          </div>
-          <div className="space-y-5">
-            {architectureChapters.map((chapter) => (
-              <UpcomingCard key={chapter.number} item={chapter} />
-            ))}
-          </div>
-        </section>
-
+        {/* Labs */}
         <section className="mt-14 pb-8">
           <div className="mb-6">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Labs</p>
-            <p className="mt-2 text-sm text-slate-500">Separate from chapters</p>
+            <p className="mt-2 text-sm text-slate-500">Scenario-based · separate from chapters</p>
           </div>
           <div className="space-y-5">
             {labs.map((lab) => (

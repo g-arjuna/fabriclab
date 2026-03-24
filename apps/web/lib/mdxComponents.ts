@@ -1,4 +1,5 @@
 import type * as React from "react"
+import { Image } from "@/components/chapter/MdxImage"
 
 // === Active components (used in current chapters) ===
 import { EnterpriseBaselineViz } from "@/components/visualisations/EnterpriseBaselineViz"
@@ -19,6 +20,9 @@ import { PlatformLandscapeViz } from "@/components/visualisations/PlatformLandsc
 import { PowerOnSequenceViz } from "@/components/visualisations/PowerOnSequenceViz"
 import { FirstAccessViz } from "@/components/visualisations/FirstAccessViz"
 import { ConnectivityMapViz } from "@/components/visualisations/ConnectivityMapViz"
+// === Ch2 — Why HPC Networking Is Different ===
+import { AllReduceBarrierViz } from "@/components/visualisations/AllReduceBarrierViz"
+import { TailLatencyViz } from "@/components/visualisations/TailLatencyViz"
 import { InvestigationMindsetViz } from "@/components/visualisations/InvestigationMindsetViz"
 import { CommandDeviceMapViz } from "@/components/visualisations/CommandDeviceMapViz"
 import { LinkBothEndsViz } from "@/components/visualisations/LinkBothEndsViz"
@@ -68,11 +72,28 @@ import { NCCLTestOutputViz } from "@/components/visualisations/NCCLTestOutputViz
 import { NCCLCorrelationViz } from "@/components/visualisations/NCCLCorrelationViz"
 import { DCQCNTuningViz } from "@/components/visualisations/DCQCNTuningViz"
 
+// === Ch9 — Optics, Cabling, and the Physical Layer ===
+import { OpticsRoadmapViz } from "@/components/visualisations/OpticsRoadmapViz"
+import { SignalChainViz } from "@/components/visualisations/SignalChainViz"
+import { FiberTypesViz } from "@/components/visualisations/FiberTypesViz"
+import { FormFactorViz } from "@/components/visualisations/FormFactorViz"
+import { CableSelectionViz } from "@/components/visualisations/CableSelectionViz"
+import { CPOEvolutionViz } from "@/components/visualisations/CPOEvolutionViz"
+
+// === Ch10 — The Storage Fabric ===
+import { StorageSeparationViz } from "@/components/visualisations/StorageSeparationViz"
+import { StorageDataPathViz } from "@/components/visualisations/StorageDataPathViz"
+import { NVMeoFProtocolViz } from "@/components/visualisations/NVMeoFProtocolViz"
+import { ParallelFSViz } from "@/components/visualisations/ParallelFSViz"
+import { CheckpointCostViz } from "@/components/visualisations/CheckpointCostViz"
+import { StorageTopologyViz } from "@/components/visualisations/StorageTopologyViz"
+
 // === Legacy components (no longer in active chapters, kept for reference) ===
 // ServerRackViz, NICCardViz, DGXNodeViz, HardwareComparison
 // These files remain in components/visualisations/ but are not registered
 
 export const mdxComponents: Record<string, React.ComponentType<unknown>> = {
+  Image: Image as unknown as React.ComponentType<unknown>,
   EnterpriseBaselineViz,
   TrainingParallelismViz,
   NVLinkViz,
@@ -91,6 +112,8 @@ export const mdxComponents: Record<string, React.ComponentType<unknown>> = {
   PowerOnSequenceViz,
   FirstAccessViz,
   ConnectivityMapViz,
+  AllReduceBarrierViz,
+  TailLatencyViz,
   InvestigationMindsetViz,
   CommandDeviceMapViz,
   LinkBothEndsViz,
@@ -139,4 +162,18 @@ export const mdxComponents: Record<string, React.ComponentType<unknown>> = {
   NCCLTestOutputViz,
   NCCLCorrelationViz,
   DCQCNTuningViz,
+  // Ch9
+  OpticsRoadmapViz,
+  SignalChainViz,
+  FiberTypesViz,
+  FormFactorViz,
+  CableSelectionViz,
+  CPOEvolutionViz,
+  // Ch10
+  StorageSeparationViz,
+  StorageDataPathViz,
+  NVMeoFProtocolViz,
+  ParallelFSViz,
+  CheckpointCostViz,
+  StorageTopologyViz,
 }

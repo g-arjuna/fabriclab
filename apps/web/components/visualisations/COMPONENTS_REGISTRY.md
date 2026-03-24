@@ -19,6 +19,8 @@ Do not modify component logic - only fix TypeScript/import errors.
 | FullWiringViz | FullWiringViz.tsx | <FullWiringViz /> | ch0 | Registered |
 | RailTopologyViz | RailTopologyViz.tsx | <RailTopologyViz /> | ch0 | Registered |
 | ECMPViz | ECMPViz.tsx | <ECMPViz /> | ch0 | Registered |
+| ConnectX7ModesViz | ConnectX7ModesViz.tsx | <ConnectX7ModesViz /> | ch0 | Registered |
+| IBvsRoCEInfraViz | IBvsRoCEInfraViz.tsx | <IBvsRoCEInfraViz /> | ch0 | Registered |
 | SoftwareStackViz | SoftwareStackViz.tsx | <SoftwareStackViz /> | ch1 | Registered |
 | ManagementPhilosophyViz | ManagementPhilosophyViz.tsx | <ManagementPhilosophyViz /> | ch1 | Registered |
 | OperationsModeViz | OperationsModeViz.tsx | <OperationsModeViz /> | ch1 | Registered |
@@ -26,6 +28,8 @@ Do not modify component logic - only fix TypeScript/import errors.
 | PowerOnSequenceViz | PowerOnSequenceViz.tsx | <PowerOnSequenceViz /> | ch1 | Registered |
 | FirstAccessViz | FirstAccessViz.tsx | <FirstAccessViz /> | ch1 | Registered |
 | ConnectivityMapViz | ConnectivityMapViz.tsx | <ConnectivityMapViz /> | ch1 | Registered |
+| AllReduceBarrierViz | AllReduceBarrierViz.tsx | <AllReduceBarrierViz /> | ch2 | Registered |
+| TailLatencyViz | TailLatencyViz.tsx | <TailLatencyViz /> | ch2 | Registered |
 | InvestigationMindsetViz | InvestigationMindsetViz.tsx | <InvestigationMindsetViz /> | ch3 | Registered |
 | CommandDeviceMapViz | CommandDeviceMapViz.tsx | <CommandDeviceMapViz /> | ch3 | Registered |
 | IbstatOutputViz | IbstatOutputViz.tsx | <IbstatOutputViz /> | ch3 | Registered |
@@ -36,6 +40,8 @@ Do not modify component logic - only fix TypeScript/import errors.
 | DiagnosticWorkflowViz | DiagnosticWorkflowViz.tsx | <DiagnosticWorkflowViz /> | ch3 | Registered |
 | ScenarioCommandMapViz | ScenarioCommandMapViz.tsx | <ScenarioCommandMapViz /> | ch3 | Registered |
 | SimulatorExplainerViz | SimulatorExplainerViz.tsx | <SimulatorExplainerViz /> | ch3 | Registered |
+| LinkBothEndsViz | LinkBothEndsViz.tsx | <LinkBothEndsViz /> | ch3 | Registered |
+| CounterBothEndsViz | CounterBothEndsViz.tsx | <CounterBothEndsViz /> | ch3 | Registered |
 | IBvEthernetMindsetViz | IBvEthernetMindsetViz.tsx | <IBvEthernetMindsetViz /> | ch4 | Registered |
 | ONYXNavigationViz | ONYXNavigationViz.tsx | <ONYXNavigationViz /> | ch4 | Registered |
 | IBPortStatusViz | IBPortStatusViz.tsx | <IBPortStatusViz /> | ch4 | Registered |
@@ -46,10 +52,6 @@ Do not modify component logic - only fix TypeScript/import errors.
 | IBDiagnetOutputViz | IBDiagnetOutputViz.tsx | <IBDiagnetOutputViz /> | ch4 | Registered |
 | UFMEventLogViz | UFMEventLogViz.tsx | <UFMEventLogViz /> | ch4 | Registered |
 | IBDiagnosticWorkflowViz | IBDiagnosticWorkflowViz.tsx | <IBDiagnosticWorkflowViz /> | ch4 | Registered |
-| LinkBothEndsViz | LinkBothEndsViz.tsx | <LinkBothEndsViz /> | ch3 | Registered |
-| CounterBothEndsViz | CounterBothEndsViz.tsx | <CounterBothEndsViz /> | ch3 | Registered |
-| ConnectX7ModesViz | ConnectX7ModesViz.tsx | <ConnectX7ModesViz /> | ch0 | Registered |
-| IBvsRoCEInfraViz | IBvsRoCEInfraViz.tsx | <IBvsRoCEInfraViz /> | ch0 | Registered |
 | CongestionMechanicsViz | CongestionMechanicsViz.tsx | <CongestionMechanicsViz /> | ch5 | Registered |
 | PFCMechanicsViz | PFCMechanicsViz.tsx | <PFCMechanicsViz /> | ch5 | Registered |
 | PauseStormViz | PauseStormViz.tsx | <PauseStormViz /> | ch5 | Registered |
@@ -59,6 +61,8 @@ Do not modify component logic - only fix TypeScript/import errors.
 | RoCEv2ConfigChecklist | RoCEv2ConfigChecklist.tsx | <RoCEv2ConfigChecklist /> | ch5 | Registered |
 | LoadBalancingTaxonomyViz | LoadBalancingTaxonomyViz.tsx | <LoadBalancingTaxonomyViz /> | ch6 | Registered |
 | IncastCongestionViz | IncastCongestionViz.tsx | <IncastCongestionViz /> | ch6 | Registered |
+| LowEntropyFlowletsViz | LowEntropyFlowletsViz.tsx | <LowEntropyFlowletsViz /> | ch6 | Registered |
+| ProactiveReactiveViz | ProactiveReactiveViz.tsx | <ProactiveReactiveViz /> | ch5 | Registered |
 | TopologyScalingViz | TopologyScalingViz.tsx | <TopologyScalingViz /> | ch7 | Registered |
 | FatTreeViz | FatTreeViz.tsx | <FatTreeViz /> | ch7 | Registered |
 | BasePodSuperPodViz | BasePodSuperPodViz.tsx | <BasePodSuperPodViz /> | ch7 | Registered |
@@ -72,6 +76,18 @@ Do not modify component logic - only fix TypeScript/import errors.
 | NCCLTestOutputViz | NCCLTestOutputViz.tsx | <NCCLTestOutputViz /> | ch8 | Registered |
 | NCCLCorrelationViz | NCCLCorrelationViz.tsx | <NCCLCorrelationViz /> | ch8 | Registered |
 | DCQCNTuningViz | DCQCNTuningViz.tsx | <DCQCNTuningViz /> | ch8 | Registered |
+| OpticsRoadmapViz | OpticsRoadmapViz.tsx | <OpticsRoadmapViz /> | ch9 | Registered |
+| SignalChainViz | SignalChainViz.tsx | <SignalChainViz /> | ch9 | Registered |
+| FiberTypesViz | FiberTypesViz.tsx | <FiberTypesViz /> | ch9 | Registered |
+| FormFactorViz | FormFactorViz.tsx | <FormFactorViz /> | ch9 | Registered |
+| CableSelectionViz | CableSelectionViz.tsx | <CableSelectionViz /> | ch9 | Registered |
+| CPOEvolutionViz | CPOEvolutionViz.tsx | <CPOEvolutionViz /> | ch9 | Registered |
+| StorageSeparationViz | StorageSeparationViz.tsx | <StorageSeparationViz /> | ch10 | Registered |
+| StorageDataPathViz | StorageDataPathViz.tsx | <StorageDataPathViz /> | ch10 | Registered |
+| NVMeoFProtocolViz | NVMeoFProtocolViz.tsx | <NVMeoFProtocolViz /> | ch10 | Registered |
+| ParallelFSViz | ParallelFSViz.tsx | <ParallelFSViz /> | ch10 | Registered |
+| CheckpointCostViz | CheckpointCostViz.tsx | <CheckpointCostViz /> | ch10 | Registered |
+| StorageTopologyViz | StorageTopologyViz.tsx | <StorageTopologyViz /> | ch10 | Registered |
 
 ## Legacy components (files kept, not registered)
 

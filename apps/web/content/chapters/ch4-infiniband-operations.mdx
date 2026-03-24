@@ -39,6 +39,16 @@ Console settings: 115200 baud · 8N1 · No hardware flow control
 Connector: Micro-USB (front panel) on QM9700, RJ45 on Q3400
 ```
 
+<Image
+  src="/images/ch4-infiniband-operations/onyx-console-access.svg"
+  alt="Illustration comparing QM9700 front-panel micro-USB console access with Q3400 RJ45 serial console access."
+  width={1200}
+  height={700}
+  style={{ objectFit: "contain", backgroundColor: "#020617" }}
+/>
+
+*Figure: Console-access schematic for the two ONYX platforms named in this chapter. QM9700 exposes front-panel micro-USB console access, while Q3400 uses an RJ45 serial console port.*
+
 The ONYX login sequence:
 
 ```
@@ -499,6 +509,15 @@ UFM's topology view maps fabric events to physical rack and slot positions. When
 - The physical path through the data center to get to that switch
 
 This physical location context is what makes UFM indispensable for large clusters. Without it, finding the right cable in a SuperPOD with thousands of cables is extremely time-consuming.
+
+<Image
+  src="/images/ch4-infiniband-operations/nvidia-ufm-network-map.png"
+  alt="Official NVIDIA UFM network map screenshot showing a selected switch and its nearby fabric links."
+  width={1207}
+  height={817}
+/>
+
+*Figure: Official NVIDIA UFM network map view. This is the operational screen that turns a switch and port identifier into physical location and nearby fabric context.*
 
 ### UFM REST API — programmatic monitoring
 

@@ -239,6 +239,15 @@ The BlueField series goes further. A DPU is a fully programmable SmartNIC with a
 
 <DPUExplainerViz />
 
+<Image
+  src="/images/ch0-hardware-foundations/nvidia-bluefield-3-official.jpg"
+  alt="Official NVIDIA BlueField-3 DPU image showing the physical DPU card form factor."
+  width={1200}
+  height={630}
+/>
+
+*Figure: Official NVIDIA BlueField-3 DPU image. This gives a concrete physical anchor for the exact DPU generation referenced in this section.*
+
 In a DGX H200, there are 2 BlueField-3 DPUs per node alongside 8 ConnectX-7 HCAs. The HCAs handle compute fabric RDMA. The DPUs handle storage and security — freeing the host CPUs to focus on managing the GPUs.
 
 ---
@@ -248,6 +257,15 @@ In a DGX H200, there are 2 BlueField-3 DPUs per node alongside 8 ConnectX-7 HCAs
 Now that you understand why the hardware evolved this way, you can look at the DGX H100 and understand every design decision:
 
 <DGXAnatomyViz />
+
+<Image
+  src="/images/ch0-hardware-foundations/nvidia-dgx-h100-official.jpg"
+  alt="Official NVIDIA DGX H100 system image."
+  width={1200}
+  height={630}
+/>
+
+*Figure: Official NVIDIA DGX H100 system image. Seeing the chassis itself helps ground the anatomy discussion in the physical box operators actually deploy.*
 
 Every choice in the DGX design is an answer to a specific constraint:
 
@@ -289,6 +307,15 @@ There are alternatives. HPE Cray supercomputer nodes, AMD Instinct MI300X server
 Now you can see how a full deployment connects. This is the complete picture:
 
 <FullWiringViz />
+
+<Image
+  src="/images/ch0-hardware-foundations/superpod-h100-arch-01.png"
+  alt="Official NVIDIA DGX SuperPOD H100 scalable unit rack layout diagram."
+  width={1018}
+  height={533}
+/>
+
+*Figure: Official NVIDIA DGX SuperPOD H100 scalable unit rack layout. This makes the physical density and repeated rack pattern behind the wiring discussion concrete.*
 
 ## Why the wiring is rigid by design
 
@@ -333,6 +360,16 @@ The answer is simpler and more surprising than most engineers expect.
 **The ConnectX-7 does not care which protocol it runs.**
 The same physical PCIe card — the same silicon, the same optical connector, the same cable — can operate as a native InfiniBand HCA or as a 400GbE Ethernet NIC. This is not a software emulation. The ConnectX-7 ASIC was designed from the ground up to support both transport layers natively. You change the operating mode through a firmware configuration utility (`mlxconfig`), and after a reboot the card presents a completely different personality to the operating system.
 <ConnectX7ModesViz />
+
+<Image
+  src="/images/ch0-hardware-foundations/nvidia-connectx-7-official.jpg"
+  alt="Official NVIDIA ConnectX-7 SuperNIC image showing the adapter form factor discussed in the mode-selection section."
+  width={1200}
+  height={630}
+/>
+
+*Figure: Official NVIDIA ConnectX-7 image. This is the physical card the chapter is referring to when it explains that the external fabric personality can change even when the hardware form factor does not.*
+
 **What "mode" actually means at the port level:**
 In **InfiniBand mode**, the ConnectX-7 speaks the InfiniBand protocol natively. It uses credit-based flow control — packets are only transmitted when the receiver has confirmed it has buffer space. There is no concept of packet loss at the link layer. The port is addressed by a LID assigned by the Subnet Manager, not by a MAC or IP address.
 In **Ethernet mode** (RoCEv2), the ConnectX-7 presents as a standard 400GbE network interface. It has a MAC address. It can be assigned an IP address. RDMA still works — through a protocol called RoCEv2 that encapsulates RDMA verbs in UDP/IP packets — but losslessness is no longer built-in. You achieve it through configuration: Priority Flow Control (PFC) and Explicit Congestion Notification (ECN). Misconfigure either and you lose the lossless guarantee.

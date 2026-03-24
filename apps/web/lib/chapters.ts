@@ -28,6 +28,11 @@ function getChaptersPath() {
   return path.join(process.cwd(), "content", "chapters");
 }
 
+function getChapterNumber(value: string): number {
+  const match = value.match(/^ch(\d+)/i);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
 function sanitiseEncoding(raw: string): string {
   return raw
     .replace(/—/g, "—")
@@ -45,7 +50,16 @@ function sanitiseEncoding(raw: string): string {
 export const getChapterSummaries = cache(async (): Promise<ChapterSummary[]> => {
   try {
     const files = await readdir(getChaptersPath());
-    const chapterFiles = files.filter((file) => file.endsWith(".mdx")).sort();
+    const chapterFiles = files
+      .filter((file) => file.endsWith(".mdx"))
+      .sort((left, right) => {
+        const chapterDelta = getChapterNumber(left) - getChapterNumber(right);
+        if (chapterDelta !== 0) {
+          return chapterDelta;
+        }
+
+        return left.localeCompare(right, undefined, { numeric: true });
+      });
 
     return Promise.all(
       chapterFiles.map(async (file) => {

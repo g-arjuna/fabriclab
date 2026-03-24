@@ -4,7 +4,12 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:browser:ch0": "playwright test tests/ch0.smoke.spec.ts",
+    "test:browser:ch1": "playwright test tests/ch1.smoke.spec.ts",
+    "test:browser:ch2": "playwright test tests/ch2.smoke.spec.ts",
+    "test:browser:ch3": "playwright test tests/ch3.smoke.spec.ts",
+    "test:browser:ch4": "playwright test tests/ch4.smoke.spec.ts"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",
@@ -22,6 +27,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "4.1.13",
     "@types/node": "24.5.2",
     "@types/react": "19.2.1",
