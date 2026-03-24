@@ -1,0 +1,67 @@
+← Curriculum
+← Chapter 7: Topology Design
+Evaluate topology proposals
+Lab 0
+Failed Rail
+Lab 1
+PFC Fix
+Lab 2
+Congestion
+Lab 3
+Spine LB
+Lab 4
+Topology
+Lab 5
+NCCL
+
+ACTIVE LAB
+
+Evaluate topology proposals
+Intermediate
+
+ELAPSED
+
+00:00
+
+SCENARIO
+
+Two vendors propose switch configurations for a new
+64-node DGX H100 cluster (512 NIC connections).
+
+Proposal A: 32-port 400G switches, 2-stage design
+Proposal B: 64-port 400G switches, 2-stage design
+
+Requirements:
+- 64 DGX H100 nodes at full line rate
+- 1:1 non-blocking fabric
+
+Evaluate both, then submit your recommendation
+before the purchase order is signed.
+
+CONDITIONS
+
+Proposal A inspected
+Proposal B inspected
+Oversubscription calculated
+Correct proposal identified
+
+TOPOLOGY
+
+DGX H100 Node A
+eth0 · 400G
+Spectrum-X SN5600
+DGX H100 Node B
+eth0 · 400G
+Filled green circle = Active
+Unfilled red circle = Down
+Solid line = 400G link
+Dashed line = degraded
+
+Click a device node to open its terminal session
+
+Click a device in the topology to open a terminal session
+
+Each device has its own CLI context and command set
+
+REFERENCE
+←

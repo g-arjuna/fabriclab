@@ -139,12 +139,48 @@ const chapterCards = [
   },
   {
     id: "Chapter 6",
+    title: "Efficient Load Balancing",
+    tag: "Foundations",
+    description:
+      "Why AI traffic breaks ECMP, how per-packet and dynamic load balancing restore utilisation, and how to read spine imbalance in the counters.",
+    status: "Available",
+    href: "/learn/ch6-efficient-load-balancing",
+  },
+  {
+    id: "Chapter 7",
     title: "Topology Design",
     tag: "Architecture",
     description:
-      "Fat-tree, DragonFly+, DGX BasePOD, DGX SuperPOD — designing the fabric.",
-    status: "Coming soon",
-    href: "/curriculum",
+      "Fat-tree, DragonFly+, DGX BasePOD, DGX SuperPOD, oversubscription math, and how AI fabrics scale cleanly.",
+    status: "Available",
+    href: "/learn/ch7-topology-design",
+  },
+  {
+    id: "Chapter 8",
+    title: "NCCL — The Application Layer",
+    tag: "Architecture",
+    description:
+      "How NCCL selects transports and algorithms, how to read nccl-tests output, and how fabric issues surface as bus bandwidth collapse.",
+    status: "Available",
+    href: "/learn/ch8-nccl-performance",
+  },
+  {
+    id: "Chapter 9",
+    title: "Optics, Cabling, and the Physical Layer",
+    tag: "Architecture",
+    description:
+      "400G and 800G optics, fiber choices, form factors, cable selection, and the physical constraints underneath AI cluster fabrics.",
+    status: "Available",
+    href: "/learn/ch9-optics-cabling",
+  },
+  {
+    id: "Chapter 10",
+    title: "The Storage Fabric",
+    tag: "Architecture",
+    description:
+      "Why storage traffic is isolated from the compute fabric, how GDS changes the data path, and how checkpoint economics drive storage design.",
+    status: "Available",
+    href: "/learn/ch10-storage-fabric",
   },
 ];
 
@@ -491,7 +527,7 @@ export default function Home() {
             A structured path from hardware to protocol.
           </h2>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-400">
-            Six chapters. Two scenario labs. One interactive CLI simulator.
+            Eleven chapters. Six scenario labs. One interactive CLI simulator.
           </p>
 
           <div className="mt-10 flex gap-6 overflow-x-auto pb-4 lg:grid lg:grid-cols-3 lg:overflow-visible">

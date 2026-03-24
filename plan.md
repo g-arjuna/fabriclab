@@ -1,686 +1,238 @@
-# FabricLab — MVP Build Plan
-
+# FabricLab — Build Plan
 > Engineering spec for Codex. Content comes from Claude — see AGENTS.md.
 > Zero API calls. Zero configuration. Works offline.
 
 ---
 
-## Goal
+## Current state (as of March 2026)
 
-A working MVP in 30–45 days with zero running costs.
+The MVP is complete and live. This plan now tracks:
+- Pending Codex deploy tasks for content Claude has already written
+- Pending bug-fix patches with existing Codex prompt files
+- Infrastructure needed for the next chapter (Ch11)
 
-RoCEv2 learning with CLI simulation and Claude-authored MDX content.
-The platform renders what Claude writes. Codex builds the renderer.
+For chapter status and content briefs, see `FABRICLAB_CONTENT_BACKLOG_v7.md`.
 
 ---
 
 ## Two-agent workflow
 
 ```
-CLAUDE writes:                    CODEX builds:
-─────────────                     ─────────────
-content/chapters/*.mdx            The MDX rendering engine
-content/knowledge/*.ts            The CLI terminal + state
-components/visualisations/*.tsx   The lab engine
-                                  The knowledge panel shell
-                                  Everything in types/, store/, lib/
+CLAUDE writes:                          CODEX applies:
+──────────────                          ──────────────
+MDX chapter files                       File copies to target paths
+React viz components (.tsx)             TypeScript fixes (tsc --noEmit)
+Updated mdxComponents.ts                Bug-fix patches from Codex prompt .txt
+Codex deploy prompt .txt files          Nav link updates between chapters
+Lab scenario TypeScript                 Image generation + placement (see below)
+                                        Light prose when contextualising images
 ```
 
-Codex does not write content. Claude does not write infrastructure.
+Codex does not write substantive educational content.
+Claude does not write infrastructure or generate images.
 
 ---
 
-## No API calls — what this means
+## Platform — what is built ✅
 
-```
-No OpenAI API          → Knowledge panel uses static content/knowledge/*.ts
-No Supabase            → No auth, no persistence, no DB
-No .env file           → Nothing to configure
-No network requests    → Works fully offline
-```
-
-Phase 2 adds APIs as progressive enhancements — zero structural changes needed.
-
----
-
-## Scope
-
-### ✅ Build (Codex)
-
-| What | Detail |
-|------|--------|
-| MDX rendering engine | Next.js @next/mdx, dynamic chapter routes, mdxComponents registry |
-| CLI terminal | xterm.js, all commands + mutations, state-driven output |
-| Lab engine | State evaluation, scoring, 3-level hints |
-| Knowledge panel shell | Renders content/knowledge/*.ts files from Claude |
-| Static topology view | SVG per spec below |
-| Zustand store | Topology state + lab state + active concept tracking |
-
-### ✅ Content (Claude, integrated by Codex)
-
-| What | Location |
-|------|----------|
-| MDX chapters | content/chapters/*.mdx |
-| Visualisation components | components/visualisations/*.tsx |
-| Knowledge base data | content/knowledge/*.ts |
-| CLI output text | Inside knowledge base files |
-
-### ❌ Do not build
-
-Auth, payments, InfiniBand, crawlers, NVIDIA Air, React Flow canvas,
-rack view, flow animations, RAG, embeddings, WebSockets, background jobs,
-any API calls, any .env variables.
+| Component | Location | Status |
+|-----------|----------|--------|
+| MDX rendering engine | `app/learn/[chapter]/page.tsx` | ✅ live |
+| Multi-device CLI terminal | `components/terminal/` | ✅ live |
+| Lab engine + state | `lib/labs/`, `store/` | ✅ live |
+| Visualisation registry | `lib/mdxComponents.ts` | ✅ live (Ch0–Ch9) |
+| Topology view | `components/topology/` | ✅ live |
+| Curriculum / learn routes | `app/curriculum/`, `app/learn/` | ✅ live |
 
 ---
 
-## Tech stack
+## Pending Codex tasks
+
+### TASK 1 — Deploy Ch10 (HIGHEST PRIORITY)
+
+Ch10 is written by Claude and sitting in `outputs/`. It is NOT yet in the live repo.
+
+**Files to copy:**
+
+| Source | Destination |
+|--------|-------------|
+| `outputs/ch10-storage-fabric.mdx` | `apps/web/content/chapters/ch10-storage-fabric.mdx` |
+| `outputs/visualisations/StorageSeparationViz.tsx` | `apps/web/components/visualisations/` |
+| `outputs/visualisations/StorageDataPathViz.tsx` | `apps/web/components/visualisations/` |
+| `outputs/visualisations/NVMeoFProtocolViz.tsx` | `apps/web/components/visualisations/` |
+| `outputs/visualisations/ParallelFSViz.tsx` | `apps/web/components/visualisations/` |
+| `outputs/visualisations/CheckpointCostViz.tsx` | `apps/web/components/visualisations/` |
+| `outputs/visualisations/StorageTopologyViz.tsx` | `apps/web/components/visualisations/` |
+| `outputs/mdxComponents.ts` | `apps/web/lib/mdxComponents.ts` |
+| `outputs/COMPONENTS_REGISTRY.md` | `apps/web/components/visualisations/COMPONENTS_REGISTRY.md` |
+
+**After copying:**
+1. Verify Ch9 nav link says `/learn/ch10-storage-fabric` (already correct in live repo — confirm only).
+2. Run `tsc --noEmit` — fix any type errors in the 6 new viz components before committing.
+3. Add Ch10 nav link `[Continue to Chapter 11 →](/learn/ch11-monitoring-telemetry)` at end of
+   `ch10-storage-fabric.mdx` (after Ch11 is written and deployed).
+
+---
+
+### TASK 2 — Fix TopologyScalingViz full-mesh bug
+
+**File:** `apps/web/components/visualisations/TopologyScalingViz.tsx`
+**Codex prompt:** `outputs/TOPOLOGY_VIZ_FIX_CODEX_PROMPT.txt`
+
+Current bug: leaf-to-spine connections use `i % spineCount` (1:1 — wrong).
+Fat-tree requires full mesh: every leaf connects to every spine.
+Stage 3 has the same bug with hardcoded parent arrays.
+
+Fix: replace with a nested loop generating all leaf×spine edges.
+
+---
+
+### TASK 3 — Apply P11 + P12 to Ch0
+
+**File:** `apps/web/content/chapters/ch0-hardware-foundations.mdx`
+**Codex prompt:** `outputs/P11_P12_CODEX_PROMPT.txt`
+
+**P11:** Change "NVLink gen3 (in DGX H100)" → "4th-generation NVLink". Add generation table:
+- A100 = NVLink 3, 600 GB/s
+- H100 = NVLink 4, 900 GB/s
+- B200 = NVLink 5, 1.8 TB/s
+- Note: NVLink gen ≠ NVSwitch gen (separate counters)
+
+**P12:** Add NVSwitch SHARP paragraph to Act 3. Add footnote to Act 6:
+"NVSwitch SHARP = intra-node in-network reduction; IB SHARP = inter-node."
+
+**Required before writing Ch12** (NVLink Switch System).
+
+---
+
+### TASK 4 — CLI factual accuracy batch
+
+**Codex prompt:** `outputs/CLI_FACTUAL_FIX_CODEX_PROMPT.txt`
+
+| ID | File | Fix |
+|----|------|-----|
+| CLI-1 | `lib/commands/ethtoolStats.ts` | Counter names: `rx_prio3_pause`, `tx_prio3_pause`, `rx_ecn_marked_pkts`, `tx_discards_phy` |
+| CLI-2 | `showDcbPfc`, `showDcbEts`, `showInterfaceCounters`, `showRoce`, `showSpineCounters`, `mutations.ts` | Switch ports: `swp1–swp32` not `eth0` |
+| CLI-3 | `ibstat.ts` | Remove duplicate `State:` field on error-disabled rail |
+| CLI-4 | NCCL test output | Correct busbw to ~146 GB/s (not ~380 GB/s) for 128-GPU cluster, 8 GB message |
+
+---
+
+### TASK 5 — Remaining fixes batch
+
+**Codex prompt:** `outputs/REMAINING_FIXES_CODEX_PROMPT.txt`
+
+| ID | Fix |
+|----|-----|
+| RF-1 | `showProposal.ts`: "2 hops (4 traversals)" — split into two separate lines |
+| RF-2 | Replace `clear counters eth0` → `clear counters` throughout |
+| RF-3 | Add `ibstat` to Lab 1 + Lab 2 DGX `help` output and `allowedCommands` |
+
+---
+
+### TASK 6 — Analysis findings fixes
+
+**Codex prompt:** `outputs/ANALYSIS_FINDINGS_FIX_CODEX_PROMPT.txt`
+
+| ID | Fix |
+|----|-----|
+| AF-1 | Lab 0: add `ethtool -S eth3` handler showing NIC Active, switch port Err-Disabled |
+| AF-2 | Ch7 Proposal B: "not feasible" → "75% port waste (economically irrational)" |
+| AF-3 | Ch8 NCCL simulator: add `← FabricLab simulator command` labels + "In production" `export` blocks |
+| AF-4 | Lab 3: add `show ecmp load-balance` to `KNOWN_COMMANDS`, `EXACT_HANDLERS`, `allowedCommands` |
+
+---
+
+### TASK 7 — Practitioner experience fixes
+
+**Codex prompt:** `outputs/PRACTITIONER_FIXES_CODEX_PROMPT.txt`
+
+| ID | Fix |
+|----|-----|
+| PF-1 | Add educational responses for: `ping`, `ip`, `ip a`, `export` (currently "unknown command") |
+| PF-2 | Add `show interface swp1`–`swp8` aliases → `showSwitchPort(activeRailId)` |
+| PF-3 | Lab 0 scenario text: "32 DGX downlinks" → "16 active DGX downlinks + 16 active spine uplinks (32 ports unused)" |
+
+---
+
+## Next content to write (Claude's job — not Codex)
+
+**Ch11: Monitoring, Telemetry, and Observability**
+
+Start a new Claude conversation. Upload:
+- `repo-context.txt`
+- `FABRICLAB_STRATEGY.md`
+- `FABRICLAB_CHAPTER_METADATA.md`
+- `FABRICLAB_CONTENT_BACKLOG_v7.md`
+
+Say: "Write Chapter 11 — Monitoring, Telemetry, and Observability."
+
+Claude will produce: MDX chapter + 5 viz components + updated `mdxComponents.ts` +
+updated `COMPONENTS_REGISTRY.md` + Codex deploy prompt.
+
+Planned vizzes: `UFMApiViz`, `DCGMMetricsViz`, `AlertThresholdViz`,
+`CorrelationTimelineViz`, `FabricHealthDashboardViz`.
+
+**Chapters after Ch11 (in order):**
+- Ch12: Scale-Up Networking — NVLink Switch System *(requires P11+P12 first)*
+- Ch13: Alternative Topologies (Torus, Dragonfly)
+- Ch14: GPU Hardware Generations
+
+---
+
+## Tech stack (unchanged)
 
 ```
 Next.js 15 (App Router) + TypeScript strict
 Tailwind CSS
 Zustand (no persistence)
 xterm.js
-@next/mdx + react-markdown + remark-gfm + gray-matter
+@next/mdx + next-mdx-remote + remark-gfm + gray-matter
 No backend. No database. No env vars.
 ```
 
 ---
 
-## Page architecture
+## Validation protocol (run after every Codex task)
 
-### `/module/rocev2` — module home
-Shows lab selector (Lab 1 / Lab 2) and links to chapters.
-
-### `/module/rocev2/[chapter]` — dynamic chapter route
-Renders Claude-authored MDX from `content/chapters/[chapter].mdx`.
-Sidebar shows chapter navigation.
-All custom components resolved from `lib/mdxComponents.ts`.
-
-### `/module/rocev2/lab` — lab environment
-Three-panel layout: Lab Panel | Topology View | Knowledge Panel
-Full-width CLI terminal below.
-
+```bash
+apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json
 ```
-┌───────────────┬──────────────────┬──────────────────────────┐
-│  Lab Panel    │  Topology View   │  Knowledge Panel         │
-│  Scenario     │  Static SVG      │  Tabs: PFC|ECN|RoCEv2|   │
-│  Conditions   │  2 nodes+switch  │  Commands                │
-│  checklist    │  Status dots     │  Auto-highlights on cmd   │
-│  Hints        │                  │  Keyword search          │
-├───────────────┴──────────────────┴──────────────────────────┤
-│  CLI Terminal (xterm.js — full width)                       │
-│  fabric-sim:~$ _                                            │
-└─────────────────────────────────────────────────────────────┘
-```
+
+Fix all errors before committing. Do not leave TypeScript errors in the repo.
 
 ---
 
-## MDX rendering engine — how to build it
+## Image assets
 
-### next.config.ts
+Codex is authorised to generate and place images across all file types.
+See Rule 6 in AGENTS.md for the full permission set. Summary:
 
-```typescript
-import createMDX from '@next/mdx'
-import remarkGfm from 'remark-gfm'
+**Where images live:** `apps/web/public/images/[chapter-slug]/filename.ext`
 
-const withMDX = createMDX({
-  options: {
-    remarkPlugins: [remarkGfm],
-  },
-})
+**Generation methods Codex may use:**
+- AI image APIs (DALL-E, Stability AI) — generate at authoring time, commit static file
+- SVG generation from code — write `.svg` directly or via script
+- Vendor screenshots / diagrams placed manually
 
-export default withMDX({
-  pageExtensions: ['ts', 'tsx', 'md', 'mdx'],
-})
-```
+**Placement targets:** MDX chapters, React viz components, any `.md` file, any page/component file
 
-### app/module/rocev2/[chapter]/page.tsx
+**Light prose rule:** Codex may write short captions (1–2 sentences) immediately adjacent
+to an image tag in `.mdx` files. No other prose changes to educational content.
 
-```typescript
-import { MDXRemote } from 'next-mdx-remote/rsc'
-import { mdxComponents } from '@/lib/mdxComponents'
-import { readFile } from 'fs/promises'
-import path from 'path'
-import matter from 'gray-matter'
-
-export default async function ChapterPage({
-  params,
-}: {
-  params: { chapter: string }
-}) {
-  const filePath = path.join(
-    process.cwd(),
-    'content/chapters',
-    `${params.chapter}.mdx`
-  )
-  const raw = await readFile(filePath, 'utf-8')
-  const { content, data } = matter(raw)
-
-  return (
-    <div className="max-w-4xl mx-auto px-6 py-10">
-      <h1 className="text-2xl font-medium mb-8">{data.title}</h1>
-      <MDXRemote source={content} components={mdxComponents} />
-    </div>
-  )
-}
-```
-
-### lib/mdxComponents.ts
-
-Codex builds this file and maintains it. When Claude delivers a new
-visualisation component, Codex adds it here. Never modify component logic.
-
-```typescript
-// lib/mdxComponents.ts
-// Add new Claude-delivered components here when they arrive.
-// Do not modify component logic — registration only.
-
-export const mdxComponents = {
-  // Claude-written visualisation components (add as they arrive)
-  // AllReduceBarrier: dynamic(() => import('@/components/visualisations/AllReduceBarrier')),
-  // DGXGenerationExplorer: dynamic(() => import('@/components/visualisations/DGXGenerationExplorer')),
-
-  // Utility components Claude uses in MDX
-  // CalloutBox, SpecTable, Pill — registered when Claude delivers them
-}
-```
+**Blocked items for P10 (Ch7 real images):** waiting on `RealImage` MDX component
+from platform engineering before the 6 Ch7 image placeholders can be wired up.
 
 ---
 
-## Visualisation component rules (for Codex when integrating)
-
-Claude writes visualisation components. They follow this contract:
-
-```
-1. Self-contained — imports only React, no external state
-2. No required props — everything has defaults
-3. Tailwind classes or inline styles — no external CSS
-4. Default export + named export (both present)
-5. TypeScript strict — no 'any' types
-
-Codex integration steps when a new component arrives:
-  1. Copy file to components/visualisations/[ComponentName].tsx
-  2. Add to lib/mdxComponents.ts
-  3. Run tsc --noEmit
-  4. Fix only TypeScript/import errors — never touch component logic
-  5. Verify it renders at the chapter route
-```
-
----
-
-## State shape — do not deviate
-
-```typescript
-// types/index.ts — Codex builds this
-
-export interface TopologyState {
-  nic: {
-    name: string        // "eth0"
-    speed: number       // 400 (Gbps)
-    state: 'up' | 'down'
-  }
-  pfcEnabled: boolean
-  ecnEnabled: boolean
-  congestionDetected: boolean
-  bufferUtilPct: number   // 0–100
-}
-
-export interface LabState {
-  labId: string | null
-  conditions: Record<string, boolean>
-  verifiedConditions: Set<string>
-  mistakeCount: number
-  nearMissCount: number
-  hintsUsed: number
-  startTime: number | null
-  isComplete: boolean
-  score: number | null
-}
-
-export interface KnowledgeConcept {
-  id: string
-  title: string
-  summary: string
-  content: string           // markdown — from Claude
-  relatedCommands: string[]
-  relatedConcepts: string[]
-}
-
-export interface CommandResult {
-  output: string
-  conceptId?: string        // which knowledge concept to surface
-  type: 'success' | 'error' | 'info'
-}
-
-export interface LabConfig {
-  id: string
-  title: string
-  difficulty: 'beginner' | 'intermediate' | 'advanced'
-  scenario: string
-  expectedMinutes: number
-  initialTopology: Partial<TopologyState>
-  requiredConditions: string[]
-  hints: LabHint[]
-}
-
-export interface LabHint {
-  level: 1 | 2 | 3
-  triggerAfterMistakes: number
-  triggerAfterSeconds: number
-  text: string
-}
-
-export interface ClassifiedCommand {
-  type: 'exact' | 'near-miss' | 'exploratory' | 'gibberish'
-  handler?: string
-  suggestion?: string
-  penalty: 'none' | 'light' | 'full'
-}
-```
-
----
-
-## Zustand store — full shape
-
-```typescript
-// store/labStore.ts
-
-interface Store {
-  // State
-  topology: TopologyState
-  lab: LabState
-  activeConceptId: string | null    // drives knowledge panel highlighting
-
-  // Topology actions
-  setTopology: (patch: Partial<TopologyState>) => void
-
-  // Lab actions
-  loadLab: (config: LabConfig) => void
-  setCondition: (key: string, value: boolean) => void
-  markVerified: (key: string) => void
-  incrementMistake: () => void
-  incrementNearMiss: () => void
-  useHint: () => void
-  completeLab: () => void
-  resetLab: () => void
-
-  // Knowledge panel
-  setActiveConceptId: (id: string | null) => void
-}
-```
-
----
-
-## CLI commands — 6 core read commands
-
-Each returns `CommandResult`. Each has a `conceptId` to surface in knowledge panel.
-
-### `show dcb pfc`
-```typescript
-// Reads: pfcEnabled
-// Side effect: markVerified('pfcDisabled') if pfcEnabled === false
-// ConceptId: 'pfc'
-
-// Output when pfcEnabled = true:
-`Interface eth0
-  Priority Flow Control:  enabled
-  PFC enabled priorities: 3 (cos3)
-  Pause quanta:           0xffff
-  Watchdog:               enabled
-  Watchdog interval:      200ms`
-
-// Output when pfcEnabled = false:
-`Interface eth0
-  Priority Flow Control:  disabled
-  PFC enabled priorities: none
-  Pause quanta:           N/A
-  Watchdog:               disabled`
-```
-
-### `show dcb ets`
-```typescript
-// Reads: ecnEnabled
-// ConceptId: 'ecn'
-
-`Interface eth0 — ETS Configuration
-  Traffic class  Priority  Bandwidth  Algorithm
-  TC0            0,1,2     30%        ETS
-  TC3 (RoCE)     3         50%        Strict Priority
-  TC7 (mgmt)     7         20%        ETS
-
-  ECN marking:  ${ecnEnabled ? 'enabled (DSCP 26)' : 'disabled'}
-  DCQCN:        ${ecnEnabled ? 'active' : 'inactive'}`
-```
-
-### `show interface counters`
-```typescript
-// Reads: nic, congestionDetected, bufferUtilPct
-// Side effect: markVerified('congestionChecked') if congestionDetected
-// ConceptId: 'rocev2'
-
-// When congestionDetected = true:
-`Interface eth0
-  Input packets:     1,847,293,441
-  Output drops:      47,291
-  PFC pause frames:  12,847
-  Buffer util:       ${bufferUtilPct}%`
-
-// When congestionDetected = false:
-`Interface eth0
-  Input packets:     1,847,293,441
-  Output drops:      0
-  PFC pause frames:  0
-  Buffer util:       12%`
-```
-
-### `ethtool -S eth0`
-```typescript
-// Reads: pfcEnabled, ecnEnabled, nic, bufferUtilPct
-// ConceptId: 'pfc'
-
-`NIC statistics:
-  rx_pfc_pause_frames:  ${pfcEnabled ? '12847' : '0'}
-  tx_pfc_pause_frames:  ${pfcEnabled ? '8293' : '0'}
-  rx_ecn_marked:        ${ecnEnabled ? '2947' : '0'}
-  tx_dropped:           ${congestionDetected ? '47291' : '0'}
-  link_speed:           ${nic.speed}Gb/s
-  link_state:           ${nic.state}`
-```
-
-### `rdma link show`
-```typescript
-// Reads: nic.state, pfcEnabled
-// ConceptId: 'rocev2'
-
-`link mlx5_0/1 state ${nic.state === 'up' ? 'ACTIVE' : 'DOWN'} physical_state ${nic.state === 'up' ? 'LINK_UP' : 'DISABLED'}
-  type RoCE
-  netdev eth0
-  ${nic.state === 'up' ? 'roce_mode: RoCEv2' : ''}
-  ${!pfcEnabled && nic.state === 'up' ? 'WARNING: PFC disabled — lossless not guaranteed' : ''}`
-```
-
-### `show roce`
-```typescript
-// Reads: pfcEnabled, ecnEnabled, nic
-// Side effect: markVerified('ecnVerified') if ecnEnabled
-// ConceptId: 'ecn'
-
-`RoCE Configuration — eth0
-  RoCE version:   RoCEv2
-  State:          ${nic.state === 'up' ? 'active' : 'down'}
-  PFC:            ${pfcEnabled ? 'enabled (priority 3)' : 'DISABLED — retransmissions possible'}
-  ECN:            ${ecnEnabled ? 'enabled — DCQCN active' : 'DISABLED — no congestion control'}
-  DSCP marking:   ${ecnEnabled ? '26 (RoCE traffic)' : 'not configured'}
-  MTU:            9000
-  GID:            fe80::506b:4b03:00a1:b200`
-```
-
----
-
-## Mutation commands
-
-```typescript
-// lib/commands/mutations.ts
-
-'disable pfc'        → setTopology({ pfcEnabled: false })
-                       setCondition('pfcDisabled', true)
-
-'enable pfc'         → setTopology({ pfcEnabled: true })
-                       setCondition('pfcDisabled', false)
-
-'enable ecn'         → setTopology({ ecnEnabled: true, congestionDetected: false })
-                       setCondition('ecnEnabled', true)
-
-'disable ecn'        → setTopology({ ecnEnabled: false })
-                       setCondition('ecnEnabled', false)
-
-'clear counters eth0' → setTopology({ congestionDetected: false, bufferUtilPct: 20 })
-
-'help'               → return list of all available commands
-
-'hint'               → useHint() → return current hint text based on level
-```
-
----
-
-## Command classifier
-
-```typescript
-// lib/commandClassifier.ts
-
-const KNOWN_COMMANDS = [
-  'show dcb pfc', 'show dcb ets', 'show interface counters',
-  'ethtool -S eth0', 'rdma link show', 'show roce',
-  'disable pfc', 'enable pfc', 'enable ecn', 'disable ecn',
-  'clear counters eth0', 'help', 'hint'
-]
-
-const KNOWN_VERBS = ['show', 'disable', 'enable', 'no', 'clear', 'help', 'hint']
-
-// Classification:
-// 1. Exact match → { type: 'exact', handler: commandName, penalty: 'none' }
-// 2. Levenshtein ≤ 2 → { type: 'near-miss', suggestion: closest, penalty: 'light' }
-//    + nearMissCount++
-//    + show: "Did you mean: <suggestion>?"
-// 3. First token in KNOWN_VERBS but no match → { type: 'exploratory', penalty: 'none' }
-//    + show: "Unknown arguments. Available: help"
-// 4. Anything else → { type: 'gibberish', penalty: 'full' }
-//    + mistakeCount++
-```
-
----
-
-## Lab engine
-
-### Scoring
-
-```typescript
-// lib/labEngine.ts
-
-function calculateScore(state: LabState): number {
-  let score = 100
-  score -= state.mistakeCount * 8
-  score -= state.nearMissCount * 3
-  score -= state.hintsUsed * 10
-  return Math.max(0, Math.min(100, Math.round(score)))
-}
-
-// Bands:
-// 90–100 → "Clean execution"     (green)
-// 70–89  → "Completed"           (blue)
-// 50–69  → "Completed with help" (amber)
-// 0–49   → "Needs review"        (red)
-```
-
-### Hint triggers
-
-```typescript
-function shouldTriggerHint(state: LabState, config: LabConfig): LabHint | null {
-  const elapsed = state.startTime
-    ? (Date.now() - state.startTime) / 1000
-    : 0
-
-  const triggered = config.hints.find(h =>
-    state.mistakeCount >= h.triggerAfterMistakes ||
-    elapsed >= h.triggerAfterSeconds
-  )
-
-  // Only show each level once
-  return triggered && !alreadyShown(triggered.level) ? triggered : null
-}
-```
-
----
-
-## Lab configs
-
-### Lab 1 — Fix PFC misconfiguration
-
-```typescript
-export const lab1: LabConfig = {
-  id: 'lab1-pfc-fix',
-  title: 'Fix the PFC misconfiguration',
-  difficulty: 'beginner',
-  expectedMinutes: 10,
-  scenario: `A RoCEv2 training workload is experiencing frequent retransmissions,
-slowing GPU-to-GPU communication by ~35%. The operations team suspects a PFC
-misconfiguration is causing a pause storm.
-
-Diagnose the current PFC state, identify the problem, and fix it.
-Verify the fix using the appropriate show command.`,
-  initialTopology: {
-    pfcEnabled: true,
-    ecnEnabled: false,
-    congestionDetected: true,
-    bufferUtilPct: 92,
-  },
-  requiredConditions: ['pfcDisabled', 'pfcVerified'],
-  hints: [
-    { level: 1, triggerAfterMistakes: 3, triggerAfterSeconds: 120,
-      text: "Start by checking the current state of Priority Flow Control on this interface." },
-    { level: 2, triggerAfterMistakes: 6, triggerAfterSeconds: 240,
-      text: "The 'dcb' command family manages Data Center Bridging. Try 'show dcb pfc'." },
-    { level: 3, triggerAfterMistakes: 10, triggerAfterSeconds: 360,
-      text: "Run 'disable pfc' to disable PFC, then verify with 'show dcb pfc'." },
-  ],
-}
-```
-
-### Lab 2 — Diagnose congestion
-
-```typescript
-export const lab2: LabConfig = {
-  id: 'lab2-congestion',
-  title: 'Diagnose fabric congestion',
-  difficulty: 'intermediate',
-  expectedMinutes: 15,
-  scenario: `GPU training throughput has dropped 40% across this node's RoCEv2 links.
-Monitoring shows elevated buffer utilisation but the team cannot identify the root cause.
-
-Use CLI tools to diagnose why congestion is occurring, then configure
-the correct mechanism to manage it without disabling PFC.`,
-  initialTopology: {
-    pfcEnabled: true,
-    ecnEnabled: false,
-    congestionDetected: true,
-    bufferUtilPct: 87,
-  },
-  requiredConditions: ['congestionChecked', 'ecnEnabled', 'ecnVerified'],
-  hints: [
-    { level: 1, triggerAfterMistakes: 3, triggerAfterSeconds: 120,
-      text: "Start by looking at interface counters. What metric stands out?" },
-    { level: 2, triggerAfterMistakes: 6, triggerAfterSeconds: 240,
-      text: "ECN signals congestion before buffers overflow. Is it configured here?" },
-    { level: 3, triggerAfterMistakes: 10, triggerAfterSeconds: 360,
-      text: "Run 'show interface counters', then 'enable ecn', then verify with 'show roce'." },
-  ],
-}
-```
-
----
-
-## Topology SVG spec
-
-Static SVG in `components/topology/TopologyView.tsx`.
-State-driven: dot colour and line style only. No interaction.
-
-```
-[DGX H100 Node A]      ← blue rect, label + status dot
-        |
-   400G link (solid when up, dashed when nic.state = 'down')
-        |
-[Spectrum-X SN5600]    ← indigo rect
-        |
-   400G link
-        |
-[DGX H100 Node B]      ← blue rect, label + status dot
-
-Status dots: filled green = up, empty red = down
-Legend: ● Active  ○ Down  — 400G link  - - degraded
-```
-
----
-
-## Knowledge panel shell
-
-Codex builds the shell. Claude fills the content (content/knowledge/*.ts).
-
-```typescript
-// What the knowledge panel does:
-// 1. Reads all KnowledgeConcept arrays from content/knowledge/
-// 2. Displays as 4 tabs: PFC | ECN | RoCEv2 | Commands
-// 3. Each tab shows concept cards (summary visible, content expands on click)
-// 4. When store.activeConceptId changes → scroll to + highlight that concept
-// 5. Keyword search filters across all concepts by title + summary
-// 6. relatedCommands chips: clicking inserts command text into terminal
-
-// Codex builds the shell with placeholder content
-// Claude-written content/knowledge/*.ts files replace placeholder automatically
-```
-
----
-
-## Build order — Codex follows this exactly
-
-```
-Phase A: Core infrastructure (Codex Web — first session)
-  Step 1  types/index.ts
-  Step 2  store/labStore.ts
-  Step 3  lib/commandClassifier.ts
-  Step 4  lib/labEngine.ts
-  Step 5  lib/commands/*.ts + mutations.ts
-  Step 6  lib/mdxComponents.ts (empty registry to start)
-  Step 7  components/terminal/Terminal.tsx + commandHandler.ts
-  Step 8  components/lab/LabPanel.tsx + LabResult.tsx
-  Step 9  components/topology/TopologyView.tsx
-  Step 10 components/knowledge/KnowledgePanel.tsx + ConceptCard.tsx (shell)
-  Step 11 data/labs/lab1-pfc-fix.ts + lab2-congestion.ts
-
-Phase B: MDX engine (Codex Web — second session)
-  Step 12 Configure @next/mdx in next.config.ts
-  Step 13 app/module/rocev2/[chapter]/page.tsx (dynamic chapter route)
-  Step 14 app/module/rocev2/page.tsx (module home)
-  Step 15 app/page.tsx (entry)
-
-Phase C: Content integration (Codex CLI — ongoing)
-  Each time Claude delivers MDX or components:
-  - Drop files in correct location
-  - Tell Codex CLI to register + verify
-  - Check in browser
-  - Report issues back to Claude or Codex
-```
-
----
-
-## Phase 2 upgrade path (stubs only)
-
-```typescript
-// In KnowledgePanel.tsx — Phase 2: replace with API call, zero structural change
-function getContextualContent(conceptId: string): KnowledgeConcept | null {
-  // Phase 1: local lookup from content/knowledge/
-  return knowledgeBase.find(c => c.id === conceptId) ?? null
-  // Phase 2: → await fetch('/api/knowledge', { body: { id: conceptId } })
-}
-
-// In labStore.ts — Phase 2: add after completeLab()
-// await supabase.from('attempts').insert({ labId, score, ... })
-```
-
----
-
-## Success criteria
-
-1. Visit `/module/rocev2` — zero setup, zero env vars, works immediately
-2. `/module/rocev2/ch1-foundations` renders Claude-written MDX with visualisations
-3. All CLI commands + mutations return state-driven output
-4. Knowledge panel auto-highlights concept when related command runs
-5. Lab 1 + Lab 2 complete with correct scoring
-6. Hints trigger at correct thresholds
-7. New Claude MDX file integrates with single Codex CLI command
-8. `tsc --noEmit` — zero errors
-9. Zero network requests — fully offline
-
----
-
-*Last updated: March 2026*
-*Content: Claude · Engineering: Codex · Zero API cost*
+## What Codex must NOT do
+
+- Write educational prose or concept explanations in MDX chapters
+  *(exception: short captions / context sentences when placing images)*
+- Write React visualisation component logic or layouts
+- Write CLI output text or lab scenario narrative
+- Invent component names not in `COMPONENTS_REGISTRY.md`
+- Add runtime API calls to the app (image generation is build-time only)
+- Add environment variables required at page render time
+- Use localStorage or sessionStorage (not supported in lab environment)
+- Use `<form>` tags in React components (xterm.js environment restriction)
