@@ -143,8 +143,12 @@ vite.config.ts.timestamp-*
 /.claude/worktrees/**
 outputs/
 tmp_devserver/
+tmp_lab_shots/
+tmp_lab_redesign/
 tmp-vercel-deploy.sh
 dev-server*.log*
+_tmp_committed_tmpfiles.txt
+repo-context.txt
 
 # Local image/debug captures in repo root
 /*.png
@@ -155,3 +159,4 @@ dev-server*.log*
 /apps/web/*-dev.out.log
 /apps/web/.tmp-dev-*.log
 /apps/web/.codex-checks/
+/apps/web/test-results/
