@@ -11,12 +11,18 @@ type AdminSupabaseEnv = PublicSupabaseEnv & {
 
 function normaliseAppUrl(value: string | undefined): string {
   const fallback = "http://localhost:3000";
-  const raw = value?.trim();
+  
+  // Try provided value, then Vercel production URL, then Vercel preview URL
+  const raw = value?.trim() 
+    || process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL?.trim()
+    || process.env.NEXT_PUBLIC_VERCEL_URL?.trim();
+
   if (!raw) {
     return fallback;
   }
 
-  return raw.replace(/\/+$/, "");
+  const url = raw.replace(/\/+$/, "");
+  return url.startsWith("http") ? url : `https://${url}`;
 }
 
 export function getPublicSupabaseEnv(): PublicSupabaseEnv | null {
