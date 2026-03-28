@@ -4,6 +4,14 @@ import { NextResponse } from "next/server";
 
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
+type EmailOtpType = "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email";
+
+const emailOtpTypes = new Set<EmailOtpType>(["signup", "invite", "magiclink", "recovery", "email_change", "email"]);
+
+function isEmailOtpType(value: string | null): value is EmailOtpType {
+  return value !== null && emailOtpTypes.has(value as EmailOtpType);
+}
+
 export async function GET(request: Request) {
   const env = getPublicSupabaseEnv();
   const url = new URL(request.url);
@@ -14,7 +22,10 @@ export async function GET(request: Request) {
   }
 
   const code = url.searchParams.get("code");
-  if (!code) {
+  const tokenHash = url.searchParams.get("token_hash");
+  const otpType = url.searchParams.get("type");
+
+  if (!code && !tokenHash) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
@@ -32,8 +43,16 @@ export async function GET(request: Request) {
     },
   });
 
-  await supabase.auth.exchangeCodeForSession(code);
+  if (code) {
+    await supabase.auth.exchangeCodeForSession(code);
+  } else if (tokenHash && isEmailOtpType(otpType)) {
+    await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: otpType,
+    });
+  } else {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
   return NextResponse.redirect(new URL(redirectTo, request.url));
 }
-

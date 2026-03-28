@@ -10,7 +10,8 @@
     "test:browser:ch1": "playwright test tests/ch1.smoke.spec.ts",
     "test:browser:ch2": "playwright test tests/ch2.smoke.spec.ts",
     "test:browser:ch3": "playwright test tests/ch3.smoke.spec.ts",
-    "test:browser:ch4": "playwright test tests/ch4.smoke.spec.ts"
+    "test:browser:ch4": "playwright test tests/ch4.smoke.spec.ts",
+    "test:browser:deploy": "playwright test tests/deploy.smoke.spec.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
