@@ -170,11 +170,11 @@ export default async function ChapterPage({ params, searchParams }: Props) {
 
           <div className="rounded-[28px] border border-white/8 bg-slate-950/22 px-5 py-6 shadow-[0_18px_46px_rgba(2,6,23,0.18)] sm:px-8 sm:py-8 md:px-9 md:py-9">
             <div
-              className="prose prose-invert max-w-none
+              className="chapter-prose prose prose-invert max-w-none
                 prose-headings:font-semibold prose-headings:tracking-tight
                 prose-h2:mb-5 prose-h2:mt-14 prose-h2:text-[1.95rem]
                 prose-h3:mb-4 prose-h3:mt-10 prose-h3:text-[1.35rem]
-                prose-p:mb-7 prose-p:max-w-[92ch] prose-p:text-[1rem] prose-p:leading-[1.95] prose-p:text-slate-300
+                prose-p:mb-7 prose-p:text-[1rem] prose-p:leading-[1.95] prose-p:text-slate-300
                 prose-li:max-w-[88ch] prose-li:text-[0.98rem] prose-li:leading-[1.9] prose-li:text-slate-300
                 prose-ul:my-8 prose-ul:space-y-3 prose-ol:my-8 prose-ol:space-y-3
                 prose-strong:text-slate-100

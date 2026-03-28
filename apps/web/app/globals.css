@@ -21,3 +21,40 @@ body {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, "Liberation Mono", "Courier New", monospace;
 }
+
+.chapter-prose p {
+  max-width: 96ch;
+}
+
+.chapter-prose p + p {
+  margin-top: 1.15rem;
+}
+
+.chapter-prose ul,
+.chapter-prose ol {
+  margin-block: 2rem;
+}
+
+.chapter-prose li + li {
+  margin-top: 0.75rem;
+}
+
+.chapter-prose :is(h2, h3) {
+  scroll-margin-top: 7rem;
+}
+
+/* Distinguish label-led teaching paragraphs from the surrounding body copy. */
+.chapter-prose p:has(> strong:first-child) {
+  margin-top: 2.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.chapter-prose p:has(> strong:first-child) > strong:first-child {
+  display: block;
+  margin-bottom: 0.55rem;
+  color: #f8fafc;
+  font-size: 1.03rem;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
