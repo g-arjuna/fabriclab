@@ -1,0 +1,696 @@
+---
+title: "Chapter 16: The GPU Compute Network -- Packet Anatomy End to End"
+module: "HPC Networking Foundations"
+level: "Advanced"
+estimatedMinutes: 65
+labLink: ""
+---
+
+Every chapter so far has described what happens *around* the packet -- the protocols, the topology, the routing table, the congestion control mechanism. This chapter goes inside the packet itself.
+
+A gradient tensor leaves GPU 0 on DGX Node A. Roughly 1.4 microseconds later, it arrives at GPU 0 on DGX Node B. Between those two moments, a specific sequence of hardware operations rewrites the frame's headers four times, makes three routing decisions, runs two ECMP hashes, and enforces PFC priority on two switch ports -- all at line rate, all in silicon, without a single CPU instruction.
+
+If you are a network engineer, you have spent your career understanding packets. You know what a Wireshark decode tree looks like. You know what "TTL decremented by 1" means at a transit router. You know the difference between a MAC table lookup and a routing table lookup. This chapter uses exactly that knowledge to take you inside the AI fabric -- translating the familiar disciplines of L2/L3 networking into the specific, concrete mechanics of GPU-to-GPU communication at 400 gigabits per second.
+
+By the end, you will be able to answer questions that stump most practitioners: What IP address does the GPU traffic use as its source? Does the fabric do ARP? What is in the BTH header and why does it matter for load balancing? What changes when you swap InfiniBand for RoCEv2? What changes when you replace a ConnectX-7 with a Gaudi 3 accelerator that has no separate NIC at all?
+
+**How this chapter is structured -- read this first**
+
+Acts 1 through 6 trace a single RoCEv2 packet from source GPU to destination GPU, step by step, in RoCEv2 mode only. Every Wireshark capture in those acts is a RoCEv2 frame. Every routing decision is an Ethernet IP lookup. Every congestion mechanism is PFC and ECN.
+
+Act 7 then runs the identical GPU-to-GPU RDMA Write over InfiniBand NDR and shows, layer by layer, exactly what is different. The RDMA programming model (CUDA, NCCL, libibverbs, Queue Pairs, BTH opcodes) is identical in both cases -- only the network headers below the BTH change. If you see a reference to libibverbs or to the "IB verbs API" in Acts 1-6, note that libibverbs is the standard RDMA programming interface used for both InfiniBand and RoCEv2 -- it is not exclusive to InfiniBand. The "IB" in "libibverbs" refers to the historical origin of the API in the InfiniBand standards body, not to a transport restriction.
+
+Act 8 covers alternative NIC stacks (Gaudi 3, MI300X, Slingshot) and Act 9 is the full comparison matrix across all fabrics.
+
+## Act 1 -- The DGX H100 as a network appliance
+
+Before the first packet can be analysed, the interfaces that produce it must be understood. A DGX H100 server is, from a network engineer's perspective, an appliance with four distinct network identities on a single chassis. Each identity uses different hardware, different software stacks, different IP addresses, and different physical ports.
+
+<DGXNetworkInterfacesViz />
+
+**Identity 1: The compute network (8x ConnectX-7 HCA ports)**
+
+Eight ConnectX-7 HCAs are installed in the DGX, each providing one 400G OSFP port. These are the ports that carry GPU training traffic -- AllReduce, AllGather, ReduceScatter, point-to-point tensor transfers. In a rail-optimised deployment, GPU `n` on every DGX node connects to Leaf Switch `n`, so GPU0 uses HCA0 (connected to Leaf0), GPU1 uses HCA1 (connected to Leaf1), and so on through GPU7/HCA7/Leaf7.
+
+Each ConnectX-7 port has its own IP address. These are the IPs that appear as source and destination in RoCEv2 packets. They are configured on the HCA's network interface as seen by the host OS -- for example `mlx5_0` through `mlx5_7` in Linux -- but crucially, the host OS's routing table and ARP table are largely irrelevant once NCCL has established its Queue Pairs. The HCA firmware manages the data path completely independently of the kernel network stack once QPs are set up.
+
+**Identity 2: The OOB/management network (2x additional ConnectX-7 ports)**
+
+The DGX H100 includes two additional ConnectX-7 HCA ports (beyond the eight compute ports) that serve the out-of-band management and storage fabric. These connect to a separate Spectrum-X or standard Ethernet OOB fabric used for UFM management traffic, NVMe-oF storage, and inter-node management connectivity. Like the compute CX7 ports, these have their own IPs and operate independently of the compute fabric. Chapter 17 and 18 cover storage and management networking in detail.
+
+A note on generations: the DGX H200 and DGX GB200 NVL72 introduce BlueField-3 DPUs for dedicated storage and DPU-offloaded management. In those platforms, the storage identity IS a BlueField-3 running its own ARM Linux with its own IP space -- a fundamentally different architecture. Everything written in this chapter applies to the DGX H100 specifically; the DGX H200/GB200 storage path differs in the ways Chapter 17 will describe.
+
+**Identity 3: The management network (1GbE OOB + BMC)**
+
+A dedicated 1GbE out-of-band port on the motherboard connects the host OS to the OOB management switch. This carries SSH, monitoring agents, Docker/containerd management, and NCCL bootstrap traffic. In most deployments NCCL's rendezvous phase (rank-to-rank discovery before QPs are established) uses this interface or whatever the default route resolves to -- controlled by the NCCL_SOCKET_IFNAME environment variable. Chapter 18 covers OOB in detail.
+
+**Identity 4: The BMC (1x dedicated IPMI port)**
+
+A dedicated IPMI/iDRAC port on the motherboard provides out-of-band management at the hardware level -- power control, serial-over-LAN console, hardware event logs. This has its own MAC and its own IP on the OOB management network. It functions even when the host OS is off or crashed.
+
+**What Linux sees vs what CUDA sees**
+
+This distinction is operationally critical. When you run `ip addr` on a DGX H100, you see eight compute HCA interfaces (`mlx5_0` through `mlx5_7`), two OOB/management HCA interfaces, and the BMC interface. Linux assigns IP addresses to these, maintains ARP caches for them, and routes packets through them for CPU-originated traffic (SSH from the host, Prometheus exporter, `ping` commands).
+
+When NCCL launches an AllReduce operation, it bypasses the kernel stack for data movement. NCCL calls `ibv_open_device()` to access the HCA via libibverbs -- the RDMA verbs API (historically named from InfiniBand but used identically for RoCEv2 and IB) -- which speaks directly to the HCA firmware through a memory-mapped device file. The HCA reads Work Requests from GPU-pinned memory and DMAs packets onto the wire without a single interrupt to the host CPU. The management/OOB interface IP is used only during NCCL's bootstrap/rendezvous phase (before QPs are established); after that, the QP-to-QP data path is direct hardware-to-hardware through the compute HCAs.
+
+## Act 2 -- Before the packet: CUDA, NCCL, and the Queue Pair
+
+To understand the packet, understand what creates it. NCCL's AllReduce operation produces a specific sequence of RDMA write operations. Each write becomes a sequence of packets. The mechanism that drives this is the Queue Pair.
+
+<QueuePairMechanicsViz />
+
+A Queue Pair (QP) is a pair of circular ring buffers -- the Send Queue (SQ) and the Receive Queue (RQ) -- that live in pinned, physically-contiguous memory on the host (or in GPU HBM, with GPUDirect RDMA). The ConnectX-7's DMA engine reads Work Queue Entries (WQEs) from the SQ at line rate, builds the corresponding packets, and places them on the wire. The RQ holds pre-posted Receive Work Requests (RWRs) that tell the HCA where in memory to DMA incoming payload.
+
+When NCCL initialises a communicator between 128 GPUs, it creates one QP per remote peer per GPU. For a 128-GPU ring AllReduce, each GPU maintains 127 remote QPs. Each QP has:
+
+- A local QPN (Queue Pair Number) -- a 24-bit identifier that is unique within the HCA. This is what appears in the RoCEv2 BTH header's destination QPN field.
+- A remote QPN -- the peer HCA's QPN for the corresponding Receive Queue.
+- A remote GID (Global Identifier) -- the 128-bit IPv6-format address of the peer HCA port. In RoCEv2, the GID maps directly to the peer's IP address via a specific encoding.
+- An RKEY (Remote Key) -- a capability token that authorises writing to a specific Memory Region (MR) on the remote side.
+
+When NCCL posts an RDMA Write, it fills a WQE specifying: remote address, remote RKEY, local source VA (virtual address in pinned GPU HBM), length, and signalling flags. The HCA DMA-reads the source data from GPU HBM, constructs the RoCEv2 packet stream, and DMAs it onto the wire. When the last packet of the RDMA Write reaches the destination HCA, that HCA DMAs the payload into the destination GPU HBM at the address the sender specified -- and the destination CPU never wakes up.
+
+This is why the kernel network stack is irrelevant: there is no socket, no `sendmsg()`, no kernel buffer copy. The path is: GPU kernel -> CUDA -> NCCL -> libibverbs -> HCA firmware -> wire.
+
+**How this differs from a normal TCP connection**
+
+In a TCP connection, the kernel manages buffers, the kernel performs the socket system call, the kernel's NIC driver submits DMA descriptors. The CPU is involved at every stage. An `iperf3` test at 400G would require the CPU to process millions of interrupts per second and copy data between socket buffers and application memory.
+
+In RDMA, the CPU posts a single Work Request and reads a single completion entry when it is done. The HCA handles everything in between. A 400G RDMA write of a 128 MB tensor involves zero CPU copies and zero CPU interrupts during the transfer itself.
+
+## Act 3 -- Inside the ConnectX-7: the NIC's packet construction pipeline
+
+The ConnectX-7 does not receive a ready-made packet from software and transmit it. It constructs the packet itself, field by field, from the information in the WQE and the QP context. Understanding this pipeline is what makes RoCEv2 behaviour comprehensible.
+
+<ConnectX7PipelineViz />
+
+**Stage 1: WQE dequeue**
+
+The HCA's send engine polls the Send Queue ring buffer at the head pointer. When it finds a valid WQE (indicated by the ownership bit), it reads the scatter-gather list -- the list of memory regions to transmit. For a large RDMA Write, NCCL may post one WQE with a 128 MB scatter-gather entry. The HCA will segment this into multiple packets, each at MTU (typically 4200 bytes for RoCEv2 with jumbo frames enabled -- verify with `mlnx_qos --pfc` and `ip link show` MTU).
+
+**Stage 2: Payload DMA from GPU HBM**
+
+The HCA DMA-reads the payload from the GPU HBM address specified in the WQE scatter-gather list. This is GPUDirect RDMA: the HCA's PCIe DMA engine transfers directly from GPU memory to the HCA's internal transmit buffer, bypassing system RAM entirely. On a DGX H100, this uses the NVLink-connected NVSwitch to bridge from the GPU to the ConnectX-7's PCIe endpoint.
+
+**Stage 3: BTH construction (IB/RoCE transport layer)**
+
+The HCA builds the Base Transport Header. For an RDMA Write operation:
+
+```
+BTH fields:
+  Opcode:        RDMA Write First (0x06), Middle (0x07), Last (0x08), Only (0x00)
+  Partition Key: 0xFFFF (default partition)
+  Destination QPN: 24-bit remote QP number
+  Packet Seq Num:  24-bit PSN, incremented per packet
+  Acknowledgement: not requested on middle packets (reduces ACK traffic)
+```
+
+The PSN (Packet Sequence Number) is how the destination HCA detects packet loss and out-of-order delivery. If PSN arrives out of order, the HCA either holds it in a reorder buffer (if RSHP/adaptive routing is enabled on the Spectrum-X NIC) or marks it as a NAK (Negative Acknowledgement) and triggers retransmission. The PSN is also what the switch's adaptive routing -- per the QPair field in the BTH -- uses for entropy in the ECMP hash. More on this in Act 4.
+
+**Stage 4: UDP and IP header construction (RoCEv2 mode)**
+
+In RoCEv2 mode, the HCA wraps the BTH in UDP/IP headers:
+
+```
+UDP header:
+  Source port:      varies (generated from hash of QPN -- provides flow entropy)
+  Destination port: 4791 (fixed -- the IANA-assigned RoCEv2 port)
+  Length:           payload + BTH + UDP header
+
+IP header:
+  Source IP:        local HCA port IP (e.g. 10.1.1.1 for mlx5_0)
+  Destination IP:   remote HCA port IP (e.g. 10.2.1.1 for remote GPU's mlx5_0)
+  Protocol:         17 (UDP)
+  DSCP:             46 (EF -- Expedited Forwarding, to be mapped to the lossless PFC priority at the NIC and switch)
+  TTL:              64
+  Don't Fragment:   set (RDMA cannot fragment -- if MTU mismatch exists, connection fails)
+```
+
+The DSCP value 46 is what enables Priority Flow Control to work -- but the mapping from DSCP value to PFC priority queue is a site-configurable parameter, not a fixed property of RoCEv2. NVIDIA's Spectrum-X BasePOD reference configuration maps DSCP 46 to PFC priority 3; some deployments use priority 5; others use different mappings entirely. What is invariant is that DSCP 46 must map to a lossless (PFC-protected) priority queue, and this mapping must be configured identically on the NIC and every switch in the fabric. The chapter uses priority 3 throughout as the BasePOD reference value. When the switch's egress queue for the RoCEv2 priority fills beyond the XOFF threshold, it sends a PFC pause frame to the upstream device. The HCA, on receiving a PFC pause for that priority, pauses sending all traffic in that priority class -- not just this flow. This is why a single congested flow affects all flows in the same priority class (the head-of-line blocking problem Ch5 describes).
+
+**Stage 5: Ethernet frame construction**
+
+The IP packet is wrapped in an Ethernet frame:
+
+```
+Ethernet header:
+  Destination MAC:  leaf switch swp1 MAC (learned from ARP on interface bring-up)
+  Source MAC:       ConnectX-7 port MAC (burned-in hardware address, e.g. 94:6d:ae:xx:xx:xx)
+  EtherType:        0x0800 (IPv4)
+  802.1Q VLAN tag:  absent in a routed fabric (VLAN tagging only on access ports, not uplinks)
+```
+
+The destination MAC is the leaf switch's MAC -- not the remote GPU's MAC. This is fundamental L3 routing: the NIC ARPs for the leaf switch's gateway IP, gets the leaf switch's MAC, and uses that as the L2 destination for every packet regardless of the remote IP. The remote GPU's MAC never appears in the frame that leaves the NIC.
+
+**Stage 6: DSCP-to-PFC priority mapping at the HCA**
+
+The ConnectX-7 maps DSCP values to 802.1p priority bits (when VLAN tagging is used) or to internal priority queues (when untagged). The NVIDIA Spectrum-X BasePOD reference mapping for RoCEv2:
+
+```
+DSCP 46 (EF) -> PFC priority 3 -> lossless queue (PFC-protected)  [BasePOD reference]
+DSCP 0  (BE) -> PFC priority 0 -> lossy queue (best-effort)
+```
+
+This mapping is site-configurable and must match identically at the NIC (via `mlnx_qos`) and at every switch in the fabric. NVIDIA's factory default DSCP trust map may use priority 5 rather than 3 for DSCP 46 in some configurations -- always verify with `mlnx_qos -i mlx5_0 --dscp` and `show qos dscp-map` on the switch. A mismatch -- NIC marking DSCP 46 to priority 3, switch mapping DSCP 46 to priority 5 (unprotected) -- causes RoCEv2 traffic to be dropped silently under congestion.
+
+**Stage 7: PAM-4 encoding and wire**
+
+The Ethernet frame is serialised onto the 400G OSFP transceiver as 8 lanes x 50 Gbps each, using PAM-4 modulation (4 signal levels, 2 bits per symbol). At this point, it is an optical or electrical signal on a DAC cable heading toward the leaf switch.
+
+Below is the packet as it leaves the ConnectX-7 -- captured at the NIC egress point. This is Capture A: the frame exactly as it enters the cable.
+
+<WiresharkCaptureViz captureId="A" />
+
+## Act 4 -- The first hop: leaf switch processing
+
+The frame arrives at the leaf switch on a front-panel port. In a BasePOD, the leaf's front-panel ports connect to DGX nodes; its uplink ports connect to spines. The leaf switch performs the first routing decision.
+
+<LeafSwitchProcessingViz />
+
+**L2 on the server-facing port, L3 on the uplinks**
+
+In a pure-routed Clos AI fabric (the BasePOD reference design), the server-facing ports (`swp1`-`swp32` on a Spectrum-X leaf) are L2 access ports. The uplink ports (`swp33`-`swp64`, connecting to spines) are L3 routed ports with no VLAN, no bridging. In an EVPN-VXLAN fabric the server-facing ports are also access ports but carry VLAN tags that identify tenants; the routing happens at the VXLAN overlay level. For this chapter, the pure-routed model is assumed throughout.
+
+When the frame from the ConnectX-7 arrives on `swp1`:
+
+1. The switch reads the destination MAC. If it matches a locally-connected device's MAC -- stop, deliver locally (intra-leaf traffic).
+2. If the destination MAC is the switch's own MAC (i.e., the gateway MAC that the ConnectX-7 ARPed for), this is a routed packet. The switch strips the Ethernet header and performs an IP route lookup.
+3. IP route lookup on destination IP (e.g., `10.2.1.1` -- the remote GPU's HCA IP): result is next-hop = one of the spine switches, via one of the uplink ports.
+4. ECMP hash computation to select which uplink.
+
+**The ECMP hash: what fields, why BTH matters**
+
+Standard ECMP hashes the 5-tuple: src IP, dst IP, IP protocol, src UDP port, dst UDP port. This produces reasonable entropy for general traffic. But RoCEv2 AllReduce traffic has a problem: all packets between the same GPU pair use the same src IP, dst IP, and dst UDP port (4791). The only variation is the src UDP port -- which the ConnectX-7 generates from a hash of the QPN, and which is often similar across flows between the same pair.
+
+The fix is to include the RoCEv2 BTH QPair number in the hash. Spectrum-X switches can be configured to parse UDP payload for the BTH header and include the Destination QPN field (bytes 5-7 of the BTH, right after the opcode and partition key). This is configured with:
+
+```bash
+nv set system forwarding ecmp-hash roce enable
+```
+
+With BTH QPair hashing enabled, two simultaneous AllReduce operations between the same GPU pair on different QPs will hash to different spines -- perfect entropy for AI traffic.
+
+**ARP: where it runs and what it produces**
+
+When HCA0 on Node A first comes up, it ARPs for its default gateway (the leaf switch's IP on the server-facing subnet). The leaf switch answers with its own MAC. HCA0 caches this: `10.1.0.1 is-at aa:bb:cc:dd:ee:ff`. All subsequent packets from HCA0 use `aa:bb:cc:dd:ee:ff` as the Ethernet destination -- regardless of the IP destination. This is standard L3 routing. The leaf switch's ARP table, conversely, holds `10.1.1.1 is-at 94:6d:ae:xx:xx:xx` (the ConnectX-7's IP mapped to its MAC). The leaf uses this when forwarding return traffic back to the GPU.
+
+**Frame rewrite at the leaf**
+
+After the ECMP hash selects uplink `swp36` (connecting to SpineC), the leaf rewrites the Ethernet header:
+
+```
+Before (arriving from GPU):
+  Src MAC: 94:6d:ae:aa:bb:cc  (ConnectX-7 on Node A)
+  Dst MAC: aa:bb:cc:11:22:33  (Leaf switch swp1 gateway MAC)
+
+After (departing toward SpineC):
+  Src MAC: aa:bb:cc:44:55:66  (Leaf switch swp36 port MAC)
+  Dst MAC: aa:bb:cc:77:88:99  (SpineC swp12 port MAC, learned from BGP next-hop ARP)
+```
+
+The IP header is unchanged. The TTL is decremented from 64 to 63.
+
+Capture B shows the frame as it arrives on `swp1` (before the L3 lookup). Capture C shows the same frame as it leaves on `swp36` (after the MAC rewrite and TTL decrement). Compare the two: the IP header and BTH-carrying payload are byte-for-byte identical; only the Ethernet header has changed.
+
+<WiresharkCaptureViz captureId="B" />
+
+<WiresharkCaptureViz captureId="C" />
+
+**What the leaf's routing table looks like under BGP vs IS-IS**
+
+Under eBGP (the standard):
+```
+Destination: 10.2.1.1/32 (remote GPU's HCA IP)
+  Via: 10.0.0.3 (SpineC loopback, BGP next-hop)
+  Protocol: BGP, distance 20
+  ECMP: 4 paths (via SpineA, SpineB, SpineC, SpineD)
+```
+
+Under IS-IS Flex Algo 128 (low-latency plane):
+```
+Destination: 10.2.1.1/32
+  Via: SpineA and SpineB only (SpineC excluded by delay constraint)
+  Protocol: IS-IS, Flex Algo 128
+  Metric: delay-based (SpineC excluded: delay 8us > 5us threshold)
+```
+
+The packet itself does not change based on protocol -- the routing table lookup produces a next-hop either way. The difference is which spines are eligible. Under Flex Algo 128, the ECMP hash runs over fewer paths, potentially producing different distribution, but the frame that leaves the leaf is identical format regardless of which protocol chose the next-hop.
+
+## Act 5 -- Transit: the spine switch
+
+The frame arrives at SpineC's downlink port (`swp12`). The spine's role is simpler than the leaf's -- it has no server-facing L2 ports, no ARP entries for GPU servers. Every port on a spine is an L3 routed port.
+
+<SpineForwardingViz />
+
+**What the spine's routing table contains -- and what it does not**
+
+The spine does not have per-GPU-IP routes in most eBGP deployments. It has per-leaf-subnet routes:
+
+```bash
+# On SpineC, show ip route
+10.1.0.0/24  via 10.0.1.1 (Leaf1 loopback)   # Leaf1's server subnet
+10.2.0.0/24  via 10.0.2.1 (Leaf4 loopback)   # Leaf4's server subnet -- destination
+10.3.0.0/24  via 10.0.3.1 (Leaf3 loopback)   # Leaf3's server subnet
+...
+```
+
+Or in eBGP with per-host routes (eBGP redistributing connected interfaces):
+```bash
+10.2.1.1/32  via 10.0.2.1 (Leaf4)   # GPU's /32 host route
+```
+
+Either way, the lookup resolves to a next-hop that is a leaf loopback IP, reachable via an ECMP group of downlink ports toward Leaf4.
+
+**ECMP at the spine: a second independent hash**
+
+The spine computes another ECMP hash to choose which of its downlinks to Leaf4 to use. This hash uses the same fields as the leaf's hash -- 5-tuple + optional BTH QPair. Because the hash function is deterministic and both switches see the same packet, the spine will consistently forward the same flow toward the same downlink. This consistency is important: if per-packet spraying (RSHP) is not enabled, all packets of one RDMA Write go via the same spine downlink, ensuring in-order delivery at the destination.
+
+With per-packet RSHP enabled on the spine, each packet takes the best available downlink independently. The destination ConnectX-7 then reorders packets in its reorder buffer before DMAing the payload to GPU HBM.
+
+**Second Ethernet rewrite at the spine**
+
+```
+Before (arriving from Leaf1):
+  Src MAC: aa:bb:cc:44:55:66  (Leaf1 swp36 port MAC)
+  Dst MAC: aa:bb:cc:77:88:99  (SpineC swp12 port MAC)
+
+After (departing toward Leaf4):
+  Src MAC: aa:bb:cc:ff:00:11  (SpineC swp8 port MAC -- downlink to Leaf4)
+  Dst MAC: aa:bb:cc:22:33:44  (Leaf4 swp36 port MAC -- SpineC-facing uplink)
+```
+
+TTL decremented from 63 to 62.
+
+**DLB/GLB operation at the spine**
+
+If Dynamic Load Balancing is active, the spine's ASIC monitors the byte count on each downlink in real time. If downlink `swp8` toward Leaf4 is at 90% utilisation and `swp9` is at 40%, new flows are redirected to `swp9`. With GLB (Global Load Balancing), SpineC also receives heartbeat quality updates from Leaf4's uplinks -- it can see that Leaf4's uplink toward Leaf2 is congested and avoid routing via Leaf4 altogether, selecting a less-loaded spine instead.
+
+Capture D is taken at the spine ingress. The key observation: the IP header is unchanged from Capture A -- same src IP, dst IP, DSCP 46. Only the MACs and TTL have changed.
+
+<WiresharkCaptureViz captureId="D" />
+
+## Act 6 -- Destination side: leaf delivery and NIC reception
+
+The frame arrives at Leaf4's uplink port. Leaf4 performs the same lookup as the originating leaf: IP route lookup finds `10.2.1.1/32` is directly connected via `swp1` (the port where Node B's HCA0 is connected). L2 lookup finds `10.2.1.1 -> 94:6d:ae:cc:dd:ee` (the remote ConnectX-7's MAC) in the ARP table.
+
+<DestinationNICDeliveryViz />
+
+Final Ethernet rewrite:
+```
+Src MAC: aa:bb:cc:bb:cc:dd  (Leaf4 swp1 gateway MAC)
+Dst MAC: 94:6d:ae:cc:dd:ee  (Node B's ConnectX-7 MAC -- destination GPU's NIC)
+```
+
+TTL: 61 (decremented twice at the two transit hops).
+
+The frame is delivered to the destination ConnectX-7. This is Capture E -- the frame as it arrives at the destination NIC. At this point, the entire Ethernet journey is visible: the original Ethernet header from Capture A has been rewritten three times (at Leaf1, at SpineC, at Leaf4), but the IP header, UDP header, BTH, and payload are byte-for-byte unchanged from when they left the source NIC.
+
+<WiresharkCaptureViz captureId="E" />
+
+**What the destination ConnectX-7 does**
+
+The HCA's receive pipeline:
+
+1. **Frame validation**: check FCS, check destination MAC matches local port MAC.
+2. **Protocol decode**: strip Ethernet, check IP dst matches local IP, check UDP port = 4791 -> RoCEv2.
+3. **QP lookup**: read Destination QPN from BTH -> look up local QP context table. QPN 0x0042 -> maps to a specific QP that Node A established with Node B during NCCL initialisation.
+4. **PSN check**: expected PSN = current PSN + 1? If yes, proceed. If out of order and RSHP enabled: hold in reorder buffer. If out of order and no RSHP: send NACK, trigger retransmission.
+5. **RKEY validation**: for RDMA Write, the incoming packet carries a virtual address and RKEY. HCA validates RKEY against the local Memory Region table. If valid, proceed.
+6. **DMA to GPU HBM**: HCA DMA-writes the payload to the virtual address specified in the RDMA Write header, translated through the MR's page table to a physical GPU HBM address.
+7. **Completion**: when the last segment (opcode "RDMA Write Last" or "Only") is received, the HCA posts a completion entry to the destination's Completion Queue. NCCL's background thread sees this completion and knows the write succeeded.
+
+**The full latency budget**
+
+| Stage | Contribution |
+|---|---|
+| GPU HBM -> PCIe DMA -> HCA TX buffer | ~500 ns |
+| HCA packet construction (BTH, headers, FCS) | ~200 ns |
+| PAM-4 serialisation (400G, 4200B frame) | ~84 ns |
+| DAC cable propagation (3m copper) | ~15 ns |
+| Leaf1 L3 lookup + MAC rewrite | ~400-600 ns |
+| Spine L3 lookup + MAC rewrite | ~400-600 ns |
+| Leaf4 L3 lookup + MAC rewrite | ~400-600 ns |
+| Propagation (DAC + fibre, ~30m total) | ~150 ns |
+| Destination HCA RX pipeline + DMA | ~400 ns |
+| **Total** | **~2.6-3.2 us end-to-end** |
+
+InfiniBand NDR achieves ~600 ns end-to-end for the same hop count because it eliminates the UDP/IP header processing overhead, uses credit-based flow control (no PFC latency jitter), and runs a simpler switch forwarding pipeline optimised for IB. The table in Act 7 will break this down precisely.
+
+## Act 7 -- The same journey over InfiniBand: what changes at every layer
+
+Now run the same GPU-to-GPU write over an InfiniBand NDR fabric (QM9700 switches, ConnectX-7 in IB mode). The CUDA call is identical. NCCL is identical. The QP model is identical. What changes is every header below the BTH.
+
+<IBvsRoCEPacketViz />
+
+**L1: unchanged**
+
+The physical layer is the same. 400G OSFP, 8 lanes x 50G PAM-4. The transceiver is the same part number. The DAC cable is the same. The only physical difference is that IB uses NDR signalling which includes different link training sequences at link-up -- invisible to the packet analyser once the link is established.
+
+**L2: InfiniBand Local Routing Header (LRH) replaces Ethernet**
+
+In InfiniBand, there is no Ethernet frame. The L2 header is the LRH (Local Routing Header), a 64-bit header:
+
+```
+LRH fields:
+  Virtual Lane (VL):    4 bits  -- equivalent to 802.1p priority
+  Link Version:         4 bits  -- always 0
+  Service Level (SL):   4 bits  -- equivalent to DSCP (determines QoS treatment)
+  Link Next Header:     2 bits  -- indicates GRH present (1) or not (0)
+  Destination LID:      16 bits -- Local Identifier of destination port (assigned by SM)
+  Packet Length:        11 bits -- in 32-bit words
+  Source LID:           16 bits -- Local Identifier of source port
+```
+
+The LID (Local Identifier) is a 16-bit address assigned to each HCA port by the Subnet Manager (UFM) at fabric bring-up. It is not configured by the network administrator -- the SM assigns it automatically as part of the fabric initialisation sweep. There is no ARP: the SM knows the LID of every port and distributes routing tables to every switch via Subnet Management Packets (SMPs).
+
+**L3: InfiniBand Global Routing Header (GRH) replaces IP**
+
+The GRH is optional but required for inter-subnet routing and is commonly present:
+
+```
+GRH fields:
+  IP Version:     6 (always IPv6 format, even in IB)
+  Traffic Class:  8 bits -- maps to Service Level for QoS
+  Flow Label:     20 bits -- equivalent to TCP flow label
+  Payload Length: 16 bits
+  Next Header:    0x1B -- InfiniBand transport
+  Hop Limit:      1 (intra-subnet) or 64 (inter-subnet)
+  SGID:           128 bits -- Global ID of source port (GID = subnet prefix + port GUID)
+  DGID:           128 bits -- Global ID of destination port
+```
+
+The SGID and DGID use the same GID encoding as RoCEv2 -- in fact, RoCEv2 reuses IB's GID format to represent IP addresses. In RoCEv2, `DGID = 0x0000000000000000ffff<IPv4address>` (the RoCEv2 GID encoding of an IPv4 address). In native IB, the DGID uses the subnet prefix assigned by the SM and the port's 64-bit GUID.
+
+**What the switch looks up: LID vs IP**
+
+An IB switch does not have a routing table in the IP sense. It has a Linear Forwarding Table (LFT): a flat array of 65536 entries (one per possible LID), each containing the output port number for that LID. The LFT is populated by the Subnet Manager's routing algorithm (fat-tree, MINHOP, or DFP) and downloaded to every switch via SMPs.
+
+```
+IB switch LFT lookup:
+  Input:  DLID from LRH (e.g., 0x0042)
+  Output: port 12 (the port that leads toward the destination)
+  Time:   O(1) array lookup -- faster than IP route lookup
+```
+
+There is no ARP. There is no MAC table. There is no TTL decrement. The LRH's DLID is never rewritten in transit -- unlike Ethernet where the MAC is rewritten at every hop, the IB LID is preserved end-to-end. Only the LFT is consulted at each switch.
+
+**Adaptive routing: per-packet, in hardware, without hashing**
+
+In InfiniBand, adaptive routing is not ECMP hash-based. The QM9700 switch measures the congestion level on each output port in real time (via credit counters in the IB credit-based flow control mechanism). For each incoming packet, the switch selects the least-congested output port toward the destination. This decision is made per-packet in hardware. No hash. No flow state. No RSHP reorder buffer needed at the destination -- IB's transport protocol handles out-of-order delivery natively at the QP level.
+
+This is the fundamental performance advantage of IB: per-packet adaptive routing with native OOO tolerance produces near-perfect link utilisation even under all-to-all communication patterns where hash-based ECMP fails.
+
+**BTH: identical in both transports**
+
+The BTH header is byte-for-byte identical in IB and RoCEv2:
+```
+  Opcode, Partition Key, Destination QPN, PSN -- same encoding, same meaning.
+```
+
+This is by design: RoCEv2 was created by taking IB's transport layer (BTH and above) and putting it on top of UDP/IP instead of the IB link/network layers. Everything above the GRH is transport -- everything below is network fabric.
+
+**Side-by-side: what changes, what stays**
+
+| Layer | RoCEv2 over Ethernet | InfiniBand NDR |
+|---|---|---|
+| Physical | 400G OSFP PAM-4 | 400G OSFP PAM-4 |
+| L2 header | Ethernet (14B, rewritten each hop) | LRH (8B, preserved end-to-end) |
+| L2 addressing | MAC (48-bit, learned via ARP) | LID (16-bit, assigned by SM) |
+| L3 header | IPv4 (20B) + UDP (8B) = 28B overhead | GRH (40B, optional) |
+| L3 lookup | IP route table (longest-prefix match) | LFT (array indexed by DLID, O(1)) |
+| Congestion control | PFC + ECN + DCQCN | Credit-based flow control (no drops) |
+| Load balancing | ECMP hash (5-tuple + optional QPair) | Adaptive routing per-packet (congestion-aware) |
+| Out-of-order handling | RSHP reorder buffer in NIC | Native IB transport OOO handling |
+| ARP | Yes (HCA ARPs for gateway MAC) | No (SM assigns LIDs, no ARP) |
+| Management protocol | BGP / IS-IS routing | Subnet Manager (UFM) via SMP |
+| End-to-end latency | ~2.6-3.2 us | ~0.6-0.8 us |
+| Transport header | BTH | BTH (identical) |
+
+Capture F is the side-by-side decode of both frames for the same RDMA Write First packet -- RoCEv2 on the left, IB on the right. Every field that differs is highlighted.
+
+<WiresharkCaptureViz captureId="F" />
+
+## Act 8 -- What if there is no ConnectX-7? Alternative NIC stacks
+
+Not every AI cluster uses NVIDIA DGX hardware. Different accelerators, different interconnects, and different NIC architectures produce different packet flows. Understanding these alternatives is increasingly important as the AI infrastructure market diversifies.
+
+<AlternativeNICStackViz />
+
+### Gaudi 3 (Intel/Habana): the accelerator IS the NIC
+
+Gaudi 3 integrates 24 x 100GbE ports directly onto the accelerator die -- there is no separate ConnectX-7, no separate PCIe NIC, no separate GPU HBM-to-NIC DMA path. The accelerator package is simultaneously the compute engine and the network adapter.
+
+**What changes in the packet path:**
+
+- There is no PCIe bus between compute and NIC. Data that the network stack reads is in Gaudi's on-die SRAM or HBM directly accessible to the integrated network engine.
+- The network engine implements RoCEv2 natively but uses a different queue pair management model -- Gaudi's HCCL (Habana Collective Communications Library) manages QPs via a different verbs-like API than libibverbs.
+- Packet headers are structurally identical to ConnectX-7 RoCEv2 -- same BTH, same UDP/IP, same DSCP marking. A Wireshark decode of a Gaudi 3 packet looks identical to a ConnectX-7 packet.
+- The switch sees exactly the same RoCEv2 traffic and applies the same PFC/ECN/ECMP logic.
+- What is missing: GPUDirect Async (which depends on NVIDIA's proprietary PCIe peer-to-peer signalling), SR-IOV VFs (Gaudi 3 does not expose NIC virtualisation in the same way), and the ConnectX-7's specific adaptive routing participation.
+
+**Real-world deployment: Intel Gaudi 2/3 clusters at scale**
+
+Intel-based Gaudi clusters (deployed at several European cloud providers and in AWS DL2q instances) use a 2.4 Tbps all-to-all fabric built from the 24 x 100GbE Gaudi ports (24 x 100G = 2.4 Tbps). The fabric typically uses standard Ethernet switches (Arista, Juniper) rather than Spectrum-X. Because Gaudi's ports are 100GbE rather than 400GbE, the topology typically uses higher radix to achieve equivalent bandwidth -- 24 ports per accelerator vs 8 ports per DGX GPU (though DGX provides 400G per port vs Gaudi's 100G, making the total compute fabric BW 3.2 Tbps for DGX vs 2.4 Tbps for Gaudi per node).
+
+### AMD Instinct MI300X with AMD Pensando Elba DPU
+
+AMD's MI300X pairs with the AMD Pensando Elba NIC/DPU rather than NVIDIA's ConnectX-7. The Elba DPU runs a DPDK-based P4 dataplane on its ARM cores rather than the firmware-driven approach of ConnectX-7.
+
+**What changes in the packet path:**
+
+- The RoCEv2 packet format is structurally identical -- same BTH, same UDP/IP, same DSCP. The difference is in what happens inside the NIC.
+- Elba's RDMA engine uses a different RNICM (RNIC Microcode) implementation. QP capacity limits, maximum MR sizes, and maximum message sizes may differ.
+- The kernel driver is different (`ionic` instead of `mlx5_core`). RCCL (ROCm Collective Communications Library, AMD's equivalent of NCCL) interacts with the RDMA stack via the same libibverbs API, but the underlying driver path differs.
+- Adaptive routing capability depends on Elba's implementation. As of MI300X deployments, per-packet spraying is supported but with different MTU and reorder buffer characteristics than ConnectX-7 RSHP.
+
+### HPE Slingshot: a different Ethernet -- not RoCEv2, not InfiniBand
+
+The Frontier supercomputer (Oak Ridge National Laboratory -- AMD Instinct MI250X + HPE Cray EX) uses HPE Slingshot 11 interconnect. Slingshot is Ethernet-based but is not RoCEv2 and is not standard Ethernet.
+
+**What Slingshot adds to the Ethernet frame:**
+
+Slingshot uses a custom Ethernet frame with a vendor-specific header extension:
+
+```
+Standard Ethernet:
+  [Dst MAC][Src MAC][EtherType 0x0800][IP][UDP][BTH][Payload]
+
+Slingshot Ethernet:
+  [Dst MAC][Src MAC][EtherType 0x0801 (Slingshot-specific)][Slingshot Header][IP][UDP][Cray BTH][Payload]
+```
+
+The Slingshot header carries:
+- **HRP (Hardware Retry Protocol)** control bits: credit-based acknowledgement without PFC
+- **Adaptive routing tag**: the hardware tells the switch which flow this belongs to for adaptive routing decisions
+- **Congestion control fields**: Slingshot uses its own congestion notification mechanism -- not ECN marks in DSCP, but dedicated header fields processed by Slingshot ASICs
+
+**Why this matters:**
+
+A standard Ethernet switch cannot forward Slingshot frames correctly -- it will see EtherType 0x0801 and may drop it or treat it as an error. Slingshot requires Slingshot-specific switch ASICs (the Rosetta ASIC). The packet format is proprietary.
+
+Slingshot's congestion control is credit-based at the hardware level -- each Slingshot port maintains per-destination credits. When a destination buffer fills, credits are not issued, and the source NIC physically cannot send until credits are replenished. This eliminates PFC storms (there is no backward-propagating pause frame -- the source just cannot send), but requires hardware-enforced credit tables in the switch ASIC.
+
+**What stays the same:**
+
+The RDMA transport model is the same -- Queue Pairs, Work Requests, Memory Regions, BTH opcodes. A programmer writing NCCL-equivalent code against the Cray RDMA API sees the same abstract model. What differs is the network plumbing that carries the BTH.
+
+### NVIDIA Quantum InfiniBand vs ConnectX-7 in RoCEv2 mode: same hardware, different mode
+
+A critical point often overlooked: the ConnectX-7 itself is a dual-mode adapter. The same physical card can operate in InfiniBand mode (connected to a QM9700 IB switch) or Ethernet mode (connected to an SN5600 Spectrum-X switch running RoCEv2). The switch determines the mode -- the NIC adapts.
+
+```bash
+# Check mode on a ConnectX-7
+mlxconfig -d /dev/mst/mt4129_pciconf0 query | grep LINK_TYPE
+LINK_TYPE_P1    IB(1) or ETH(2)
+
+# Changing mode (requires reboot)
+mlxconfig -d /dev/mst/mt4129_pciconf0 set LINK_TYPE_P1=2  # Set to Ethernet
+```
+
+When you change mode from IB to Ethernet, the entire LRH/GRH header disappears and UDP/IP appears instead. The BTH stays. The GPU-to-GPU communication latency increases by approximately 1.5-2 us per hop due to the added header processing overhead and the replacement of IB's credit-based flow control with PFC (which introduces pause latency under congestion).
+
+## Act 9 -- How the fabric choice changes the packet: comparison matrix
+
+Every fabric technology produces a different packet, different switch lookup, different congestion control, different latency profile. This act consolidates the full comparison.
+
+<FabricComparisonMatrixViz />
+
+### Layer-by-layer comparison
+
+**Layer 1 -- Physical**
+
+All modern AI fabrics use 400G OSFP with PAM-4 modulation. This is the same physical spec across ConnectX-7 RoCEv2, ConnectX-7 InfiniBand, Gaudi 3, and MI300X with Elba. Slingshot also uses 200G or 400G optical -- the physical signalling is compatible but the protocol above it is not.
+
+The optics may differ: DGX H100 ships with QSFP-DD-to-OSFP breakout cables for some rack configurations; Frontier uses SMF-based optical links between Rosetta ASICs. These differences are at the DAC/transceiver level, not visible to any network protocol.
+
+**Layer 2 -- Data link**
+
+| Fabric | L2 header | Addressing | Rewritten each hop? |
+|---|---|---|---|
+| RoCEv2 / Spectrum-X | Ethernet II (14B) | 48-bit MAC | Yes -- full rewrite |
+| InfiniBand NDR | LRH (8B) | 16-bit LID | No -- LID unchanged end-to-end |
+| Slingshot | Ethernet + Slingshot ext | MAC + routing tag | Yes -- MAC rewritten |
+
+**Layer 3 -- Network**
+
+| Fabric | L3 header | Addressing | Lookup type |
+|---|---|---|---|
+| RoCEv2 | IPv4 (20B) + UDP (8B) | 32-bit IP | ECMP hash -> next-hop (IP route table) |
+| InfiniBand | GRH (40B, optional) | 128-bit GID | LFT array[DLID] = port -> O(1) |
+| Slingshot | IPv4 + Slingshot ext | IP + routing tag | Slingshot routing table |
+
+**Congestion control**
+
+| Fabric | Mechanism | Granularity | Propagation |
+|---|---|---|---|
+| RoCEv2 | PFC pause + ECN marks + DCQCN rate reduction | Per priority class | Hop-by-hop (PFC) + end-to-end (ECN) |
+| InfiniBand | Credit-based flow control (per-VL per-port) | Per virtual lane | Per-link (no backward propagation) |
+| Slingshot | HRP credit-based + adaptive routing | Per destination | Per-link (no PFC storms possible) |
+
+**Load balancing**
+
+| Fabric | Method | Entropy source | OOO handling |
+|---|---|---|---|
+| RoCEv2 + SLB | ECMP hash | 5-tuple + optional QPair | None -- retransmit on OOO |
+| RoCEv2 + RSHP | Per-packet spray | All flows treated independently | RSHP reorder buffer in ConnectX-7 |
+| InfiniBand | Adaptive routing (per-packet, congestion-aware) | No hash -- real-time congestion measurement | Native IB transport |
+| Slingshot | Adaptive routing (per-flow, per-credit) | Flow tag in Slingshot header | HRP credits maintain order within flow |
+
+**Latency benchmark (2-hop fabric, 128B message)**
+
+| Fabric | MPI latency | Notes |
+|---|---|---|
+| InfiniBand NDR 400G | ~0.6 us | Credit-based FC, per-packet adaptive routing, O(1) LFT lookup |
+| RoCEv2 + Spectrum-X RSHP | ~1.4-1.6 us | Added UDP/IP overhead, PFC latency jitter, IP route lookup |
+| Slingshot 200G | ~1.1-1.3 us | Credit-based FC, adaptive routing, Slingshot header overhead |
+| Gaudi 3 (100GbE RoCEv2) | ~2.0-2.5 us | 100G limit, standard Ethernet, no Spectrum-X RSHP |
+
+**When would you choose each?**
+
+InfiniBand NDR remains the lowest-latency, highest-throughput choice for pure GPU training workloads where the cluster is homogeneous NVIDIA hardware. The premium is the proprietary switch stack (QM9700 vs commodity Ethernet) and the reliance on the Subnet Manager.
+
+RoCEv2 over Spectrum-X is the choice when the cluster must support mixed workloads (GPU training + inference + storage on the same fabric), when EVPN multi-tenancy is needed, or when the organisation has strong Ethernet operational expertise and wants BGP-based routing with familiar tooling. The latency penalty (~1 us per hop) is acceptable for most AllReduce patterns.
+
+Slingshot is the choice when building at scientific HPC scale (tens of thousands of nodes) where the traffic pattern is mixed HPC + AI and where the credit-based flow control is a hard requirement due to the scale of MPI collective operations.
+
+Gaudi 3 (100GbE integrated) is the choice when the budget requires it or when the workload is inference-oriented (lower bandwidth requirements, more sensitivity to per-GPU cost than raw training throughput).
+
+## Act 10 -- Reading the packet in production: CLI commands that expose each layer
+
+All the packet anatomy described above has a corresponding CLI observation on the production devices. This act maps the packet fields to the commands that reveal them.
+
+<ProductionDebugMapViz />
+
+**At the source ConnectX-7 (DGX Node A)**
+
+```bash
+# Verify HCA is in the correct mode (IB or Ethernet)
+ibstat mlx5_0 | grep "Link layer"
+# Output: Link layer: Ethernet   (or InfiniBand)
+
+# Check DSCP-to-priority mapping (DSCP 46 must map to the lossless PFC priority)
+# BasePOD reference: DSCP 46 -> priority 3. Verify this matches your switch config.
+mlnx_qos -i mlx5_0 --dscp
+
+# Verify QP state (INIT -> RTR -> RTS means connected and ready)
+ibv_devinfo -d mlx5_0 -v | grep QP
+
+# Monitor per-priority packet counters (shows PFC triggering by priority)
+ethtool -S eth3 | grep "rx_prio3\|tx_prio3"
+# rx_prio3_pause_duration: 142000   <- PFC pauses received on priority 3
+
+# Show current active QP connections (NCCL AllReduce in progress)
+rdma res show qp dev mlx5_0 | grep -c RTS
+# Output: 127   (127 active QPs for 128-GPU ring AllReduce)
+```
+
+**At the leaf switch**
+
+```bash
+# Verify routing table entry for destination GPU IP
+show ip route 10.2.1.1
+# Output: 10.2.1.1/32 via 10.0.0.3 (SpineC), 4 ECMP paths
+
+# Check ECMP hash configuration -- is BTH QPair hashing enabled?
+show ecmp hash
+# roce: enabled   <- critical -- must be enabled for proper entropy
+
+# Verify DSCP-to-queue mapping (DSCP 46 must go to lossless queue)
+show qos dscp-map
+# 46 -> queue 3 -> PFC-protected
+
+# Monitor interface counters for PFC storms
+show interface swp36 counters pfc
+# Priority 3 pause frames received: 0   (0 = healthy)
+# Priority 3 pause frames sent: 2841    <- sending PFC upstream (congestion present)
+
+# Verify ARP entry for destination NIC
+show arp 10.2.1.1
+# 10.2.1.1 is-at 94:6d:ae:cc:dd:ee via swp1
+```
+
+**At the spine switch**
+
+```bash
+# Verify routing table (per-leaf-subnet or per-GPU-host routes)
+show ip route 10.2.0.0/24
+# Output: 10.2.0.0/24 via 10.0.2.1 (Leaf4 loopback), 4 ECMP downlinks
+
+# Check DLB status (is adaptive LB active?)
+show load-balance dlb
+# Mode: flowlet   Active: yes   Inactivity timer: 100 us
+
+# Monitor spine utilisation (should be even across all downlinks)
+show interface counters | grep "swp[0-9]"
+# swp1: TX 78.3%  swp2: TX 79.1%  swp3: TX 12.4% <- imbalanced!
+
+# If imbalanced: check GLB heartbeat status
+show glb status
+# Heartbeat interval: 20ms   Last update: 3ms ago   Quality: good
+```
+
+**InfiniBand-specific observation commands**
+
+```bash
+# On IB switch: show Linear Forwarding Table
+ibswitchinfo -D 0  # Shows LFT for switch at depth 0
+
+# Verify Subnet Manager assigned LIDs
+ibstat mlx5_0 | grep "LID"
+# LID: 0x0042
+
+# Show per-port receive counters (detects symbol errors, link errors)
+perfquery -x 0x0042 1  # Query port 1 on device with LID 0x42
+
+# On UFM management console: show routing algorithm
+ufm_rest GET /ufmRest/app/network/routing
+# {"algorithm": "fat_tree", "lft_mode": "minhop"}
+```
+
+**Connecting CLI output to packet anatomy**
+
+Every CLI command above exposes one or more fields from the packet path:
+
+- `ibstat` link layer -> determines whether LRH or Ethernet header is present (Act 3)
+- `mlnx_qos` DSCP map -> determines which PFC priority DSCP 46 maps to (must match switch config)
+- `show ip route` -> the routing table entry the leaf/spine uses for the IP lookup (Acts 4, 5)
+- `show ecmp hash roce: enabled` -> confirms BTH QPair is in the ECMP hash (Act 4)
+- `show qos dscp-map` -> confirms DSCP 46 goes to the lossless PFC queue (Act 3)
+- `show interface counters pfc` -> reveals whether PFC is triggering and for which priority (Act 3, Ch5)
+- `rdma res show qp` -> shows active QPs and their state (Act 2)
+- `ethtool -S rx_prio3_pause` -> counts PFC pause frames received at the NIC (Act 3, Ch5)
+
+When a training job slows down unexpectedly, this is the diagnostic sequence: start at the NIC (`ibstat`, `rdma res show qp`, `ethtool -S`), move to the leaf switch (`show interface counters`, `show ip route`, `show ecmp hash`), move to the spine (`show interface counters`, `show glb status`). The packet anatomy in this chapter tells you exactly what each command is measuring and which layer of the packet it corresponds to.
+
+## What you now know
+
+A GPU-to-GPU RDMA Write is not "just a packet." It is a precisely-engineered sequence of hardware operations that bypass the operating system entirely, construct headers at line rate in NIC firmware, traverse three Ethernet rewrites across two switch hops, and deliver payload directly to GPU memory on the far side -- all without a single CPU instruction touching the data.
+
+The fundamental insight for a network engineer: most of your existing knowledge applies directly. ARP still runs (in RoCEv2 mode). TTL still decrements. ECMP still hashes the 5-tuple. MAC addresses are still rewritten at every L3 hop. What is new is what lives above UDP: the BTH header whose QPair field provides the extra entropy that ECMP needs, the RDMA semantics that make the payload self-routing to a specific GPU memory address, and the PFC mechanism that keeps the lossless queue from dropping the packet when a spine is congested.
+
+InfiniBand removes the UDP/IP layer and replaces it with a simpler, faster lookup (LFT array vs IP route table), native per-packet adaptive routing, and credit-based flow control without pause frames. The BTH is identical. The GPU-visible API is identical. The operational simplification comes at the cost of a proprietary switch stack and a dependency on the Subnet Manager for every addressing decision.
+
+Alternative fabrics -- Gaudi 3's integrated NIC, Slingshot's credit-based Ethernet, MI300X with Pensando -- all use the same BTH transport model but different network layers beneath it. Understanding the packet anatomy at each layer lets you reason about what changes when the hardware changes, without being surprised by undocumented behaviour.
+
+[Continue to Chapter 17 ->](/learn/ch17-storage-network-packet-path)

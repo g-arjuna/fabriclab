@@ -1,51 +1,84 @@
 # FabricLab
 
-FabricLab is an offline-first HPC / AI data centre networking learning platform.
-Target audience: network engineers transitioning from enterprise to AI cluster infrastructure.
-Reference hardware: NVIDIA DGX H100, ConnectX-7 NICs, QM9700 / SN5600 switches, BlueField-3 DPU.
+FabricLab is an interactive HPC / AI data centre networking learning platform for network
+engineers moving from enterprise networking into AI cluster infrastructure.
 
-The current repo contains a working Next.js app in `apps/web` with:
+The repo now combines:
 
-- 11 chapter routes available locally (Ch0-Ch10 present and discoverable by the app)
-- 6 interactive labs with a state-driven multi-device CLI simulator
-- 80+ React visualisation components registered in `mdxComponents.ts`
-- Lab-specific topology views and a reference drawer
-- MDX chapter rendering with a large component registry
-- Browser smoke checks for Ch0-Ch4
+- repo-backed chapter content and visualisations
+- a state-driven lab simulator
+- Supabase-backed auth, entitlement, release metadata, and synced progress
+- a Vercel-ready Next.js app in `apps/web`
+
+## Repo status
+
+- 17 chapter routes live (`Ch0-Ch16`)
+- 12 interactive labs
+- 119+ React visualisation components registered in `mdxComponents.ts`
+- catalog-driven curriculum metadata in `apps/web/content/catalog.json`
+- Supabase auth/access/release-control scaffolding in repo
+
+## Access model
+
+V1 defaults:
+
+- free chapters: `Ch0-Ch2`
+- free labs: `Labs 0-1`
+- all other published chapters stay visible but open as metadata-only previews
+- all other published labs stay visible but open as locked shells
+- one paid entitlement: `core_paid`
 
 ## Chapter status
 
 | Ch | Slug | Title | Status |
 |----|------|-------|--------|
-| 0 | ch0-hardware-foundations | The Hardware Story | ✅ live |
-| 1 | ch1-os-platforms | OS, Platforms, and First Power-On | ✅ live |
-| 2 | ch2-why-different | Why HPC Networking Is Different | ✅ live |
-| 3 | ch3-the-cli | The CLI — Reading the Fabric | ✅ live |
-| 4 | ch4-infiniband-operations | InfiniBand Operations | ✅ live |
-| 5 | ch5-pfc-ecn-congestion | PFC, ECN, and Congestion Control | ✅ live |
-| 6 | ch6-load-balancing | Efficient Load Balancing | ✅ live |
-| 7 | ch7-topology-design | Topology Design | ✅ live |
-| 8 | ch8-nccl-performance | NCCL — The Application Layer | ✅ live |
-| 9 | ch9-optics-cabling | Optics, Cabling, and the Physical Layer | ✅ live |
-| 10 | ch10-storage-fabric | The Storage Fabric | ✅ live |
-| 11 | ch11-monitoring-telemetry | Monitoring, Telemetry, and Observability | 📋 next to write |
+| 0 | ch0-hardware-foundations | The Hardware Story | live |
+| 1 | ch1-os-platforms | Operating Systems and Management Platforms | live |
+| 2 | ch2-why-different | Why HPC Networking Is Different | live |
+| 3 | ch3-the-cli | The CLI - Reading the Fabric | live |
+| 4 | ch4-infiniband-operations | InfiniBand Operations | live |
+| 5 | ch5-pfc-ecn-congestion | PFC, ECN, and Congestion Control | live |
+| 6 | ch6-efficient-load-balancing | Efficient Load Balancing | live |
+| 7 | ch7-topology-design | Topology Design | live |
+| 8 | ch8-nccl-performance | NCCL - The Application Layer | live |
+| 9 | ch9-optics-cabling | Optics, Cabling, and the Physical Layer | live |
+| 10 | ch10-storage-fabric | The Storage Fabric | live |
+| 11 | ch11-monitoring-telemetry | Monitoring, Telemetry, and Observability | live |
+| 12 | ch12-nvlink-switch-system | Scale-Up Networking - NVLink Switch System | live |
+| 13 | ch13-alternative-topologies | Alternative Topologies | live |
+| 14 | ch14-gpu-hardware-generations | GPU Hardware Generations and Network Implications | live |
+| 15 | ch15-ip-routing-ai-fabrics | IP Routing for AI/ML Fabrics | live |
+| 16 | ch16-gpu-compute-network-packet-anatomy | The GPU Compute Network - Packet Anatomy | live |
 
 ## Labs
 
-| Lab | Fault modelled |
-|-----|----------------|
-| lab0-failed-rail | Rail 3 DAC cable failure → Err-Disabled switch port |
-| lab1-pfc-fix | PFC not enabled on compute interface |
-| lab2-silent-congestion | ECN not configured → silent drops under load |
-| lab3-uneven-spine | ECMP hot-spotting on spine uplinks |
-| lab4-topology-sizing | Undersized 2-stage fabric proposal |
-| lab5-nccl-diagnosis | NCCL_IB_HCA set to mlx5_bond_0 → TCP fallback |
+| Lab | Slug | Fault modelled |
+|-----|------|----------------|
+| 0 | lab0-failed-rail | Rail failure isolated to an err-disabled switch port |
+| 1 | lab1-pfc-fix | PFC not enabled on the compute traffic class |
+| 2 | lab2-congestion | Fabric congestion from missing ECN |
+| 3 | lab3-uneven-spine | ECMP hot-spotting on spine uplinks |
+| 4 | lab4-topology-sizing | Undersized fabric proposal and oversubscription analysis |
+| 5 | lab5-nccl-diagnosis | NCCL transport fallback to sockets |
+| 6 | lab6-alert-triage | Silent fabric degradation across UFM, DCGM, and switch telemetry |
+| 7 | lab7-pause-storm | Hidden NIC-side pause storm caused by missing ECN |
+| 8 | lab8-pfc-priority-mismatch | PFC enabled on the wrong traffic class |
+| 9 | lab9-errdisable-recovery | Physical fault causing err-disable and rail recovery workflow |
+| 10 | lab10-ecmp-hotspot | BGP Link Bandwidth community missing -> equal ECMP on reduced-capacity spine |
+| 11 | lab11-bgp-path-failure | Different-ASN spines -> suboptimal 3-hop routing on link failure |
 
-## Running the app
+## Quickstart
 
 ```bash
 cd apps/web
 npm install
+cp .env.example .env.local
+```
+
+Fill in the Supabase values in `apps/web/.env.local`, then:
+
+```bash
+npm run catalog:sync
 npm run dev
 ```
 
@@ -53,55 +86,65 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Useful routes:
 
-- `/` — landing page
-- `/curriculum` — chapter + lab index
-- `/learn` — chapter browser
-- `/learn/ch0-hardware-foundations` — first chapter
-- `/lab?lab=lab0-failed-rail` — lab entrypoint
+- `/`
+- `/curriculum`
+- `/login`
+- `/account`
+- `/admin/releases`
+- `/learn/ch0-hardware-foundations`
+- `/lab?lab=lab0-failed-rail`
+
+## Required environment variables
+
+Defined in `apps/web/.env.example`:
+
+- `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_ADMIN_EMAILS`
+
+## Supabase setup
+
+1. Create a Supabase dev project.
+2. Enable email magic-link auth.
+3. Set site URL to `http://localhost:3000`.
+4. Add `http://localhost:3000/auth/callback` as a redirect URL.
+5. Apply the SQL in `supabase/migrations/20260328_001_auth_access_release_control.sql`.
+6. Run `npm run catalog:sync` from `apps/web`.
 
 ## Project structure
 
-```
+```text
 apps/web/
-  app/                        ← Next.js routes (learn/, lab/, curriculum/)
-  content/chapters/           ← MDX chapter files (ch0-ch10 currently live in this repo)
-  components/visualisations/  ← React viz components (80+ registered)
-  lib/mdxComponents.ts        ← Registers all viz components for MDX
-  components/visualisations/COMPONENTS_REGISTRY.md  ← Registry table
-  lib/labs/                   ← Lab scenario TypeScript
-  components/terminal/        ← xterm.js multi-device terminal
-  components/topology/        ← Topology views
-  store/                      ← Zustand state
+  app/                        Next.js routes
+  content/chapters/           MDX chapter files
+  content/catalog.json        chapter/lab metadata and default release settings
+  data/labs/                  lab scenario configuration
+  components/visualisations/  React visualisation components
+  components/terminal/        xterm.js multi-device terminal
+  components/topology/        topology views
+  components/auth/            auth/session client UI
+  lib/catalog/                shared catalog + access helpers
+  lib/auth/                   server-side viewer/admin helpers
+  lib/supabase/               browser/server/admin clients
+  lib/progress/               remote progress sync helpers
+  lib/mdxComponents.ts        MDX component registry
+supabase/migrations/          schema and RLS
 ```
 
-## How the simulator works
+## Release workflow
 
-- Device tabs map to DGX hosts, Spectrum-X leaf switches, spine switches, or workstation contexts.
-- Commands are routed through lab-aware handlers in `components/terminal/commandHandler.ts`.
-- Lab state lives in Zustand and drives command output, hints, and completion checks.
-- Chapters are rendered from MDX files; visualisation components are registered in `lib/mdxComponents.ts`.
+Content remains git-driven:
 
-## Two-agent workflow
+1. Claude writes content artifacts
+2. Codex deploys/integrates them
+3. update `apps/web/content/catalog.json` for any new chapter/lab
+4. run `npm run catalog:sync`
+5. verify locally / on preview
+6. publish and set free/paid access from `/admin/releases`
 
-**Claude** authors all educational content: MDX chapters, React visualisation components, lab scenario
-TypeScript, and Codex deploy prompts.
-
-**Codex** applies file copies to the live repo, fixes TypeScript errors, wires infrastructure,
-generates and places images, and may write short captions when contextualising images.
-Codex does not write substantive educational content. Claude does not write infrastructure.
-
-For the full workflow and image permissions, see `AGENTS.md` and `plan.md`.
-
-## Pending Codex tasks (priority order)
-
-1. **Continue image and browser QA passes** — Ch0-Ch4 now have inserted images plus smoke checks; continue the same workflow from Ch5 onward.
-2. **Fix TopologyScalingViz** (Ch7) — leaf-to-spine connections are 1:1; should be full-mesh.
-   Codex prompt: `outputs/TOPOLOGY_VIZ_FIX_CODEX_PROMPT.txt`
-3. **Apply P11 + P12** (Ch0) — NVLink generation naming correction + NVSwitch SHARP addition.
-   Codex prompt: `outputs/P11_P12_CODEX_PROMPT.txt`
-4. **CLI accuracy batch** — counter name fixes, swp port naming, busbw correction.
-   Codex prompts: `CLI_FACTUAL_FIX_CODEX_PROMPT.txt`, `REMAINING_FIXES_CODEX_PROMPT.txt`,
-   `ANALYSIS_FINDINGS_FIX_CODEX_PROMPT.txt`, `PRACTITIONER_FIXES_CODEX_PROMPT.txt`
+This prevents unfinished weekly content drops from automatically going live.
 
 ## Validation
 
@@ -109,4 +152,8 @@ For the full workflow and image permissions, see `AGENTS.md` and `plan.md`.
 apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json
 ```
 
-The app works without external APIs or runtime configuration.
+## Two-agent workflow
+
+- Claude owns educational content, MDX prose, lab narrative, and visualisation teaching logic
+- Codex owns platform engineering, integration, auth, release control, deployment plumbing,
+  registries, image placement, and browser QA

@@ -36,19 +36,46 @@ export function runMutation(command: string): CommandResult {
         conceptId: "pfc",
         type: "success",
       };
+    case "enable pfc priority 3":
+      store.setTopology({
+        pfcEnabled: true,
+        pfcPriority: 3,
+        congestionDetected: false,
+        bufferUtilPct: 18,
+      } as any);
+      store.setCondition("pfcPriorityFixed", true);
+      store.markVerified("pfcPriorityFixed");
+      store.setCondition("pfcEnabled", true);
+      
+      // Prevent order sensitivity deadlock for Lab 8
+      store.setCondition("dropsConfirmed", true);
+      store.markVerified("dropsConfirmed");
+      store.setCondition("pfcPriorityInspected", true);
+      store.markVerified("pfcPriorityInspected");
+      store.setCondition("mismatchIdentified", true);
+      store.markVerified("mismatchIdentified");
+      return {
+        output: "PFC reconfigured to priority 3 (cos3).\n"
+          + "RoCEv2 traffic (DSCP 26 -> cos3) is now protected by PFC.\n"
+          + "Verify with: show dcb pfc   and   ethtool -S eth0",
+        conceptId: "pfc",
+        type: "success",
+      };
     case "enable ecn":
       store.setTopology({
         ecnEnabled: true,
         congestionDetected: false,
         silentCongestion: false,
-        bufferUtilPct: 31,
+        pauseStorm: false,
+        bufferUtilPct: 12,
       });
       store.setCondition("ecnEnabled", true);
       store.markVerified("ecnEnabled");
       return {
         output: "ECN enabled. DCQCN is now active.\n"
           + "Senders are receiving CE marks and reducing injection rate.\n"
-          + "Verify with: show dcb ets",
+          + "If a PFC pause storm was active, it should subside within seconds.\n"
+          + "Verify with: show dcb ets   and   ethtool -S eth0",
         conceptId: "ecn",
         type: "success",
       };

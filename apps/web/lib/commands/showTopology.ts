@@ -5,6 +5,7 @@ export function showTopology(): CommandResult {
   const { topology, setCondition, markVerified } = useLabStore.getState()
 
   const rails = topology.rails ?? []
+  const degradedRail = rails.find((rail) => rail.switchPort !== 'up' || rail.nicState !== 'up')
 
   if (rails.length === 0) {
     return {
@@ -46,11 +47,11 @@ export function showTopology(): CommandResult {
 
   Cluster: 16 DGX H100 nodes × 8 GPUs = 128 GPUs total
   Each leaf switch serves all 16 nodes on that GPU rail.
-  Fault scope: One port on leaf-rail3 — only DGX-Node-01 GPU 3 is isolated.
+  Fault scope: One port on leaf-rail${degradedRail?.id ?? 3} — only DGX-Node-01 GPU ${degradedRail?.id ?? 3} is isolated.
   The other 15 nodes are contributing all 8 GPUs each.
 
   Next: Run 'show rdma links' to confirm NIC-level view of the fault.
-  Then: Switch to leaf-rail3 terminal and run 'show switch port rail3'.`
+  Then: Switch to leaf-rail${degradedRail?.id ?? 3} terminal and run 'show switch port rail${degradedRail?.id ?? 3}'.`
 
   return {
     output: `${header}\n${rows}\n${footer}`,

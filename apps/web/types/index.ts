@@ -16,6 +16,9 @@ export interface TopologyState {
   ecnEnabled: boolean
   congestionDetected: boolean
   silentCongestion: boolean
+  pauseStorm?: boolean
+  pfcPriority?: number
+  opticReplaced?: boolean
   unevenSpine?: boolean
   lbMode?: 'hash' | 'adaptive' | 'per-packet'
   bufferUtilPct: number

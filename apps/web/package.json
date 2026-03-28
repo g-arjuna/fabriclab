@@ -5,6 +5,7 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
+    "catalog:sync": "node scripts/sync-catalog.mjs",
     "test:browser:ch0": "playwright test tests/ch0.smoke.spec.ts",
     "test:browser:ch1": "playwright test tests/ch1.smoke.spec.ts",
     "test:browser:ch2": "playwright test tests/ch2.smoke.spec.ts",
@@ -12,6 +13,8 @@
     "test:browser:ch4": "playwright test tests/ch4.smoke.spec.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.57.4",
     "@mdx-js/loader": "^3.1.1",
     "@mdx-js/react": "^3.1.1",
     "@next/mdx": "^16.2.1",

@@ -3,14 +3,18 @@ import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 
+import { AuthControls } from "@/components/auth/AuthControls";
 import { ChapterSidebar } from "@/components/chapter/ChapterSidebar";
 import { PageProgressMarker } from "@/components/chapter/PageProgressMarker";
+import { ChapterPreviewShell } from "@/components/catalog/ChapterPreviewShell";
+import { getServerViewer } from "@/lib/auth/server";
 import {
   getChapterDocument,
   getChapterPage,
-  getChapterSummaries,
   splitIntoPages,
 } from "@/lib/chapters";
+import { getCatalogAccessState, getCurriculumCatalog } from "@/lib/catalog/runtime";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { mdxComponents } from "@/lib/mdxComponents";
 
 type Props = {
@@ -18,10 +22,38 @@ type Props = {
   searchParams: Promise<{ page?: string }>;
 };
 
+function canAccessFreeSet(accessTier: "free" | "paid", authEnabled: boolean, isAdmin: boolean, hasPaidEntitlement: boolean) {
+  if (!authEnabled) {
+    return true;
+  }
+
+  return isAdmin || hasPaidEntitlement || accessTier === "free";
+}
+
 export default async function ChapterPage({ params, searchParams }: Props) {
   const { chapter } = await params;
   const { page: pageParam } = await searchParams;
-  const pageIndex = Math.max(0, parseInt(pageParam ?? "0", 10) || 0);
+  const pageIndex = Math.max(0, Number.parseInt(pageParam ?? "0", 10) || 0);
+  const viewer = await getServerViewer();
+  const authEnabled = isSupabaseConfigured();
+  const accessState = await getCatalogAccessState("chapter", chapter, viewer);
+
+  if (!accessState.item || (!accessState.isPublished && !viewer.isAdmin)) {
+    notFound();
+  }
+
+  if (!accessState.canAccess) {
+    if (!accessState.shouldShowPreview) {
+      notFound();
+    }
+
+    return (
+      <ChapterPreviewShell
+        item={accessState.item}
+        hasPaidEntitlement={viewer.hasPaidEntitlement}
+      />
+    );
+  }
 
   const result = await getChapterPage(chapter, pageIndex);
   if (!result) {
@@ -29,12 +61,17 @@ export default async function ChapterPage({ params, searchParams }: Props) {
   }
 
   const { page, totalPages, document } = result;
-  const allChapters = await getChapterSummaries();
+  const { chapters: catalogChapters } = await getCurriculumCatalog(viewer);
+  const sidebarChapters = catalogChapters
+    .filter((item) =>
+      canAccessFreeSet(item.accessTier, authEnabled, viewer.isAdmin, viewer.hasPaidEntitlement),
+    )
+    .map((item) => ({ slug: item.slug, title: item.title }));
   const hasPrev = pageIndex > 0;
   const hasNext = pageIndex < totalPages - 1;
   const allPages = splitIntoPages(document.content);
   const chapterDocuments = await Promise.all(
-    allChapters.map(async ({ slug }) => {
+    sidebarChapters.map(async ({ slug }) => {
       const chapterDocument = await getChapterDocument(slug);
       return [slug, splitIntoPages(chapterDocument.content).length] as const;
     }),
@@ -55,27 +92,30 @@ export default async function ChapterPage({ params, searchParams }: Props) {
             <span className="text-slate-700">/</span>
             <span className="max-w-[200px] truncate text-sm text-slate-400">{document.title}</span>
           </div>
-          {document.labLink ? (
-            <Link
-              href={document.labLink}
-              className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 text-xs text-cyan-400 transition hover:border-cyan-500/50 hover:text-cyan-300"
-            >
-              Open lab ?
-            </Link>
-          ) : (
-            <Link
-              href="/lab"
-              className="rounded-full border border-white/20 px-4 py-1.5 text-xs text-slate-400 transition hover:border-white/40 hover:text-slate-300"
-            >
-              Open lab ?
-            </Link>
-          )}
+          <div className="flex items-center gap-3">
+            {document.labLink ? (
+              <Link
+                href={document.labLink}
+                className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 text-xs text-cyan-400 transition hover:border-cyan-500/50 hover:text-cyan-300"
+              >
+                Open lab
+              </Link>
+            ) : (
+              <Link
+                href="/lab"
+                className="rounded-full border border-white/20 px-4 py-1.5 text-xs text-slate-400 transition hover:border-white/40 hover:text-slate-300"
+              >
+                Open lab
+              </Link>
+            )}
+            <AuthControls compact />
+          </div>
         </div>
       </nav>
 
       <div className="mx-auto max-w-7xl px-6 py-8 lg:grid lg:grid-cols-[220px_1fr] lg:gap-12">
         <ChapterSidebar
-          allChapters={allChapters}
+          allChapters={sidebarChapters}
           currentChapter={chapter}
           allPages={allPages}
           currentPageIndex={pageIndex}
@@ -172,7 +212,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               {hasNext ? (
                 <Link
                   href={`/learn/${chapter}?page=${pageIndex + 1}`}
-                  className="ml-auto flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-sm transition hover:border-cyan-500/30 hover:border-white/20"
+                  className="ml-auto flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-sm transition hover:border-white/20 hover:border-cyan-500/30"
                 >
                   <div className="text-right">
                     <p className="text-xs text-slate-600">Next</p>
@@ -233,4 +273,3 @@ export default async function ChapterPage({ params, searchParams }: Props) {
     </main>
   );
 }
-

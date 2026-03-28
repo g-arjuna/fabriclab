@@ -12,6 +12,7 @@ type StoreState = {
   loadLab: (config: LabConfig) => void;
   setCondition: (key: string, value: boolean) => void;
   markVerified: (key: string) => void;
+  verifyCondition: (key: string) => void;
   incrementMistake: () => void;
   incrementNearMiss: () => void;
   useHint: (level: number) => void;
@@ -107,6 +108,13 @@ export const useLabStore = create<StoreState>((set) => ({
         },
       };
     }),
+  verifyCondition: (key) =>
+    set((state) => ({
+      lab: {
+        ...state.lab,
+        verifiedConditions: new Set([...state.lab.verifiedConditions, key]),
+      },
+    })),
   incrementMistake: () =>
     set((state) => ({
       lab: {

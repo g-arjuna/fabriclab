@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+  <title id="title">Healthy ECN rate shaping versus pause-thrash without ECN</title>
+  <desc id="desc">Technical comparison diagram showing the same burst handled two ways: ECN and DCQCN smooth the sender rate before the queue reaches PFC, while missing ECN leaves the fabric oscillating between full-rate bursts and pause windows.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#020617" />
+      <stop offset="100%" stop-color="#0b1730" />
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" />
+    </filter>
+    <style>
+      .title { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 700; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .curveSmooth { animation: curveSmooth 3.2s ease-in-out infinite; }
+      .curveJagged { animation: curveJagged 2s linear infinite; }
+      .pulseMark { animation: pulseMark 2.2s ease-in-out infinite; }
+      .pulsePause { animation: pulsePause 1.5s ease-in-out infinite; }
+      @keyframes curveSmooth {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-8px); }
+      }
+      @keyframes curveJagged {
+        0%, 100% { opacity: 0.5; }
+        50% { opacity: 1; }
+      }
+      @keyframes pulseMark {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 1; }
+      }
+      @keyframes pulsePause {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
+      }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1100" fill="url(#bg)" />
+  <circle cx="240" cy="180" r="180" fill="#22c55e" opacity="0.08" filter="url(#soft)" />
+  <circle cx="1350" cy="220" r="170" fill="#f59e0b" opacity="0.08" filter="url(#soft)" />
+  <circle cx="1220" cy="880" r="220" fill="#ef4444" opacity="0.08" filter="url(#soft)" />
+
+  <text x="90" y="90" font-size="48" fill="#f8fafc" class="title">Same burst, two control loops</text>
+  <text x="90" y="132" font-size="22" fill="#94a3b8" class="title">The learning goal in Act 6: ECN should bend the sender rate early enough that PFC stays an emergency backstop, not the normal control loop.</text>
+
+  <rect x="70" y="190" width="1460" height="840" rx="34" fill="#0f172a" stroke="#1e293b" stroke-width="2" />
+
+  <g transform="translate(100 230)">
+    <rect x="0" y="0" width="670" height="760" rx="30" fill="#0b1220" stroke="#1f3b2a" stroke-width="2" />
+    <text x="34" y="52" font-size="30" fill="#f8fafc" class="title">Healthy path: ECN plus DCQCN</text>
+    <text x="34" y="86" font-size="18" fill="#94a3b8" class="mono">Marks appear early, sender rate bends, queue peaks below sustained PFC.</text>
+
+    <rect x="34" y="118" width="602" height="270" rx="24" fill="#111827" stroke="#334155" stroke-width="1.5" />
+    <text x="58" y="156" font-size="22" fill="#e2e8f0" class="title">Queue depth over the burst</text>
+    <line x1="90" y1="332" x2="590" y2="332" stroke="#475569" stroke-width="2" />
+    <line x1="90" y1="186" x2="90" y2="332" stroke="#475569" stroke-width="2" />
+    <line x1="90" y1="250" x2="590" y2="250" stroke="#22c55e" stroke-width="2" stroke-dasharray="10 8" />
+    <line x1="90" y1="212" x2="590" y2="212" stroke="#f59e0b" stroke-width="2" stroke-dasharray="10 8" class="pulseMark" />
+    <line x1="90" y1="194" x2="590" y2="194" stroke="#fb7185" stroke-width="2" stroke-dasharray="10 8" />
+    <text x="600" y="253" font-size="15" fill="#86efac" class="mono">ECN min</text>
+    <text x="600" y="215" font-size="15" fill="#fbbf24" class="mono">ECN max</text>
+    <text x="600" y="197" font-size="15" fill="#fda4af" class="mono">PFC zone</text>
+    <path d="M90 332 C150 330, 190 288, 240 250 S330 210, 370 212 S450 250, 590 310" fill="none" stroke="#38bdf8" stroke-width="8" stroke-linecap="round" class="curveSmooth" />
+    <circle cx="308" cy="226" r="10" fill="#f59e0b" class="pulseMark" />
+    <text x="326" y="232" font-size="15" fill="#fcd34d" class="mono">CE marking begins here</text>
+
+    <rect x="34" y="420" width="602" height="160" rx="24" fill="#111827" stroke="#334155" stroke-width="1.5" />
+    <text x="58" y="458" font-size="22" fill="#e2e8f0" class="title">Sender injection rate</text>
+    <line x1="90" y1="542" x2="590" y2="542" stroke="#475569" stroke-width="2" />
+    <path d="M90 470 C200 470, 215 478, 290 502 S415 532, 590 496" fill="none" stroke="#22c55e" stroke-width="8" stroke-linecap="round" class="curveSmooth" />
+    <text x="92" y="566" font-size="14" fill="#94a3b8" class="mono">time</text>
+    <text x="106" y="486" font-size="14" fill="#86efac" class="mono">near line rate</text>
+    <text x="410" y="528" font-size="14" fill="#86efac" class="mono">reduced smoothly by DCQCN</text>
+
+    <rect x="34" y="612" width="602" height="118" rx="22" fill="#052e16" stroke="#22c55e" stroke-width="1.5" />
+    <text x="56" y="652" font-size="20" fill="#bbf7d0" class="title">What counters look like</text>
+    <text x="56" y="688" font-size="18" fill="#d1fae5" class="mono">Switch: ECN marks present, PFC rare or brief, drops 0</text>
+    <text x="56" y="714" font-size="18" fill="#d1fae5" class="mono">NIC: rx_ecn_marked grows during the burst, pause counters stay low</text>
+  </g>
+
+  <g transform="translate(830 230)">
+    <rect x="0" y="0" width="670" height="760" rx="30" fill="#0b1220" stroke="#4a2210" stroke-width="2" />
+    <text x="34" y="52" font-size="30" fill="#f8fafc" class="title">Pathological path: PFC-only stop-start</text>
+    <text x="34" y="86" font-size="18" fill="#94a3b8" class="mono">Missing ECN leaves the queue living at the pause edge and the sender oscillating between full rate and zero.</text>
+
+    <rect x="34" y="118" width="602" height="270" rx="24" fill="#111827" stroke="#334155" stroke-width="1.5" />
+    <text x="58" y="156" font-size="22" fill="#e2e8f0" class="title">Queue depth over the burst</text>
+    <line x1="90" y1="332" x2="590" y2="332" stroke="#475569" stroke-width="2" />
+    <line x1="90" y1="186" x2="90" y2="332" stroke="#475569" stroke-width="2" />
+    <line x1="90" y1="250" x2="590" y2="250" stroke="#22c55e" stroke-width="2" stroke-dasharray="10 8" />
+    <line x1="90" y1="212" x2="590" y2="212" stroke="#f59e0b" stroke-width="2" stroke-dasharray="10 8" />
+    <line x1="90" y1="194" x2="590" y2="194" stroke="#fb7185" stroke-width="2" stroke-dasharray="10 8" class="pulsePause" />
+    <text x="600" y="253" font-size="15" fill="#86efac" class="mono">ECN min</text>
+    <text x="600" y="215" font-size="15" fill="#fbbf24" class="mono">ECN max</text>
+    <text x="600" y="197" font-size="15" fill="#fda4af" class="mono">PFC zone</text>
+    <path d="M90 332 L150 332 L150 204 L220 204 L220 332 L290 332 L290 200 L360 200 L360 332 L430 332 L430 198 L500 198 L500 332 L590 332" fill="none" stroke="#fb923c" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" class="curveJagged" />
+    <rect x="150" y="188" width="36" height="146" fill="#f59e0b" opacity="0.14" class="pulsePause" />
+    <rect x="290" y="188" width="36" height="146" fill="#f59e0b" opacity="0.14" class="pulsePause" style="animation-delay:0.2s" />
+    <rect x="430" y="188" width="36" height="146" fill="#f59e0b" opacity="0.14" class="pulsePause" style="animation-delay:0.4s" />
+    <text x="474" y="228" font-size="15" fill="#fdba74" class="mono">queue keeps slamming into PFC</text>
+
+    <rect x="34" y="420" width="602" height="160" rx="24" fill="#111827" stroke="#334155" stroke-width="1.5" />
+    <text x="58" y="458" font-size="22" fill="#e2e8f0" class="title">Sender injection rate</text>
+    <line x1="90" y1="542" x2="590" y2="542" stroke="#475569" stroke-width="2" />
+    <path d="M90 470 L160 470 L160 540 L235 540 L235 470 L310 470 L310 540 L385 540 L385 470 L460 470 L460 540 L535 540 L535 488 L590 488" fill="none" stroke="#ef4444" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" class="curveJagged" />
+    <text x="100" y="486" font-size="14" fill="#fca5a5" class="mono">full rate</text>
+    <text x="172" y="532" font-size="14" fill="#fca5a5" class="mono">pause window</text>
+    <text x="422" y="566" font-size="14" fill="#94a3b8" class="mono">time</text>
+
+    <rect x="34" y="612" width="602" height="118" rx="22" fill="#431407" stroke="#f59e0b" stroke-width="1.5" />
+    <text x="56" y="652" font-size="20" fill="#fed7aa" class="title">What counters look like</text>
+    <text x="56" y="688" font-size="18" fill="#ffedd5" class="mono">Switch: buffer stays high, PFC pause grows, drops may still be zero</text>
+    <text x="56" y="714" font-size="18" fill="#ffedd5" class="mono">NIC: rx_ecn_marked stays 0, pause counters climb, throughput feels jagged</text>
+  </g>
+
+  <rect x="100" y="1048" width="1400" height="0" fill="none" />
+  <rect x="110" y="1018" width="1380" height="54" rx="18" fill="#0b2742" stroke="#38bdf8" stroke-width="1.5" />
+  <text x="800" y="1052" text-anchor="middle" font-size="20" fill="#dbeafe" class="mono">Diagnostic takeaway: ECN should reshape the sender before the queue lives in the PFC zone. If the fabric alternates between line rate and zero, you are using PAUSE as the primary controller.</text>
+</svg>

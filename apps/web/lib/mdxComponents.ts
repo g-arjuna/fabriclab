@@ -88,12 +88,67 @@ import { ParallelFSViz } from "@/components/visualisations/ParallelFSViz"
 import { CheckpointCostViz } from "@/components/visualisations/CheckpointCostViz"
 import { StorageTopologyViz } from "@/components/visualisations/StorageTopologyViz"
 
+// === Ch11 — Monitoring, Telemetry, and Observability ===
+import { UFMApiViz } from "@/components/visualisations/UFMApiViz"
+import { DCGMMetricsViz } from "@/components/visualisations/DCGMMetricsViz"
+import { AlertThresholdViz } from "@/components/visualisations/AlertThresholdViz"
+import { CorrelationTimelineViz } from "@/components/visualisations/CorrelationTimelineViz"
+import { FabricHealthDashboardViz } from "@/components/visualisations/FabricHealthDashboardViz"
+
+// === Ch12 — Scale-Up Networking: NVLink Switch System ===
+import { NVLinkScaleViz } from "@/components/visualisations/NVLinkScaleViz"
+import { ScaleUpTopologyViz } from "@/components/visualisations/ScaleUpTopologyViz"
+import { BandwidthComparisonViz } from "@/components/visualisations/BandwidthComparisonViz"
+import { ScaleDecisionViz } from "@/components/visualisations/ScaleDecisionViz"
+import { NVLinkDiagnosticsViz } from "@/components/visualisations/NVLinkDiagnosticsViz"
+
+// === Ch13 — Alternative Topologies ===
+import { TorusEvolutionViz } from "@/components/visualisations/TorusEvolutionViz"
+import { AllReduceOnTorusViz } from "@/components/visualisations/AllReduceOnTorusViz"
+import { DragonFlyTopologyViz } from "@/components/visualisations/DragonFlyTopologyViz"
+import { TPUPodViz } from "@/components/visualisations/TPUPodViz"
+import { TopologyDecisionViz } from "@/components/visualisations/TopologyDecisionViz"
+
+// === Ch14 — GPU Hardware Generations and Network Implications ===
+import { NVLinkGenerationViz } from "@/components/visualisations/NVLinkGenerationViz"
+import { GPUFormFactorViz } from "@/components/visualisations/GPUFormFactorViz"
+import { PCIeBandwidthViz } from "@/components/visualisations/PCIeBandwidthViz"
+import { GH200ArchViz } from "@/components/visualisations/GH200ArchViz"
+import { MIGNetworkViz } from "@/components/visualisations/MIGNetworkViz"
+
+// === Ch15 — IP Routing for AI/ML Fabrics ===
+import { RoutingProtocolCompareViz } from "@/components/visualisations/RoutingProtocolCompareViz"
+import { BGPUnnumberedViz } from "@/components/visualisations/BGPUnnumberedViz"
+import { BGPASNDesignViz } from "@/components/visualisations/BGPASNDesignViz"
+import { BGPDPFViz } from "@/components/visualisations/BGPDPFViz"
+import { RIFTvsBGPViz } from "@/components/visualisations/RIFTvsBGPViz"
+import { FlexAlgoViz } from "@/components/visualisations/FlexAlgoViz"
+import { SRv6PathViz } from "@/components/visualisations/SRv6PathViz"
+import { MultiTenancyFabricViz } from "@/components/visualisations/MultiTenancyFabricViz"
+
+// === Ch16 — The GPU Compute Network: Packet Anatomy End to End ===
+import { WiresharkCaptureViz } from "@/components/visualisations/WiresharkCaptureViz"
+import { DGXNetworkInterfacesViz } from "@/components/visualisations/DGXNetworkInterfacesViz"
+import { QueuePairMechanicsViz } from "@/components/visualisations/QueuePairMechanicsViz"
+import { ConnectX7PipelineViz } from "@/components/visualisations/ConnectX7PipelineViz"
+import {
+  LeafSwitchProcessingViz,
+  SpineForwardingViz,
+  DestinationNICDeliveryViz,
+  IBvsRoCEPacketViz,
+} from "@/components/visualisations/LeafSpineNICVizzes"
+import {
+  AlternativeNICStackViz,
+  FabricComparisonMatrixViz,
+  ProductionDebugMapViz,
+} from "@/components/visualisations/AlternativeComparisons"
+
 // === Legacy components (no longer in active chapters, kept for reference) ===
 // ServerRackViz, NICCardViz, DGXNodeViz, HardwareComparison
 // These files remain in components/visualisations/ but are not registered
 
-export const mdxComponents: Record<string, React.ComponentType<unknown>> = {
-  Image: Image as unknown as React.ComponentType<unknown>,
+export const mdxComponents: Record<string, React.ComponentType<any>> = {
+  Image: Image as unknown as React.ComponentType<any>,
   EnterpriseBaselineViz,
   TrainingParallelismViz,
   NVLinkViz,
@@ -176,4 +231,44 @@ export const mdxComponents: Record<string, React.ComponentType<unknown>> = {
   ParallelFSViz,
   CheckpointCostViz,
   StorageTopologyViz,
+  UFMApiViz,
+  DCGMMetricsViz,
+  AlertThresholdViz,
+  CorrelationTimelineViz,
+  FabricHealthDashboardViz,
+  NVLinkScaleViz,
+  ScaleUpTopologyViz,
+  BandwidthComparisonViz,
+  ScaleDecisionViz,
+  NVLinkDiagnosticsViz,
+  TorusEvolutionViz,
+  AllReduceOnTorusViz,
+  DragonFlyTopologyViz,
+  TPUPodViz,
+  TopologyDecisionViz,
+  // Ch14
+  NVLinkGenerationViz,
+  GPUFormFactorViz,
+  PCIeBandwidthViz,
+  GH200ArchViz,
+  MIGNetworkViz,
+  RoutingProtocolCompareViz,
+  BGPUnnumberedViz,
+  BGPASNDesignViz,
+  BGPDPFViz,
+  RIFTvsBGPViz,
+  FlexAlgoViz,
+  SRv6PathViz,
+  MultiTenancyFabricViz,
+  WiresharkCaptureViz,
+  DGXNetworkInterfacesViz,
+  QueuePairMechanicsViz,
+  ConnectX7PipelineViz,
+  LeafSwitchProcessingViz,
+  SpineForwardingViz,
+  DestinationNICDeliveryViz,
+  IBvsRoCEPacketViz,
+  AlternativeNICStackViz,
+  FabricComparisonMatrixViz,
+  ProductionDebugMapViz,
 }

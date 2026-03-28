@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { AuthControls } from "@/components/auth/AuthControls";
+
 const GITHUB_URL = "https://github.com/g-arjuna/fabriclab";
 
 const TERMINAL_LINES = [
@@ -418,6 +420,7 @@ export default function Home() {
             >
               GitHub
             </a>
+            <AuthControls compact />
             <Link
               href="/learn/ch0-hardware-foundations"
               className="rounded-full bg-cyan-400 px-4 py-1.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
@@ -657,8 +660,8 @@ export default function Home() {
               The fabric that runs AI waits for no one.
             </h2>
             <p className="mt-4 text-lg leading-8 text-slate-400">
-              Chapter 0 is free. No account required. Open the terminal and type your first
-              command.
+              Chapters 0-2 and Labs 0-1 are free. Sign in when you want synced progress or paid
+              access, then open the terminal and type your first command.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link

@@ -1,238 +1,264 @@
-# FabricLab — Build Plan
-> Engineering spec for Codex. Content comes from Claude — see AGENTS.md.
-> Zero API calls. Zero configuration. Works offline.
+# FabricLab - Platform Plan
+> Engineering plan for Codex.
+> Read `AGENTS.md` first.
 
 ---
 
-## Current state (as of March 2026)
+## Current direction
 
-The MVP is complete and live. This plan now tracks:
-- Pending Codex deploy tasks for content Claude has already written
-- Pending bug-fix patches with existing Codex prompt files
-- Infrastructure needed for the next chapter (Ch11)
+FabricLab is moving from a fully static MVP to a hybrid platform:
 
-For chapter status and content briefs, see `FABRICLAB_CONTENT_BACKLOG_v7.md`.
+- content remains repo-backed
+- Supabase becomes the source of truth for auth, entitlements, release metadata, and synced progress
+- Vercel becomes the canonical host for `apps/web`
 
----
-
-## Two-agent workflow
-
-```
-CLAUDE writes:                          CODEX applies:
-──────────────                          ──────────────
-MDX chapter files                       File copies to target paths
-React viz components (.tsx)             TypeScript fixes (tsc --noEmit)
-Updated mdxComponents.ts                Bug-fix patches from Codex prompt .txt
-Codex deploy prompt .txt files          Nav link updates between chapters
-Lab scenario TypeScript                 Image generation + placement (see below)
-                                        Light prose when contextualising images
-```
-
-Codex does not write substantive educational content.
-Claude does not write infrastructure or generate images.
+Content writing is still Claude-owned.
+Platform engineering is Codex-owned.
 
 ---
 
-## Platform — what is built ✅
+## V1 product shape
 
-| Component | Location | Status |
-|-----------|----------|--------|
-| MDX rendering engine | `app/learn/[chapter]/page.tsx` | ✅ live |
-| Multi-device CLI terminal | `components/terminal/` | ✅ live |
-| Lab engine + state | `lib/labs/`, `store/` | ✅ live |
-| Visualisation registry | `lib/mdxComponents.ts` | ✅ live (Ch0–Ch9) |
-| Topology view | `components/topology/` | ✅ live |
-| Curriculum / learn routes | `app/curriculum/`, `app/learn/` | ✅ live |
-
----
-
-## Pending Codex tasks
-
-### TASK 1 — Deploy Ch10 (HIGHEST PRIORITY)
-
-Ch10 is written by Claude and sitting in `outputs/`. It is NOT yet in the live repo.
-
-**Files to copy:**
-
-| Source | Destination |
-|--------|-------------|
-| `outputs/ch10-storage-fabric.mdx` | `apps/web/content/chapters/ch10-storage-fabric.mdx` |
-| `outputs/visualisations/StorageSeparationViz.tsx` | `apps/web/components/visualisations/` |
-| `outputs/visualisations/StorageDataPathViz.tsx` | `apps/web/components/visualisations/` |
-| `outputs/visualisations/NVMeoFProtocolViz.tsx` | `apps/web/components/visualisations/` |
-| `outputs/visualisations/ParallelFSViz.tsx` | `apps/web/components/visualisations/` |
-| `outputs/visualisations/CheckpointCostViz.tsx` | `apps/web/components/visualisations/` |
-| `outputs/visualisations/StorageTopologyViz.tsx` | `apps/web/components/visualisations/` |
-| `outputs/mdxComponents.ts` | `apps/web/lib/mdxComponents.ts` |
-| `outputs/COMPONENTS_REGISTRY.md` | `apps/web/components/visualisations/COMPONENTS_REGISTRY.md` |
-
-**After copying:**
-1. Verify Ch9 nav link says `/learn/ch10-storage-fabric` (already correct in live repo — confirm only).
-2. Run `tsc --noEmit` — fix any type errors in the 6 new viz components before committing.
-3. Add Ch10 nav link `[Continue to Chapter 11 →](/learn/ch11-monitoring-telemetry)` at end of
-   `ch10-storage-fabric.mdx` (after Ch11 is written and deployed).
+- Free anonymous access:
+  - Chapters `0-2`
+  - Labs `0-1`
+- Published paid chapters remain visible in curriculum and render metadata-only preview shells
+- Published paid labs remain visible in curriculum and render locked-entry shells
+- One paid entitlement only: `core_paid`
+- Email magic-link auth only
+- Minimal admin dashboard for:
+  - `is_published`
+  - `access_tier`
+  - `preview_enabled`
+  - `preview_summary`
+  - manual entitlement grants/revocations
 
 ---
 
-### TASK 2 — Fix TopologyScalingViz full-mesh bug
+## Architecture rules
 
-**File:** `apps/web/components/visualisations/TopologyScalingViz.tsx`
-**Codex prompt:** `outputs/TOPOLOGY_VIZ_FIX_CODEX_PROMPT.txt`
+### Content
 
-Current bug: leaf-to-spine connections use `i % spineCount` (1:1 — wrong).
-Fat-tree requires full mesh: every leaf connects to every spine.
-Stage 3 has the same bug with hardcoded parent arrays.
+- Chapter bodies stay in `apps/web/content/chapters/*.mdx`
+- Visualisation components stay in repo files
+- Labs stay in repo TypeScript files
+- Do not move learning content into Supabase
 
-Fix: replace with a nested loop generating all leaf×spine edges.
+### Supabase tables
 
----
+- `profiles`
+- `content_catalog`
+- `user_entitlements`
+- `chapter_progress`
+- `lab_progress`
 
-### TASK 3 — Apply P11 + P12 to Ch0
+### Access model
 
-**File:** `apps/web/content/chapters/ch0-hardware-foundations.mdx`
-**Codex prompt:** `outputs/P11_P12_CODEX_PROMPT.txt`
+- middleware: session refresh only
+- route render: actual access enforcement
+- preview pages must not parse locked MDX
 
-**P11:** Change "NVLink gen3 (in DGX H100)" → "4th-generation NVLink". Add generation table:
-- A100 = NVLink 3, 600 GB/s
-- H100 = NVLink 4, 900 GB/s
-- B200 = NVLink 5, 1.8 TB/s
-- Note: NVLink gen ≠ NVSwitch gen (separate counters)
+### Progress model
 
-**P12:** Add NVSwitch SHARP paragraph to Act 3. Add footnote to Act 6:
-"NVSwitch SHARP = intra-node in-network reduction; IB SHARP = inter-node."
-
-**Required before writing Ch12** (NVLink Switch System).
-
----
-
-### TASK 4 — CLI factual accuracy batch
-
-**Codex prompt:** `outputs/CLI_FACTUAL_FIX_CODEX_PROMPT.txt`
-
-| ID | File | Fix |
-|----|------|-----|
-| CLI-1 | `lib/commands/ethtoolStats.ts` | Counter names: `rx_prio3_pause`, `tx_prio3_pause`, `rx_ecn_marked_pkts`, `tx_discards_phy` |
-| CLI-2 | `showDcbPfc`, `showDcbEts`, `showInterfaceCounters`, `showRoce`, `showSpineCounters`, `mutations.ts` | Switch ports: `swp1–swp32` not `eth0` |
-| CLI-3 | `ibstat.ts` | Remove duplicate `State:` field on error-disabled rail |
-| CLI-4 | NCCL test output | Correct busbw to ~146 GB/s (not ~380 GB/s) for 128-GPU cluster, 8 GB message |
+- guest progress: browser-local
+- signed-in progress: Supabase-backed
+- no guest-to-account merge in v1
 
 ---
 
-### TASK 5 — Remaining fixes batch
+## Local dev bootstrap
 
-**Codex prompt:** `outputs/REMAINING_FIXES_CODEX_PROMPT.txt`
+### 1. Install dependencies
 
-| ID | Fix |
-|----|-----|
-| RF-1 | `showProposal.ts`: "2 hops (4 traversals)" — split into two separate lines |
-| RF-2 | Replace `clear counters eth0` → `clear counters` throughout |
-| RF-3 | Add `ibstat` to Lab 1 + Lab 2 DGX `help` output and `allowedCommands` |
-
----
-
-### TASK 6 — Analysis findings fixes
-
-**Codex prompt:** `outputs/ANALYSIS_FINDINGS_FIX_CODEX_PROMPT.txt`
-
-| ID | Fix |
-|----|-----|
-| AF-1 | Lab 0: add `ethtool -S eth3` handler showing NIC Active, switch port Err-Disabled |
-| AF-2 | Ch7 Proposal B: "not feasible" → "75% port waste (economically irrational)" |
-| AF-3 | Ch8 NCCL simulator: add `← FabricLab simulator command` labels + "In production" `export` blocks |
-| AF-4 | Lab 3: add `show ecmp load-balance` to `KNOWN_COMMANDS`, `EXACT_HANDLERS`, `allowedCommands` |
-
----
-
-### TASK 7 — Practitioner experience fixes
-
-**Codex prompt:** `outputs/PRACTITIONER_FIXES_CODEX_PROMPT.txt`
-
-| ID | Fix |
-|----|-----|
-| PF-1 | Add educational responses for: `ping`, `ip`, `ip a`, `export` (currently "unknown command") |
-| PF-2 | Add `show interface swp1`–`swp8` aliases → `showSwitchPort(activeRailId)` |
-| PF-3 | Lab 0 scenario text: "32 DGX downlinks" → "16 active DGX downlinks + 16 active spine uplinks (32 ports unused)" |
-
----
-
-## Next content to write (Claude's job — not Codex)
-
-**Ch11: Monitoring, Telemetry, and Observability**
-
-Start a new Claude conversation. Upload:
-- `repo-context.txt`
-- `FABRICLAB_STRATEGY.md`
-- `FABRICLAB_CHAPTER_METADATA.md`
-- `FABRICLAB_CONTENT_BACKLOG_v7.md`
-
-Say: "Write Chapter 11 — Monitoring, Telemetry, and Observability."
-
-Claude will produce: MDX chapter + 5 viz components + updated `mdxComponents.ts` +
-updated `COMPONENTS_REGISTRY.md` + Codex deploy prompt.
-
-Planned vizzes: `UFMApiViz`, `DCGMMetricsViz`, `AlertThresholdViz`,
-`CorrelationTimelineViz`, `FabricHealthDashboardViz`.
-
-**Chapters after Ch11 (in order):**
-- Ch12: Scale-Up Networking — NVLink Switch System *(requires P11+P12 first)*
-- Ch13: Alternative Topologies (Torus, Dragonfly)
-- Ch14: GPU Hardware Generations
-
----
-
-## Tech stack (unchanged)
-
-```
-Next.js 15 (App Router) + TypeScript strict
-Tailwind CSS
-Zustand (no persistence)
-xterm.js
-@next/mdx + next-mdx-remote + remark-gfm + gray-matter
-No backend. No database. No env vars.
+```bash
+cd apps/web
+npm install
 ```
 
+### 2. Create a Supabase dev project
+
+In Supabase:
+
+1. create a new project for FabricLab dev
+2. enable email auth / magic links
+3. set site URL to `http://localhost:3000`
+4. add redirect URLs for:
+   - `http://localhost:3000/auth/callback`
+   - your Vercel preview callback URLs later
+
+### 3. Apply the schema
+
+Run the SQL in:
+
+- `supabase/migrations/20260328_001_auth_access_release_control.sql`
+
+This creates:
+
+- profiles
+- content catalog
+- entitlements
+- chapter progress
+- lab progress
+- RLS policies
+
+### 4. Configure local env
+
+Copy:
+
+- `apps/web/.env.example`
+
+to:
+
+- `apps/web/.env.local`
+
+Fill in:
+
+- `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_ADMIN_EMAILS`
+
+### 5. Seed catalog metadata
+
+```bash
+cd apps/web
+npm run catalog:sync
+```
+
+This upserts chapter/lab metadata from `content/catalog.json` into `content_catalog`.
+
+### 6. Run the app
+
+```bash
+cd apps/web
+npm run dev
+```
+
+Useful routes:
+
+- `/`
+- `/curriculum`
+- `/login`
+- `/account`
+- `/admin/releases`
+- `/learn/ch0-hardware-foundations`
+- `/lab?lab=lab0-failed-rail`
+
 ---
 
-## Validation protocol (run after every Codex task)
+## Vercel and domain plan
+
+### Dev / preview
+
+1. create the Vercel project for `apps/web`
+2. add the same Supabase env vars to Vercel
+3. add preview deployment callback URLs to Supabase auth settings
+4. test magic-link flows on preview URLs
+
+### Production
+
+1. create a separate production Supabase project later
+2. mirror schema + env vars
+3. add `fabriclab.dev` to Vercel
+4. point Cloudflare DNS to Vercel
+5. add production callback URLs in Supabase auth settings
+
+---
+
+## Implementation phases
+
+### Phase 1 - Foundations
+
+- add Supabase clients/utilities
+- add migrations and env example
+- add shared catalog source and sync script
+
+### Phase 2 - Auth and gating
+
+- auth provider
+- login/account routes
+- curriculum from shared catalog
+- chapter preview shells
+- locked lab shells
+- route-level entitlement checks
+
+### Phase 3 - Progress sync
+
+- preserve guest progress locally
+- hydrate remote progress on sign-in
+- sync chapter/lab completion for signed-in users
+
+### Phase 4 - Admin release control
+
+- protected admin page
+- catalog publish/access controls
+- manual entitlement grant/revoke tools
+
+### Phase 5 - Deployment and handoff
+
+- validate local + preview flows
+- update README/docs
+- create Claude handoff notes for ongoing weekly content drops
+
+---
+
+## Ongoing content-release workflow
+
+When Claude ships new content:
+
+1. commit the new chapter/viz/lab files to git
+2. update `content/catalog.json` for the new route metadata
+3. run `npm run catalog:sync`
+4. keep the new item unpublished by default
+5. verify locally / on preview
+6. publish via `/admin/releases` when ready
+
+This allows content work to continue weekly without exposing unfinished material immediately.
+
+---
+
+## Validation checklist
+
+### TypeScript
 
 ```bash
 apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json
 ```
 
-Fix all errors before committing. Do not leave TypeScript errors in the repo.
+### Auth
+
+- sign in with magic link
+- session survives refresh
+- sign out returns to guest mode
+
+### Access
+
+- guests can open `Ch0-Ch2` and `Labs 0-1`
+- guests see locked previews for paid published chapters
+- guests see locked shells for paid published labs
+- `core_paid` unlocks all paid chapters/labs
+
+### Admin
+
+- non-admin users cannot access `/admin/releases`
+- admin can change publish/access/preview fields
+- admin can grant and revoke `core_paid`
+
+### Progress
+
+- guest progress stays local
+- signed-in progress syncs from Supabase
+- signing out restores guest progress
+
+### Release flow
+
+- unpublished content does not appear for non-admins
+- published content appears after sync + admin publish
 
 ---
 
-## Image assets
+## Follow-up docs
 
-Codex is authorised to generate and place images across all file types.
-See Rule 6 in AGENTS.md for the full permission set. Summary:
-
-**Where images live:** `apps/web/public/images/[chapter-slug]/filename.ext`
-
-**Generation methods Codex may use:**
-- AI image APIs (DALL-E, Stability AI) — generate at authoring time, commit static file
-- SVG generation from code — write `.svg` directly or via script
-- Vendor screenshots / diagrams placed manually
-
-**Placement targets:** MDX chapters, React viz components, any `.md` file, any page/component file
-
-**Light prose rule:** Codex may write short captions (1–2 sentences) immediately adjacent
-to an image tag in `.mdx` files. No other prose changes to educational content.
-
-**Blocked items for P10 (Ch7 real images):** waiting on `RealImage` MDX component
-from platform engineering before the 6 Ch7 image placeholders can be wired up.
-
----
-
-## What Codex must NOT do
-
-- Write educational prose or concept explanations in MDX chapters
-  *(exception: short captions / context sentences when placing images)*
-- Write React visualisation component logic or layouts
-- Write CLI output text or lab scenario narrative
-- Invent component names not in `COMPONENTS_REGISTRY.md`
-- Add runtime API calls to the app (image generation is build-time only)
-- Add environment variables required at page render time
-- Use localStorage or sessionStorage (not supported in lab environment)
-- Use `<form>` tags in React components (xterm.js environment restriction)
+- `README.md` - quickstart and repo status
+- `docs/CLAUDE_HANDOFF_RELEASE_CONTROL.md` - content-agent guidance

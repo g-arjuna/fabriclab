@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { AuthControls } from "@/components/auth/AuthControls";
 import { KnowledgePanel } from "@/components/knowledge/KnowledgePanel";
 import { LabResult } from "@/components/lab/LabResult";
+import { SolutionModal } from "@/components/lab/SolutionModal";
 import { MultiDeviceTerminal } from "@/components/terminal/MultiDeviceTerminal";
 import { TopologyView } from "@/components/topology/TopologyView";
 import { lab0, lab0Devices } from "@/data/labs/lab0-failed-rail";
@@ -14,6 +16,12 @@ import { lab2, lab2Devices } from "@/data/labs/lab2-congestion";
 import { lab3, lab3Devices } from "@/data/labs/lab3-uneven-spine";
 import { lab4, lab4Devices } from "@/data/labs/lab4-topology-sizing";
 import { lab5, lab5Devices } from "@/data/labs/lab5-nccl-diagnosis";
+import { lab6, lab6Devices } from "@/data/labs/lab6-alert-triage";
+import { lab7, lab7Devices } from "@/data/labs/lab7-pause-storm";
+import { lab8, lab8Devices } from "@/data/labs/lab8-pfc-priority-mismatch";
+import { lab9, lab9Devices } from "@/data/labs/lab9-errdisable-recovery";
+import { lab10, lab10Devices } from "@/data/labs/lab10-ecmp-hotspot";
+import { lab11, lab11Devices } from "@/data/labs/lab11-bgp-path-failure";
 import { isComplete } from "@/lib/labEngine";
 import { formatConditionLabel } from "@/lib/formatters";
 import { useLabStore } from "@/store/labStore";
@@ -26,6 +34,12 @@ const LABS = {
   [lab3.id]: lab3,
   [lab4.id]: lab4,
   [lab5.id]: lab5,
+  [lab6.id]: lab6,
+  [lab7.id]: lab7,
+  [lab8.id]: lab8,
+  [lab9.id]: lab9,
+  [lab10.id]: lab10,
+  [lab11.id]: lab11,
 };
 
 const LAB_DEVICES = {
@@ -35,6 +49,12 @@ const LAB_DEVICES = {
   [lab3.id]: lab3Devices,
   [lab4.id]: lab4Devices,
   [lab5.id]: lab5Devices,
+  [lab6.id]: lab6Devices,
+  [lab7.id]: lab7Devices,
+  [lab8.id]: lab8Devices,
+  [lab9.id]: lab9Devices,
+  [lab10.id]: lab10Devices,
+  [lab11.id]: lab11Devices,
 };
 
 const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
@@ -44,9 +64,16 @@ const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
   [lab3.id]: { slug: "ch6-efficient-load-balancing", label: "Chapter 6: Efficient Load Balancing" },
   [lab4.id]: { slug: "ch7-topology-design", label: "Chapter 7: Topology Design" },
   [lab5.id]: { slug: "ch8-nccl-performance", label: "Chapter 8: NCCL" },
+  [lab6.id]: { slug: "ch11-monitoring-telemetry", label: "Chapter 11: Monitoring & Telemetry" },
+  [lab7.id]: { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },
+  [lab8.id]: { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },
+  [lab9.id]: { slug: "ch9-optics-cabling", label: "Chapter 9: Optics & Cabling" },
+  [lab10.id]: { slug: "ch15-ip-routing-ai-fabrics", label: "Chapter 15: IP Routing for AI/ML Fabrics" },
+  [lab11.id]: { slug: "ch15-ip-routing-ai-fabrics", label: "Chapter 15: IP Routing for AI/ML Fabrics" },
 };
 
 type LabId = keyof typeof LABS;
+const LABS_WITH_SOLUTION_REPLAYS = new Set<LabId>([lab0.id]);
 
 function formatElapsed(startTime: number | null, now: number): string {
   const elapsedSeconds = startTime ? Math.max(0, Math.floor((now - startTime) / 1000)) : 0;
@@ -124,12 +151,14 @@ export function LabExperience() {
   const labState = useLabStore((state) => state.lab);
   const markLabComplete = useProgressStore((state) => state.markLabComplete);
   const [topologyExpanded, setTopologyExpanded] = useState(false);
+  const [solutionOpen, setSolutionOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const requestedLabId = (searchParams.get("lab") as LabId | null) ?? lab1.id;
   const activeLab = useMemo(() => LABS[requestedLabId] ?? lab1, [requestedLabId]);
   const activeDevices = useMemo(() => LAB_DEVICES[activeLab.id] ?? [], [activeLab.id]);
   const sourceChapter = LAB_SOURCE_CHAPTERS[activeLab.id];
+  const hasSolution = LABS_WITH_SOLUTION_REPLAYS.has(activeLab.id);
   const isLabComplete = useLabStore((state) => isComplete(state.lab, activeLab));
 
   useEffect(() => {
@@ -185,6 +214,10 @@ export function LabExperience() {
     loadLab(activeLab);
   };
 
+  useEffect(() => {
+    setSolutionOpen(false);
+  }, [activeLab.id]);
+
   return (
     <>
       <main className="flex h-screen flex-col overflow-hidden bg-[#07111f]">
@@ -209,34 +242,43 @@ export function LabExperience() {
             </span>
           </div>
 
-          <div className="flex items-center gap-0.5 rounded-xl border border-white/10 bg-slate-900 p-1">
-            {([lab0.id, lab1.id, lab2.id, lab3.id, lab4.id, lab5.id] as LabId[]).map((labId, index) => {
-              const isActive = activeLab.id === labId;
-              const shortLabels: Record<string, string> = {
-                [lab0.id]: "Failed Rail",
-                [lab1.id]: "PFC Fix",
-                [lab2.id]: "Congestion",
-                [lab3.id]: "Spine LB",
-                [lab4.id]: "Topology",
-                [lab5.id]: "NCCL",
-              };
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-xl border border-white/10 bg-slate-900 p-1">
+              {([lab0.id, lab1.id, lab2.id, lab3.id, lab4.id, lab5.id, lab6.id, lab7.id, lab8.id, lab9.id, lab10.id, lab11.id] as LabId[]).map((labId, index) => {
+                const isActive = activeLab.id === labId;
+                const shortLabels: Record<string, string> = {
+                  [lab0.id]: "Failed Rail",
+                  [lab1.id]: "PFC Fix",
+                  [lab2.id]: "Congestion",
+                  [lab3.id]: "Spine LB",
+                  [lab4.id]: "Topology",
+                  [lab5.id]: "NCCL",
+                  [lab6.id]: "Alert Triage",
+                  [lab7.id]: "Pause Storm",
+                  [lab8.id]: "PFC Priority",
+                  [lab9.id]: "Err-Disable",
+                  [lab10.id]: "ECMP Hotspot",
+                  [lab11.id]: "BGP Failure",
+                };
 
-              return (
-                <button
-                  key={labId}
-                  type="button"
-                  onClick={() => handleLabSelection(labId)}
-                  className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
-                    isActive
-                      ? "bg-cyan-400 text-slate-950"
-                      : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                  }`}
-                >
-                  <span className="mb-0.5 block text-[9px] leading-none opacity-50">Lab {index}</span>
-                  {shortLabels[labId]}
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={labId}
+                    type="button"
+                    onClick={() => handleLabSelection(labId)}
+                    className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
+                      isActive
+                        ? "bg-cyan-400 text-slate-950"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <span className="mb-0.5 block text-[9px] leading-none opacity-50">Lab {index}</span>
+                    {shortLabels[labId]}
+                  </button>
+                );
+              })}
+            </div>
+            <AuthControls compact />
           </div>
         </header>
 
@@ -313,6 +355,22 @@ export function LabExperience() {
                 {latestHint.text}
               </div>
             )}
+
+            {hasSolution && (
+              <div className="mt-4 rounded-2xl border border-white/8 bg-slate-900/60 p-4">
+                <p className="text-[10px] uppercase tracking-widest text-slate-500">Need Help?</p>
+                <p className="mt-2 text-xs leading-6 text-slate-400">
+                  Watch a recorded solution replay for this lab.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSolutionOpen(true)}
+                  className="mt-3 w-full rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2.5 text-sm font-medium text-cyan-200 transition hover:border-cyan-300/30 hover:bg-cyan-400/15 hover:text-white"
+                >
+                  Show Solution
+                </button>
+              </div>
+            )}
           </aside>
 
           <div className="flex flex-1 flex-col overflow-hidden">
@@ -373,6 +431,13 @@ export function LabExperience() {
       )}
 
       <KnowledgePanelDrawer />
+
+      <SolutionModal
+        isOpen={solutionOpen}
+        onClose={() => setSolutionOpen(false)}
+        labId={activeLab.id}
+        title={activeLab.title}
+      />
 
       {labState.isComplete && labState.score !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-6 backdrop-blur-sm">

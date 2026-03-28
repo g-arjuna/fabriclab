@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+  <title id="title">Silent congestion diagnostic triad</title>
+  <desc id="desc">Readable technical illustration showing the three-signal pattern of silent congestion: high buffer utilization on the switch, zero ECN marks on the host, and stop-start throughput caused by PFC-only control.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#020617" />
+      <stop offset="100%" stop-color="#08192f" />
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" />
+    </filter>
+    <style>
+      .title { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 700; }
+      .label { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .wave { animation: wave 2.3s ease-in-out infinite; }
+      .pauseBurst { animation: pauseBurst 1.4s linear infinite; }
+      .ecnZero { animation: ecnZero 2s ease-in-out infinite; }
+      @keyframes wave {
+        0%, 100% { transform: scaleY(0.55); }
+        50% { transform: scaleY(1); }
+      }
+      @keyframes pauseBurst {
+        0% { opacity: 0.18; }
+        35% { opacity: 1; }
+        100% { opacity: 0.18; }
+      }
+      @keyframes ecnZero {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 1; }
+      }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1100" fill="url(#bg)" />
+  <circle cx="1290" cy="170" r="180" fill="#f59e0b" opacity="0.09" filter="url(#soft)" />
+  <circle cx="220" cy="900" r="220" fill="#38bdf8" opacity="0.09" filter="url(#soft)" />
+
+  <text x="100" y="84" font-size="44" fill="#f8fafc" class="title">Silent congestion: the fabric is struggling</text>
+  <text x="100" y="130" font-size="44" fill="#f8fafc" class="title">without ever dropping</text>
+  <text x="100" y="170" font-size="22" fill="#94a3b8" class="title">Lab 2 fingerprint: buffers high, pauses present, ECN absent, throughput visibly reduced.</text>
+
+  <rect x="80" y="220" width="1440" height="790" rx="34" fill="#0f172a" stroke="#1e293b" stroke-width="2" />
+
+  <g transform="translate(120 270)">
+    <rect x="0" y="0" width="640" height="330" rx="28" fill="#111827" stroke="#334155" stroke-width="1.5" />
+    <text x="34" y="48" font-size="28" fill="#f8fafc" class="title">1. Switch-side clue</text>
+    <text x="34" y="82" font-size="18" fill="#94a3b8" class="label">The queue is stressed enough to hurt, but not full enough to drop.</text>
+
+    <rect x="34" y="122" width="572" height="50" rx="14" fill="#020617" stroke="#1e293b" stroke-width="1.5" />
+    <text x="54" y="154" font-size="19" fill="#38bdf8" class="label">Output drops: 0</text>
+    <text x="304" y="154" font-size="19" fill="#f59e0b" class="label">PFC pause frames: 4,823</text>
+
+    <text x="34" y="220" font-size="18" fill="#cbd5e1" class="label">Buffer utilization</text>
+    <rect x="34" y="244" width="572" height="52" rx="20" fill="#1e293b" />
+    <rect x="34" y="244" width="497" height="52" rx="20" fill="#f59e0b" />
+    <text x="320" y="278" text-anchor="middle" font-size="26" fill="#fff7ed" class="title">87%</text>
+
+    <text x="34" y="338" font-size="18" fill="#e2e8f0" class="label">- PFC is absorbing congestion instead of letting the port tail-drop</text>
+    <text x="34" y="366" font-size="18" fill="#e2e8f0" class="label">- The queue is living in the almost-paused zone too often</text>
+    <text x="34" y="394" font-size="18" fill="#e2e8f0" class="label">- Casual inspection misses it because drops stay at zero</text>
+  </g>
+
+  <g transform="translate(840 270)">
+    <rect x="0" y="0" width="640" height="330" rx="28" fill="#111827" stroke="#334155" stroke-width="1.5" />
+    <text x="34" y="48" font-size="28" fill="#f8fafc" class="title">2. Host-side clue</text>
+    <text x="34" y="82" font-size="18" fill="#94a3b8" class="label">The NIC never sees CE marks, so DCQCN never gets a chance to help.</text>
+
+    <rect x="34" y="122" width="572" height="140" rx="20" fill="#020617" stroke="#1e293b" stroke-width="1.5" />
+    <text x="54" y="158" font-size="18" fill="#38bdf8" class="label">ethtool -S eth0 | grep ecn</text>
+    <text x="54" y="206" font-size="24" fill="#e2e8f0" class="label">rx_ecn_marked:</text>
+    <text x="282" y="206" font-size="34" fill="#f87171" class="title ecnZero">0</text>
+    <text x="54" y="246" font-size="24" fill="#e2e8f0" class="label">tx_ecn_marked:</text>
+    <text x="282" y="246" font-size="34" fill="#64748b" class="title">0</text>
+
+    <text x="34" y="308" font-size="18" fill="#e2e8f0" class="label">- No CE marks means no CNPs and no smooth sender rate reduction</text>
+    <text x="34" y="336" font-size="18" fill="#e2e8f0" class="label">- Congestion exists, but the ECN signalling layer is missing</text>
+    <text x="34" y="364" font-size="18" fill="#e2e8f0" class="label">- The fabric is running PFC-only, so behavior becomes stop-start</text>
+  </g>
+
+  <g transform="translate(120 650)">
+    <rect x="0" y="0" width="1360" height="250" rx="28" fill="#111827" stroke="#334155" stroke-width="1.5" />
+    <text x="34" y="48" font-size="28" fill="#f8fafc" class="title">3. Throughput clue</text>
+    <text x="34" y="82" font-size="18" fill="#94a3b8" class="label">The application still makes progress, but in jagged bursts because PFC keeps freezing and releasing senders.</text>
+
+    <rect x="34" y="116" width="420" height="94" rx="16" fill="#020617" stroke="#1e293b" stroke-width="1.5" />
+    <text x="56" y="146" font-size="16" fill="#cbd5e1" class="label">Effective injection pattern</text>
+    <g transform="translate(62 188)">
+      <rect x="0" y="-52" width="18" height="52" fill="#38bdf8" class="wave" />
+      <rect x="28" y="-74" width="18" height="74" fill="#38bdf8" class="wave" style="animation-delay:0.12s" />
+      <rect x="56" y="-20" width="18" height="20" fill="#f59e0b" class="pauseBurst" />
+      <rect x="84" y="-64" width="18" height="64" fill="#38bdf8" class="wave" style="animation-delay:0.24s" />
+      <rect x="112" y="-16" width="18" height="16" fill="#f59e0b" class="pauseBurst" style="animation-delay:0.22s" />
+      <rect x="140" y="-82" width="18" height="82" fill="#38bdf8" class="wave" style="animation-delay:0.36s" />
+      <rect x="168" y="-22" width="18" height="22" fill="#f59e0b" class="pauseBurst" style="animation-delay:0.48s" />
+      <rect x="196" y="-60" width="18" height="60" fill="#38bdf8" class="wave" style="animation-delay:0.52s" />
+      <rect x="224" y="-18" width="18" height="18" fill="#f59e0b" class="pauseBurst" style="animation-delay:0.7s" />
+      <rect x="252" y="-76" width="18" height="76" fill="#38bdf8" class="wave" style="animation-delay:0.68s" />
+      <rect x="280" y="-14" width="18" height="14" fill="#f59e0b" class="pauseBurst" style="animation-delay:0.88s" />
+      <rect x="308" y="-86" width="18" height="86" fill="#38bdf8" class="wave" style="animation-delay:0.84s" />
+    </g>
+    <text x="60" y="210" font-size="14" fill="#38bdf8" class="label">blue = send bursts</text>
+    <text x="220" y="210" font-size="14" fill="#f59e0b" class="label">amber = pause windows</text>
+
+    <text x="520" y="148" font-size="18" fill="#e2e8f0" class="label">- The cluster keeps making progress, but in jagged stop-start bursts</text>
+    <text x="520" y="176" font-size="18" fill="#e2e8f0" class="label">- PFC protects losslessness, yet throughput is far below line rate</text>
+    <text x="520" y="204" font-size="18" fill="#e2e8f0" class="label">- Enabling ECN converts this into smooth DCQCN-driven rate shaping</text>
+
+    <rect x="520" y="138" width="0" height="0" fill="none" />
+  </g>
+
+  <rect x="120" y="940" width="1360" height="56" rx="18" fill="#0b2742" stroke="#38bdf8" stroke-width="1.5" />
+  <text x="800" y="976" text-anchor="middle" font-size="21" fill="#e0f2fe" class="label">Diagnostic rule: zero drops + elevated buffer util + zero rx_ecn_marked = congestion is real, but only PFC is reacting.</text>
+</svg>

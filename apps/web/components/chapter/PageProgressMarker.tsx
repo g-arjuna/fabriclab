@@ -11,10 +11,11 @@ interface Props {
 
 export function PageProgressMarker({ chapterSlug, pageIndex }: Props) {
   const markPageComplete = useProgressStore((state) => state.markPageComplete);
+  const mode = useProgressStore((state) => state.mode);
 
   useEffect(() => {
     markPageComplete(chapterSlug, pageIndex);
-  }, [chapterSlug, pageIndex, markPageComplete]);
+  }, [chapterSlug, pageIndex, markPageComplete, mode]);
 
   return null;
 }

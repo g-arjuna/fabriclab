@@ -57,10 +57,10 @@ const COMPONENTS: NodeComponent[] = [
   {
     id: "nvme",
     label: "NVMe SSDs",
-    count: "30 TB",
+    count: "~30 TB",
     color: "#1e293b",
-    description: "30 TB of local NVMe storage (30× 1 TB U.2 drives). Used for OS, frameworks, and local checkpointing. Training datasets typically live on shared parallel storage (BeeGFS, WEKA) accessed over the storage fabric. GPUDirect Storage (GDS) can read directly from NVMe to GPU memory.",
-    specs: ["30 × 1 TB U.2", "PCIe Gen4 NVMe", "~100 GB/s read", "GPUDirect Storage"],
+    description: "~30 TB of local NVMe storage across 8× 3.84 TB U.2 drives. Used for OS, frameworks, and local checkpointing. Training datasets typically live on shared parallel storage (BeeGFS, WEKA) accessed over the storage fabric. GPUDirect Storage (GDS) can read directly from NVMe to GPU memory.",
+    specs: ["8 × 3.84 TB U.2", "PCIe Gen4 NVMe", "~100 GB/s read", "GPUDirect Storage"],
   },
 ]
 

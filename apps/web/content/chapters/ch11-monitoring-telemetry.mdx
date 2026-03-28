@@ -1,0 +1,450 @@
+---
+title: "Chapter 11: Monitoring, Telemetry, and Observability"
+module: "HPC Networking Foundations"
+level: "Advanced"
+estimatedMinutes: 48
+labLink: ""
+---
+
+Every chapter so far taught you how to diagnose a problem you already know exists. You opened a ticket, ran `ibstat`, found the err-disabled port, fixed it. The loop started with a symptom.
+
+This chapter teaches you how to know a problem exists before the ML engineer's Slack message arrives.
+
+The difference between reactive diagnosis and proactive observability is not a matter of tools — you already know most of the tools. It is a matter of *when* you look, *what* you watch continuously, and *how* you correlate signals across four separate data streams when something goes wrong at 3am on a 256-GPU training run worth $40,000 per hour.
+
+---
+
+## Act 1 — The monitoring gap
+
+A DGX cluster running a 70B parameter training job generates roughly 4 GB/s of telemetry: GPU power samples, NVLink utilisation counters, fabric port error rates, buffer occupancy histograms, application timing logs. Almost none of it is visible to you unless you have built the pipeline to collect and store it.
+
+Without that pipeline, your monitoring model looks like this:
+
+1. Training job slow → ML engineer pings you
+2. You run `ibstat` on the affected DGX → find a degraded HCA
+3. You check the switch → find a flapping port
+4. You fix the port
+5. Job recovers — or was already checkpointed and restarted from scratch
+
+The problem: step 1 to step 5 takes 20–45 minutes. On a 256-GPU cluster at $40K/hr, that is $13–30K per incident, assuming the job can even recover cleanly. A job that ran for 18 hours without checkpointing loses everything.
+
+The observability model looks like this instead:
+
+1. `rx_symbol_err` counter on leaf-2 port 14 trends upward over 6 hours
+2. Alert fires at threshold — you investigate during business hours
+3. You replace the DAC cable before the link degrades to err-disabled
+4. Training job never notices
+
+The gap is **trend data vs point-in-time snapshots**. The CLI commands you learned in Ch3 and Ch4 are snapshots. Observability is the continuous collection of those same counters, stored as time-series, so you can see *direction of travel* not just current state.
+
+<UFMApiViz />
+
+The three pillars of AI fabric observability are:
+- **UFM REST API** — fabric topology, port counters, and events at scale
+- **DCGM** — GPU and NVLink metrics that correlate with fabric failures
+- **Prometheus + Grafana** — storage, alerting, and visualisation
+
+They are not replacements for the CLI. They are the continuous layer that tells you *when* to reach for the CLI.
+
+---
+
+## Act 2 — UFM REST API
+
+In Ch4 you used the UFM event log GUI to inspect InfiniBand fabric events after a fault. That GUI is backed by a REST API — the same API you use to build automated polling, alerting, and integration with external monitoring systems.
+
+The UFM REST API runs on the UFM management host (typically a separate server or the UFM appliance) on port 443. Authentication is HTTP Basic over TLS. Every response is JSON.
+
+### The four endpoints you need
+
+**GET /ufmRest/app/ufmVersion** — health check. Returns UFM version and fabric summary. If this call fails, UFM itself has a problem.
+
+**GET /ufmRest/resources/ports** — all fabric ports with current state, speed, and counters. This is the bulk-polling endpoint: one call returns every port in the fabric. Filter by `guid` for a specific HCA, by `peer_guid` to trace a link, or by `logical_state != Active` to find anything non-healthy.
+
+**GET /ufmRest/resources/alarms** — all active alarms. This is your first-stop dashboard call. An empty alarm list means UFM sees no current issues. A non-empty list gives you the alarm type, severity, and affected GUIDs.
+
+**GET /ufmRest/events** — fabric event stream. Ordered by timestamp. Use `?from_event_id=` to poll incrementally. This is how you stream events into Prometheus or a SIEM.
+
+```bash
+# Get all active alarms — formatted
+curl -sk -u admin:password \
+  https://ufm-host/ufmRest/resources/alarms \
+  | python3 -m json.tool
+
+# Poll ports filtered to non-Active state
+curl -sk -u admin:password \
+  "https://ufm-host/ufmRest/resources/ports?logical_state=Down" \
+  | jq '.[].guid'
+
+# Incremental event stream — last 500 events
+curl -sk -u admin:password \
+  "https://ufm-host/ufmRest/events?from_event_id=0&max_results=500" \
+  | jq '.[].type'
+```
+
+### Polling frequency
+
+| Endpoint | Recommended poll interval | Why |
+|----------|--------------------------|-----|
+| `/alarms` | 30 seconds | Fast alarm detection |
+| `/ports` (counters) | 60–120 seconds | Counter deltas need time to accumulate |
+| `/events` | 60 seconds incremental | Low volume, fine-grained |
+| `/ufmVersion` | 5 minutes | Health check only |
+
+Counter polling at less than 60 seconds produces mostly noise — most error counters increment slowly enough that sub-minute deltas are meaningless. The exception is `SymbolErrors` during active link degradation, which can increment by thousands per second. If you detect a rising `SymbolErrors` count, switch to 10-second polling for that specific port.
+
+### What UFM REST does not expose
+
+UFM REST gives you InfiniBand fabric state. It does not give you:
+- GPU metrics (use DCGM)
+- Ethernet fabric counters from Spectrum switches (use Prometheus + SNMP/gNMI or Telegraf)
+- Application-layer NCCL timing (use NCCL logs or DCGM NVLink counters)
+
+A healthy monitoring stack uses all three. UFM REST is the IB fabric layer.
+
+---
+
+## Act 3 — DCGM: the GPU metric layer
+
+DCGM (NVIDIA Data Center GPU Manager) is a daemon that runs on every DGX host and exposes GPU metrics over a local socket. A Prometheus exporter (`dcgm-exporter`) scrapes DCGM and makes those metrics available to Prometheus.
+
+DCGM is the bridge between the GPU and the network fabric. Many network problems manifest first as GPU metric anomalies — a degraded HCA shows up as reduced NVLink bandwidth before the IB error counter crosses threshold.
+
+<DCGMMetricsViz />
+
+### The metric groups that matter for fabric health
+
+**NVLink bandwidth and error counters**
+- `DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL` — aggregate NVLink bandwidth (GB/s). A healthy H100 in active training should be at 600–900 GB/s. Sustained drop below 400 GB/s indicates a degraded NVLink lane or NVSwitch issue.
+- `DCGM_FI_DEV_NVLINK_REPLAY_ERROR_COUNT_*` (per link) — NVLink replay errors. Non-zero is a problem. These increment when NVLink must retransmit a flit due to corruption — analogous to TCP retransmits but at intra-node speeds.
+- `DCGM_FI_DEV_NVLINK_CRC_FLIT_ERROR_*` — CRC errors at flit level. Pre-cursor to link degradation.
+
+**ECC errors**
+- `DCGM_FI_DEV_ECC_SBE_VOL_TOTAL` — single-bit ECC errors (correctable). A few per day is normal. Rapid accumulation signals HBM degradation.
+- `DCGM_FI_DEV_ECC_DBE_VOL_TOTAL` — double-bit ECC errors (uncorrectable). Any non-zero value requires immediate investigation. The GPU will typically page-retire the affected memory row.
+
+**GPU utilisation and power**
+- `DCGM_FI_DEV_GPU_UTIL` — GPU compute utilisation %. During training this should be 95–100% between AllReduce barriers. Sustained drops to 60–70% indicate AllReduce stall — the network is the bottleneck.
+- `DCGM_FI_DEV_POWER_USAGE` — power draw (W). Correlated with compute load. Sudden drops in power often mean the GPU has throttled due to thermal or ECC issues.
+- `DCGM_FI_DEV_GPU_TEMP` — GPU die temperature (°C). H100 throttles at 83°C, shuts down at 87°C. Sustained operation above 80°C warrants inspection of cooling.
+
+**PCIe counters** (relevant when diagnosing DPU ↔ CPU ↔ NVMe traffic)
+- `DCGM_FI_DEV_PCIE_REPLAY_COUNTER` — PCIe replays. Non-zero suggests a PCIe link quality issue between the GPU and the CPU/NVMe path.
+
+### Running DCGM and dcgm-exporter
+
+```bash
+# On the DGX host — check DCGM daemon status
+systemctl status nvidia-dcgm
+
+# Query DCGM directly via dcgmi CLI
+dcgmi dmon -e 155,203,210,211,252,1001  # power, temp, ecc, nvlink bw
+
+# dcgm-exporter exposes Prometheus metrics on :9400
+curl http://localhost:9400/metrics | grep DCGM_FI_DEV_GPU_UTIL
+```
+
+The `dcgm-exporter` Helm chart is the standard deployment for Kubernetes-based DGX clusters. For bare-metal deployments, run it as a systemd service on each DGX host.
+
+### MIG and multi-tenant monitoring
+
+In clusters where H100 GPUs are partitioned with MIG (Multi-Instance GPU) for multi-tenant inference workloads, DCGM exposes per-instance metrics with a `gpu_i_id` label. The metric names are identical — you filter by instance rather than by device. Note that NVLink metrics are not available per-MIG-instance; NVLink operates at the physical GPU level and is only relevant in training configurations where MIG is not typically used.
+
+> **Confidential Computing note**: In clusters using H100 Confidential Computing (TEE mode), GPU metrics that would reveal information about encrypted workloads are restricted. DCGM can report power, temperature, and PCIe counters, but per-SM compute counters and some ECC details may be unavailable depending on the attestation policy. This is expected behaviour — the TEE prevents the host from inspecting encrypted gradient buffers. Plan your observability stack accordingly if you operate mixed confidential and standard GPU partitions.
+
+---
+
+## Act 4 — Prometheus and Grafana for AI fabrics
+
+Prometheus is a pull-based time-series database. Every 60 seconds (configurable) it scrapes your exporters — `dcgm-exporter` on each DGX host, `ufm-exporter` if you build one, `node-exporter` for host metrics — and stores the samples. Grafana queries Prometheus and renders dashboards.
+
+This section covers what to configure, not how to install — assume a working Prometheus + Grafana stack.
+
+<FabricHealthDashboardViz />
+
+### The scrape config
+
+```yaml
+# prometheus.yml — minimal AI fabric scrape config
+scrape_configs:
+  - job_name: 'dcgm'
+    static_configs:
+      - targets:
+          - dgx-01:9400
+          - dgx-02:9400
+          # ... all DGX hosts
+    scrape_interval: 60s
+    scrape_timeout: 10s
+
+  - job_name: 'node'
+    static_configs:
+      - targets:
+          - dgx-01:9100
+          - dgx-02:9100
+    scrape_interval: 30s
+
+  - job_name: 'ufm_custom'
+    # If you build a UFM REST → Prometheus bridge
+    static_configs:
+      - targets: ['ufm-exporter:9500']
+    scrape_interval: 60s
+```
+
+### Alert rules
+
+Prometheus alert rules live in a separate YAML file loaded by the Prometheus config. Each rule defines a PromQL expression and a threshold. When the expression evaluates true for the `for` duration, the alert fires and is routed to Alertmanager.
+
+```yaml
+# alerts/fabric.yml
+groups:
+  - name: fabric_health
+    rules:
+
+      # Link flap: port changes from Active within the hour
+      - alert: IBPortFlapping
+        expr: |
+          increase(ufm_port_logical_state_changes_total[1h]) > 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "IB port {{ $labels.guid }} flapping"
+
+      # Symbol error rate rising — precursor to link failure
+      - alert: IBSymbolErrorRising
+        expr: |
+          rate(ufm_port_symbol_errors_total[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Symbol errors rising on {{ $labels.guid }}"
+
+      # GPU utilisation drop during expected training window
+      - alert: GPUUtilDrop
+        expr: |
+          DCGM_FI_DEV_GPU_UTIL < 80
+          and on(instance) training_job_active == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "GPU {{ $labels.gpu }} underutilised during training"
+
+      # NVLink bandwidth drop
+      - alert: NVLinkBandwidthLow
+        expr: |
+          DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL < 400
+          and on(instance) training_job_active == 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NVLink BW {{ $value }} GB/s on {{ $labels.instance }}"
+
+      # Double-bit ECC — immediate action
+      - alert: GPUDoubleBitECC
+        expr: increase(DCGM_FI_DEV_ECC_DBE_VOL_TOTAL[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Uncorrectable ECC error on {{ $labels.instance }} GPU {{ $labels.gpu }}"
+```
+
+The `training_job_active` metric in those rules is a synthetic gauge you push from your job scheduler — 1 when a training job is running, 0 when idle. Without it, GPU utilisation alerts fire constantly during maintenance windows and idle periods.
+
+---
+
+## Act 5 — Alert threshold calibration
+
+The most common mistake in AI fabric monitoring is copying threshold values from generic server monitoring playbooks. An HPC fabric is not a generic server environment. Thresholds that generate actionable signal in one context produce noise in the other.
+
+<AlertThresholdViz />
+
+### PFC pause rate
+
+**Wrong threshold**: alert on any non-zero PFC pause frames.
+
+In a correctly configured RoCEv2 fabric under load, PFC pause frames are *expected*. PFC is the backpressure mechanism — it is doing its job when it fires occasionally during burst absorption. Zero PFC in a 400G fabric under AI training load may actually indicate ECN is absorbing all congestion before PFC fires (good) or that your PFC is misconfigured and not actually enabled (check with `show dcb pfc`).
+
+**Right threshold**: alert when PFC pause duration exceeds a rate that indicates the fabric is not draining. A reasonable starting rule:
+
+```yaml
+# PFC: alert when pause duration > 10% of total link time, sustained for 2 minutes
+expr: rate(pfc_pause_duration_total[2m]) / rate(link_up_time_total[2m]) > 0.10
+for: 2m
+```
+
+Sustained PFC at >10% of link time means the pause propagation is not resolving — likely a misconfigured DCQCN or a sender that is not responding to ECN signals.
+
+### Symbol error rate — trend, not absolute
+
+**Wrong threshold**: alert when `SymbolErrors > 0`.
+
+Symbol errors are non-zero on almost every link in a large InfiniBand fabric. Cosmic rays, thermal noise, and marginal transceivers produce occasional errors that the FEC layer corrects transparently. The absolute count is meaningless on its own.
+
+**Right threshold**: alert on rate of change. A link that has had 200 total symbol errors over 60 days is fine. The same link accumulating 200 symbol errors in 10 minutes is degrading.
+
+```yaml
+# Symbol errors: alert on rate > 10/min sustained
+expr: rate(ufm_port_symbol_errors_total[10m]) > 0.17  # 10/min = 0.17/s
+for: 5m
+```
+
+Also: correlate with the link's error history baseline. A link that has always been at 2/min and is now at 8/min is more concerning than a link that has been stable at 5/min for months.
+
+### Buffer utilisation
+
+Buffer occupancy is only meaningful during bursty traffic. A 30% buffer utilisation reading on a switch port that carries a 400G GPU-to-leaf link is normal during AllReduce scatter phases. The signal you want is *sustained* high buffer occupancy, which means traffic is not draining.
+
+```yaml
+# Buffer: alert on sustained >60% occupancy for >1 min
+expr: switch_buffer_utilisation_percent > 60
+for: 1m
+```
+
+### Link flap frequency
+
+A link that flaps once is physical layer noise. A link that flaps 3 times in an hour is a degrading cable. A link that flaps 10 times in an hour is down.
+
+```yaml
+# One flap: informational. Three in an hour: warning.
+expr: increase(port_state_changes_total[1h]) >= 3
+for: 0m  # fire immediately
+severity: warning
+```
+
+### The false-positive cost
+
+Every spurious alert trains your team to ignore alerts. In a 256-GPU cluster monitored by one or two fabric engineers, alert fatigue is a serious operational risk. Calibrate thresholds conservatively: it is better to miss a marginal link for a few hours than to desensitise your team with 40 false alarms per week.
+
+A useful metric: track alert-to-action ratio. If fewer than 30% of your alerts result in a configuration change or hardware replacement within 48 hours, your thresholds are too sensitive.
+
+---
+
+## Act 6 — Cross-layer correlation
+
+A single physical event — a DAC cable with a marginal connector on leaf-3 port 22 — produces a cascade of observable events across four separate monitoring layers. Understanding the cascade is how you attribute root cause in under 10 minutes instead of 2 hours.
+
+<CorrelationTimelineViz />
+
+Here is the cascade in order, with the timestamp offset from the initial event:
+
+**T+0s — Physical layer**: The marginal connector introduces signal integrity noise. The DAC's DSP starts seeing elevated pre-FEC bit errors. No counter has incremented yet.
+
+**T+15s — IB layer**: `SymbolErrors` begins incrementing on both ends of the link (DGX-07 HCA port 1, and leaf-3 port 22). UFM detects this as a counter delta on the next poll cycle. No alarm has fired yet.
+
+**T+3m — UFM alert**: `IBSymbolErrorRising` alert fires. You get a PagerDuty notification. The link is still Active.
+
+**T+7m — NCCL layer**: The IB link's increasing error rate forces retransmissions at the transport layer. AllReduce busbw measured by `nccl-tests` drops from 146 GB/s to 89 GB/s. NCCL logs show increased `timeout_count`. The job is still running but slowing.
+
+**T+12m — GPU layer**: DCGM shows `DCGM_FI_DEV_GPU_UTIL` on DGX-07 dropping from 97% to 71%. The GPU is spending more time waiting at the AllReduce barrier. `GPUUtilDrop` alert fires.
+
+**T+18m — Training logs**: The training framework (PyTorch DDP / Megatron) logs a `NCCL timeout` or `Watchdog abort`. The job may checkpoint and restart, or may fail entirely.
+
+**T+20m — ML engineer's Slack message**: "Training seems slow / crashed."
+
+With a calibrated monitoring stack, you are already investigating at T+3m. Without it, you start at T+20m.
+
+### Correlating timestamps across streams
+
+The critical skill is timestamp alignment across four systems that may have different clock sources:
+
+| Layer | Data source | Timestamp source |
+|-------|-------------|-----------------|
+| IB fabric | UFM event API | UFM server clock |
+| GPU / NVLink | DCGM → Prometheus | DGX host clock (NTP) |
+| NCCL | Log files on DGX | DGX host clock (NTP) |
+| Training | Framework logs | DGX host clock (NTP) |
+
+All DGX hosts and UFM server must be NTP-synchronised to the same time source (preferably PTP-disciplined for sub-millisecond accuracy). A clock skew of 5 seconds between the UFM server and a DGX host will make a causal chain look like two independent events.
+
+**Practical correlation workflow:**
+
+1. In Grafana: set a time window starting 5 minutes before the reported symptom
+2. Stack the panels: GPU util (DCGM), NVLink BW (DCGM), UFM alarm state, NCCL busbw (if logged to Prometheus via a custom exporter)
+3. Look for the *earliest* anomaly — that is your root cause layer
+4. If UFM SymbolErrors leads GPU util drop by 7+ minutes, the fault is physical layer (cable/optics)
+5. If GPU util drops first and UFM shows no errors, the fault is in the compute path (NCCL misconfiguration, NVLink degradation, or CPU-side bottleneck)
+
+---
+
+## Act 7 — ibdiagnet in production: sweeps, not snapshots
+
+In Ch4 you ran `ibdiagnet` as a one-off diagnostic tool when investigating a specific fault. In production, `ibdiagnet` is most valuable as a scheduled sweep — run nightly or weekly, output stored, and results compared against a baseline.
+
+### The scheduled sweep pattern
+
+```bash
+#!/bin/bash
+# /opt/fabric/scripts/ibdiagnet-sweep.sh
+# Run nightly via cron at 02:00
+
+DATE=$(date +%Y%m%d_%H%M)
+OUTDIR=/var/lib/fabric-health/ibdiagnet/${DATE}
+mkdir -p ${OUTDIR}
+
+# Full fabric sweep — BER check, routing, SM, counters
+ibdiagnet \
+  --ber_threshold 1e-12 \
+  --pm_pause_counters \
+  --cable_info \
+  -o ${OUTDIR}/ibdiagnet_${DATE}
+
+# Extract summary line for trending
+grep "FAILED\|MARGINAL\|PASSED" ${OUTDIR}/ibdiagnet_${DATE}.log \
+  >> /var/lib/fabric-health/sweep-summary.log
+
+# Alert if any FAILED checks
+if grep -q "FAILED" ${OUTDIR}/ibdiagnet_${DATE}.log; then
+  echo "ibdiagnet FAILED checks: $(date)" | mail -s "Fabric health alert" ops-team@company.com
+fi
+```
+
+```
+# crontab entry
+0 2 * * * /opt/fabric/scripts/ibdiagnet-sweep.sh
+```
+
+### Interpreting trends, not snapshots
+
+A single `ibdiagnet` run tells you the state of the fabric right now. A series of runs tells you whether the fabric is healthy, improving, or degrading.
+
+Key trend indicators:
+
+**BER (Bit Error Rate) marginal links**: A link at `1e-13` today is fine. The same link at `1e-11` next week is degrading — BER two orders of magnitude worse than baseline means the physical layer is deteriorating. Replace the cable or transceiver before the BER crosses `1e-12` (ibdiagnet's FAILED threshold).
+
+**Routing check warnings**: Consistent routing warnings about specific GUIDs indicate a subnet manager issue or a persistent link flap that is causing SM reroutes. These do not resolve on their own.
+
+**Counter accumulation across sweeps**: Compare `SymbolErrors` totals between runs. A link accumulating 500 errors/night vs 10 errors/night for the same link six weeks ago is telling you something about physical layer ageing.
+
+### What nightly sweeps catch that continuous polling misses
+
+Continuous Prometheus polling catches rate-of-change anomalies during training jobs. `ibdiagnet` nightly sweeps catch:
+
+- **Routing correctness** — a misconfigured route that reduces effective bisection bandwidth, invisible in counter telemetry
+- **Cable BER at rest** — many marginal cables show BER issues only when the fabric is quiet and there is no burst traffic masking the retransmit patterns
+- **SM configuration drift** — partition key mismatches, incorrect adaptive routing weights, QoS misconfigurations accumulate silently
+- **Dead end paths** — a link that is Active but routing zero traffic due to a subtle SM bug
+
+Treat `ibdiagnet` sweeps and Prometheus telemetry as complementary, not redundant. Neither replaces the other.
+
+---
+
+## What you now know
+
+You can now operate an AI fabric at the observability level, not just the diagnostic level. Specifically:
+
+**UFM REST API**: You know how to poll `/alarms`, `/ports`, and `/events` programmatically, and at what frequency each endpoint should be called. You understand that UFM REST covers the IB fabric layer only — Ethernet and GPU layers need separate tooling.
+
+**DCGM**: You know which metrics (`NVLINK_BANDWIDTH_TOTAL`, `NVLINK_REPLAY_ERROR_COUNT`, `ECC_DBE_VOL_TOTAL`, `GPU_UTIL`) act as early indicators of fabric health issues, and how DCGM plugs into Prometheus via `dcgm-exporter`.
+
+**Prometheus + Grafana**: You know how to configure scrape jobs, write alert rules with `for` clauses to avoid transient noise, and why `training_job_active` as a synthetic metric is essential for avoiding false positives during maintenance windows.
+
+**Alert calibration**: You know that PFC pause frames are expected under load, that symbol errors are only meaningful as a rate-of-change rather than an absolute count, and that alert-to-action ratio is your metric for threshold quality.
+
+**Cross-layer correlation**: You know the four-layer cascade from a physical event to a training job failure, and that the layer that anomalies *first* in the timeline is the root cause layer. You know that NTP synchronisation across all components is a precondition for any correlation to be trustworthy.
+
+**ibdiagnet sweeps**: You know how to run scheduled health baselines and why nightly sweeps catch routing correctness and BER trends that continuous counter polling misses.
+
+[Continue to Chapter 12 →](/learn/ch12-nvlink-switch-system)

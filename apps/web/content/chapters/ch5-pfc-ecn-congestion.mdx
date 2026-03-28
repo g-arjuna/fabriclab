@@ -172,6 +172,15 @@ This is the intended behaviour — backpressure propagating to the source. But i
 
 <PauseStormViz />
 
+<Image
+  src="/images/ch5-pfc-ecn-congestion/pause-propagation-deadlock-map.svg"
+  alt="Animated technical diagram showing a PFC pause frame propagating hop by hop through a leaf-spine-leaf path and then turning into a circular deadlock dependency."
+  width={1600}
+  height={900}
+  style={{ objectFit: "contain" }}
+/>
+*Figure: A pause storm is not one hot port. It is a chain of queues waiting on each other, with the truly dangerous case being a closed loop that only the watchdog can break.*
+
 ### The deadlock scenario
 
 The truly dangerous scenario is a **circular pause dependency**. Imagine a simplified fabric:
@@ -274,6 +283,15 @@ ECN min-threshold < ECN max-threshold < PFC headroom threshold < Buffer maximum
 If this ordering is violated — for example, if ECN marks at max_threshold but PFC pauses at a lower threshold — ECN marks will trigger pauses rather than rate reductions, defeating the purpose.
 
 ---
+
+<Image
+  src="/images/ch5-pfc-ecn-congestion/ecn-pfc-threshold-ladder.svg"
+  alt="Illustration of a switch egress queue showing ECN minimum threshold, ECN maximum threshold, PFC headroom threshold, and buffer maximum in the correct operational order."
+  width={1600}
+  height={1100}
+  style={{ objectFit: "contain" }}
+/>
+*Figure: The ordering matters more than the absolute values. ECN has to start early enough that DCQCN can reduce the sender before PFC headroom is consumed.*
 
 ## Act 5 — DCQCN: the rate control algorithm
 
@@ -393,6 +411,15 @@ Switch sends a RESUME frame (or simply stops sending PAUSE renewals). Senders re
 
 **T=3ms: Congestion resolved**
 AllReduce completes. The whole event took 3ms with one 800μs pause — well within acceptable limits for a training cluster.
+
+<Image
+  src="/images/ch5-pfc-ecn-congestion/rate-control-vs-pause-thrash.svg"
+  alt="Comparison diagram showing the same burst handled in two ways: ECN plus DCQCN bends sender rate before the queue lives in the PFC zone, while missing ECN produces stop-start pause thrash."
+  width={1600}
+  height={1100}
+  style={{ objectFit: "contain" }}
+/>
+*Figure: The same burst can feel almost invisible when ECN shapes senders early, or painfully jagged when PAUSE becomes the primary control loop.*
 
 ### When both mechanisms fail
 
@@ -530,6 +557,24 @@ Lab 2 presents a specific scenario: training throughput has dropped 40%, but `sh
 Silent congestion is the most operationally difficult failure mode because the fabric looks healthy from casual inspection. No drops. PFC pauses are present but small. Buffer utilisation is elevated but below the drop threshold. The monitoring dashboard does not alarm.
 
 What is actually happening: without ECN, the only congestion mechanism is PFC. The switch is sending PAUSE frames to manage the congested port. The NIC is alternating between paused and transmitting. Effective throughput is a fraction of line rate even though no packets are being dropped. The RDMA queue pairs are not in error state. The training job continues — just slowly.
+
+<Image
+  src="/images/ch5-pfc-ecn-congestion/silent-congestion-diagnostic-triad.svg"
+  alt="Operations illustration showing the three-part silent congestion fingerprint: high switch buffer utilisation, modest but growing PFC pause counters, and zero ECN marks on the host NIC."
+  width={1600}
+  height={1100}
+  style={{ objectFit: "contain" }}
+/>
+*Figure: This is the diagnostic pattern Lab 2 is built around. The fabric is protecting itself from drops, but because ECN is absent the only control loop left is stop-start pausing.*
+
+<Image
+  src="/images/ch5-pfc-ecn-congestion/cross-layer-congestion-signatures.svg"
+  alt="Comparison matrix showing how healthy bursts, silent congestion, and capacity failure look across application behavior, switch counters, NIC counters, and operator interpretation."
+  width={1600}
+  height={1200}
+  style={{ objectFit: "contain" }}
+/>
+*Figure: This is the cross-check that keeps you from chasing the wrong fix. Similar slowdowns mean different things depending on whether ECN marks are present on the NIC and whether drops appear on the switch.*
 
 ### The diagnostic path for Lab 2
 

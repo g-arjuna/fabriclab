@@ -58,11 +58,11 @@ Do not modify component logic - only fix TypeScript/import errors.
 | ECNMechanicsViz | ECNMechanicsViz.tsx | <ECNMechanicsViz /> | ch5 | Registered |
 | DCQCNViz | DCQCNViz.tsx | <DCQCNViz /> | ch5 | Registered |
 | CongestionTimelineViz | CongestionTimelineViz.tsx | <CongestionTimelineViz /> | ch5 | Registered |
+| ProactiveReactiveViz | ProactiveReactiveViz.tsx | <ProactiveReactiveViz /> | ch5 | Registered |
 | RoCEv2ConfigChecklist | RoCEv2ConfigChecklist.tsx | <RoCEv2ConfigChecklist /> | ch5 | Registered |
 | LoadBalancingTaxonomyViz | LoadBalancingTaxonomyViz.tsx | <LoadBalancingTaxonomyViz /> | ch6 | Registered |
 | IncastCongestionViz | IncastCongestionViz.tsx | <IncastCongestionViz /> | ch6 | Registered |
 | LowEntropyFlowletsViz | LowEntropyFlowletsViz.tsx | <LowEntropyFlowletsViz /> | ch6 | Registered |
-| ProactiveReactiveViz | ProactiveReactiveViz.tsx | <ProactiveReactiveViz /> | ch5 | Registered |
 | TopologyScalingViz | TopologyScalingViz.tsx | <TopologyScalingViz /> | ch7 | Registered |
 | FatTreeViz | FatTreeViz.tsx | <FatTreeViz /> | ch7 | Registered |
 | BasePodSuperPodViz | BasePodSuperPodViz.tsx | <BasePodSuperPodViz /> | ch7 | Registered |
@@ -88,6 +88,45 @@ Do not modify component logic - only fix TypeScript/import errors.
 | ParallelFSViz | ParallelFSViz.tsx | <ParallelFSViz /> | ch10 | Registered |
 | CheckpointCostViz | CheckpointCostViz.tsx | <CheckpointCostViz /> | ch10 | Registered |
 | StorageTopologyViz | StorageTopologyViz.tsx | <StorageTopologyViz /> | ch10 | Registered |
+| UFMApiViz | UFMApiViz.tsx | <UFMApiViz /> | ch11 | Registered |
+| DCGMMetricsViz | DCGMMetricsViz.tsx | <DCGMMetricsViz /> | ch11 | Registered |
+| AlertThresholdViz | AlertThresholdViz.tsx | <AlertThresholdViz /> | ch11 | Registered |
+| CorrelationTimelineViz | CorrelationTimelineViz.tsx | <CorrelationTimelineViz /> | ch11 | Registered |
+| FabricHealthDashboardViz | FabricHealthDashboardViz.tsx | <FabricHealthDashboardViz /> | ch11 | Registered |
+| NVLinkScaleViz | NVLinkScaleViz.tsx | <NVLinkScaleViz /> | ch12 | Registered |
+| ScaleUpTopologyViz | ScaleUpTopologyViz.tsx | <ScaleUpTopologyViz /> | ch12 | Registered |
+| BandwidthComparisonViz | BandwidthComparisonViz.tsx | <BandwidthComparisonViz /> | ch12 | Registered |
+| ScaleDecisionViz | ScaleDecisionViz.tsx | <ScaleDecisionViz /> | ch12 | Registered |
+| NVLinkDiagnosticsViz | NVLinkDiagnosticsViz.tsx | <NVLinkDiagnosticsViz /> | ch12 | Registered |
+| TorusEvolutionViz | TorusEvolutionViz.tsx | <TorusEvolutionViz /> | ch13 | Registered |
+| AllReduceOnTorusViz | AllReduceOnTorusViz.tsx | <AllReduceOnTorusViz /> | ch13 | Registered |
+| DragonFlyTopologyViz | DragonFlyTopologyViz.tsx | <DragonFlyTopologyViz /> | ch13 | Registered |
+| TPUPodViz | TPUPodViz.tsx | <TPUPodViz /> | ch13 | Registered |
+| TopologyDecisionViz | TopologyDecisionViz.tsx | <TopologyDecisionViz /> | ch13 | Registered |
+| NVLinkGenerationViz | NVLinkGenerationViz.tsx | <NVLinkGenerationViz /> | ch14 | Registered |
+| GPUFormFactorViz | GPUFormFactorViz.tsx | <GPUFormFactorViz /> | ch14 | Registered |
+| PCIeBandwidthViz | PCIeBandwidthViz.tsx | <PCIeBandwidthViz /> | ch14 | Registered |
+| GH200ArchViz | GH200ArchViz.tsx | <GH200ArchViz /> | ch14 | Registered |
+| MIGNetworkViz | MIGNetworkViz.tsx | <MIGNetworkViz /> | ch14 | Registered |
+| RoutingProtocolCompareViz | RoutingProtocolCompareViz.tsx | <RoutingProtocolCompareViz /> | ch15 | Registered |
+| BGPUnnumberedViz | BGPUnnumberedViz.tsx | <BGPUnnumberedViz /> | ch15 | Registered |
+| BGPASNDesignViz | BGPASNDesignViz.tsx | <BGPASNDesignViz /> | ch15 | Registered |
+| BGPDPFViz | BGPDPFViz.tsx | <BGPDPFViz /> | ch15 | Registered |
+| RIFTvsBGPViz | RIFTvsBGPViz.tsx | <RIFTvsBGPViz /> | ch15 | Registered |
+| FlexAlgoViz | FlexAlgoViz.tsx | <FlexAlgoViz /> | ch15 | Registered |
+| SRv6PathViz | SRv6PathViz.tsx | <SRv6PathViz /> | ch15 | Registered |
+| MultiTenancyFabricViz | MultiTenancyFabricViz.tsx | <MultiTenancyFabricViz /> | ch15 | Registered |
+| WiresharkCaptureViz | WiresharkCaptureViz.tsx | <WiresharkCaptureViz captureId="A" /> | ch16 | Registered |
+| DGXNetworkInterfacesViz | DGXNetworkInterfacesViz.tsx | <DGXNetworkInterfacesViz /> | ch16 | Registered |
+| QueuePairMechanicsViz | QueuePairMechanicsViz.tsx | <QueuePairMechanicsViz /> | ch16 | Registered |
+| ConnectX7PipelineViz | ConnectX7PipelineViz.tsx | <ConnectX7PipelineViz /> | ch16 | Registered |
+| LeafSwitchProcessingViz | LeafSpineNICVizzes.tsx | <LeafSwitchProcessingViz /> | ch16 | Registered |
+| SpineForwardingViz | LeafSpineNICVizzes.tsx | <SpineForwardingViz /> | ch16 | Registered |
+| DestinationNICDeliveryViz | LeafSpineNICVizzes.tsx | <DestinationNICDeliveryViz /> | ch16 | Registered |
+| IBvsRoCEPacketViz | LeafSpineNICVizzes.tsx | <IBvsRoCEPacketViz /> | ch16 | Registered |
+| AlternativeNICStackViz | AlternativeComparisons.tsx | <AlternativeNICStackViz /> | ch16 | Registered |
+| FabricComparisonMatrixViz | AlternativeComparisons.tsx | <FabricComparisonMatrixViz /> | ch16 | Registered |
+| ProductionDebugMapViz | AlternativeComparisons.tsx | <ProductionDebugMapViz /> | ch16 | Registered |
 
 ## Legacy components (files kept, not registered)
 

@@ -1,6 +1,10 @@
 import { Suspense } from "react";
+import { notFound } from "next/navigation";
 
 import { LabExperience } from "@/app/module/rocev2/lab/LabExperience";
+import { LockedLabShell } from "@/components/catalog/LockedLabShell";
+import { getServerViewer } from "@/lib/auth/server";
+import { getCatalogAccessState } from "@/lib/catalog/runtime";
 
 function LabLoadingState() {
   return (
@@ -12,7 +16,28 @@ function LabLoadingState() {
   );
 }
 
-export default function LabPage() {
+type LabPageProps = {
+  searchParams: Promise<{ lab?: string }>;
+};
+
+export default async function LabPage({ searchParams }: LabPageProps) {
+  const { lab: labId = "lab1-pfc-fix" } = await searchParams;
+  const viewer = await getServerViewer();
+  const accessState = await getCatalogAccessState("lab", labId, viewer);
+
+  if (!accessState.item || (!accessState.isPublished && !viewer.isAdmin)) {
+    notFound();
+  }
+
+  if (!accessState.canAccess) {
+    return (
+      <LockedLabShell
+        item={accessState.item}
+        hasPaidEntitlement={viewer.hasPaidEntitlement}
+      />
+    );
+  }
+
   return (
     <Suspense fallback={<LabLoadingState />}>
       <LabExperience />

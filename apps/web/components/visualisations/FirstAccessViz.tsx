@@ -141,8 +141,9 @@ export function FirstAccessViz() {
           </ul>
         </div>
 
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-200">
-          <span className="font-semibold">What bad looks like: </span>{info.whatBadLooksLike}
+        {/* Improved contrast: text-red-100 (up from text-red-200), border-red-400/30 (up from border-red-500/20) */}
+        <div className="rounded-xl border border-red-400/30 bg-red-500/8 p-3 text-xs text-red-100">
+          <span className="font-semibold text-red-200">What bad looks like: </span>{info.whatBadLooksLike}
         </div>
       </div>
     </div>

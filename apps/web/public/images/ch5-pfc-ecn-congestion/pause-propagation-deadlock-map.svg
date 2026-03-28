@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Pause propagation and circular deadlock in a leaf-spine fabric</title>
+  <desc id="desc">Animated technical illustration showing a congestion event propagating pause frames hop by hop and the circular dependency that becomes a pause storm deadlock.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#020617" />
+      <stop offset="100%" stop-color="#071326" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#111d34" />
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" />
+    </filter>
+    <marker id="arrowData" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#38bdf8" />
+    </marker>
+    <marker id="arrowPause" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#f59e0b" />
+    </marker>
+    <marker id="arrowDead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#ef4444" />
+    </marker>
+    <style>
+      .label { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .title { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 700; }
+      .pulsePause { animation: pulsePause 2.2s ease-in-out infinite; }
+      .pulseDead { animation: pulseDead 1.8s ease-in-out infinite; }
+      .packetA { animation: dataA 3.4s linear infinite; }
+      .packetB { animation: dataB 3.4s linear infinite 1.7s; }
+      .pauseA { animation: pauseA 2.8s linear infinite; }
+      .pauseB { animation: pauseB 2.8s linear infinite 1.4s; }
+      .deadA { animation: deadA 3s linear infinite; }
+      .deadB { animation: deadB 3s linear infinite 1.5s; }
+      @keyframes pulsePause {
+        0%, 100% { opacity: 0.55; }
+        50% { opacity: 1; }
+      }
+      @keyframes pulseDead {
+        0%, 100% { opacity: 0.35; }
+        50% { opacity: 1; }
+      }
+      @keyframes dataA {
+        0% { transform: translateX(0px); opacity: 0; }
+        10% { opacity: 1; }
+        100% { transform: translateX(810px); opacity: 0; }
+      }
+      @keyframes dataB {
+        0% { transform: translateX(0px); opacity: 0; }
+        10% { opacity: 1; }
+        100% { transform: translateX(810px); opacity: 0; }
+      }
+      @keyframes pauseA {
+        0% { transform: translate(0px, 0px); opacity: 0; }
+        12% { opacity: 1; }
+        100% { transform: translate(-610px, 0px); opacity: 0; }
+      }
+      @keyframes pauseB {
+        0% { transform: translate(0px, 0px); opacity: 0; }
+        12% { opacity: 1; }
+        100% { transform: translate(-610px, 0px); opacity: 0; }
+      }
+      @keyframes deadA {
+        0% { transform: translate(0px, 0px); opacity: 0; }
+        8% { opacity: 1; }
+        25% { transform: translate(250px, 0px); opacity: 1; }
+        50% { transform: translate(250px, 180px); opacity: 1; }
+        75% { transform: translate(0px, 180px); opacity: 1; }
+        100% { transform: translate(0px, 0px); opacity: 0; }
+      }
+      @keyframes deadB {
+        0% { transform: translate(250px, 180px); opacity: 0; }
+        8% { opacity: 1; }
+        25% { transform: translate(0px, 180px); opacity: 1; }
+        50% { transform: translate(0px, 0px); opacity: 1; }
+        75% { transform: translate(250px, 0px); opacity: 1; }
+        100% { transform: translate(250px, 180px); opacity: 0; }
+      }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)" />
+  <circle cx="1280" cy="150" r="180" fill="#0ea5e9" opacity="0.08" filter="url(#soft)" />
+  <circle cx="270" cy="740" r="220" fill="#f59e0b" opacity="0.08" filter="url(#soft)" />
+
+  <text x="90" y="92" font-size="46" fill="#f8fafc" class="title">How a local pause becomes a fabric-wide deadlock</text>
+  <text x="90" y="128" font-size="20" fill="#94a3b8" class="title">Top: intended backpressure path. Bottom-right: the circular pause dependency the watchdog is designed to break.</text>
+
+  <rect x="70" y="170" width="1460" height="300" rx="32" fill="url(#panel)" stroke="#1e293b" stroke-width="2" />
+  <text x="110" y="220" font-size="28" fill="#e2e8f0" class="title">1. Intended behaviour: pause propagates to the original source</text>
+
+  <g transform="translate(120 255)">
+    <rect x="0" y="60" width="180" height="86" rx="18" fill="#052e16" stroke="#22c55e" stroke-width="2" />
+    <text x="90" y="98" text-anchor="middle" font-size="22" fill="#dcfce7" class="title">DGX Node A</text>
+    <text x="90" y="124" text-anchor="middle" font-size="14" fill="#86efac" class="label">source sending gradients</text>
+
+    <rect x="300" y="60" width="190" height="86" rx="18" fill="#0b2742" stroke="#38bdf8" stroke-width="2" />
+    <text x="395" y="98" text-anchor="middle" font-size="22" fill="#e0f2fe" class="title">Leaf Switch 1</text>
+    <text x="395" y="124" text-anchor="middle" font-size="14" fill="#7dd3fc" class="label">upstream queue</text>
+
+    <rect x="620" y="60" width="190" height="86" rx="18" fill="#0b2742" stroke="#38bdf8" stroke-width="2" />
+    <text x="715" y="98" text-anchor="middle" font-size="22" fill="#e0f2fe" class="title">Spine</text>
+    <text x="715" y="124" text-anchor="middle" font-size="14" fill="#7dd3fc" class="label">transit hop</text>
+
+    <rect x="940" y="60" width="190" height="86" rx="18" fill="#3f1906" stroke="#f59e0b" stroke-width="2" />
+    <text x="1035" y="98" text-anchor="middle" font-size="22" fill="#ffedd5" class="title">Leaf Switch 2</text>
+    <text x="1035" y="124" text-anchor="middle" font-size="14" fill="#fdba74" class="label">egress queue at 89%</text>
+
+    <rect x="1260" y="60" width="180" height="86" rx="18" fill="#312e81" stroke="#a78bfa" stroke-width="2" />
+    <text x="1350" y="98" text-anchor="middle" font-size="22" fill="#ede9fe" class="title">DGX Node B</text>
+    <text x="1350" y="124" text-anchor="middle" font-size="14" fill="#c4b5fd" class="label">slow receiver</text>
+
+    <line x1="180" y1="103" x2="300" y2="103" stroke="#38bdf8" stroke-width="6" marker-end="url(#arrowData)" />
+    <line x1="490" y1="103" x2="620" y2="103" stroke="#38bdf8" stroke-width="6" marker-end="url(#arrowData)" />
+    <line x1="810" y1="103" x2="940" y2="103" stroke="#38bdf8" stroke-width="6" marker-end="url(#arrowData)" />
+    <line x1="1130" y1="103" x2="1260" y2="103" stroke="#38bdf8" stroke-width="6" marker-end="url(#arrowData)" />
+
+    <line x1="1035" y1="165" x2="715" y2="165" stroke="#f59e0b" stroke-width="5" stroke-dasharray="14 10" marker-end="url(#arrowPause)" class="pulsePause" />
+    <line x1="715" y1="192" x2="395" y2="192" stroke="#f59e0b" stroke-width="5" stroke-dasharray="14 10" marker-end="url(#arrowPause)" class="pulsePause" />
+    <line x1="395" y1="219" x2="90" y2="219" stroke="#f59e0b" stroke-width="5" stroke-dasharray="14 10" marker-end="url(#arrowPause)" class="pulsePause" />
+
+    <g transform="translate(175 92)">
+      <circle r="9" fill="#7dd3fc" class="packetA" />
+      <circle r="9" fill="#7dd3fc" class="packetB" />
+    </g>
+    <g transform="translate(1035 165)">
+      <circle r="8" fill="#fbbf24" class="pauseA" />
+      <circle r="8" fill="#fbbf24" class="pauseB" />
+    </g>
+
+    <rect x="910" y="190" width="250" height="60" rx="14" fill="#3f1906" stroke="#f59e0b" stroke-width="1.5" />
+    <text x="1035" y="214" text-anchor="middle" font-size="14" fill="#fdba74" class="label">PFC threshold crossed before tail-drop</text>
+    <text x="1035" y="236" text-anchor="middle" font-size="14" fill="#ffedd5" class="label">Backpressure walks upstream hop by hop</text>
+  </g>
+
+  <rect x="70" y="510" width="1460" height="320" rx="32" fill="url(#panel)" stroke="#1e293b" stroke-width="2" />
+  <text x="110" y="560" font-size="28" fill="#e2e8f0" class="title">2. Dangerous behaviour: two pause chains form a circular dependency</text>
+
+  <g transform="translate(160 615)">
+    <rect x="0" y="0" width="220" height="78" rx="18" fill="#4a1010" stroke="#ef4444" stroke-width="2" />
+    <text x="110" y="33" text-anchor="middle" font-size="21" fill="#fee2e2" class="title">Switch X</text>
+    <text x="110" y="56" text-anchor="middle" font-size="14" fill="#fca5a5" class="label">paused waiting for B to drain</text>
+
+    <rect x="420" y="0" width="220" height="78" rx="18" fill="#4a1010" stroke="#ef4444" stroke-width="2" />
+    <text x="530" y="33" text-anchor="middle" font-size="21" fill="#fee2e2" class="title">Switch Y</text>
+    <text x="530" y="56" text-anchor="middle" font-size="14" fill="#fca5a5" class="label">paused waiting for A to drain</text>
+
+    <rect x="0" y="180" width="220" height="78" rx="18" fill="#052e16" stroke="#22c55e" stroke-width="2" />
+    <text x="110" y="213" text-anchor="middle" font-size="21" fill="#dcfce7" class="title">Node A</text>
+    <text x="110" y="236" text-anchor="middle" font-size="14" fill="#86efac" class="label">cannot drain because paused</text>
+
+    <rect x="420" y="180" width="220" height="78" rx="18" fill="#312e81" stroke="#a78bfa" stroke-width="2" />
+    <text x="530" y="213" text-anchor="middle" font-size="21" fill="#ede9fe" class="title">Node B</text>
+    <text x="530" y="236" text-anchor="middle" font-size="14" fill="#c4b5fd" class="label">cannot drain because paused</text>
+
+    <path d="M220 39 H420" stroke="#ef4444" stroke-width="6" fill="none" marker-end="url(#arrowDead)" class="pulseDead" />
+    <path d="M530 78 V180" stroke="#ef4444" stroke-width="6" fill="none" marker-end="url(#arrowDead)" class="pulseDead" />
+    <path d="M420 219 H220" stroke="#ef4444" stroke-width="6" fill="none" marker-end="url(#arrowDead)" class="pulseDead" />
+    <path d="M110 180 V78" stroke="#ef4444" stroke-width="6" fill="none" marker-end="url(#arrowDead)" class="pulseDead" />
+
+    <g transform="translate(220 39)">
+      <circle r="9" fill="#f87171" class="deadA" />
+      <circle r="9" fill="#fb7185" class="deadB" />
+    </g>
+
+    <rect x="730" y="6" width="600" height="238" rx="20" fill="#111827" stroke="#334155" stroke-width="1.5" />
+    <text x="760" y="42" font-size="18" fill="#f8fafc" class="title">Operational signature</text>
+    <text x="760" y="82" font-size="16" fill="#fca5a5" class="label">• PFC pause counters grow on multiple switches at once</text>
+    <text x="760" y="114" font-size="16" fill="#fca5a5" class="label">• Output drops stay near zero until watchdog action</text>
+    <text x="760" y="146" font-size="16" fill="#fca5a5" class="label">• Throughput collapses even though link state remains up</text>
+    <text x="760" y="178" font-size="16" fill="#fca5a5" class="label">• A watchdog “drop” event is the circuit breaker, not a bug</text>
+    <text x="760" y="220" font-size="15" fill="#94a3b8" class="label">The dangerous part is not one congested port. It is the loop of queues that are all waiting for each other.</text>
+  </g>
+</svg>

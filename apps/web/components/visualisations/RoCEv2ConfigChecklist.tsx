@@ -87,9 +87,17 @@ export function RoCEv2ConfigChecklist() {
           const isSelected = selected === item.step
           const isDone = checked.has(item.step)
           return (
-            <button
+            <div
               key={item.step}
+              role="button"
+              tabIndex={0}
               onClick={() => setSelected(isSelected ? null : item.step)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  setSelected(isSelected ? null : item.step)
+                }
+              }}
               className="w-full rounded-xl text-left transition-all"
               style={{
                 backgroundColor: isSelected ? `${item.color}33` : isDone ? "#14532d22" : "#0f172a",
@@ -130,7 +138,7 @@ export function RoCEv2ConfigChecklist() {
                   </div>
                 </div>
               )}
-            </button>
+            </div>
           )
         })}
       </div>

@@ -22,6 +22,9 @@ export function showInterfaceCounters(): CommandResult {
       : null;
     const faultedRail = rails.find((rail) => rail.switchPort === "error-disabled");
     const showFaultOnThisLeaf = faultedRail !== undefined && activeLeafRail === faultedRail.id;
+    const faultPortName = useLabStore.getState().lab.labId === "lab9-errdisable-recovery" && faultedRail?.id === 2
+      ? "swp3"
+      : "swp5";
 
     return {
       output: `Interface  RX packets      TX packets      RX drops  TX drops  PFC rx  Buffer util
@@ -31,7 +34,7 @@ swp2       6,228,341,892   6,201,884,112   0         0         912     19%
 swp3       6,241,002,341   6,194,773,221   0         0         833     17%
 swp4       6,229,441,002   6,199,223,441   0         0         889     18%
 ${showFaultOnThisLeaf
-  ? `swp5       0               0               0         0         0       0%  ← ERR-DISABLED (no traffic)`
+  ? `${faultPortName}       0               0               0         0         0       0%  ← ERR-DISABLED (no traffic)`
   : `swp5       6,237,441,223   6,202,331,891   0         0         856     18%`}
 swp6       6,231,002,331   6,198,441,002   0         0         901     19%
 swp7       6,228,441,113   6,200,113,441   0         0         878     18%

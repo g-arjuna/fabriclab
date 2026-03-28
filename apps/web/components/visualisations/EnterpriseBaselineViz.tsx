@@ -141,8 +141,8 @@ export function EnterpriseBaselineViz() {
           </button>
         </div>
 
-        {/* Detail panel */}
-        <div className="flex-1">
+        {/* Detail panel — mt-6 added to give breathing room from the diagram */}
+        <div className="flex-1 mt-6 lg:mt-0">
           {selected ? (
             <div className="rounded-xl border border-white/10 bg-slate-800 p-4 h-full">
               <h3 className="text-sm font-semibold text-white">{selected.label}</h3>
@@ -155,9 +155,9 @@ export function EnterpriseBaselineViz() {
               </div>
             </div>
           ) : (
-            <div className="flex h-full min-h-[160px] items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-slate-600 p-4 text-center">
-              Click any component to understand its role<br />
-              <span className="text-xs mt-2 text-slate-700">This is the baseline we are about to leave behind</span>
+            <div className="flex h-full min-h-[160px] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-slate-600 p-6 text-center gap-3">
+              <span>Click any component to understand its role</span>
+              <span className="text-xs text-slate-700">This is the baseline we are about to leave behind</span>
             </div>
           )}
         </div>

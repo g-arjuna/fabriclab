@@ -48,8 +48,9 @@ to AllReduce. The other 15 nodes are unaffected.
 Cluster topology:
   16 DGX nodes × 8 GPUs = 128 GPUs
   8 leaf switches (one per GPU rail, Rail 0–7)
-  Each leaf (SN5600 64-port): 16 active DGX downlinks + 16 active spine uplinks
-  (32 ports unused — cluster is sized for 16 nodes today)
+  Each leaf (SN5600 64-port): 16 active DGX downlinks
+    + 16 active spine uplinks (32 ports unused —
+    cluster is sized for 16 nodes today)
 
 Your task:
   1. Identify which rail failed (show topology)

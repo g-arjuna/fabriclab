@@ -107,10 +107,10 @@ When a packet is dropped on a TCP connection, TCP detects the loss after a timeo
 
 For an AllReduce operation across 256 GPUs:
 - One packet drop causes a GPU's RDMA queue pair to enter an error state
-- The entire tensor that was being transferred must be retransmitted from the beginning
+- The RDMA QP enters error state and must retransmit all unacknowledged packets from the point of the drop (Go-Back-N from the dropped sequence number onwards) — which, for a large in-flight tensor, means retransmitting the vast majority of the transfer
 - Every other GPU is sitting idle at the synchronisation barrier waiting
 - At 400 Gb/s, "a tensor" might mean several gigabytes
-- This happens thousands of times per hour during training
+- This happens thousands of times per hour during training. Optical transceivers — the pluggable modules that terminate every 400G fibre run — are the single most frequent hardware failure point in production AI clusters. A marginal transceiver can cause intermittent packet drops without fully going down, making it far harder to diagnose than a clean link failure.
 
 **A single packet drop can stall a 256-GPU job for hundreds of milliseconds.** At the scale of a large training run — weeks of continuous GPU time — even a 1% slowdown from network issues costs millions of dollars.
 
@@ -291,6 +291,17 @@ When a GPU fails, the training job crashes. Every other GPU in the job stops. Th
 For a 70B parameter model, a full checkpoint is roughly 140 GB. At 800 Gb/s storage fabric bandwidth per node (2× BlueField-3 DPUs at 400G each), writing a checkpoint takes approximately 1.4 seconds. Teams typically checkpoint every 10–30 minutes. When a failure occurs, you lose at most 30 minutes of GPU time — on a cluster that costs $500 per GPU-hour, that is $250,000 of wasted compute per failure on a 32,000-GPU job.
 
 This is why the storage fabric is fast, why it is separate from the compute fabric, and why GPUDirect Storage (which allows GPUs to write directly to NVMe-oF targets without CPU involvement) matters. Every second of checkpoint time is multiplied by thousands of GPUs sitting idle.
+
+The storage bandwidth available to the cluster determines how quickly those seconds add up:
+
+| Storage bandwidth per node | Time to write 140 GB checkpoint | Notes |
+|---|---|---|
+| 100 Gbps (12.5 GB/s) | ~11.2 seconds | Single-NIC storage — common in legacy HPC |
+| 200 Gbps (25 GB/s) | ~5.6 seconds | Single BlueField-3 DPU |
+| 800 Gbps (100 GB/s) | **~1.4 seconds** | DGX H100 target — 2× BlueField-3 DPUs |
+| 3.2 Tbps (400 GB/s) | ~0.35 seconds | Full DGX node aggregate (theoretical) |
+
+At 32,000 GPUs and a 30-minute checkpoint interval, reducing checkpoint time from 11 seconds to 1.4 seconds saves approximately 3.1 GPU-hours per checkpoint — roughly $1,500 at $500/GPU-hour. Across 48 checkpoints per day, the storage fabric investment pays for itself in wasted-compute terms within weeks.
 
 **Why DGX and not something else?**
 

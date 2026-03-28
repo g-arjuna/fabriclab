@@ -2,7 +2,7 @@ import type { CommandResult } from '@/types'
 import { useLabStore } from '@/store/labStore'
 
 export function ibstat(): CommandResult {
-  const { topology } = useLabStore.getState()
+  const { topology, setCondition, markVerified } = useLabStore.getState()
   const rails = topology.rails ?? []
 
   if (rails.length === 0) {
@@ -58,6 +58,12 @@ export function ibstat(): CommandResult {
                   Port GUID: ${portGuid}
                   Link layer: Ethernet`
   })
+
+  const hasErrDisabled = rails.some((rail) => rail.switchPort === 'error-disabled')
+  if (hasErrDisabled) {
+    setCondition('nicActiveTrapSeen', true)
+    markVerified('nicActiveTrapSeen')
+  }
 
   return {
     output: entries.join('\n\n'),

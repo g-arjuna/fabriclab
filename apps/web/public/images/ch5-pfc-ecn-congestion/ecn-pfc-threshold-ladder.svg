@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+  <title id="title">ECN and PFC threshold ordering</title>
+  <desc id="desc">Readable technical illustration showing the proper ordering of ECN minimum threshold, ECN maximum threshold, PFC threshold and buffer maximum, plus the operational meaning of each zone.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#020617" />
+      <stop offset="100%" stop-color="#08192f" />
+    </linearGradient>
+    <linearGradient id="queue" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#16a34a" />
+      <stop offset="52%" stop-color="#f59e0b" />
+      <stop offset="84%" stop-color="#fb7185" />
+      <stop offset="100%" stop-color="#ef4444" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="10" />
+    </filter>
+    <style>
+      .title { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 700; }
+      .label { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .levelPulse { animation: levelPulse 3s ease-in-out infinite; }
+      .markPulse { animation: markPulse 2.2s ease-in-out infinite; }
+      .pausePulse { animation: pausePulse 1.8s ease-in-out infinite; }
+      @keyframes levelPulse {
+        0%, 100% { transform: translateY(0px); opacity: 0.95; }
+        50% { transform: translateY(-16px); opacity: 1; }
+      }
+      @keyframes markPulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+      @keyframes pausePulse {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 1; }
+      }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1100" fill="url(#bg)" />
+  <circle cx="260" cy="170" r="180" fill="#22c55e" opacity="0.08" filter="url(#glow)" />
+  <circle cx="1330" cy="860" r="230" fill="#ef4444" opacity="0.08" filter="url(#glow)" />
+
+  <text x="96" y="96" font-size="50" fill="#f8fafc" class="title">The threshold ordering that makes ECN useful</text>
+  <text x="96" y="136" font-size="22" fill="#94a3b8" class="title">ECN must fire before PFC. If the order is wrong, the fabric spends its life pausing instead of rate-shaping.</text>
+
+  <rect x="80" y="190" width="1440" height="820" rx="34" fill="#0f172a" stroke="#1e293b" stroke-width="2" />
+
+  <g transform="translate(120 250)">
+    <text x="0" y="-12" font-size="28" fill="#e2e8f0" class="title">Switch egress queue</text>
+
+    <rect x="80" y="36" width="210" height="620" rx="30" fill="#111827" stroke="#334155" stroke-width="2" />
+    <rect x="103" y="58" width="164" height="576" rx="22" fill="url(#queue)" opacity="0.26" />
+    <rect x="103" y="186" width="164" height="448" rx="22" fill="url(#queue)" opacity="0.92" class="levelPulse" />
+
+    <line x1="290" y1="82" x2="560" y2="82" stroke="#ef4444" stroke-width="3" stroke-dasharray="10 10" />
+    <text x="585" y="74" font-size="22" fill="#fca5a5" class="label">Buffer max</text>
+    <text x="585" y="104" font-size="18" fill="#fee2e2" class="label">~12 MB</text>
+
+    <line x1="290" y1="190" x2="560" y2="190" stroke="#fb7185" stroke-width="3" stroke-dasharray="10 10" class="pausePulse" />
+    <text x="585" y="182" font-size="22" fill="#fda4af" class="label">PFC threshold</text>
+    <text x="585" y="212" font-size="18" fill="#fee2e2" class="label">~2.0 MB headroom</text>
+
+    <line x1="290" y1="308" x2="560" y2="308" stroke="#f59e0b" stroke-width="3" stroke-dasharray="10 10" class="markPulse" />
+    <text x="585" y="300" font-size="22" fill="#fbbf24" class="label">ECN max</text>
+    <text x="585" y="330" font-size="18" fill="#ffedd5" class="label">~1.5 MB</text>
+
+    <line x1="290" y1="492" x2="560" y2="492" stroke="#22c55e" stroke-width="3" stroke-dasharray="10 10" />
+    <text x="585" y="484" font-size="22" fill="#86efac" class="label">ECN min</text>
+    <text x="585" y="514" font-size="18" fill="#d1fae5" class="label">~150 KB</text>
+
+    <text x="185" y="694" text-anchor="middle" font-size="18" fill="#cbd5e1" class="label">Current burst depth</text>
+
+    <rect x="0" y="728" width="700" height="120" rx="22" fill="#0b2742" stroke="#38bdf8" stroke-width="1.5" />
+    <text x="28" y="772" font-size="21" fill="#e0f2fe" class="title">Required ordering</text>
+    <text x="28" y="812" font-size="20" fill="#bae6fd" class="label">ECN min &lt; ECN max &lt; PFC threshold &lt; buffer max</text>
+    <text x="28" y="840" font-size="16" fill="#94a3b8" class="label">That gives DCQCN time to pull the sender down before PAUSE is needed.</text>
+  </g>
+
+  <g transform="translate(860 250)">
+    <text x="0" y="-12" font-size="28" fill="#e2e8f0" class="title">What each zone means</text>
+
+    <rect x="0" y="24" width="600" height="130" rx="24" fill="#052e16" stroke="#22c55e" stroke-width="1.5" />
+    <text x="30" y="64" font-size="24" fill="#86efac" class="title">Green: healthy flow</text>
+    <text x="30" y="98" font-size="18" fill="#d1fae5" class="label">Below ECN min, packets pass unmarked.</text>
+    <text x="30" y="124" font-size="18" fill="#d1fae5" class="label">Counters stay quiet and no sender changes rate.</text>
+
+    <rect x="0" y="190" width="600" height="150" rx="24" fill="#3f1906" stroke="#f59e0b" stroke-width="1.5" class="markPulse" />
+    <text x="30" y="232" font-size="24" fill="#fbbf24" class="title">Amber: ECN should do the work</text>
+    <text x="30" y="266" font-size="18" fill="#ffedd5" class="label">Switch marks CE, receivers send CNPs,</text>
+    <text x="30" y="292" font-size="18" fill="#ffedd5" class="label">and DCQCN starts reducing send rates.</text>
+    <text x="30" y="318" font-size="18" fill="#ffedd5" class="label">This is the preferred congestion-control zone.</text>
+
+    <rect x="0" y="376" width="600" height="160" rx="24" fill="#4a1010" stroke="#fb7185" stroke-width="1.5" class="pausePulse" />
+    <text x="30" y="418" font-size="24" fill="#fda4af" class="title">Red-pink: PFC is the backstop</text>
+    <text x="30" y="452" font-size="18" fill="#fee2e2" class="label">The burst is too sudden or too large,</text>
+    <text x="30" y="478" font-size="18" fill="#fee2e2" class="label">so headroom is being spent while PAUSE propagates.</text>
+    <text x="30" y="504" font-size="18" fill="#fee2e2" class="label">A brief visit is fine. Living here means pathing or ECN is wrong.</text>
+
+    <rect x="0" y="572" width="600" height="170" rx="24" fill="#450a0a" stroke="#ef4444" stroke-width="1.5" />
+    <text x="30" y="614" font-size="24" fill="#fca5a5" class="title">Dark red: failure territory</text>
+    <text x="30" y="648" font-size="18" fill="#fee2e2" class="label">Drops here with ECN active and PFC firing:</text>
+    <text x="30" y="674" font-size="18" fill="#fee2e2" class="label">the fabric is undersized or traffic is misbalanced.</text>
+    <text x="30" y="708" font-size="18" fill="#fee2e2" class="label">Drops here with zero ECN marks:</text>
+    <text x="30" y="734" font-size="18" fill="#fee2e2" class="label">ECN is simply not configured.</text>
+  </g>
+</svg>

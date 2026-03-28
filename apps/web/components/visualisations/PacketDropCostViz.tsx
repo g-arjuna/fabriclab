@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState } from "react"
 
@@ -10,16 +10,39 @@ const scenarios: { id: Scenario; label: string; color: string }[] = [
   { id: "rdma_lossless", label: "RDMA lossless (target)", color: "#166534" },
 ]
 
-const steps = [
-  "GPU0 starts AllReduce — sends 140 GB gradient tensor",
-  "Network forwards tensor across fabric",
-  "Packet dropped / lost in transit",
-  "Sender detects loss (timeout / NACK)",
-  "Retransmit all unacknowledged packets (Go-Back-N — catastrophic at scale)",
-  "Other 255 GPUs wait at synchronisation barrier",
-  "AllReduce finally completes",
-  "All GPUs start next training step",
-]
+// Step labels are scenario-specific so the lossless view shows what actually happens
+const stepLabels: Record<Scenario, string[]> = {
+  tcp: [
+    "GPU0 starts AllReduce — sends 140 GB gradient tensor",
+    "Network forwards tensor across fabric",
+    "Packet dropped / lost in transit",
+    "Sender detects loss (timeout / NACK)",
+    "Retransmit unacknowledged packets (Go-Back-N)",
+    "Other 255 GPUs wait at synchronisation barrier",
+    "AllReduce finally completes",
+    "All GPUs start next training step",
+  ],
+  rdma_loss: [
+    "GPU0 starts AllReduce — sends 140 GB gradient tensor",
+    "Network forwards tensor across fabric",
+    "Packet dropped / lost in transit",
+    "Sender detects loss (timeout / NACK)",
+    "Retransmit all unacknowledged packets (Go-Back-N — catastrophic at scale)",
+    "Other 255 GPUs wait at synchronisation barrier",
+    "AllReduce finally completes",
+    "Multiply by thousands of drops per day…",
+  ],
+  rdma_lossless: [
+    "GPU0 starts AllReduce — sends 140 GB gradient tensor",
+    "Network forwards tensor at full wire speed",
+    "Packet drop prevented by link-level flow control (PFC)",
+    "N/A — no loss to detect",
+    "N/A — no retransmit needed",
+    "No idle — all GPUs stay active throughout",
+    "AllReduce completes — fastest possible",
+    "All GPUs start next training step immediately",
+  ],
+}
 
 const stepStates: Record<Scenario, ("ok" | "warn" | "fail" | "wait" | "idle")[]> = {
   tcp: ["ok", "ok", "warn", "wait", "ok", "wait", "ok", "ok"],
@@ -43,15 +66,15 @@ const stepNotes: Record<Scenario, string[]> = {
     "RDMA bypasses kernel — faster than TCP",
     "Packet dropped — RDMA QP enters error state",
     "QP error detected — Go-Back-N forces retransmit from dropped packet onwards",
-    "RDMA uses Go-Back-N: retransmits all unacknowledged packets from the dropped sequence number onwards. With millions of packets in flight for a large tensor, this means retransmitting the vast majority of the transfer — still far worse than TCP selective acknowledgement.",
+    "RDMA uses Go-Back-N: retransmits all unacknowledged packets from the dropped sequence number (PSN) onwards. With millions of packets in flight for a large tensor, this means retransmitting the vast majority of the transfer — far worse than TCP selective acknowledgement.",
     "All 255 GPUs idle — wasted GPU-hours",
     "Complete — but seconds wasted per drop",
-    "Multiply by thousands of drops per day...",
+    "Multiply by thousands of drops per day…",
   ],
   rdma_lossless: [
     "Normal operation",
     "RDMA bypasses kernel — full wire speed",
-    "No drops — PFC or IB credit flow prevents them",
+    "PFC (Priority Flow Control) sends a PAUSE frame to the upstream sender before buffers overflow, preventing the drop entirely. No packet is lost. The QP never enters error state.",
     "N/A — no loss to detect",
     "N/A — no retransmit needed",
     "No idle — all GPUs stay active",
@@ -97,7 +120,7 @@ export function PacketDropCostViz() {
       </div>
 
       <div className="space-y-2">
-        {steps.map((step, i) => {
+        {stepLabels[scenario].map((step, i) => {
           const state = stepStates[scenario][i]
           const colors = stepColors[state]
           const isActive = activeStep === i
@@ -132,8 +155,8 @@ export function PacketDropCostViz() {
 
       <div className="mt-4 rounded-xl bg-slate-800/50 p-3 text-xs text-slate-400">
         {scenario === "tcp" && "TCP handles loss gracefully but slowly. For AI training, 'slowly' is expensive when you have 256 GPUs all waiting."}
-        {scenario === "rdma_loss" && "RDMA with packet loss is worse than TCP — the entire message must retransmit, not just the lost packet. This is why lossless networking is non-negotiable for RDMA."}
-        {scenario === "rdma_lossless" && "With a lossless fabric (InfiniBand credit flow, or RoCEv2 with PFC+ECN), drops never occur. RDMA runs at full wire speed. This is what we are trying to achieve."}
+        {scenario === "rdma_loss" && "RDMA with packet loss is worse than TCP — Go-Back-N retransmission from the dropped PSN onwards means the vast majority of the tensor must retransmit. This is why lossless networking is non-negotiable for RDMA."}
+        {scenario === "rdma_lossless" && "With a lossless fabric (InfiniBand credit flow, or RoCEv2 with PFC+ECN), drops never occur. PFC pauses the sender before buffers overflow. RDMA runs at full wire speed. This is what we are trying to achieve."}
       </div>
     </div>
   )

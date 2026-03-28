@@ -1,0 +1,214 @@
+---
+title: "Chapter 15: IP Routing for AI/ML Fabrics"
+module: "HPC Networking Foundations"
+level: "Advanced"
+estimatedMinutes: 55
+labLink: "/lab?lab=lab10-ecmp-hotspot"
+---
+
+Every chapter so far has assumed that traffic finds its way between GPUs. Chapter 2 showed you *why* the traffic is so demanding. Chapter 5 showed you how to protect it with PFC and ECN. Chapter 6 showed you how to spread it across links. But underneath all of that, a routing protocol is making the fundamental decision: which path even exists? Which next-hop does this packet go to? How does the leaf switch know that the far GPU is reachable at all?
+
+In traditional enterprise networks, routing is an afterthought — OSPF runs, routes converge, done. In an AI fabric, the routing protocol is a precision instrument. The wrong ASN design produces suboptimal three-hop paths when a link fails, saturating an intermediate spine and killing a training job that had been running for six hours. The wrong load-balancing community leaves 800 Gbps links half-empty while others hit 100%. The wrong protocol choice makes DragonFly topologies unmanageable at scale.
+
+This chapter takes you through the full routing stack that makes a modern AI fabric work — from why eBGP won the data center routing war, through the advanced BGP capabilities that create logical fabric partitions for multi-tenant GPU clusters, to the emerging IGP protocols (RIFT and IS-IS Flex Algo) that are beginning to displace BGP where link-level awareness matters more than policy flexibility, and finally to SRv6 and the multi-tenancy isolation model that turns physical fabric into GPU-as-a-Service.
+
+## Act 1 — Why routing protocol choice matters
+
+The first question in any AI fabric deployment is: which dynamic routing protocol? OSPF, IS-IS, BGP, RIFT — all of them can move packets from A to B. What separates them in an AI context is what they do when things get hard: a link fails at 03:00, 32 spines are simultaneously receiving AllReduce traffic, one tenant's elephant flows are colliding with another tenant's gradient synchronisation.
+
+BGP became the dominant protocol in data center fabrics for a specific reason: RFC 7938, "Use of BGP for Routing in Large-Scale Data Centers," published in 2016, documented how hyperscalers were already using eBGP as an IGP replacement. The reasoning was sound. OSPF floods link-state information to every node — fine at 20 switches, pathological at 200 when LSA churn from link flaps creates CPU storms. IS-IS scales better but was considered exotic outside service provider networks. BGP, by contrast, is a path-vector protocol that propagates reachability, not topology. A leaf switch running eBGP knows how to reach every destination but does not know the complete topology between here and there. That information hiding is a feature, not a bug: it prevents the flooding amplification that kills OSPF at scale.
+
+<RoutingProtocolCompareViz />
+
+The limitation BGP accepted in exchange for this scalability is now becoming the central problem in AI fabrics. BGP's path-vector model gives you per-prefix best-path selection. It does not give you real-time link utilisation awareness. When a 400 Gbps spine link is at 98% and a DLB update needs to redirect flows away from it, BGP cannot express that state — that awareness lives in the ASIC and the DLB quality tables, not in the routing protocol. When you want to partition the fabric into logical routing planes so Tenant A's GPU traffic never shares a spine with Tenant B's, BGP needs custom extensions (DPF, Link Bandwidth Community) that were not part of its original design.
+
+The emerging alternatives — RIFT (RFC 9692) and IS-IS Flex Algo (RFC 9502) — were designed with these requirements in mind from the start. They carry link-quality metadata natively. They support multiple simultaneous routing topologies. They converge faster on failure. But they sacrifice BGP's policy richness and multi-vendor maturity. The practical answer in most deployments is a layered approach: eBGP for scale and policy, augmented with DPF for deterministic path control, with RIFT emerging as a candidate for pure-scale deployments that do not need BGP's policy machinery.
+
+The new pressure on all of these protocols comes from microsecond requirements. AllReduce synchronisation barriers mean that a single slow GPU can stall 10,000 others. When a link degrades and the routing protocol takes 50ms to converge, that is 50ms of stalled training — at $2–4 per GPU-hour across a 10,000-GPU cluster, that is hundreds of dollars of wasted compute. The routing protocol must react fast, ideally before the application layer notices anything has changed.
+
+## Act 2 — eBGP unnumbered: eliminating address overhead
+
+A 200-switch AI fabric has roughly 2,400 inter-switch links (32 spines × 8 leaf connections, 8 leaf × 32 spine connections, times the pod count). In traditional eBGP deployments, every one of those links needs a point-to-point IPv4 subnet — typically a /30 or /31. That is 2,400 subnets to assign, document, and maintain. When a new spine is added, you touch every leaf it connects to. When a link fails, you debug against a table of addresses you have to look up.
+
+eBGP unnumbered, specified in RFC 5549 ("Advertising IPv4 Network Layer Reachability Information with an IPv6 Next Hop"), eliminates all of this. The insight is elegant: every network interface already has an IPv6 link-local address derived from its MAC address (EUI-64). That address is unique per link without any configuration. If you can establish a BGP session using that link-local address, and if you can use the link-local address as the IPv4 next-hop, you never need to assign a single point-to-point IPv4 address in your fabric.
+
+<BGPUnnumberedViz />
+
+The mechanics work in three phases. First, ICMPv6 Neighbor Discovery runs automatically. Leaf1 sends a Neighbor Solicitation to the all-nodes multicast address; Spine1 responds with a Neighbor Advertisement carrying its link-local address (`fe80::…`) and MAC address. Both sides learn each other's link-local addresses without any IP configuration.
+
+Second, Spine1's routing daemon sends a Router Advertisement that includes ICMPv6 information about its link-local address. Leaf1 now knows the BGP neighbor address to use. The TCP session for BGP is established to and from the link-local addresses directly.
+
+Third, when BGP Update messages are exchanged, the NLRI (the IP prefix being advertised, such as `10.1.1.0/24`) is IPv4 — your server addresses are still IPv4. But the BGP next-hop attribute is the IPv6 link-local address of the advertising switch, not an IPv4 address. This is what RFC 5549 defines: the Extended Next Hop Encoding capability, negotiated in the BGP Open message, allows the next-hop attribute to carry an IPv6 address for an IPv4 prefix.
+
+The practical result is that the administrator only needs to:
+1. Assign each switch a unique BGP ASN (the 32-bit private range `4200000000–4294967294` gives you billions of values, trivially auto-assigned from the rack number)
+2. Enable BGP on all uplink interfaces with `neighbor interface-range` pointing to link-local addresses
+3. Redistribute connected routes so server prefixes appear in BGP
+
+Everything else — peering addresses, next-hop computation, route installation — happens automatically. When a new spine is added, you cable it and enable BGP; the link-local address appears, ND runs, BGP comes up, routes propagate. There is nothing to pre-configure on the leaves.
+
+One nuance: the BGP next-hop rewrite that normally happens when an eBGP router re-advertises a prefix continues to work correctly. When Spine1 receives a server prefix from Leaf1 (with next-hop = Leaf1's link-local address toward Leaf1) and re-advertises it to Leaf2, Spine1 rewrites the next-hop to its own link-local address toward Leaf2. Leaf2 sees the server as reachable via Spine1's local address — correct, and still requiring no IPv4 addressing on any inter-switch link.
+
+## Act 3 — BGP ASN design: one decision that determines failure behavior
+
+BGP's AS-PATH loop prevention mechanism — refusing to accept a route whose AS-PATH already contains the local ASN — is BGP's primary defence against routing loops. In an AI fabric, this mechanism also controls what happens when links fail. Getting the ASN design right is therefore a reliability decision, not just a numbering exercise.
+
+<BGPASNDesignViz />
+
+Consider a three-stage Clos fabric. Leaf1 has two servers: Server1 and Server5. Server5 is connected to Leaf2. Leaf1 and Leaf2 both connect to SpineA and SpineB. The normal path for Server1 → Server5 is: Leaf1 → SpineA (or SpineB) → Leaf2 → Server5. Two hops.
+
+Now a link fails: the Leaf2 → SpineA link goes down. SpineA can no longer reach Leaf2. What happens next depends entirely on ASN assignment.
+
+**Scenario A: all spines share the same ASN (recommended).** SpineA and SpineB both have ASN 65000. Leaf1 receives the route to Server5 from SpineA and SpineB with their ASN in the path. When the Leaf2–SpineA link fails, SpineA withdraws the Server5 route. Leaf1 removes SpineA from ECMP. Traffic shifts to SpineB. SpineB still has a path to Leaf2. Two-hop path maintained. Clean.
+
+Now suppose two links fail simultaneously: Leaf2–SpineA and Leaf2–SpineB. SpineA and SpineB both withdraw. Leaf1 has no route to Server5. The job sees a connectivity failure and the orchestrator restarts it on another server. This is correct behaviour — the fabric is partitioned, and there is no valid path, so BGP truthfully declares it unreachable.
+
+**Scenario B: each spine has a unique ASN.** SpineA = ASN 65001, SpineB = ASN 65002. When the Leaf2–SpineA link fails, SpineA has no direct route to Leaf2. But SpineA can still see Leaf2's prefixes via SpineB (through a hypothetical spine-to-spine link, or via Leaf1 if route reflection is used). The AS-PATH for Server5 via this route is: 65001 → 65002 → 65000 (Leaf2's ASN). SpineA will accept this because 65001 does not appear in the path. SpineA re-advertises it to Leaf1. Leaf1 now sends traffic via SpineA → SpineB → Leaf2 — a three-hop path through an extra spine. That extra hop adds latency, and the intermediate Leaf2–SpineB link now carries twice the load. In an AI fabric where a single link already carries elephant flows at 80–90% utilisation, doubling the load on SpineB → Leaf2 immediately causes congestion and PFC storms.
+
+The fix is simple: use the same ASN on all switches at the same tier. All spines share one ASN. All super-spines share one ASN. All leaf switches have unique ASNs (they originate prefixes and need to be individually identifiable). This configuration is the recommendation of RFC 7938 and every major hyperscaler deployment.
+
+**BGP ADD-PATH** extends the same fabric with multipath diversity. In a standard eBGP deployment, each router advertises only its single best path for a prefix. When Spine1 has three routes to Server5 (via Leaf2's three downlinks), it picks one and advertises that to Leaf1. Leaf1 sees only one path. ADD-PATH changes this: Spine1 advertises all three paths, each tagged with a path identifier. Leaf1 installs all three in its ECMP group. If one Leaf2 downlink fails, Leaf1 immediately has two remaining paths in its RIB without waiting for BGP convergence. ADD-PATH is especially valuable with route reflectors (iBGP): the RR can advertise all paths to all clients rather than a single best path, dramatically improving multipath redundancy.
+
+**AS-PATH strip and replace** handles the case where the AI fabric connects to a private-ASN core network. If Server101 is in a remote data centre and its prefix arrives at the border-spine with a long private AS-PATH, the leaf switches will see different AS-PATH lengths for the same destination depending on which border-spine they ask. Route policies applied at the border-spine normalise this: strip the incoming AS-PATH and replace it with a predefined list of ASNs of equal length. All border-spines apply the same replacement. From the perspective of leaf switches, Server101 now appears equidistant through all border devices, and ECMP distributes traffic evenly across all border links.
+
+## Act 4 — BGP Link Bandwidth Community and DPF: traffic engineering inside the fabric
+
+Standard eBGP distributes traffic equally across all ECMP paths — it assumes all paths are equivalent. In a real AI fabric, they are not. A five-stage Clos fabric may have spine-to-super-spine links of different speeds. A spine that has lost one of its four downlinks to a destination leaf now has 75% of the bandwidth it had before. Sending equal traffic to a reduced-capacity spine causes congestion that flows back as PFC pause frames.
+
+The BGP Link Bandwidth Extended Community solves the capacity signalling problem. When a spine advertises a route to a leaf, it encodes the total forwarding capacity toward the destination leaf as a community attribute. If Spine1 normally has four 400 Gbps links to Leaf4 but one has failed, it advertises the Server5 prefix with a bandwidth community value of 1200 (three links × 400 Gbps) instead of 1600. Leaf1 sees all four spines and their respective bandwidth community values. Rather than distributing traffic equally, it performs weighted ECMP proportional to those values: Spine1 gets 3/16 of the traffic, the three healthy spines get 4/16 each. The ASIC implements this via a bucket indirection table where the number of buckets pointing to each next-hop reflects the weight. This mechanism is called Weighted Packet Spraying (WPS) in some vendor implementations.
+
+The bandwidth community mechanism works reactively: it responds to failures after they happen. BGP DPF (Deterministic Path Forwarding, IETF draft `draft-wang-idr-dpf`) goes a step further — it partitions the fabric into logical routing planes *before* any failure, guaranteeing that specific workloads can never compete for the same physical path.
+
+<BGPDPFViz />
+
+The core idea is fabric coloring. The physical three-stage Clos fabric — which has many equal paths between any leaf pair — is divided into multiple logical fabrics by coloring the eBGP sessions. Session coloring happens at peering establishment: the eBGP session between Leaf1 and Spine1 is configured as "black." The session between Leaf1 and Spine2 is configured as "gray." Only routes matching a session's color are advertised over that session.
+
+Route coloring works as follows: Server5 is connected to Leaf4. Leaf4 originates the route to Server5 as uncolored (matching all colors). When Leaf4 advertises this route to Spine1 over the black session, Spine1 records the route as "black." When Spine1 re-advertises to Leaf1 over the black session, Leaf1 receives a black route. Similarly, Leaf4 advertises to Spine2 over the gray session; Spine2 re-advertises to Leaf1 over the gray session; Leaf1 receives a gray route. Leaf1 now has two routes to Server5: one black (through Spine1) and one gray (through Spine2). It can configure the black route as active and the gray as backup, or use both simultaneously for different traffic classes.
+
+Traffic-to-color mapping is the final piece. Several mechanisms can attach a color to an outgoing flow:
+
+**Filter-Based Forwarding (FBF) / Policy-Based Routing**: A traffic classifier on the leaf switch matches flows by source/destination QPair range, source UDP port range, or DSCP value. Matched flows are redirected to the black or gray logical fabric path instead of the default ECMP path. This is the most operationally straightforward approach and requires no server-side changes.
+
+**On-box agent**: A software agent running on the switch probes each logical fabric using active measurements and distributes new workloads to the fabric with the best measured quality. Requires ASIC-level RoCEv2 flow awareness to classify flows by QPair.
+
+**Central controller**: A fabric controller (such as HPE Juniper's CPCE — Containerized Path Computation Engine) has topology visibility across all nodes, receives streaming telemetry, and pushes forwarding decisions to the switches. The controller can make globally optimal decisions that individual switches cannot see — for example, rebalancing a tenant's flows across fabrics when a spine degrades, before any switch-local congestion mechanism would trigger.
+
+**EVPN-VXLAN correlation**: The most powerful form. MAC-VRF instances on the leaf are associated with specific fabric colors. Traffic entering `MAC-VRF-black` (Tenant A's overlay) is automatically routed over the black physical fabric. Traffic entering `MAC-VRF-gray` (Tenant B) uses gray. The control plane and data plane isolation are both enforced by the same mechanism.
+
+The multi-tenant scenario this enables: a 128-GPU cluster shared between seven LLM training jobs. The highest-priority job — a model that must complete a training iteration within a strict time window for a real-time product — is pinned to the black fabric. That fabric's three spine paths are exclusively its. The other six jobs share the remaining gray fabric. The high-priority job's JCT is predictable because it cannot be affected by the other six jobs' traffic, even if they produce massive AllReduce bursts at exactly the wrong moment.
+
+## Act 5 — RIFT: a routing protocol built for fat-tree
+
+eBGP was designed for the internet and adapted for data centers. RIFT (Routing in Fat Trees, RFC 9692, published April 2025) was designed for fat-tree topologies from first principles. The difference is visible in every design decision it makes.
+
+<RIFTvsBGPViz />
+
+In a standard eBGP fat-tree fabric, every leaf switch has a complete view of every server prefix but no view of the topology connecting those prefixes. Leaf1 knows it can reach Server5 via Spine1 or Spine2, but it does not know whether Spine1's link to Leaf4 is congested. It cannot perform end-to-end path quality assessment. This is the DLB/GLB problem from Chapter 6: the routing plane is deliberately topology-blind, and load balancing must fill the gap using out-of-band quality signals.
+
+RIFT combines two propagation mechanisms. Northbound (leaf → spine → super-spine), RIFT uses link-state flooding: each node advertises its adjacencies and local prefixes to all nodes in the layer above, building a complete topology view at the top of the fabric. Southbound (spine → leaf), RIFT uses distance-vector: each spine summarises reachability information into aggregated prefixes and distributes them down. The result is that spine and super-spine nodes have full topology awareness (they have seen all northbound link-state), while leaf nodes have a compact distance-vector view that minimises FIB size.
+
+This topology awareness produces automatic traffic engineering that BGP cannot match. When a leaf link fails, the super-spine nodes update their link-state topology and immediately begin disaggregating the summary prefixes — advertising more-specific prefixes to direct traffic around the failure, without any operator intervention. This "automatic disaggregation" means that RIFT converges as fast as link-state propagation allows (typically under 10ms in a well-tuned fabric), compared to BGP's multiple round-trip convergence cycles.
+
+RIFT's adjacency formation uses UDP hello messages rather than TCP. There is no TCP state machine, no SYN/SYN-ACK/ACK sequence, no TCP retransmit timer. Adjacency formation is nearly instantaneous on link-up. Zero-touch provisioning follows naturally: a new spine is cabled, RIFT discovers it via hellos, the topology updates automatically, and routing entries appear within seconds. No ASN assignment, no BGP neighbor configuration on connecting leafs.
+
+The K-store (Key-Value store) embedded in RIFT advertisements enables metadata distribution that BGP requires extensions for. ASIC-level link quality metrics, overlay configuration data, QoS settings, and administrative metadata can all be propagated through the K-store as part of normal RIFT operation. This is the mechanism that makes RIFT suitable for DragonFly Sparse topologies (the IETF draft `draft-przygienda-rift-dragonfly`): the inter-group horizontal links between top-of-fabric nodes are encoded as K-store entries, enabling routing across groups without the manual configuration burden that makes BGP-based DragonFly impractical at scale.
+
+RIFT's practical limitation is maturity. RFC 9692 was published in April 2025. Implementations exist in open-source (used for server-level routing) and from selected vendors, but multi-vendor interoperability at the scale of a 10,000-switch AI fabric has not been proven in production. The operational tooling — debugging, telemetry, audit trails — is less mature than BGP's decades of tooling. Deployments that need EVPN overlay services for multi-tenancy or complex border routing policies will find RIFT's policy model limited compared to BGP.
+
+## Act 6 — IS-IS Flex Algo: multiple routing planes inside one protocol domain
+
+IS-IS has a quiet advantage in AI fabrics: it was designed as a link-state protocol that carries arbitrary metadata in Type-Length-Value (TLV) extensions, and the standards body has systematically added AI fabric capabilities to those TLVs over the past three years.
+
+The key addition is Flexible Algorithm (Flex Algo), standardised in RFC 9350 and RFC 9502. Where standard IS-IS computes a single shortest-path tree using a single metric (link bandwidth by default), Flex Algo allows up to 128 simultaneous routing computations, each using a different combination of metric type and constraints. The result is multiple independent routing topologies — multiple logical fabrics — all derived from the same IS-IS adjacency database, without requiring any overlay encapsulation.
+
+<FlexAlgoViz />
+
+The Flexible Algorithm Definition (FAD) specifies three things: the calculation type (currently always modified Dijkstra), the metric type (IGP metric, minimum unidirectional delay, or TE metric), and a set of constraints (include-any, exclude-all, include-all on administrative groups, plus optional bandwidth and delay thresholds). Every node participating in a given Flex Algo must advertise the same FAD — if any node disagrees on the definition, it is excluded from that algorithm's topology and traffic is not routed through it.
+
+A practical deployment divides traffic into three planes:
+
+**Flex Algo 0 (default):** Standard IS-IS metric. All nodes participate. This is the fallback — all traffic can use it, and management/control-plane traffic always uses this plane.
+
+**Flex Algo 128:** Low-latency constraint. Metric type = minimum unidirectional delay. Spines that advertise delay measurements below a threshold are included; those above are excluded. Critical LLM training traffic is mapped to Algo 128 via a routing policy that matches the RoCEv2 DSCP value. The SPF computation for Algo 128 produces a topology that only includes low-latency links, and all paths through Algo 128 are guaranteed to meet the delay SLA.
+
+**Flex Algo 129:** High-bandwidth constraint. Metric type = TE metric weighted by available bandwidth. A spine with one failed downlink advertises reduced TE metric; Algo 129's SPF routes around it. Storage-fabric traffic from BlueField-3 DPUs is mapped here — storage traffic is bandwidth-sensitive but not as latency-critical as GPU AllReduce.
+
+Each server prefix is advertised with an Algorithm field in the IS-IS IPv4 Algorithm Prefix Reachability TLV (RFC 9502). This TLV includes the MTID (multi-topology identifier) and the algorithm number alongside the standard prefix information. A leaf switch receiving this TLV installs the prefix in its Algo 128 RIB separately from its Algo 0 RIB. When a flow arrives from a GPU and is classified to Algo 128, the forwarding lookup uses the Algo 128 FIB entry, not the default.
+
+IS-IS Optimal Distributed Flooding (IETF draft `draft-ietf-lsr-distoptflood`) complements Flex Algo by reducing LSP flooding overhead in dense fabrics. Standard IS-IS floods an LSP to all neighbours simultaneously. In a 64-spine fabric where every leaf connects to every spine, this means each leaf LSP update is sent 64 times from the originating leaf. The distributed flooding optimisation elects one neighbour per link-state PDU to receive the initial flood, reducing copies from N to 1 in the typical case. At 64 spines, this is a 64× reduction in LSP traffic — significant during network convergence events when many links change state simultaneously.
+
+IS-IS scales to approximately 2,500 switch nodes in tested deployments, compared to RIFT's 1,000+ and BGP's effectively unlimited scale. For most AI fabrics (which top out at a few hundred switches), all three protocols are within range; the choice is driven by operational familiarity and feature requirements.
+
+## Act 7 — SRv6: centralized path programming with headers
+
+Segment Routing over IPv6 (SRv6) takes a fundamentally different approach to traffic engineering: instead of distributing routing decisions across all switches, it encodes the complete path in the packet header at the ingress node. Transit nodes do not make routing decisions — they read the next segment identifier from the header and forward accordingly.
+
+<SRv6PathViz />
+
+The header is the SRH (Segment Routing Header), an IPv6 extension header that sits between the outer IPv6 header and the inner Layer 4 header (UDP carrying RoCEv2 in an AI fabric). The SRH contains:
+
+**Segment list**: An ordered list of 128-bit IPv6 addresses, each representing a SID (Segment Identifier). The currently active SID is pointed to by the Segments Left counter. When a switch processes the packet, it decrements Segments Left and updates the destination address of the outer IPv6 header to the next SID. The packet is then forwarded toward that next destination using normal IPv6 routing.
+
+**Node SID**: A SID that identifies a specific switch in the SR domain — similar to a loopback address. Encoding Node SID of Spine3 in the segment list means the packet must traverse Spine3.
+
+**Adjacency SID**: A SID that identifies a specific link between two switches. More precise than a Node SID — encoding an Adjacency SID forces the packet to exit via exactly that interface. Used when precise traffic engineering requires avoiding a specific link.
+
+The SRv6 for AI backend draft (`draft-filsfils-srv6ops-srv6-ai-backend`) describes the operational model: a central controller (using Path Computation Element Protocol, PCEP, or BGP-LS for topology learning) computes an optimal path for each GPU-to-GPU communication pattern at the start of a training job. The controller encodes this path as a segment list and pushes it to the ingress leaf. The ingress leaf prepends the SRH to all packets from that GPU. Transit switches and spines forward based purely on the outer destination address — no flow state, no load balancing decisions, just destination lookup and SRH processing.
+
+**SRv6 uSID** (Micro-SID, defined in IETF draft `draft-filsfils-spring-net-pgm-extension-srv6-usid`) addresses the MTU inflation problem. A full SRH with three 128-bit SIDs adds 48 bytes of overhead before the payload. In an AI fabric where GPU frames are typically at MTU (typically 4200 bytes for RoCEv2 with jumbo frames), this overhead is acceptable. But in a five-stage fabric where segment lists may need five or more SIDs, the overhead grows to 80+ bytes, potentially forcing fragmentation. Micro-SID compresses each SID from 128 bits to 16 bits by sharing a common locator block (the most significant bits) across all SIDs in the domain. A five-SID segment list now adds 10 bytes instead of 80. The locator block approach works because all switches in the SR domain belong to the same administrative network — their SIDs naturally share the same prefix.
+
+The practical tradeoff for SRv6 in AI fabrics: it requires DCQCN (PFC + ECN) to continue functioning correctly even with SRH encapsulation. The RoCEv2 DSCP value that triggers PFC and ECN marking must survive SRH encapsulation and decapsulation. Early SRv6 implementations did not preserve DSCP through encapsulation, breaking lossless fabric operation. Modern implementations copy DSCP from the inner to the outer header. Operators must verify this behaviour in their hardware before deploying SRv6 in a lossless fabric.
+
+SRv6 is gaining production momentum in service provider networks. For AI fabrics specifically, it is most compelling in two scenarios: very large fabrics where a central controller can compute globally optimal paths more effectively than distributed ECMP, and multi-tenant fabrics where the strict traffic isolation guarantees of explicit path programming are preferable to the probabilistic guarantees of DPF coloring.
+
+## Act 8 — Multi-tenancy: GPUaaS isolation at network and server level
+
+When a data centre offers GPU-as-a-Service — selling training capacity to multiple organizations who must not see each other's model parameters or gradient updates — network-level isolation becomes a compliance requirement, not just an operational convenience.
+
+<MultiTenancyFabricViz />
+
+**Network-level isolation: EVPN-VXLAN**
+
+The standard model for multi-tenant AI fabrics uses EVPN-VXLAN with per-tenant routing instances. Each tenant is assigned a MAC-VRF (MAC Virtual Routing and Forwarding) instance on every leaf switch where that tenant's servers are connected. The MAC-VRF is identified by a VLAN tag on the server-facing interface and a VNI (VXLAN Network Identifier) on the fabric-facing encapsulation.
+
+Route Type 5 (RT5) IP prefixes extend isolation to the IP routing layer. Within a tenant's network, GPU servers communicate via VXLAN tunnels controlled by EVPN BGP signalling. Spine switches act as EVPN route reflectors — they do not participate in tenant data planes but relay RT5 advertisements between leaves. When GPU1 (Tenant A, connected to Leaf1) sends traffic to GPU9 (also Tenant A, connected to Leaf3), Leaf1 encapsulates the packet in VXLAN with Tenant A's VNI, forwards it across the fabric, and Leaf3 decapsulates and delivers to GPU9. Leaf2, connected only to Tenant B servers, never sees Tenant A's packets — the VNI acts as a complete data-plane barrier.
+
+The combined MAC-VRF + RT5 model handles multi-rail deployments cleanly. A four-rail AI cluster with 512 GPUs per tenant can allocate GPU0–GPU127 to Rail 1 and GPU128–GPU255 to Rail 2. The EVPN RT5 tunnels between rails carry only the inter-rail traffic, and the spine switches route between rails using the tenant's VRF — without ever mixing Tenant A's inter-rail packets with Tenant B's.
+
+**Server-level isolation: MIG + SR-IOV network implications**
+
+Chapter 14 explained MIG partitioning from the GPU perspective. The network implications are specific: when an H100 is partitioned into 7 MIG instances for 7 inference tenants, each instance needs a separate network identity and bandwidth allocation.
+
+SR-IOV (Single Root I/O Virtualization) on the ConnectX-7 provides this. The physical NIC is logically split into one Physical Function (PF) and up to 128 Virtual Functions (VFs). Each VF has its own MAC address, its own RoCEv2 queue pair space, and can be rate-limited independently. A 7-instance MIG partition maps to 7 VFs, each with a configured bandwidth limit of `total_link_bandwidth ÷ 7` (adjustable based on SLA).
+
+On the leaf switch, each VF's traffic arrives with a different VLAN tag (the hypervisor or SR-IOV driver tags each VF's traffic before it hits the switch port). The leaf maps each VLAN to a MAC-VRF instance — 7 VLANs on one server port, 7 MAC-VRF instances, 7 independent EVPN instances. From the fabric's perspective, 7 independent tenants are connected to that single physical port.
+
+The monitoring implication (connected to Chapter 11): UFM sees RoCEv2 counters per VF, not per physical NIC. If one MIG instance's SR-IOV VF is generating excessive pause frames, the counter is `vf3_pause_frames`, not `nic_pause_frames`. Alert thresholds calibrated for whole-GPU workloads need to be divided by the MIG partition count and applied per-VF.
+
+**GBP microsegmentation: intra-tenant isolation**
+
+VXLAN Group-Based Policy (GBP) adds a second isolation layer within a single tenant's VNI. Two GPU servers in the same VNI (same tenant, same IP subnet) can be prevented from communicating directly if their GBP tags differ. The GBP tag is encoded in the VXLAN header alongside the VNI. Policy rules on the leaf switch enforce the tag-based access control at the data plane, before packets leave the ingress port.
+
+The AI fabric use case: within a single tenant running seven simultaneously, each sub-job gets a unique GBP tag. Job A's GPUs can only communicate with other Job A GPUs; the switch drops Job A packets destined for Job B GPUs at the data plane, without requiring firewall appliances. When the jobs complete and the orchestrator reallocates the GPUs, GBP tags are updated.
+
+**Radius-based dynamic ACL: the centralised alternative**
+
+An alternative to EVPN multi-tenancy is Radius-based dynamic ACL. When a GPU server authenticates (802.1X or MACSEC), the Radius server returns an ACL policy specific to that tenant. The leaf switch applies the ACL to that server's port, filtering inter-tenant traffic based on IP prefix lists.
+
+This approach is operationally simpler — one Radius server controls the entire fabric's tenant policies — but scales poorly at high tenant counts. TCAM (Ternary Content-Addressable Memory) on typical data center switches holds 16,000–64,000 ACL entries. With 512 servers, 7 tenants, and per-server per-tenant ACL rules, TCAM exhaustion is a real risk. EVPN-VXLAN's VNI-based isolation has no such TCAM constraint; it uses hardware forwarding tables (L2 MAC and L3 IP) whose scale is an order of magnitude larger.
+
+## What you now know
+
+The routing protocol stack of an AI fabric is a stack of complementary decisions, each addressing a different dimension of the traffic engineering problem:
+
+eBGP unnumbered eliminates link addressing overhead — tens of thousands of fabric links managed with zero IPv4 address configuration. ASN design controls failure semantics — same-ASN spine tiers prevent suboptimal routing at the cost of declaring connectivity lost when no valid path exists, which is the correct behaviour for training jobs that cannot tolerate degraded performance. BGP Link Bandwidth Community and DPF add traffic engineering above the baseline: weighted ECMP that adapts to capacity changes, and logical fabric partitioning that gives different tenants and different workloads their own dedicated routing planes.
+
+RIFT and IS-IS Flex Algo represent the next generation: protocols that carry link-quality and topology metadata natively, eliminating the need for BGP extensions and out-of-band quality signalling. RIFT is the choice for pure-scale fat-tree deployments willing to invest in a newer protocol stack. IS-IS Flex Algo is the evolutionary choice for environments already running IS-IS who want multiple routing planes without migrating to a new protocol.
+
+SRv6 enables path programming at the highest level of precision — the controller dictates the exact sequence of switches each flow traverses. The flexibility is enormous; the operational burden of maintaining segment lists is correspondingly significant.
+
+Multi-tenancy ties all of this together: EVPN-VXLAN provides the data-plane isolation between tenants, BGP DPF or IS-IS Flex Algo provides the routing-plane isolation, MIG + SR-IOV provide the server-level isolation, and GBP adds intra-tenant microsegmentation. In combination, these mechanisms transform a shared physical fabric into a platform where multiple organizations can train confidential models on the same switches, at the same time, with complete assurance that their data never crosses the isolation boundary.
+
+The routing protocol is not a detail. In an AI fabric, it is the instrument that determines whether a training job completes on schedule, whether a tenant's gradient updates stay private, and whether a link failure propagates as a clean failover or as a cascading congestion event that costs hours of recompute.
+
+[Continue to Chapter 16 →](/learn/ch16-gpu-compute-network-packet-anatomy)
