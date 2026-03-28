@@ -96,8 +96,17 @@ export function trackErrors(page: Page): BrowserErrorTracker {
       failure === "net::ERR_ABORTED" &&
       url.startsWith(supabaseUrl) &&
       /\/auth\/v1\/user(?:\?|$)/.test(url);
+    const isAbortedSupabaseProgressWrite =
+      failure === "net::ERR_ABORTED" &&
+      url.startsWith(supabaseUrl) &&
+      /\/rest\/v1\/(?:chapter_progress|lab_progress)\?on_conflict=/.test(url);
 
-    if (isAbortedRscRequest || isAbortedStaticChunkRequest || isAbortedSupabaseUserProbe) {
+    if (
+      isAbortedRscRequest ||
+      isAbortedStaticChunkRequest ||
+      isAbortedSupabaseUserProbe ||
+      isAbortedSupabaseProgressWrite
+    ) {
       return;
     }
 

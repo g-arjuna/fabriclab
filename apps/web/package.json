@@ -16,7 +16,8 @@
     "test:browser:progress": "playwright test tests/progress.sync.smoke.spec.ts",
     "test:browser:catalog": "playwright test tests/catalog.surface.smoke.spec.ts",
     "test:browser:entitlements": "playwright test tests/entitlement.revoke.smoke.spec.ts",
-    "test:browser:labs": "playwright test tests/lab.release.smoke.spec.ts"
+    "test:browser:labs": "playwright test tests/lab.release.smoke.spec.ts",
+    "test:browser:release": "npm run test:browser:deploy && npm run test:browser:admin && npm run test:browser:progress && npm run test:browser:catalog && npm run test:browser:entitlements && npm run test:browser:labs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
