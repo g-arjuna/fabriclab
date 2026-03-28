@@ -7,7 +7,7 @@ import { getCurriculumCatalog, groupChaptersByPart } from "@/lib/catalog/runtime
 import { PARTS, type CatalogItem } from "@/lib/catalog/source";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
-function canAccessItem(item: CatalogItem, hasAuth: boolean, hasPaidEntitlement: boolean, isAdmin: boolean) {
+function canAccessItem(item: CatalogItem) {
   return true;
 }
 
@@ -66,7 +66,7 @@ export default async function CurriculumPage() {
                   <CurriculumCard
                     key={item.slug}
                     item={item}
-                    canAccess={canAccessItem(item, authEnabled, viewer.hasPaidEntitlement, viewer.isAdmin)}
+                    canAccess={canAccessItem(item)}
                   />
                 ))}
               </div>
@@ -86,7 +86,7 @@ export default async function CurriculumPage() {
               <CurriculumCard
                 key={lab.slug}
                 item={lab}
-                canAccess={canAccessItem(lab, authEnabled, viewer.hasPaidEntitlement, viewer.isAdmin)}
+                canAccess={canAccessItem(lab)}
               />
             ))}
           </div>

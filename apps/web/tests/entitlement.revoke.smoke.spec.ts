@@ -42,7 +42,7 @@ test.describe.serial("Legacy entitlement revoke smoke", () => {
       await page.goto(`${appUrl}/admin/releases`, { waitUntil: "domcontentloaded" });
       await page.getByPlaceholder("learner@fabriclab.dev").fill(learnerEmail);
       await page.getByRole("button", { name: "Revoke" }).click();
-      await expect(page.getByText(`Revoked core_paid from ${learnerEmail}.`)).toBeVisible();
+      await expect(page.getByText(`Revoked legacy test access from ${learnerEmail}.`)).toBeVisible();
       await expect.poll(async () => await hasPaidEntitlement(learnerEmail)).toBe(false);
 
       await learnerPage.goto(`${appUrl}/account`, { waitUntil: "domcontentloaded" });

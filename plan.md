@@ -9,7 +9,7 @@
 FabricLab is moving from a fully static MVP to a hybrid platform:
 
 - content remains repo-backed
-- Supabase becomes the source of truth for auth, entitlements, release metadata, and synced progress
+- Supabase becomes the source of truth for auth, release metadata, synced progress, and community comments
 - Vercel becomes the canonical host for `apps/web`
 
 Content writing is still Claude-owned.
@@ -49,6 +49,7 @@ Platform engineering is Codex-owned.
 - `user_entitlements`
 - `chapter_progress`
 - `lab_progress`
+- `community_comments`
 
 ### Access model
 
@@ -89,6 +90,7 @@ In Supabase:
 Run the SQL in:
 
 - `supabase/migrations/20260328_001_auth_access_release_control.sql`
+- `supabase/migrations/20260329_002_community_comments.sql`
 
 This creates:
 
@@ -116,6 +118,10 @@ Fill in:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_ADMIN_EMAILS`
+- `NEXT_PUBLIC_COMMUNITY_REPO_URL` (optional)
+- `NEXT_PUBLIC_COMMUNITY_ISSUES_URL` (optional)
+- `NEXT_PUBLIC_COMMUNITY_DISCUSSIONS_URL` (optional)
+- `NEXT_PUBLIC_SUPPORT_URL` (optional)
 
 ### 5. Seed catalog metadata
 
@@ -197,6 +203,12 @@ Useful routes:
 - update README/docs
 - create Claude handoff notes for ongoing weekly content drops
 
+### Phase 6 - Community loop
+
+- add per-chapter and per-lab discussion threads
+- expose optional repo / issues / support links in the app shell
+- keep contribution docs and issue templates aligned with the live platform
+
 ---
 
 ## Ongoing content-release workflow
@@ -238,7 +250,7 @@ apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json
 
 - non-admin users cannot access `/admin/releases`
 - admin can change publish/access/preview fields
-- admin can grant and revoke `core_paid` for internal testing if still needed
+- admin can grant and revoke legacy test entitlements for internal regression checks if still needed
 
 ### Progress
 

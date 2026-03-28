@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 
 import { AuthControls } from "@/components/auth/AuthControls";
 import { ChapterSidebar } from "@/components/chapter/ChapterSidebar";
+import { CommunityThread } from "@/components/community/CommunityThread";
 import { PageProgressMarker } from "@/components/chapter/PageProgressMarker";
 import { getServerViewer } from "@/lib/auth/server";
 import { getCatalogAccessState, getCurriculumCatalog } from "@/lib/catalog/runtime";
@@ -126,7 +127,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
           ) : (
             <div className="mb-10 md:mb-12">
               <p className="text-xs uppercase tracking-[0.28em] text-slate-600">
-                {document.title} · Part {pageIndex + 1} of {totalPages}
+                {document.title} / Part {pageIndex + 1} of {totalPages}
               </p>
               <h2 className="mt-3 max-w-5xl text-3xl font-semibold leading-tight tracking-tight text-white md:text-4xl">
                 {page.heading}
@@ -181,7 +182,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
                   href={`/learn/${chapter}?page=${pageIndex - 1}`}
                   className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-sm transition hover:border-white/20 sm:w-auto"
                 >
-                  <span className="text-slate-500">←</span>
+                  <span className="text-slate-500">{"\u2190"}</span>
                   <div>
                     <p className="text-xs text-slate-600">Previous</p>
                     <p className="mt-0.5 font-medium text-slate-300">
@@ -204,7 +205,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
                       {allPages[pageIndex + 1]?.shortTitle}
                     </p>
                   </div>
-                  <span className="text-cyan-400">→</span>
+                  <span className="text-cyan-400">{"\u2192"}</span>
                 </Link>
               ) : document.labLink ? (
                 <Link
@@ -215,7 +216,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
                     <p className="text-xs text-cyan-600">Chapter complete</p>
                     <p className="mt-0.5 font-medium text-cyan-300">Open the lab environment</p>
                   </div>
-                  <span className="text-cyan-400">→</span>
+                  <span className="text-cyan-400">{"\u2192"}</span>
                 </Link>
               ) : (
                 <Link
@@ -226,7 +227,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
                     <p className="text-xs text-slate-600">Chapter complete</p>
                     <p className="mt-0.5 font-medium text-slate-300">Back to curriculum</p>
                   </div>
-                  <span className="text-slate-400">→</span>
+                  <span className="text-slate-400">{"\u2192"}</span>
                 </Link>
               )}
             </div>
@@ -252,6 +253,8 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               </div>
             </div>
           </div>
+
+          <CommunityThread contentKind="chapter" contentSlug={chapter} title={document.title} />
         </div>
       </div>
     </main>

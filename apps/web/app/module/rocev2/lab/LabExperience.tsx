@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { AuthControls } from "@/components/auth/AuthControls";
+import { CommunityThread } from "@/components/community/CommunityThread";
 import { KnowledgePanel } from "@/components/knowledge/KnowledgePanel";
 import { LabResult } from "@/components/lab/LabResult";
 import { SolutionModal } from "@/components/lab/SolutionModal";
@@ -371,6 +372,15 @@ export function LabExperience() {
                 </button>
               </div>
             )}
+
+            <div className="mt-4">
+              <CommunityThread
+                compact
+                contentKind="lab"
+                contentSlug={activeLab.id}
+                title={activeLab.title}
+              />
+            </div>
           </aside>
 
           <div className="flex flex-1 flex-col overflow-hidden">
@@ -413,8 +423,8 @@ export function LabExperience() {
           >
             <div className="flex items-center justify-between border-b border-white/8 px-6 py-4">
               <div>
-                <p className="text-xs uppercase tracking-widest text-slate-500">Topology — {activeLab.title}</p>
-                <p className="mt-0.5 text-sm text-slate-400">Reference view — use the device tabs below the topology to switch CLIs</p>
+                <p className="text-xs uppercase tracking-widest text-slate-500">Topology / {activeLab.title}</p>
+                <p className="mt-0.5 text-sm text-slate-400">Reference view / use the device tabs below the topology to switch CLIs</p>
               </div>
               <button
                 onClick={() => setTopologyExpanded(false)}

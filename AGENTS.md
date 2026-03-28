@@ -50,9 +50,10 @@ Supabase stores only:
 
 - auth/session state
 - profiles
-- entitlements
 - release metadata
 - synced learner progress
+- community comments
+- optional legacy entitlements kept only for internal regression/testing
 
 ### Rule 2 - Runtime APIs are now allowed, but only for platform infrastructure
 
@@ -158,6 +159,7 @@ Current product shape:
 - all published chapters are open
 - all published labs are open
 - email magic-link auth is optional and mainly used for synced progress
+- community comments can live alongside chapters and labs once the migration is applied
 - minimal protected admin UI remains for release flags and internal tooling
 - entitlement plumbing may remain in the schema for future experimentation, but it is not part of the public learner journey
 

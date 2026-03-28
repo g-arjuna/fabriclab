@@ -73,7 +73,7 @@ export function CurriculumCard({ item, canAccess }: CurriculumCardProps) {
             : "text-amber-400/70 group-hover:text-amber-300"
         }`}
       >
-        →
+        {"\u2192"}
       </div>
     </Link>
   );

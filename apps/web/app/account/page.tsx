@@ -53,7 +53,7 @@ export default async function AccountPage() {
               <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-6 md:col-span-2">
                 <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">Admin tools</p>
                 <p className="mt-3 text-sm leading-7 text-cyan-100">
-                  Manage content release state and manual entitlements from the release-control dashboard.
+                  Manage content release state and internal test metadata from the release-control dashboard.
                 </p>
                 <Link
                   href="/admin/releases"

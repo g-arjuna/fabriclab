@@ -1,0 +1,33 @@
+name: Technical correction
+description: Report a chapter, diagram, or CLI explanation that is technically inaccurate or misleading.
+title: "[Correction] "
+labels:
+  - technical-correction
+body:
+  - type: input
+    id: content-target
+    attributes:
+      label: Chapter or lab slug
+      placeholder: ch5-pfc-ecn-congestion / lab8-pfc-priority-mismatch
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is inaccurate?
+      description: Quote the exact sentence, concept, command, or visualization behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: What should it say instead?
+      description: Be as specific as possible. Include the corrected wording or technical behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Primary sources
+      description: Link official documentation, RFCs, vendor references, or other primary sources if available.
+

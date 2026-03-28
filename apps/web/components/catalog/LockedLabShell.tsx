@@ -5,10 +5,10 @@ import type { CatalogItem } from "@/lib/catalog/source";
 
 type LockedLabShellProps = {
   item: CatalogItem;
-  hasPaidEntitlement: boolean;
+  hasSession: boolean;
 };
 
-export function LockedLabShell({ item, hasPaidEntitlement }: LockedLabShellProps) {
+export function LockedLabShell({ item, hasSession }: LockedLabShellProps) {
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#07111f_0%,#020617_100%)] text-slate-100">
       <header className="border-b border-white/8 bg-[#07111f]/90 backdrop-blur">
@@ -53,19 +53,19 @@ export function LockedLabShell({ item, hasPaidEntitlement }: LockedLabShellProps
           <aside className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-8 shadow-2xl shadow-slate-950/40 backdrop-blur">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Next step</p>
             <h2 className="mt-4 text-2xl font-semibold text-white">
-              {hasPaidEntitlement ? "Refresh availability" : "Sign in for context"}
+              {hasSession ? "Return after release" : "Sign in for context"}
             </h2>
             <p className="mt-4 text-sm leading-7 text-slate-400">
-              {hasPaidEntitlement
-                ? "This account still carries the legacy testing entitlement. Re-open the lab if the release state changed during this session."
+              {hasSession
+                ? "This lab is currently held back for release staging. Return once it is published, or keep working through the open curriculum."
                 : "Sign in to sync progress or check release state, then return once the lab is published."}
             </p>
             <div className="mt-8 flex flex-col gap-3">
               <Link
-                href={hasPaidEntitlement ? item.href : "/login"}
+                href={hasSession ? "/lab" : "/login"}
                 className="inline-flex items-center justify-center rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
               >
-                {hasPaidEntitlement ? "Re-open lab" : "Sign in"}
+                {hasSession ? "Back to labs" : "Sign in"}
               </Link>
               <Link
                 href={`/learn/${item.sourceChapterSlug}`}

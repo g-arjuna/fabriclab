@@ -5,7 +5,7 @@ import type { CatalogItem } from "@/lib/catalog/source";
 
 type ChapterPreviewShellProps = {
   item: CatalogItem;
-  hasPaidEntitlement: boolean;
+  hasSession: boolean;
 };
 
 function Tag({ children }: { children: string }) {
@@ -18,7 +18,7 @@ function Tag({ children }: { children: string }) {
 
 export function ChapterPreviewShell({
   item,
-  hasPaidEntitlement,
+  hasSession,
 }: ChapterPreviewShellProps) {
   return (
     <main className="min-h-screen bg-[#020617] text-slate-100">
@@ -80,19 +80,19 @@ export function ChapterPreviewShell({
           <aside className="rounded-3xl border border-white/10 bg-[#020b16] p-8 shadow-2xl shadow-slate-950/40">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Access</p>
             <h2 className="mt-4 text-2xl font-semibold text-white">
-              {hasPaidEntitlement ? "Refresh availability" : "Sign in for context"}
+              {hasSession ? "Return after release" : "Sign in for context"}
             </h2>
             <p className="mt-4 text-sm leading-7 text-slate-400">
-              {hasPaidEntitlement
-                ? "This account still carries the legacy testing entitlement. If this page appears unexpectedly, refresh the session or check the release state in admin."
+              {hasSession
+                ? "This chapter is currently held back for release staging. Check back after it is published, or review the curriculum for currently open material."
                 : "Sign in to sync progress or inspect release state, then return to the curriculum. Published chapters remain open to everyone."}
             </p>
             <div className="mt-8 flex flex-col gap-3">
               <Link
-                href={hasPaidEntitlement ? item.href : "/login"}
+                href={hasSession ? "/curriculum" : "/login"}
                 className="inline-flex items-center justify-center rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
               >
-                {hasPaidEntitlement ? "Re-open chapter" : "Sign in"}
+                {hasSession ? "Back to curriculum" : "Sign in"}
               </Link>
               <Link
                 href="/curriculum"

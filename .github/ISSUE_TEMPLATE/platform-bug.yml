@@ -1,0 +1,28 @@
+name: Platform bug
+description: Report auth, progress sync, release-control, or UI/platform issues.
+title: "[Platform] "
+labels:
+  - platform-bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What broke?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+  - type: textarea
+    id: route
+    attributes:
+      label: Route or area
+      placeholder: /account, /admin/releases, /learn/ch3-the-cli, /lab?lab=lab2-congestion
+

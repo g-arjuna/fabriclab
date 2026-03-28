@@ -5,206 +5,56 @@ import Link from "next/link";
 
 import { AuthControls } from "@/components/auth/AuthControls";
 import { SOURCE_CHAPTERS, SOURCE_LABS } from "@/lib/catalog/source";
+import { getPublicCommunityConfig } from "@/lib/community/config";
 
 const TERMINAL_LINES = [
-  { text: "fabric-sim:~$ show dcb pfc", color: "#e2e8f0", isPrompt: true },
-  { text: "Interface eth0", color: "#94a3b8", isPrompt: false },
-  { text: "  Priority Flow Control:  enabled", color: "#94a3b8", isPrompt: false },
-  { text: "  PFC enabled priorities: 3 (cos3)", color: "#94a3b8", isPrompt: false },
-  { text: "  Watchdog:               enabled", color: "#22d3ee", isPrompt: false },
-  { text: "", color: "", isPrompt: false },
-  { text: "fabric-sim:~$ disable pfc", color: "#e2e8f0", isPrompt: true },
-  { text: "PFC disabled on eth0. Verify with: show dcb pfc", color: "#22c55e", isPrompt: false },
+  { text: "fabric-sim:~$ show dcb pfc", color: "#e2e8f0" },
+  { text: "Interface swp3", color: "#94a3b8" },
+  { text: "  Priority Flow Control:  enabled", color: "#94a3b8" },
+  { text: "  PFC enabled priorities: 3 (cos3)", color: "#94a3b8" },
+  { text: "  Watchdog:               enabled", color: "#22d3ee" },
+  { text: "", color: "#94a3b8" },
+  { text: "fabric-sim:~$ show roce", color: "#e2e8f0" },
+  { text: "DSCP 26 maps to cos3 on this fabric.", color: "#22c55e" },
 ];
-
-const chapterCardsLegacy = [
-  {
-    id: "Chapter 0",
-    title: "The Hardware Story",
-    tag: "Foundations",
-    description:
-      "DGX anatomy, NVLink, NICs vs HCAs vs DPUs, rail topology, the three networks.",
-    status: "Available",
-    href: "/learn/ch0-hardware-foundations",
-  },
-  {
-    id: "Chapter 1",
-    title: "OS and Management",
-    tag: "Foundations",
-    description:
-      "DGX OS, ONYX, UFM, first power-on sequence. What runs where and how to access it.",
-    status: "Available",
-    href: "/learn/ch1-os-platforms",
-  },
-  {
-    id: "Chapter 2",
-    title: "Why HPC Networking Is Different",
-    tag: "Foundations",
-    description:
-      "The AllReduce barrier, why TCP fails, lossless requirements, the mental model shift.",
-    status: "Available",
-    href: "/learn/ch2-why-different",
-  },
-  {
-    id: "Chapter 3",
-    title: "The CLI — Reading the Fabric",
-    tag: "Foundations",
-    description:
-      "The commands and discipline for reading HPC fabric state. Which commands run where, how to read their output, and the investigation workflow from physical layer to configuration.",
-    status: "Available",
-    href: "/learn/ch3-the-cli",
-  },
-  {
-    id: "Chapter 4",
-    title: "InfiniBand Operations",
-    tag: "Foundations",
-    description:
-      "ONYX CLI, ibdiagnet, UFM, error counter interpretation, and Subnet Manager operations.",
-    status: "Available",
-    href: "/learn/ch4-infiniband-operations",
-  },
-  {
-    id: "Chapter 5",
-    title: "PFC, ECN, and Congestion Control",
-    tag: "Foundations",
-    description:
-      "How losslessness actually works: PFC mechanics, pause storms, ECN marking, DCQCN, and the full RoCEv2 configuration checklist.",
-    status: "Available",
-    href: "/learn/ch5-pfc-ecn-congestion",
-  },
-  {
-    id: "Chapter 6",
-    title: "Topology Design",
-    tag: "Architecture",
-    description:
-      "Fat-tree, DragonFly+, DGX BasePOD, DGX SuperPOD — designing the fabric.",
-    status: "Coming soon",
-    href: "/curriculum",
-  },
-];
-
-const chapterCards = [
-  {
-    id: "Chapter 0",
-    title: "The Hardware Story",
-    tag: "Foundations",
-    description:
-      "DGX anatomy, NVLink, NICs vs HCAs vs DPUs, rail topology, the three networks.",
-    status: "Available",
-    href: "/learn/ch0-hardware-foundations",
-  },
-  {
-    id: "Chapter 1",
-    title: "OS and Management",
-    tag: "Foundations",
-    description:
-      "DGX OS, ONYX, UFM, first power-on sequence. What runs where and how to access it.",
-    status: "Available",
-    href: "/learn/ch1-os-platforms",
-  },
-  {
-    id: "Chapter 2",
-    title: "Why HPC Networking Is Different",
-    tag: "Foundations",
-    description:
-      "The AllReduce barrier, why TCP fails, lossless requirements, the mental model shift.",
-    status: "Available",
-    href: "/learn/ch2-why-different",
-  },
-  {
-    id: "Chapter 3",
-    title: "The CLI — Reading the Fabric",
-    tag: "Foundations",
-    description:
-      "The commands and discipline for reading HPC fabric state. Which commands run where, how to read their output, and the investigation workflow from physical layer to configuration.",
-    status: "Available",
-    href: "/learn/ch3-the-cli",
-  },
-  {
-    id: "Chapter 4",
-    title: "InfiniBand Operations",
-    tag: "Foundations",
-    description:
-      "ONYX CLI, ibdiagnet, UFM, error counter interpretation, and Subnet Manager operations.",
-    status: "Available",
-    href: "/learn/ch4-infiniband-operations",
-  },
-  {
-    id: "Chapter 5",
-    title: "PFC, ECN, and Congestion Control",
-    tag: "Foundations",
-    description:
-      "How losslessness actually works: PFC mechanics, pause storms, ECN marking, DCQCN, and the full RoCEv2 configuration checklist.",
-    status: "Available",
-    href: "/learn/ch5-pfc-ecn-congestion",
-  },
-  {
-    id: "Chapter 6",
-    title: "Efficient Load Balancing",
-    tag: "Foundations",
-    description:
-      "Why AI traffic breaks ECMP, how per-packet and dynamic load balancing restore utilisation, and how to read spine imbalance in the counters.",
-    status: "Available",
-    href: "/learn/ch6-efficient-load-balancing",
-  },
-  {
-    id: "Chapter 7",
-    title: "Topology Design",
-    tag: "Architecture",
-    description:
-      "Fat-tree, DragonFly+, DGX BasePOD, DGX SuperPOD, oversubscription math, and how AI fabrics scale cleanly.",
-    status: "Available",
-    href: "/learn/ch7-topology-design",
-  },
-  {
-    id: "Chapter 8",
-    title: "NCCL — The Application Layer",
-    tag: "Architecture",
-    description:
-      "How NCCL selects transports and algorithms, how to read nccl-tests output, and how fabric issues surface as bus bandwidth collapse.",
-    status: "Available",
-    href: "/learn/ch8-nccl-performance",
-  },
-  {
-    id: "Chapter 9",
-    title: "Optics, Cabling, and the Physical Layer",
-    tag: "Architecture",
-    description:
-      "400G and 800G optics, fiber choices, form factors, cable selection, and the physical constraints underneath AI cluster fabrics.",
-    status: "Available",
-    href: "/learn/ch9-optics-cabling",
-  },
-  {
-    id: "Chapter 10",
-    title: "The Storage Fabric",
-    tag: "Architecture",
-    description:
-      "Why storage traffic is isolated from the compute fabric, how GDS changes the data path, and how checkpoint economics drive storage design.",
-    status: "Available",
-    href: "/learn/ch10-storage-fabric",
-  },
-];
-
-void chapterCardsLegacy;
 
 const personas = [
   {
     title: "CCNP / CCIE engineers",
-    body: "You can read BGP tables and design VxLAN fabrics. You have never touched InfiniBand. This is your on-ramp.",
+    body: "You can read BGP tables and design VxLAN fabrics. You have not spent time inside InfiniBand or RoCE yet. FabricLab is the transition path.",
   },
   {
     title: "HPC cluster administrators",
-    body: "You manage the servers. The network team handles the fabric. This platform closes the gap so you understand the full stack.",
+    body: "You manage the servers, but the fabric still feels opaque. FabricLab closes the gap between compute operations and network operations.",
   },
   {
-    title: "Cloud architects",
-    body: "You are designing GPU cluster infrastructure. You need to understand why lossless networking is non-negotiable and what it costs to get wrong.",
+    title: "Cloud and platform architects",
+    body: "You are designing GPU infrastructure and need to understand what lossless fabrics demand at the protocol and operational level.",
   },
   {
-    title: "Network engineering students",
-    body: "HPC fabric engineering is one of the fastest-growing specialisations in infrastructure. Get ahead of the curve before you need it.",
+    title: "Network engineers growing into AI infrastructure",
+    body: "AI fabrics are a fast-moving specialisation. FabricLab gives you a structured path before the first production incident lands on your desk.",
   },
 ];
+
+const homepageChapterCards = SOURCE_CHAPTERS.map((chapter) => ({
+  id: `Chapter ${chapter.number}`,
+  title: chapter.title,
+  tag:
+    chapter.partKey === "foundations"
+      ? "Foundations"
+      : chapter.partKey === "fabric-operations"
+        ? "Operations"
+        : chapter.partKey === "infrastructure"
+          ? "Infrastructure"
+          : "Architecture",
+  description: chapter.description,
+  status: chapter.defaultPublished ? "Available" : "Staged",
+  href: chapter.defaultPublished ? chapter.href : "/curriculum",
+}));
+
+const homepageChapterCount = SOURCE_CHAPTERS.length;
+const homepageLabCount = SOURCE_LABS.length;
 
 function TerminalPreview() {
   const [visibleLines, setVisibleLines] = useState(0);
@@ -266,18 +116,16 @@ function TerminalPreview() {
         {TERMINAL_LINES.map((line, index) => {
           if (index < visibleLines) {
             return (
-              <div key={`${line.text}-${index}`} style={{ color: line.color || "#94a3b8" }}>
+              <div key={`${line.text}-${index}`} style={{ color: line.color }}>
                 {line.text || "\u00A0"}
               </div>
             );
           }
 
           if (index === visibleLines && !isPaused) {
-            const partialText = line.text.slice(0, currentChar);
-
             return (
-              <div key={`${line.text}-${index}`} style={{ color: line.color || "#94a3b8" }}>
-                {partialText}
+              <div key={`${line.text}-${index}`} style={{ color: line.color }}>
+                {line.text.slice(0, currentChar)}
                 <span className="inline-block h-4 w-2 translate-y-0.5 bg-cyan-400 align-middle animate-[blink_0.5s_steps(1)_infinite]" />
               </div>
             );
@@ -355,7 +203,7 @@ function ChapterIcon({ tag }: { tag: string }) {
     return <RackIcon />;
   }
 
-  if (tag === "RoCEv2") {
+  if (tag === "Operations") {
     return <WaveIcon />;
   }
 
@@ -367,37 +215,20 @@ function tagClasses(tag: string) {
     return "bg-slate-800 text-slate-400";
   }
 
-  if (tag === "RoCEv2") {
+  if (tag === "Operations") {
     return "bg-blue-950 text-blue-400";
   }
 
-  if (tag === "Operations") {
+  if (tag === "Infrastructure") {
     return "bg-green-950 text-green-400";
   }
 
   return "bg-purple-950 text-purple-400";
 }
 
-const homepageChapterCards = SOURCE_CHAPTERS.map((chapter) => ({
-  id: `Chapter ${chapter.number}`,
-  title: chapter.title,
-  tag:
-    chapter.partKey === "foundations"
-      ? "Foundations"
-      : chapter.partKey === "fabric-operations"
-        ? "Operations"
-        : chapter.partKey === "infrastructure"
-          ? "Infrastructure"
-          : "Architecture",
-  description: chapter.description,
-  status: chapter.defaultPublished ? "Available" : "Coming soon",
-  href: chapter.defaultPublished ? chapter.href : "/curriculum",
-}));
-
-const homepageChapterCount = SOURCE_CHAPTERS.length;
-const homepageLabCount = SOURCE_LABS.length;
-
 export default function Home() {
+  const communityConfig = getPublicCommunityConfig();
+
   return (
     <main className="bg-[#020617] text-slate-100">
       <style jsx global>{`
@@ -417,9 +248,9 @@ export default function Home() {
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-3">
             <span className="font-mono text-sm uppercase tracking-[0.32em] text-cyan-400">FABRICLAB</span>
-            <span className="text-slate-600">·</span>
+            <span className="text-slate-600">/</span>
             <span className="rounded-full border border-white/10 bg-slate-900 px-2 py-0.5 text-[10px] uppercase tracking-[0.28em] text-slate-400">
-              Beta
+              Community beta
             </span>
           </Link>
 
@@ -428,14 +259,17 @@ export default function Home() {
               Curriculum
             </Link>
             <Link href="/lab" className="text-sm text-slate-400 transition hover:text-slate-200">
-              Lab
+              Labs
+            </Link>
+            <Link href="/community" className="text-sm text-slate-400 transition hover:text-slate-200">
+              Community
             </Link>
             <AuthControls compact />
             <Link
               href="/learn/ch0-hardware-foundations"
               className="rounded-full bg-cyan-400 px-4 py-1.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
-              Start learning →
+              Start learning
             </Link>
           </div>
         </div>
@@ -459,15 +293,15 @@ export default function Home() {
 
         <div className="relative mx-auto flex w-full max-w-7xl flex-col items-center text-center">
           <p className="text-xs uppercase tracking-[0.4em] text-slate-500">
-            OPEN PLATFORM · HPC NETWORKING · INTERACTIVE LABS
+            OPEN PLATFORM / HPC NETWORKING / COMMUNITY REVIEWED
           </p>
           <h1 className="mt-8 text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl">
             <span className="block">Master the fabric</span>
             <span className="mt-2 block text-cyan-400">that runs AI.</span>
           </h1>
           <p className="mt-6 max-w-2xl text-center text-lg leading-8 text-slate-400">
-            InfiniBand. RoCEv2. RDMA. DGX SuperPOD. Spectrum-X. Learn HPC networking through
-            interactive CLI simulation — the way Packet Tracer taught you enterprise networking.
+            InfiniBand. RoCEv2. RDMA. DGX SuperPOD. Spectrum-X. Learn AI and HPC networking through
+            interactive chapters, stateful labs, and a simulator built for network engineers.
           </p>
 
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
@@ -475,7 +309,7 @@ export default function Home() {
               href="/learn/ch0-hardware-foundations"
               className="rounded-full bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
-              Start with Chapter 0 →
+              Open Chapter 0
             </Link>
             <Link
               href="/curriculum"
@@ -483,11 +317,17 @@ export default function Home() {
             >
               Explore the curriculum
             </Link>
+            <Link
+              href="/community"
+              className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-6 py-3 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
+            >
+              Join the community
+            </Link>
           </div>
 
           <TerminalPreview />
 
-          <p className="mt-8 animate-bounce text-xs text-slate-600">↓ scroll to explore</p>
+          <p className="mt-8 animate-bounce text-xs text-slate-600">scroll to explore</p>
         </div>
       </section>
 
@@ -500,24 +340,23 @@ export default function Home() {
             </h2>
             <div className="mt-6 space-y-6 text-base leading-8 text-slate-300">
               <p>
-                Network engineers who can troubleshoot BGP, design spanning tree, and read OSPF
-                LSAs find themselves completely lost when they walk into an AI data center for the
-                first time. The knowledge lives in vendor runbooks, pre-sales conversations, and
-                conference papers — not in any structured, interactive learning resource.
+                Network engineers who can troubleshoot BGP, reason about ECMP, and design VxLAN
+                fabrics still walk into AI data centers and find an unfamiliar world. The knowledge
+                is fragmented across vendor docs, conference talks, and incident writeups.
               </p>
               <p>
-                GNS3 and EVE-NG stop at the edge. Cisco Packet Tracer never heard of InfiniBand.
-                NVIDIA&apos;s own documentation assumes you already understand RDMA semantics. There
-                is no simulation environment for HPC fabric — until now.
+                FabricLab turns that scattered knowledge into a structured, reviewable, interactive
+                platform. Chapters explain the hardware and protocols. Labs let you test commands
+                against live state. The community can then sharpen both.
               </p>
             </div>
           </div>
 
           <div className="grid gap-6">
             {[
-              { value: "400G", label: "per GPU rail in a DGX H100 cluster" },
-              { value: "0", label: "packet drops tolerated in RDMA workloads" },
-              { value: "7μs", label: "typical AllReduce latency in a SuperPOD" },
+              { value: "400G", label: "per GPU rail in a modern DGX training fabric" },
+              { value: "0", label: "packet drops tolerated in healthy RDMA training flows" },
+              { value: "17", label: "published chapters live in the open catalog today" },
             ].map((stat) => (
               <div
                 key={stat.value}
@@ -540,7 +379,8 @@ export default function Home() {
             A structured path from hardware to protocol.
           </h2>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-400">
-            {homepageChapterCount} chapters. {homepageLabCount} scenario labs. One interactive CLI simulator.
+            {homepageChapterCount} chapters. {homepageLabCount} scenario labs. One simulator. All
+            published content is open.
           </p>
 
           <div className="mt-10 flex gap-6 overflow-x-auto pb-4 lg:grid lg:grid-cols-3 lg:overflow-visible">
@@ -603,30 +443,26 @@ export default function Home() {
               <BookIcon />
               <h3 className="mt-6 text-2xl font-semibold text-white">Structured chapters</h3>
               <p className="mt-4 text-base leading-8 text-slate-400">
-                Each chapter tells a complete story — from the physical hardware through the
-                protocol details to the operational commands. Interactive visualisations make
-                abstract concepts tangible.
+                Each chapter connects physical hardware, transport behavior, congestion control, and
+                operator workflow into one narrative with visual support.
               </p>
             </div>
 
             <div className="rounded-2xl border border-cyan-500/30 bg-slate-900 p-8 shadow-2xl shadow-cyan-950/25 ring-1 ring-cyan-500/20">
               <TerminalIcon />
-              <h3 className="mt-6 text-2xl font-semibold text-white">CLI simulation</h3>
+              <h3 className="mt-6 text-2xl font-semibold text-white">Stateful CLI labs</h3>
               <p className="mt-4 text-base leading-8 text-slate-400">
-                A real terminal simulator running against virtual fabric state. Type{" "}
-                <span className="font-mono text-slate-200">show dcb pfc</span> and get output that
-                reflects the actual topology. Change state. See the output change. Complete graded
-                scenario labs.
+                The simulator is not static text. Commands read live lab state, so outputs change as
+                you diagnose faults, fix configuration, or recover links.
               </p>
             </div>
 
             <div className="rounded-2xl border border-white/8 bg-slate-900 p-8 shadow-2xl shadow-slate-950/50">
               <BrainNetworkIcon />
-              <h3 className="mt-6 text-2xl font-semibold text-white">Knowledge panel</h3>
+              <h3 className="mt-6 text-2xl font-semibold text-white">Community feedback loop</h3>
               <p className="mt-4 text-base leading-8 text-slate-400">
-                Run a command and the knowledge panel automatically surfaces the relevant concept —
-                PFC, ECN, RDMA queue pairs. Learning happens at the moment you need it, not in a
-                separate tab.
+                Readers can comment directly on chapters and labs, report technical glitches, and
+                help tighten the curriculum without waiting for a closed release cycle.
               </p>
             </div>
           </div>
@@ -656,6 +492,38 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="bg-slate-950 py-24">
+        <div className="mx-auto max-w-7xl px-6">
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">COMMUNITY</p>
+          <h2 className="mt-4 text-4xl font-semibold text-white">
+            Keep the platform open. Make it sharper every week.
+          </h2>
+          <div className="mt-10 grid gap-6 lg:grid-cols-3">
+            <div className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
+              <h3 className="text-xl font-semibold text-white">Comment where the issue appears</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-400">
+                Leave technical corrections, lab glitches, and operator notes directly on the
+                relevant chapter or lab page.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
+              <h3 className="text-xl font-semibold text-white">Contribute through the repo</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-400">
+                The repository is set up for focused fixes, issue reports, new labs, and chapter
+                improvements without turning the platform into a private product wall.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
+              <h3 className="text-xl font-semibold text-white">Support without restricting access</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-400">
+                FabricLab stays openly accessible. Support links are optional and simply help fund
+                more chapter review, better labs, and platform polish.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="py-24">
         <div className="mx-auto max-w-7xl px-6">
           <div
@@ -667,24 +535,30 @@ export default function Home() {
           >
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">START LEARNING</p>
             <h2 className="mt-4 text-4xl font-semibold text-white">
-              The fabric that runs AI waits for no one.
+              Learn the fabric in the open.
             </h2>
             <p className="mt-4 text-lg leading-8 text-slate-400">
-              Chapters 0-2 and Labs 0-1 are free. Sign in when you want synced progress or paid
-              access, then open the terminal and type your first command.
+              Published chapters and labs are open to everyone. Sign in if you want synced progress,
+              to join the discussion, or to help with release testing.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link
                 href="/learn/ch0-hardware-foundations"
                 className="rounded-full bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
               >
-                Open Chapter 0 →
+                Open Chapter 0
               </Link>
               <Link
                 href="/lab"
                 className="rounded-full border border-white/20 px-6 py-3 text-sm text-slate-300 transition hover:border-white/40"
               >
-                Go to the lab →
+                Go to the labs
+              </Link>
+              <Link
+                href="/community"
+                className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-6 py-3 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
+              >
+                Community hub
               </Link>
             </div>
           </div>
@@ -695,19 +569,31 @@ export default function Home() {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <span className="font-mono uppercase tracking-[0.28em] text-cyan-400">FABRICLAB</span>
-            <span>© 2026</span>
+            <span>{"\u00A9"} 2026</span>
           </div>
           <div className="flex items-center gap-5">
             <Link href="/curriculum" className="transition hover:text-slate-400">
               Curriculum
             </Link>
             <Link href="/lab" className="transition hover:text-slate-400">
-              Lab
+              Labs
             </Link>
+            <Link href="/community" className="transition hover:text-slate-400">
+              Community
+            </Link>
+            {communityConfig.supportUrl ? (
+              <a
+                href={communityConfig.supportUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="transition hover:text-slate-400"
+              >
+                Support FabricLab
+              </a>
+            ) : null}
           </div>
         </div>
       </footer>
     </main>
   );
 }
-

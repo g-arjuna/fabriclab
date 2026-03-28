@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ message: `Granted core_paid to ${email}.` });
+  return NextResponse.json({ message: `Granted legacy test access to ${email}.` });
 }
 
 export async function DELETE(request: Request) {
@@ -117,5 +117,5 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ message: `Revoked core_paid from ${email}.` });
+  return NextResponse.json({ message: `Revoked legacy test access from ${email}.` });
 }

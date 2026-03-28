@@ -1,0 +1,6 @@
+blank_issues_enabled: true
+contact_links:
+  - name: FabricLab community roadmap
+    url: https://fabriclab-dev.vercel.app/community
+    about: Check the current priorities and contribution direction before opening broad feature requests.
+

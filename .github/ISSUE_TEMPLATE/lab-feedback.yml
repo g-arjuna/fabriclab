@@ -1,0 +1,36 @@
+name: Lab feedback
+description: Report a simulator bug, lab command mismatch, or realism issue.
+title: "[Lab] "
+labels:
+  - lab-feedback
+body:
+  - type: input
+    id: lab-slug
+    attributes:
+      label: Lab slug
+      placeholder: lab2-congestion
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or action
+      description: Include the exact command you ran, or describe the UI interaction.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Screenshots, topology state, or why the current behavior feels unrealistic.
+
