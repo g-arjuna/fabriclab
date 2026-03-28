@@ -1,10 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import {
-  assertNoBrowserErrors,
-  signInWithMagicLink,
-  trackErrors,
-} from "./helpers/liveAuth";
+import { assertNoBrowserErrors, signInWithMagicLink, trackErrors } from "./helpers/liveAuth";
 
 test.describe.serial("Homepage and curriculum catalog smoke", () => {
   test("guest sees the latest public catalog surface", async ({ page }) => {
@@ -26,21 +22,21 @@ test.describe.serial("Homepage and curriculum catalog smoke", () => {
     ).toBeVisible();
     await expect(page.getByText(/Part 1 - Foundations/i)).toBeVisible();
     await expect(page.getByText(/Part 4 - Scale and Architecture/i)).toBeVisible();
-    await expect(page.getByRole("link", { name: /The Hardware Story/i })).toContainText("Free");
+    await expect(page.getByRole("link", { name: /The Hardware Story/i })).toContainText("Available");
     await expect(
       page.getByRole("link", { name: /The GPU Compute Network - Packet Anatomy/i }),
-    ).toContainText("Paid preview");
+    ).toContainText("Available");
     await expect(
       page.getByRole("link", { name: /Identify the failed rail/i }),
-    ).toContainText("Free");
+    ).toContainText("Available");
     await expect(
       page.getByRole("link", { name: /BGP suboptimal routing: spine ASN design/i }),
-    ).toContainText("Paid preview");
+    ).toContainText("Available");
 
     assertNoBrowserErrors(tracker);
   });
 
-  test("signed-in paid user sees paid curriculum cards unlocked", async ({ page }) => {
+  test("signed-in users see the same open catalog plus account features", async ({ page }) => {
     const tracker = trackErrors(page);
 
     await signInWithMagicLink(page);
@@ -53,6 +49,7 @@ test.describe.serial("Homepage and curriculum catalog smoke", () => {
       page.getByRole("link", { name: /BGP suboptimal routing: spine ASN design/i }),
     ).toContainText("Available");
     await expect(page.getByText("Paid preview")).toHaveCount(0);
+    await expect(page.getByText("Free")).toHaveCount(0);
 
     assertNoBrowserErrors(tracker);
   });

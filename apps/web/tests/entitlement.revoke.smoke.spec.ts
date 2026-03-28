@@ -11,8 +11,8 @@ import {
   trackErrors,
 } from "./helpers/liveAuth";
 
-test.describe.serial("Entitlement revoke smoke", () => {
-  test("revoking paid access re-locks paid routes for a learner", async ({ browser, page }) => {
+test.describe.serial("Legacy entitlement revoke smoke", () => {
+  test("revoking legacy test access does not affect public catalog access", async ({ browser, page }) => {
     const adminTracker = trackErrors(page);
     const learnerContext = await browser.newContext();
     const learnerPage = await learnerContext.newPage();
@@ -26,7 +26,7 @@ test.describe.serial("Entitlement revoke smoke", () => {
       await learnerPage.goto(`${appUrl}/account`, { waitUntil: "domcontentloaded" });
       await expect(learnerPage.getByText(learnerEmail)).toBeVisible();
       await expect(learnerPage.getByText(/Standard learner account\./i)).toBeVisible();
-      await expect(learnerPage.getByText(/Core paid unlocked/i)).toBeVisible();
+      await expect(learnerPage.getByText(/Full public catalog/i)).toBeVisible();
 
       await learnerPage.goto(`${appUrl}/learn/ch3-the-cli`, { waitUntil: "domcontentloaded" });
       await expect(learnerPage.getByRole("heading", { name: /Chapter 3: The CLI/i })).toBeVisible();
@@ -36,7 +36,7 @@ test.describe.serial("Entitlement revoke smoke", () => {
 
       await learnerPage.goto(`${appUrl}/lab?lab=lab2-congestion`, { waitUntil: "domcontentloaded" });
       await expect(learnerPage.getByRole("heading", { name: /Diagnose fabric congestion/i })).toBeVisible();
-      await expect(learnerPage.getByText(/Lab locked/i)).toHaveCount(0);
+      await expect(learnerPage.getByText(/GPU training throughput has dropped 40%/i)).toBeVisible();
 
       await signInWithMagicLink(page);
       await page.goto(`${appUrl}/admin/releases`, { waitUntil: "domcontentloaded" });
@@ -46,19 +46,17 @@ test.describe.serial("Entitlement revoke smoke", () => {
       await expect.poll(async () => await hasPaidEntitlement(learnerEmail)).toBe(false);
 
       await learnerPage.goto(`${appUrl}/account`, { waitUntil: "domcontentloaded" });
-      await expect(learnerPage.getByText(/Free access only/i)).toBeVisible();
+      await expect(learnerPage.getByText(/Full public catalog/i)).toBeVisible();
 
       await learnerPage.goto(`${appUrl}/learn/ch3-the-cli`, { waitUntil: "domcontentloaded" });
-      await expect(learnerPage.getByText(/Chapter preview/i)).toBeVisible();
+      await expect(learnerPage.getByRole("heading", { name: /Chapter 3: The CLI/i })).toBeVisible();
       await expect(
-        learnerPage.getByText(/The full lesson stays hidden until paid access is granted/i),
+        learnerPage.getByText(/The investigation always starts with the same three questions/i),
       ).toBeVisible();
 
       await learnerPage.goto(`${appUrl}/lab?lab=lab2-congestion`, { waitUntil: "domcontentloaded" });
-      await expect(learnerPage.getByText(/Lab locked/i)).toBeVisible();
-      await expect(
-        learnerPage.getByText(/The simulator, device sessions, and scoring stay unavailable/i),
-      ).toBeVisible();
+      await expect(learnerPage.getByRole("heading", { name: /Diagnose fabric congestion/i })).toBeVisible();
+      await expect(learnerPage.getByText(/GPU training throughput has dropped 40%/i)).toBeVisible();
 
       assertNoBrowserErrors(adminTracker);
       assertNoBrowserErrors(learnerTracker);

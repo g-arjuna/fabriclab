@@ -101,17 +101,10 @@ Actual entitlement checks happen at route render time:
 - `/lab`
 - `/admin/*`
 
-### Rule 6 - Preview mode must not leak lesson bodies
+### Rule 6 - Unpublished content must stay dark
 
-Locked chapters may show only catalog metadata:
-
-- title
-- tags
-- duration
-- preview summary
-- upgrade/sign-in CTA
-
-Do not parse or render locked MDX chapter content in preview mode.
+Unpublished chapters or labs must not be rendered for normal users.
+Keep publish-state enforcement at the route level and do not leak unpublished lesson bodies or simulator state.
 
 ### Rule 7 - Content release stays repo-driven
 
@@ -120,7 +113,7 @@ Weekly content flow:
 1. Claude writes content and commit-ready artifacts
 2. Codex deploys the files into the app
 3. Catalog sync upserts chapter/lab metadata to Supabase
-4. Admin toggles publish/access flags when ready
+4. Admin toggles publish flags when ready
 
 New content should default to unpublished until explicitly released.
 
@@ -160,15 +153,13 @@ Also validate the relevant browser routes when touching auth, gating, progress, 
 
 ## Current platform model
 
-V1 commercial shape:
+Current product shape:
 
-- free anonymous access: `Ch0-Ch2`, `Labs 0-1`
-- all other published chapters visible in curriculum but locked behind preview shells
-- all other published labs visible in curriculum but locked behind lab-entry shells
-- one entitlement only: `core_paid`
-- email magic-link auth only
-- minimal protected admin UI for release flags and manual paid grants
-- billing deferred; schema must remain billing-ready
+- all published chapters are open
+- all published labs are open
+- email magic-link auth is optional and mainly used for synced progress
+- minimal protected admin UI remains for release flags and internal tooling
+- entitlement plumbing may remain in the schema for future experimentation, but it is not part of the public learner journey
 
 ---
 
@@ -181,7 +172,7 @@ Platform/auth/catalog:
 - `apps/web/lib/auth/*`
 - `apps/web/lib/supabase/*`
 - `apps/web/lib/progress/*`
-- `apps/web/middleware.ts`
+- `apps/web/proxy.ts`
 - `apps/web/app/login/*`
 - `apps/web/app/account/*`
 - `apps/web/app/admin/*`

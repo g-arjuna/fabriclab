@@ -17,7 +17,7 @@ const target = {
 };
 
 test.describe.serial("Lab release controls smoke", () => {
-  test("admin can unpublish and restore a paid lab", async ({ browser, page }) => {
+  test("admin can unpublish and restore a public lab", async ({ browser, page }) => {
     const tracker = trackErrors(page);
     const original = await readCatalogState(target.kind, target.slug);
     const guestContext = await browser.newContext();
@@ -56,11 +56,8 @@ test.describe.serial("Lab release controls smoke", () => {
         waitUntil: "domcontentloaded",
       });
       expect(restoredResponse?.status()).toBe(200);
-      await expect(guestPage.getByText(/Lab locked/i)).toBeVisible();
-      await expect(guestPage.getByRole("heading", { name: target.title })).toBeVisible();
-      await expect(
-        guestPage.getByText(/The simulator, device sessions, and scoring stay unavailable/i),
-      ).toBeVisible();
+      await expect(guestPage.getByText(/Diagnose fabric congestion/i)).toBeVisible();
+      await expect(guestPage.locator("text=Type 'help' for available commands.")).toBeVisible();
 
       assertNoBrowserErrors(tracker);
     } finally {

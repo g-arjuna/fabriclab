@@ -6,37 +6,21 @@ import remarkGfm from "remark-gfm";
 import { AuthControls } from "@/components/auth/AuthControls";
 import { ChapterSidebar } from "@/components/chapter/ChapterSidebar";
 import { PageProgressMarker } from "@/components/chapter/PageProgressMarker";
-import { ChapterPreviewShell } from "@/components/catalog/ChapterPreviewShell";
 import { getServerViewer } from "@/lib/auth/server";
 import { getCatalogAccessState, getCurriculumCatalog } from "@/lib/catalog/runtime";
 import { getChapterDocument, getChapterPage, splitIntoPages } from "@/lib/chapters";
 import { mdxComponents } from "@/lib/mdxComponents";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 type Props = {
   params: Promise<{ chapter: string }>;
   searchParams: Promise<{ page?: string }>;
 };
 
-function canAccessFreeSet(
-  accessTier: "free" | "paid",
-  authEnabled: boolean,
-  isAdmin: boolean,
-  hasPaidEntitlement: boolean,
-) {
-  if (!authEnabled) {
-    return true;
-  }
-
-  return isAdmin || hasPaidEntitlement || accessTier === "free";
-}
-
 export default async function ChapterPage({ params, searchParams }: Props) {
   const { chapter } = await params;
   const { page: pageParam } = await searchParams;
   const pageIndex = Math.max(0, Number.parseInt(pageParam ?? "0", 10) || 0);
   const viewer = await getServerViewer();
-  const authEnabled = isSupabaseConfigured();
   const accessState = await getCatalogAccessState("chapter", chapter, viewer);
 
   if (!accessState.item || (!accessState.isPublished && !viewer.isAdmin)) {
@@ -44,16 +28,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
   }
 
   if (!accessState.canAccess) {
-    if (!accessState.shouldShowPreview) {
-      notFound();
-    }
-
-    return (
-      <ChapterPreviewShell
-        item={accessState.item}
-        hasPaidEntitlement={viewer.hasPaidEntitlement}
-      />
-    );
+    notFound();
   }
 
   const result = await getChapterPage(chapter, pageIndex);
@@ -63,16 +38,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
 
   const { page, totalPages, document } = result;
   const { chapters: catalogChapters } = await getCurriculumCatalog(viewer);
-  const sidebarChapters = catalogChapters
-    .filter((item) =>
-      canAccessFreeSet(
-        item.accessTier,
-        authEnabled,
-        viewer.isAdmin,
-        viewer.hasPaidEntitlement,
-      ),
-    )
-    .map((item) => ({ slug: item.slug, title: item.title }));
+  const sidebarChapters = catalogChapters.map((item) => ({ slug: item.slug, title: item.title }));
   const hasPrev = pageIndex > 0;
   const hasNext = pageIndex < totalPages - 1;
   const allPages = splitIntoPages(document.content);

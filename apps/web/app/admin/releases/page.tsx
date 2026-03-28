@@ -76,11 +76,11 @@ export default async function AdminReleasesPage() {
         <header className="mt-10 max-w-3xl">
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Admin release control</p>
           <h1 className="mt-4 text-4xl font-semibold text-white">
-            Manage publish state, previews, and paid access
+            Manage publish state and internal access metadata
           </h1>
           <p className="mt-4 text-lg leading-8 text-slate-300">
-            Content remains git-backed. This dashboard only controls release metadata and manual
-            learner entitlements in Supabase.
+            Content remains git-backed. This dashboard controls release metadata in Supabase and
+            keeps the legacy entitlement plumbing available for internal testing only.
           </p>
         </header>
 

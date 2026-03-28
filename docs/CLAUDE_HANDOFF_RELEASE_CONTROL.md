@@ -14,7 +14,6 @@ This note tells Claude what changed in the platform so ongoing chapter work keep
 FabricLab now has a Supabase-backed platform layer for:
 
 - auth and sessions
-- paid entitlements
 - release metadata
 - synced learner progress
 
@@ -22,13 +21,11 @@ The app is no longer purely offline/static.
 
 ## Release model
 
-V1 learner access:
+Current learner access:
 
-- free: Chapters `0-2`, Labs `0-1`
-- paid: all other published chapters/labs
-
-Locked chapters are still visible in the curriculum, but the route renders a metadata-only preview shell.
-Locked labs are still visible in the curriculum, but the route renders a locked-entry shell instead of the simulator.
+- all published chapters are open
+- all published labs are open
+- auth is optional and mainly used for synced progress plus admin workflows
 
 ## Important authoring implications for Claude
 
@@ -61,22 +58,11 @@ That file controls:
 
 - number/order
 - href
-- default free vs paid tier
-- preview summary
+- default publication metadata
+- preview summary if we ever reintroduce staged previews
 - publish default
 
-### 4. Preview shells do not render MDX bodies
-
-For locked chapters, the app shows only metadata:
-
-- title
-- duration
-- tags
-- preview summary
-
-So chapter metadata must stay strong and descriptive enough that a locked preview still makes sense.
-
-### 5. Do not write auth/billing prose into lessons
+### 4. Do not write auth/billing prose into lessons
 
 Keep course content educational.
 Do not add subscription/paywall/product-copy into chapter bodies unless explicitly requested.
@@ -87,12 +73,10 @@ Do not add subscription/paywall/product-copy into chapter bodies unless explicit
 2. Codex integrates files into the repo
 3. Codex updates `content/catalog.json` if needed
 4. Codex runs catalog sync
-5. Admin publishes or locks the content from `/admin/releases`
+5. Admin publishes the content from `/admin/releases`
 
 ## Current product defaults to remember
 
-- one paid entitlement only: `core_paid`
-- billing is not wired yet
-- manual paid grants happen through admin tools
 - guest progress is local only
 - signed-in progress syncs to Supabase
+- admin controls still exist for release staging and internal testing

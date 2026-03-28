@@ -18,7 +18,7 @@ export function LockedLabShell({ item, hasPaidEntitlement }: LockedLabShellProps
               href="/curriculum"
               className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400 transition hover:text-slate-200"
             >
-              ← Curriculum
+              {"<- Curriculum"}
             </Link>
             <span className="text-sm font-semibold text-white">{item.title}</span>
           </div>
@@ -29,21 +29,23 @@ export function LockedLabShell({ item, hasPaidEntitlement }: LockedLabShellProps
       <div className="mx-auto max-w-5xl px-6 py-16">
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <section className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-8 shadow-2xl shadow-slate-950/40 backdrop-blur">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Lab locked</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Lab unavailable</p>
             <h1 className="mt-4 text-4xl font-semibold text-white">{item.title}</h1>
             <div className="mt-4 flex flex-wrap gap-3">
               <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-300">
                 {item.durationLabel}
               </span>
               <span className="rounded-full bg-amber-950 px-3 py-1 text-xs text-amber-300">
-                Paid lab
+                Release staging
               </span>
             </div>
-            <p className="mt-8 text-base leading-8 text-slate-300">{item.previewSummary || item.description}</p>
+            <p className="mt-8 text-base leading-8 text-slate-300">
+              {item.previewSummary || item.description}
+            </p>
             <div className="mt-8 rounded-2xl border border-white/8 bg-[#020b16] p-5">
               <p className="text-sm leading-7 text-slate-400">
-                The simulator, device sessions, and scoring stay unavailable until this account has
-                `core_paid`. The lab remains visible here so release state and upgrade paths are easy to verify.
+                This route is currently being held back from public access. Use the admin release
+                controls to publish the lab when the simulator and supporting chapter are ready.
               </p>
             </div>
           </section>
@@ -51,12 +53,12 @@ export function LockedLabShell({ item, hasPaidEntitlement }: LockedLabShellProps
           <aside className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-8 shadow-2xl shadow-slate-950/40 backdrop-blur">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Next step</p>
             <h2 className="mt-4 text-2xl font-semibold text-white">
-              {hasPaidEntitlement ? "Refresh lab access" : "Sign in for paid access"}
+              {hasPaidEntitlement ? "Refresh availability" : "Sign in for context"}
             </h2>
             <p className="mt-4 text-sm leading-7 text-slate-400">
               {hasPaidEntitlement
-                ? "This account already has a paid entitlement. Re-open the lab if access was granted during this session."
-                : "Use a magic-link sign-in and a manually granted entitlement during v1 to unlock paid labs."}
+                ? "This account still carries the legacy testing entitlement. Re-open the lab if the release state changed during this session."
+                : "Sign in to sync progress or check release state, then return once the lab is published."}
             </p>
             <div className="mt-8 flex flex-col gap-3">
               <Link

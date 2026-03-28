@@ -167,7 +167,7 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
           </div>
 
           <div className="rounded-2xl border border-white/8 bg-[#020b16] p-4">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Access tier</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Access metadata</p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
@@ -178,7 +178,7 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
                     : "border border-white/10 text-slate-400 hover:text-white"
                 }`}
               >
-                Free
+                Open
               </button>
               <button
                 type="button"
@@ -189,9 +189,12 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
                     : "border border-white/10 text-slate-400 hover:text-white"
                 }`}
               >
-                Paid
+                Legacy test
               </button>
             </div>
+            <p className="mt-3 text-xs leading-6 text-slate-500">
+              Public routes currently ignore this flag and treat all published content as open.
+            </p>
           </div>
 
           <div className="rounded-2xl border border-white/8 bg-[#020b16] p-4">
@@ -253,11 +256,12 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
   return (
     <div className="space-y-10">
       <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Manual entitlement</p>
-        <h2 className="mt-3 text-2xl font-semibold text-white">Grant or revoke paid access</h2>
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Internal entitlement testing</p>
+        <h2 className="mt-3 text-2xl font-semibold text-white">Grant or revoke legacy test access</h2>
         <p className="mt-3 text-sm leading-7 text-slate-400">
-          Use an email address from Supabase Auth. This adds or removes the `core_paid` entitlement
-          without changing billing state.
+          Use an email address from Supabase Auth. This adds or removes the dormant legacy
+          entitlement row for internal regression testing. The public app no longer depends on it
+          for normal access.
         </p>
         <div className="mt-5 flex flex-col gap-3 md:flex-row">
           <input
@@ -273,7 +277,7 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
             disabled={entitlementPending !== null}
             className="rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {entitlementPending === "grant" ? "Granting..." : "Grant paid access"}
+            {entitlementPending === "grant" ? "Granting..." : "Grant test access"}
           </button>
           <button
             type="button"

@@ -23,7 +23,7 @@ function AccessBadge({ item, canAccess }: { item: CatalogItem; canAccess: boolea
           {item.durationLabel}
         </span>
         <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-green-400">
-          {item.accessTier === "free" ? "Free" : "Available"}
+          Available
         </span>
       </>
     );
@@ -35,7 +35,7 @@ function AccessBadge({ item, canAccess }: { item: CatalogItem; canAccess: boolea
         {item.durationLabel}
       </span>
       <span className="rounded-full bg-amber-950 px-3 py-1 text-xs text-amber-300">
-        Paid preview
+        Unavailable
       </span>
     </>
   );
@@ -65,11 +65,6 @@ export function CurriculumCard({ item, canAccess }: CurriculumCardProps) {
           ))}
         </div>
         <p className="mt-4 text-sm leading-7 text-slate-400">{item.description}</p>
-        {!canAccess ? (
-          <p className="mt-3 text-xs leading-6 text-amber-200/80">
-            Preview the overview now. Sign in with paid access to unlock the full content.
-          </p>
-        ) : null}
       </div>
       <div
         className={`pt-1 text-2xl transition ${

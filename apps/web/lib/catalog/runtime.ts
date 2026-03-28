@@ -30,7 +30,7 @@ function mergeCatalogItem(source: SourceCatalogItem, row?: CatalogRow | null): C
     previewSummary: row?.preview_summary ?? source.previewSummary,
     tags: row?.tags ?? source.tags,
     isPublished: row?.is_published ?? source.defaultPublished,
-    accessTier: row?.access_tier ?? source.defaultAccessTier,
+    accessTier: "free",
     previewEnabled: row?.preview_enabled ?? source.defaultPreviewEnabled,
   };
 }
@@ -70,18 +70,14 @@ function buildAccessState(item: CatalogItem, viewer: ServerViewer, bypassAuth: b
     };
   }
 
-  const canAccess =
-    viewer.isAdmin ||
-    item.accessTier === "free" ||
-    viewer.hasPaidEntitlement;
-
-  const isLocked = !canAccess;
+  const canAccess = true;
+  const isLocked = false;
 
   return {
     item,
     canAccess,
     isLocked,
-    shouldShowPreview: isLocked && item.previewEnabled,
+    shouldShowPreview: false,
     isPublished: item.isPublished,
     isAdmin: viewer.isAdmin,
     hasPaidEntitlement: viewer.hasPaidEntitlement,
@@ -177,7 +173,7 @@ export function getSourceCatalogSeedRows() {
     description: item.description,
     tags: item.tags,
     is_published: item.defaultPublished,
-    access_tier: item.defaultAccessTier,
+    access_tier: "free",
     preview_enabled: item.defaultPreviewEnabled,
     preview_summary: item.previewSummary,
   }));

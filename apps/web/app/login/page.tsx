@@ -43,7 +43,7 @@ export default function LoginPage() {
           {user ? "You're already signed in" : "Sign in with a magic link"}
         </h1>
         <p className="mt-4 text-sm leading-7 text-slate-400">
-          Use a passwordless link to sync progress, unlock paid access, and manage release testing.
+          Use a passwordless link to sync progress, keep your place across devices, and manage release testing.
         </p>
 
         {!user && (
@@ -110,4 +110,3 @@ export default function LoginPage() {
     </main>
   );
 }
-

@@ -8,11 +8,7 @@ import { PARTS, type CatalogItem } from "@/lib/catalog/source";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 function canAccessItem(item: CatalogItem, hasAuth: boolean, hasPaidEntitlement: boolean, isAdmin: boolean) {
-  if (!hasAuth) {
-    return true;
-  }
-
-  return isAdmin || hasPaidEntitlement || item.accessTier === "free";
+  return true;
 }
 
 export default async function CurriculumPage() {
@@ -37,19 +33,19 @@ export default async function CurriculumPage() {
             HPC networking from hardware to routed AI fabrics
           </h1>
           <p className="mt-4 text-lg leading-8 text-slate-300">
-            Free access covers Chapters 0-2 and Labs 0-1. The rest of the catalog stays visible so
-            you can preview the roadmap, release state, and paid unlock path without losing context.
+            Every published chapter and lab is open. Sign in if you want synced progress, an account
+            page, or admin access for release-control work.
           </p>
         </header>
 
         {!authEnabled ? (
           <div className="mt-8 rounded-2xl border border-white/10 bg-slate-900/70 p-5 text-sm leading-7 text-slate-300">
-            Supabase is not configured in this environment yet, so the app is running in local mode
-            with all published content open. Add the environment values from
+            Supabase is not configured in this environment yet, so the app is running in local mode.
+            Add the environment values from
             {" "}
             <code className="rounded bg-slate-950 px-1.5 py-0.5 text-cyan-300">apps/web/.env.example</code>
             {" "}
-            to enable auth, entitlements, previews, and admin release controls.
+            to enable sign-in, synced progress, and admin release controls.
           </div>
         ) : null}
 
@@ -82,7 +78,7 @@ export default async function CurriculumPage() {
           <div className="mb-6">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Labs</p>
             <p className="mt-2 text-sm text-slate-500">
-              Scenario-based simulator work. Labs 0-1 are free; the rest unlock with paid access.
+              Scenario-based simulator work. All published labs are open for hands-on practice.
             </p>
           </div>
           <div className="space-y-5">

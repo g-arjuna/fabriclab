@@ -20,13 +20,12 @@ The repo now combines:
 
 ## Access model
 
-V1 defaults:
+Current defaults:
 
-- free chapters: `Ch0-Ch2`
-- free labs: `Labs 0-1`
-- all other published chapters stay visible but open as metadata-only previews
-- all other published labs stay visible but open as locked shells
-- one paid entitlement: `core_paid`
+- every published chapter is open
+- every published lab is open
+- sign-in is optional and used for synced progress plus admin workflows
+- release controls still exist so unfinished content can stay unpublished
 
 ## Chapter status
 
@@ -142,7 +141,7 @@ Content remains git-driven:
 3. update `apps/web/content/catalog.json` for any new chapter/lab
 4. run `npm run catalog:sync`
 5. verify locally / on preview
-6. publish and set free/paid access from `/admin/releases`
+6. publish from `/admin/releases` when the content is ready
 
 This prevents unfinished weekly content drops from automatically going live.
 

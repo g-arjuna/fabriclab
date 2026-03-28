@@ -19,19 +19,17 @@ Platform engineering is Codex-owned.
 
 ## V1 product shape
 
-- Free anonymous access:
-  - Chapters `0-2`
-  - Labs `0-1`
-- Published paid chapters remain visible in curriculum and render metadata-only preview shells
-- Published paid labs remain visible in curriculum and render locked-entry shells
-- One paid entitlement only: `core_paid`
+- Free anonymous access to all published chapters and labs
+- Sign-in is optional and used for:
+  - synced progress
+  - admin workflows
 - Email magic-link auth only
 - Minimal admin dashboard for:
   - `is_published`
-  - `access_tier`
-  - `preview_enabled`
-  - `preview_summary`
-  - manual entitlement grants/revocations
+  - optional future `access_tier`
+  - optional future `preview_enabled`
+  - optional future `preview_summary`
+  - admin entitlement grants/revocations for internal testing if needed
 
 ---
 
@@ -55,8 +53,8 @@ Platform engineering is Codex-owned.
 ### Access model
 
 - middleware: session refresh only
-- route render: actual access enforcement
-- preview pages must not parse locked MDX
+- route render: actual publish-state enforcement
+- unpublished content must not render for normal users
 
 ### Progress model
 
@@ -174,14 +172,12 @@ Useful routes:
 - add migrations and env example
 - add shared catalog source and sync script
 
-### Phase 2 - Auth and gating
+### Phase 2 - Auth and access
 
 - auth provider
 - login/account routes
 - curriculum from shared catalog
-- chapter preview shells
-- locked lab shells
-- route-level entitlement checks
+- route-level publish checks
 
 ### Phase 3 - Progress sync
 
@@ -234,16 +230,15 @@ apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json
 
 ### Access
 
-- guests can open `Ch0-Ch2` and `Labs 0-1`
-- guests see locked previews for paid published chapters
-- guests see locked shells for paid published labs
-- `core_paid` unlocks all paid chapters/labs
+- guests can open all published chapters and labs
+- signed-in users see the same published catalog with progress sync/account features
+- unpublished content remains hidden from non-admins
 
 ### Admin
 
 - non-admin users cannot access `/admin/releases`
 - admin can change publish/access/preview fields
-- admin can grant and revoke `core_paid`
+- admin can grant and revoke `core_paid` for internal testing if still needed
 
 ### Progress
 

@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 
 import { LabExperience } from "@/app/module/rocev2/lab/LabExperience";
-import { LockedLabShell } from "@/components/catalog/LockedLabShell";
 import { getServerViewer } from "@/lib/auth/server";
 import { getCatalogAccessState } from "@/lib/catalog/runtime";
 
@@ -30,12 +29,7 @@ export default async function LabPage({ searchParams }: LabPageProps) {
   }
 
   if (!accessState.canAccess) {
-    return (
-      <LockedLabShell
-        item={accessState.item}
-        hasPaidEntitlement={viewer.hasPaidEntitlement}
-      />
-    );
+    notFound();
   }
 
   return (

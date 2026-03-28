@@ -18,8 +18,8 @@ export default async function AccountPage() {
         {!viewer.user ? (
           <div className="mt-8 rounded-2xl border border-white/8 bg-[#020b16] p-6">
             <p className="text-sm leading-7 text-slate-300">
-              You are currently browsing as a guest. Sign in to sync progress and unlock paid
-              access once entitlement is granted.
+              You are currently browsing as a guest. Sign in if you want synced progress across
+              devices or access to admin tooling.
             </p>
             <Link
               href="/login"
@@ -39,14 +39,13 @@ export default async function AccountPage() {
             </div>
 
             <div className="rounded-2xl border border-white/8 bg-[#020b16] p-6">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Entitlement</p>
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Access</p>
               <p className="mt-4 text-lg font-semibold text-white">
-                {viewer.hasPaidEntitlement ? "Core paid unlocked" : "Free access only"}
+                Full public catalog
               </p>
               <p className="mt-2 text-sm text-slate-400">
-                {viewer.hasPaidEntitlement
-                  ? "All paid chapters and labs are available on this account."
-                  : "You currently have access to the free foundation set only."}
+                Published chapters and labs are open to everyone. This account is mainly useful for
+                synced progress and any admin privileges attached to it.
               </p>
             </div>
 
@@ -70,4 +69,3 @@ export default async function AccountPage() {
     </main>
   );
 }
-

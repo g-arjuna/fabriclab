@@ -32,25 +32,21 @@ export function ChapterPreviewShell({
               FABRICLAB
             </Link>
             <span className="text-slate-700">/</span>
-            <span className="max-w-[240px] truncate text-sm text-slate-400">
-              {item.title}
-            </span>
+            <span className="max-w-[240px] truncate text-sm text-slate-400">{item.title}</span>
           </div>
           <AuthControls compact />
         </div>
       </nav>
 
       <div className="mx-auto max-w-5xl px-6 py-12">
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-          Chapter preview
-        </p>
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Chapter unavailable</p>
         <h1 className="mt-4 text-4xl font-semibold text-white">{item.title}</h1>
         <div className="mt-4 flex flex-wrap gap-3">
           <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-300">
             {item.durationLabel}
           </span>
           <span className="rounded-full bg-amber-950 px-3 py-1 text-xs text-amber-300">
-            Paid chapter
+            Release staging
           </span>
           {item.partTitle ? (
             <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400">
@@ -74,23 +70,22 @@ export function ChapterPreviewShell({
             </div>
             <div className="mt-8 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5">
               <p className="text-sm leading-7 text-amber-100">
-                The full lesson stays hidden until paid access is granted. This preview only exposes
-                catalog metadata, not chapter body content.
+                This route is not currently available to public learners. When a chapter is held
+                back for release staging, we show catalog metadata only and keep the lesson body
+                dark.
               </p>
             </div>
           </section>
 
           <aside className="rounded-3xl border border-white/10 bg-[#020b16] p-8 shadow-2xl shadow-slate-950/40">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-              Access
-            </p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Access</p>
             <h2 className="mt-4 text-2xl font-semibold text-white">
-              {hasPaidEntitlement ? "Refresh access" : "Unlock the full chapter"}
+              {hasPaidEntitlement ? "Refresh availability" : "Sign in for context"}
             </h2>
             <p className="mt-4 text-sm leading-7 text-slate-400">
               {hasPaidEntitlement
-                ? "This account already has paid entitlement. If this page still appears, refresh the session or re-open the chapter."
-                : "Sign in to sync progress and use a paid entitlement-enabled account to open the full lesson and related labs."}
+                ? "This account still carries the legacy testing entitlement. If this page appears unexpectedly, refresh the session or check the release state in admin."
+                : "Sign in to sync progress or inspect release state, then return to the curriculum. Published chapters remain open to everyone."}
             </p>
             <div className="mt-8 flex flex-col gap-3">
               <Link
