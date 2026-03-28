@@ -10,8 +10,8 @@ import { ChapterPreviewShell } from "@/components/catalog/ChapterPreviewShell";
 import { getServerViewer } from "@/lib/auth/server";
 import { getCatalogAccessState, getCurriculumCatalog } from "@/lib/catalog/runtime";
 import { getChapterDocument, getChapterPage, splitIntoPages } from "@/lib/chapters";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { mdxComponents } from "@/lib/mdxComponents";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 type Props = {
   params: Promise<{ chapter: string }>;
@@ -135,11 +135,11 @@ export default async function ChapterPage({ params, searchParams }: Props) {
           <PageProgressMarker chapterSlug={chapter} pageIndex={pageIndex} />
 
           {pageIndex === 0 ? (
-            <div className="mb-8 md:mb-10">
-              <h1 className="max-w-4xl text-3xl font-semibold leading-tight text-white sm:text-4xl md:text-5xl">
+            <div className="mb-10 md:mb-12">
+              <h1 className="max-w-5xl text-4xl font-semibold leading-tight tracking-tight text-white md:text-5xl">
                 {document.title}
               </h1>
-              <div className="mt-5 flex flex-wrap gap-2.5 sm:gap-3">
+              <div className="mt-5 flex flex-wrap gap-3">
                 {document.module ? (
                   <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400">
                     {document.module}
@@ -158,33 +158,32 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               </div>
             </div>
           ) : (
-            <div className="mb-8 md:mb-10">
+            <div className="mb-10 md:mb-12">
               <p className="text-xs uppercase tracking-[0.28em] text-slate-600">
                 {document.title} · Part {pageIndex + 1} of {totalPages}
               </p>
-              <h2 className="mt-3 max-w-4xl text-2xl font-semibold leading-tight text-white sm:text-3xl md:text-4xl">
+              <h2 className="mt-3 max-w-5xl text-3xl font-semibold leading-tight tracking-tight text-white md:text-4xl">
                 {page.heading}
               </h2>
             </div>
           )}
 
-          <div className="rounded-[28px] border border-white/8 bg-slate-950/35 px-5 py-6 shadow-[0_24px_60px_rgba(2,6,23,0.35)] sm:px-8 sm:py-8 md:px-10 md:py-10">
+          <div className="rounded-[28px] border border-white/8 bg-slate-950/22 px-5 py-6 shadow-[0_18px_46px_rgba(2,6,23,0.18)] sm:px-8 sm:py-8 md:px-9 md:py-9">
             <div
-              className="prose prose-invert mx-auto max-w-none md:max-w-[70ch]
+              className="prose prose-invert max-w-none
                 prose-headings:font-semibold prose-headings:tracking-tight
-                prose-h2:mb-5 prose-h2:mt-12 prose-h2:text-2xl
-                prose-h3:mb-4 prose-h3:mt-9 prose-h3:text-xl
-                prose-p:mb-6 prose-p:text-[1.04rem] prose-p:leading-[1.95] prose-p:text-slate-300
-                prose-li:text-[1.01rem] prose-li:leading-8 prose-li:text-slate-300
-                prose-ul:space-y-2 prose-ol:space-y-2
+                prose-h2:mb-5 prose-h2:mt-14 prose-h2:text-[1.95rem]
+                prose-h3:mb-4 prose-h3:mt-10 prose-h3:text-[1.35rem]
+                prose-p:mb-7 prose-p:max-w-[92ch] prose-p:text-[1rem] prose-p:leading-[1.95] prose-p:text-slate-300
+                prose-li:max-w-[88ch] prose-li:text-[0.98rem] prose-li:leading-[1.9] prose-li:text-slate-300
+                prose-ul:my-8 prose-ul:space-y-3 prose-ol:my-8 prose-ol:space-y-3
                 prose-strong:text-slate-100
-                prose-blockquote:border-l prose-blockquote:border-cyan-500/30 prose-blockquote:pl-5 prose-blockquote:text-slate-300
+                prose-blockquote:my-8 prose-blockquote:border-l prose-blockquote:border-cyan-500/30 prose-blockquote:pl-5 prose-blockquote:text-slate-300
                 prose-code:rounded prose-code:bg-slate-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.92em] prose-code:text-cyan-300
                 prose-pre:border prose-pre:border-white/10 prose-pre:bg-slate-900
                 prose-table:text-sm
                 prose-th:text-slate-300 prose-td:text-slate-400
                 prose-a:text-cyan-400 prose-a:no-underline hover:prose-a:underline"
-              style={{ fontFamily: "var(--font-reading)" }}
             >
               <MDXRemote
                 source={page.content}
