@@ -8,12 +8,8 @@ import { ChapterSidebar } from "@/components/chapter/ChapterSidebar";
 import { PageProgressMarker } from "@/components/chapter/PageProgressMarker";
 import { ChapterPreviewShell } from "@/components/catalog/ChapterPreviewShell";
 import { getServerViewer } from "@/lib/auth/server";
-import {
-  getChapterDocument,
-  getChapterPage,
-  splitIntoPages,
-} from "@/lib/chapters";
 import { getCatalogAccessState, getCurriculumCatalog } from "@/lib/catalog/runtime";
+import { getChapterDocument, getChapterPage, splitIntoPages } from "@/lib/chapters";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { mdxComponents } from "@/lib/mdxComponents";
 
@@ -22,7 +18,12 @@ type Props = {
   searchParams: Promise<{ page?: string }>;
 };
 
-function canAccessFreeSet(accessTier: "free" | "paid", authEnabled: boolean, isAdmin: boolean, hasPaidEntitlement: boolean) {
+function canAccessFreeSet(
+  accessTier: "free" | "paid",
+  authEnabled: boolean,
+  isAdmin: boolean,
+  hasPaidEntitlement: boolean,
+) {
   if (!authEnabled) {
     return true;
   }
@@ -64,7 +65,12 @@ export default async function ChapterPage({ params, searchParams }: Props) {
   const { chapters: catalogChapters } = await getCurriculumCatalog(viewer);
   const sidebarChapters = catalogChapters
     .filter((item) =>
-      canAccessFreeSet(item.accessTier, authEnabled, viewer.isAdmin, viewer.hasPaidEntitlement),
+      canAccessFreeSet(
+        item.accessTier,
+        authEnabled,
+        viewer.isAdmin,
+        viewer.hasPaidEntitlement,
+      ),
     )
     .map((item) => ({ slug: item.slug, title: item.title }));
   const hasPrev = pageIndex > 0;
@@ -81,8 +87,8 @@ export default async function ChapterPage({ params, searchParams }: Props) {
   return (
     <main className="min-h-screen bg-[#020617] text-slate-100">
       <nav className="sticky top-0 z-40 border-b border-white/8 bg-[#020617]/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3">
-          <div className="flex items-center gap-4">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <Link
               href="/curriculum"
               className="font-mono text-sm uppercase tracking-[0.28em] text-cyan-400 transition hover:text-cyan-300"
@@ -90,20 +96,23 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               FABRICLAB
             </Link>
             <span className="text-slate-700">/</span>
-            <span className="max-w-[200px] truncate text-sm text-slate-400">{document.title}</span>
+            <span className="max-w-[170px] truncate text-sm text-slate-400 sm:max-w-[240px]">
+              {document.title}
+            </span>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
             {document.labLink ? (
               <Link
                 href={document.labLink}
-                className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 text-xs text-cyan-400 transition hover:border-cyan-500/50 hover:text-cyan-300"
+                className="flex-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 text-center text-xs text-cyan-400 transition hover:border-cyan-500/50 hover:text-cyan-300 sm:flex-none"
               >
                 Open lab
               </Link>
             ) : (
               <Link
                 href="/lab"
-                className="rounded-full border border-white/20 px-4 py-1.5 text-xs text-slate-400 transition hover:border-white/40 hover:text-slate-300"
+                className="flex-1 rounded-full border border-white/20 px-4 py-1.5 text-center text-xs text-slate-400 transition hover:border-white/40 hover:text-slate-300 sm:flex-none"
               >
                 Open lab
               </Link>
@@ -113,7 +122,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
         </div>
       </nav>
 
-      <div className="mx-auto max-w-7xl px-6 py-8 lg:grid lg:grid-cols-[220px_1fr] lg:gap-12">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:grid lg:grid-cols-[220px_1fr] lg:gap-12">
         <ChapterSidebar
           allChapters={sidebarChapters}
           currentChapter={chapter}
@@ -122,13 +131,15 @@ export default async function ChapterPage({ params, searchParams }: Props) {
           chapterPageCounts={chapterPageCounts}
         />
 
-        <div className="min-w-0">
+        <div className="min-w-0 lg:pt-2">
           <PageProgressMarker chapterSlug={chapter} pageIndex={pageIndex} />
 
           {pageIndex === 0 ? (
-            <div className="mb-8">
-              <h1 className="text-4xl font-semibold text-white">{document.title}</h1>
-              <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mb-8 md:mb-10">
+              <h1 className="max-w-4xl text-3xl font-semibold leading-tight text-white sm:text-4xl md:text-5xl">
+                {document.title}
+              </h1>
+              <div className="mt-5 flex flex-wrap gap-2.5 sm:gap-3">
                 {document.module ? (
                   <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400">
                     {document.module}
@@ -147,32 +158,40 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               </div>
             </div>
           ) : (
-            <div className="mb-8">
+            <div className="mb-8 md:mb-10">
               <p className="text-xs uppercase tracking-[0.28em] text-slate-600">
                 {document.title} · Part {pageIndex + 1} of {totalPages}
               </p>
-              <h2 className="mt-2 text-3xl font-semibold text-white">{page.heading}</h2>
+              <h2 className="mt-3 max-w-4xl text-2xl font-semibold leading-tight text-white sm:text-3xl md:text-4xl">
+                {page.heading}
+              </h2>
             </div>
           )}
 
-          <div
-            className="prose prose-invert max-w-none
-              prose-headings:font-semibold
-              prose-h2:mb-4 prose-h2:mt-10 prose-h2:text-2xl
-              prose-h3:mt-8 prose-h3:text-xl
-              prose-p:text-slate-300 prose-p:leading-8
-              prose-strong:text-slate-200
-              prose-code:rounded prose-code:bg-slate-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-cyan-300
-              prose-pre:border prose-pre:border-white/10 prose-pre:bg-slate-900
-              prose-table:text-sm
-              prose-th:text-slate-300 prose-td:text-slate-400
-              prose-a:text-cyan-400 prose-a:no-underline hover:prose-a:underline"
-          >
-            <MDXRemote
-              source={page.content}
-              components={mdxComponents}
-              options={{ mdxOptions: { remarkPlugins: [remarkGfm] } }}
-            />
+          <div className="rounded-[28px] border border-white/8 bg-slate-950/35 px-5 py-6 shadow-[0_24px_60px_rgba(2,6,23,0.35)] sm:px-8 sm:py-8 md:px-10 md:py-10">
+            <div
+              className="prose prose-invert mx-auto max-w-none md:max-w-[70ch]
+                prose-headings:font-semibold prose-headings:tracking-tight
+                prose-h2:mb-5 prose-h2:mt-12 prose-h2:text-2xl
+                prose-h3:mb-4 prose-h3:mt-9 prose-h3:text-xl
+                prose-p:mb-6 prose-p:text-[1.04rem] prose-p:leading-[1.95] prose-p:text-slate-300
+                prose-li:text-[1.01rem] prose-li:leading-8 prose-li:text-slate-300
+                prose-ul:space-y-2 prose-ol:space-y-2
+                prose-strong:text-slate-100
+                prose-blockquote:border-l prose-blockquote:border-cyan-500/30 prose-blockquote:pl-5 prose-blockquote:text-slate-300
+                prose-code:rounded prose-code:bg-slate-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.92em] prose-code:text-cyan-300
+                prose-pre:border prose-pre:border-white/10 prose-pre:bg-slate-900
+                prose-table:text-sm
+                prose-th:text-slate-300 prose-td:text-slate-400
+                prose-a:text-cyan-400 prose-a:no-underline hover:prose-a:underline"
+              style={{ fontFamily: "var(--font-reading)" }}
+            >
+              <MDXRemote
+                source={page.content}
+                components={mdxComponents}
+                options={{ mdxOptions: { remarkPlugins: [remarkGfm] } }}
+              />
+            </div>
           </div>
 
           <div className="mt-16 border-t border-white/8 pt-8">
@@ -191,11 +210,11 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               {hasPrev ? (
                 <Link
                   href={`/learn/${chapter}?page=${pageIndex - 1}`}
-                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-sm transition hover:border-white/20"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-sm transition hover:border-white/20 sm:w-auto"
                 >
                   <span className="text-slate-500">←</span>
                   <div>
@@ -212,7 +231,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               {hasNext ? (
                 <Link
                   href={`/learn/${chapter}?page=${pageIndex + 1}`}
-                  className="ml-auto flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-sm transition hover:border-white/20 hover:border-cyan-500/30"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-sm transition hover:border-white/20 hover:border-cyan-500/30 sm:ml-auto sm:w-auto"
                 >
                   <div className="text-right">
                     <p className="text-xs text-slate-600">Next</p>
@@ -225,7 +244,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               ) : document.labLink ? (
                 <Link
                   href={document.labLink}
-                  className="ml-auto flex items-center gap-3 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-4 text-sm transition hover:border-cyan-500/50"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-4 text-sm transition hover:border-cyan-500/50 sm:ml-auto sm:w-auto"
                 >
                   <div className="text-right">
                     <p className="text-xs text-cyan-600">Chapter complete</p>
@@ -236,7 +255,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               ) : (
                 <Link
                   href="/curriculum"
-                  className="ml-auto flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-sm transition hover:border-white/20"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-slate-900 px-5 py-4 text-sm transition hover:border-white/20 sm:ml-auto sm:w-auto"
                 >
                   <div className="text-right">
                     <p className="text-xs text-slate-600">Chapter complete</p>
