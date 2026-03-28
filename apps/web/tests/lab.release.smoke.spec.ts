@@ -56,7 +56,10 @@ test.describe.serial("Lab release controls smoke", () => {
         waitUntil: "domcontentloaded",
       });
       expect(restoredResponse?.status()).toBe(200);
-      await expect(guestPage.getByText(/Diagnose fabric congestion/i)).toBeVisible();
+      await expect(
+        guestPage.getByRole("heading", { name: /ECMP hotspot: BGP bandwidth community/i }),
+      ).toBeVisible();
+      await expect(guestPage.getByText(/You are the fabric engineer on call at 14:30/i)).toBeVisible();
       await expect(guestPage.locator("text=Type 'help' for available commands.")).toBeVisible();
 
       assertNoBrowserErrors(tracker);

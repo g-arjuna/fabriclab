@@ -17,7 +17,7 @@ const target = {
 };
 
 test.describe.serial("Admin release controls smoke", () => {
-  test("admin can unpublish and restore a paid chapter", async ({ browser, page }) => {
+  test("admin can unpublish and restore a public chapter", async ({ browser, page }) => {
     const tracker = trackErrors(page);
     const original = await readCatalogState(target.kind, target.slug);
     const guestContext = await browser.newContext();
@@ -48,8 +48,10 @@ test.describe.serial("Admin release controls smoke", () => {
 
       const restoredResponse = await guestPage.goto(`${appUrl}${target.route}`, { waitUntil: "domcontentloaded" });
       expect(restoredResponse?.status()).toBe(200);
-      await expect(guestPage.getByText(/Chapter preview/i)).toBeVisible();
       await expect(guestPage.getByRole("heading", { name: target.title })).toBeVisible();
+      await expect(
+        guestPage.getByText(/Every chapter so far has assumed that traffic finds its way between GPUs/i),
+      ).toBeVisible();
 
       assertNoBrowserErrors(tracker);
     } finally {
