@@ -13,7 +13,8 @@
     "test:browser:ch4": "playwright test tests/ch4.smoke.spec.ts",
     "test:browser:deploy": "playwright test tests/deploy.smoke.spec.ts",
     "test:browser:admin": "playwright test tests/admin.release.smoke.spec.ts",
-    "test:browser:progress": "playwright test tests/progress.sync.smoke.spec.ts"
+    "test:browser:progress": "playwright test tests/progress.sync.smoke.spec.ts",
+    "test:browser:catalog": "playwright test tests/catalog.surface.smoke.spec.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
