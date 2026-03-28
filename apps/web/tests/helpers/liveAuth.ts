@@ -30,6 +30,8 @@ export const smokeEmail =
   process.env.SMOKE_TEST_EMAIL ??
   process.env.SUPABASE_ADMIN_EMAILS?.split(",").map((value) => value.trim()).find(Boolean) ??
   "";
+export const learnerEmail =
+  process.env.SMOKE_TEST_LEARNER_EMAIL?.trim() || "smoke-learner@fabriclab.dev";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -141,9 +143,18 @@ export async function findUserIdByEmail(email = smokeEmail) {
   expect(error, error?.message ?? "Failed to list auth users").toBeNull();
 
   const user = data?.users.find((entry) => entry.email?.toLowerCase() === email.toLowerCase());
-  expect(user, `Could not find auth user for ${email}`).toBeTruthy();
+  if (user) {
+    return user.id;
+  }
 
-  return user!.id;
+  const { data: createdUser, error: createError } = await admin.auth.admin.createUser({
+    email,
+    email_confirm: true,
+  });
+  expect(createError, createError?.message ?? `Failed to create auth user for ${email}`).toBeNull();
+  expect(createdUser.user, `Could not create auth user for ${email}`).toBeTruthy();
+
+  return createdUser.user!.id;
 }
 
 export async function generateMagicCallbackUrl(email = smokeEmail) {
@@ -234,4 +245,29 @@ export async function readChapterProgress(userId: string, chapterSlug: string) {
 
   expect(error, error?.message ?? `Failed to read chapter progress for ${chapterSlug}`).toBeNull();
   return data as ChapterProgressRow | null;
+}
+
+export async function hasPaidEntitlement(email = smokeEmail) {
+  const userId = await findUserIdByEmail(email);
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("user_entitlements")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("entitlement_key", "core_paid");
+
+  expect(error, error?.message ?? `Failed to read entitlement for ${email}`).toBeNull();
+  return (data?.length ?? 0) > 0;
+}
+
+export async function revokePaidEntitlement(email = smokeEmail) {
+  const userId = await findUserIdByEmail(email);
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("user_entitlements")
+    .delete()
+    .eq("user_id", userId)
+    .eq("entitlement_key", "core_paid");
+
+  expect(error, error?.message ?? `Failed to revoke entitlement for ${email}`).toBeNull();
 }
