@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { AuthControls } from "@/components/auth/AuthControls";
+import { SOURCE_CHAPTERS, SOURCE_LABS } from "@/lib/catalog/source";
 
 const GITHUB_URL = "https://github.com/g-arjuna/fabriclab";
 
@@ -379,6 +380,25 @@ function tagClasses(tag: string) {
   return "bg-purple-950 text-purple-400";
 }
 
+const homepageChapterCards = SOURCE_CHAPTERS.map((chapter) => ({
+  id: `Chapter ${chapter.number}`,
+  title: chapter.title,
+  tag:
+    chapter.partKey === "foundations"
+      ? "Foundations"
+      : chapter.partKey === "fabric-operations"
+        ? "Operations"
+        : chapter.partKey === "infrastructure"
+          ? "Infrastructure"
+          : "Architecture",
+  description: chapter.description,
+  status: chapter.defaultPublished ? "Available" : "Coming soon",
+  href: chapter.defaultPublished ? chapter.href : "/curriculum",
+}));
+
+const homepageChapterCount = SOURCE_CHAPTERS.length;
+const homepageLabCount = SOURCE_LABS.length;
+
 export default function Home() {
   return (
     <main className="bg-[#020617] text-slate-100">
@@ -530,11 +550,11 @@ export default function Home() {
             A structured path from hardware to protocol.
           </h2>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-400">
-            Eleven chapters. Six scenario labs. One interactive CLI simulator.
+            {homepageChapterCount} chapters. {homepageLabCount} scenario labs. One interactive CLI simulator.
           </p>
 
           <div className="mt-10 flex gap-6 overflow-x-auto pb-4 lg:grid lg:grid-cols-3 lg:overflow-visible">
-            {chapterCards.map((card) => {
+            {homepageChapterCards.map((card) => {
               const isAvailable = card.status === "Available";
               const cardContent = (
                 <>

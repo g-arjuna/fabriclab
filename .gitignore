@@ -160,3 +160,4 @@ repo-context.txt
 /apps/web/.tmp-dev-*.log
 /apps/web/.codex-checks/
 /apps/web/test-results/
+/apps/web/.vercel/
