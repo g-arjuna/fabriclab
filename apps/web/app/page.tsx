@@ -6,8 +6,6 @@ import Link from "next/link";
 import { AuthControls } from "@/components/auth/AuthControls";
 import { SOURCE_CHAPTERS, SOURCE_LABS } from "@/lib/catalog/source";
 
-const GITHUB_URL = "https://github.com/g-arjuna/fabriclab";
-
 const TERMINAL_LINES = [
   { text: "fabric-sim:~$ show dcb pfc", color: "#e2e8f0", isPrompt: true },
   { text: "Interface eth0", color: "#94a3b8", isPrompt: false },
@@ -432,14 +430,6 @@ export default function Home() {
             <Link href="/lab" className="text-sm text-slate-400 transition hover:text-slate-200">
               Lab
             </Link>
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm text-slate-400 transition hover:text-slate-200"
-            >
-              GitHub
-            </a>
             <AuthControls compact />
             <Link
               href="/learn/ch0-hardware-foundations"
@@ -714,9 +704,6 @@ export default function Home() {
             <Link href="/lab" className="transition hover:text-slate-400">
               Lab
             </Link>
-            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="transition hover:text-slate-400">
-              GitHub
-            </a>
           </div>
         </div>
       </footer>
