@@ -1,6 +1,9 @@
+import { unstable_noStore as noStore } from "next/cache";
+
 import type { ServerViewer } from "@/lib/auth/server";
 import type { CatalogItem, CatalogKind, CatalogAccessState, SourceCatalogItem } from "@/lib/catalog/source";
 import { SOURCE_CATALOG_ITEMS, getSourceCatalogItem, getSourceChapters, getSourceLabs } from "@/lib/catalog/source";
+import { getAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -33,7 +36,9 @@ function mergeCatalogItem(source: SourceCatalogItem, row?: CatalogRow | null): C
 }
 
 async function getCatalogRows(kind?: CatalogKind): Promise<CatalogRow[]> {
-  const supabase = await getServerSupabaseClient();
+  noStore();
+
+  const supabase = getAdminSupabaseClient() ?? await getServerSupabaseClient();
   if (!supabase) {
     return [];
   }
@@ -177,4 +182,3 @@ export function getSourceCatalogSeedRows() {
     preview_summary: item.previewSummary,
   }));
 }
-

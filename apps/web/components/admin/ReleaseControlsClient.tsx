@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type AdminCatalogItem = {
   kind: "chapter" | "lab";
@@ -23,10 +23,15 @@ type ReleaseControlsClientProps = {
 
 export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientProps) {
   const [items, setItems] = useState(initialItems);
+  const itemsRef = useRef(initialItems);
   const [savingSlug, setSavingSlug] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [entitlementEmail, setEntitlementEmail] = useState("");
   const [entitlementPending, setEntitlementPending] = useState<"grant" | "revoke" | null>(null);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   const grouped = useMemo(
     () => ({
@@ -36,7 +41,13 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
     [items],
   );
 
-  async function saveItem(item: AdminCatalogItem) {
+  async function saveItem(slug: string) {
+    const item = itemsRef.current.find((entry) => entry.slug === slug);
+    if (!item) {
+      setMessage("Could not find the selected catalog item.");
+      return;
+    }
+
     setSavingSlug(item.slug);
     setMessage(null);
 
@@ -91,9 +102,13 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
   }
 
   function updateItem(slug: string, patch: Partial<AdminCatalogItem>) {
-    setItems((current) =>
-      current.map((item) => (item.slug === slug ? { ...item, ...patch } : item)),
-    );
+    setItems((current) => {
+      const nextItems = current.map((item) =>
+        item.slug === slug ? { ...item, ...patch } : item,
+      );
+      itemsRef.current = nextItems;
+      return nextItems;
+    });
   }
 
   function renderCard(item: AdminCatalogItem) {
@@ -224,7 +239,7 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
           </div>
           <button
             type="button"
-            onClick={() => void saveItem(item)}
+            onClick={() => void saveItem(item.slug)}
             disabled={isSaving}
             className="rounded-full bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
           >

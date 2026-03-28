@@ -19,7 +19,9 @@ interface ProgressState {
   completedPages: Record<string, number[]>;
   completedLabs: CompletedLabRecord;
   guestSnapshot: ProgressSnapshot;
+  hasHydrated: boolean;
   mode: "guest" | "remote";
+  setHasHydrated: (value: boolean) => void;
   markPageComplete: (chapterSlug: string, pageIndex: number) => void;
   markLabComplete: (labId: string, score: number) => void;
   isPageComplete: (chapterSlug: string, pageIndex: number) => boolean;
@@ -37,13 +39,34 @@ function emptySnapshot(): ProgressSnapshot {
   };
 }
 
+function mergeCompletedPages(
+  remotePages: Record<string, number[]>,
+  localPages: Record<string, number[]>,
+) {
+  const chapterSlugs = new Set([...Object.keys(remotePages), ...Object.keys(localPages)]);
+
+  return Object.fromEntries(
+    [...chapterSlugs].map((chapterSlug) => {
+      const mergedPages = new Set([
+        ...(remotePages[chapterSlug] ?? []),
+        ...(localPages[chapterSlug] ?? []),
+      ]);
+
+      return [chapterSlug, [...mergedPages].sort((a, b) => a - b)];
+    }),
+  );
+}
+
 export const useProgressStore = create<ProgressState>()(
   persist(
     (set, get) => ({
       completedPages: {},
       completedLabs: {},
       guestSnapshot: emptySnapshot(),
+      hasHydrated: false,
       mode: "guest",
+
+      setHasHydrated: (value) => set({ hasHydrated: value }),
 
       markPageComplete: (chapterSlug, pageIndex) =>
         set((state) => {
@@ -112,18 +135,29 @@ export const useProgressStore = create<ProgressState>()(
       },
 
       hydrateRemoteProgress: (snapshot) =>
-        set((state) => ({
-          completedPages: snapshot.completedPages,
-          completedLabs: snapshot.completedLabs,
-          guestSnapshot:
-            state.mode === "guest"
+        set((state) => {
+          const shouldMergeRemoteState = state.mode === "remote";
+
+          return {
+            completedPages: shouldMergeRemoteState
+              ? mergeCompletedPages(snapshot.completedPages, state.completedPages)
+              : snapshot.completedPages,
+            completedLabs: shouldMergeRemoteState
               ? {
-                  completedPages: state.completedPages,
-                  completedLabs: state.completedLabs,
+                  ...snapshot.completedLabs,
+                  ...state.completedLabs,
                 }
-              : state.guestSnapshot,
-          mode: "remote",
-        })),
+              : snapshot.completedLabs,
+            guestSnapshot:
+              state.mode === "guest"
+                ? {
+                    completedPages: state.completedPages,
+                    completedLabs: state.completedLabs,
+                  }
+                : state.guestSnapshot,
+            mode: "remote",
+          };
+        }),
 
       switchToGuestMode: () =>
         set((state) => ({
@@ -152,6 +186,9 @@ export const useProgressStore = create<ProgressState>()(
     {
       name: "fabriclab-progress",
       storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
       merge: (persistedState, currentState) => {
         const typedPersisted = (persistedState ?? {}) as Partial<ProgressState>;
         const completedPages = typedPersisted.completedPages ?? currentState.completedPages;
@@ -166,6 +203,7 @@ export const useProgressStore = create<ProgressState>()(
             completedPages,
             completedLabs,
           },
+          hasHydrated: true,
           mode: typedPersisted.mode ?? "guest",
         };
       },

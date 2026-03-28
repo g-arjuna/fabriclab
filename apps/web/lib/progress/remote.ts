@@ -1,6 +1,7 @@
 "use client";
 
 import { getBrowserSupabaseClient } from "@/lib/supabase/client";
+import type { User } from "@supabase/supabase-js";
 
 export type RemoteProgressPayload = {
   completedPages: Record<string, number[]>;
@@ -14,6 +15,25 @@ export type RemoteProgressPayload = {
   >;
 };
 
+async function getAuthenticatedBrowserUser(): Promise<User | null> {
+  const supabase = getBrowserSupabaseClient();
+  if (!supabase) {
+    return null;
+  }
+
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  if (error) {
+    console.error("Failed to read browser auth session for progress sync.", error.message);
+    return null;
+  }
+
+  return session?.user ?? null;
+}
+
 export async function loadRemoteProgress(): Promise<RemoteProgressPayload> {
   const supabase = getBrowserSupabaseClient();
   if (!supabase) {
@@ -23,10 +43,7 @@ export async function loadRemoteProgress(): Promise<RemoteProgressPayload> {
     };
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getAuthenticatedBrowserUser();
   if (!user) {
     return {
       completedPages: {},
@@ -73,17 +90,14 @@ export async function syncChapterProgress(
     return;
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getAuthenticatedBrowserUser();
   if (!user) {
     return;
   }
 
   const lastPageIndex = completedPages.length > 0 ? Math.max(...completedPages) : 0;
 
-  await supabase.from("chapter_progress").upsert(
+  const { error } = await supabase.from("chapter_progress").upsert(
     {
       user_id: user.id,
       chapter_slug: chapterSlug,
@@ -95,6 +109,10 @@ export async function syncChapterProgress(
       onConflict: "user_id,chapter_slug",
     },
   );
+
+  if (error) {
+    console.error(`Failed to sync chapter progress for ${chapterSlug}.`, error.message);
+  }
 }
 
 export async function syncLabProgress(
@@ -106,15 +124,12 @@ export async function syncLabProgress(
     return;
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getAuthenticatedBrowserUser();
   if (!user) {
     return;
   }
 
-  await supabase.from("lab_progress").upsert(
+  const { error } = await supabase.from("lab_progress").upsert(
     {
       user_id: user.id,
       lab_id: labId,
@@ -127,5 +142,8 @@ export async function syncLabProgress(
       onConflict: "user_id,lab_id",
     },
   );
-}
 
+  if (error) {
+    console.error(`Failed to sync lab progress for ${labId}.`, error.message);
+  }
+}
