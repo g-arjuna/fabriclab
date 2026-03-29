@@ -217,8 +217,14 @@ Important caveat:
   - `npm run build`
   - `npm run test:browser:deploy`
   - `npm run test:browser:progress`
+- Stabilized the browser smoke harness for the new session model by ignoring benign aborted
+  `/api/auth/session` probes during navigation:
+  - `apps/web/tests/helpers/liveAuth.ts`
+- Re-verified the full local release suite on the branch:
+  - `npm run test:browser:release`
 - Review conclusion:
   - the web branch builds cleanly
+  - local regression coverage is green again
   - main remaining risk is rollout/config migration, not a compile-time issue
 
 ## Open Items
