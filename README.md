@@ -136,8 +136,10 @@ If you want general forum threads to optionally create matching GitHub issues, s
 - `GITHUB_COMMUNITY_ISSUES_TOKEN`
 - `GITHUB_COMMUNITY_ISSUE_LABELS`
 
-The token should have repository issue-write permissions for the FabricLab repo. The GitHub target is
-derived from `NEXT_PUBLIC_COMMUNITY_REPO_URL`.
+The token should be a GitHub token that can create issues in the FabricLab repository. For a
+fine-grained personal access token, grant repository access to `g-arjuna/fabriclab` and enable
+`Issues: Read and write`. The GitHub target is derived from
+`NEXT_PUBLIC_COMMUNITY_REPO_URL`.
 
 If you want to expose public community destinations, set the optional `NEXT_PUBLIC_COMMUNITY_*`
 and `NEXT_PUBLIC_SUPPORT_URL` variables in `apps/web/.env.local` and in Vercel.

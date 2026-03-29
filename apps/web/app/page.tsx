@@ -299,6 +299,7 @@ export default function Home() {
           <p className="mt-6 max-w-2xl text-center text-lg leading-8 text-slate-400">
             InfiniBand. RoCEv2. RDMA. DGX SuperPOD. Spectrum-X. Learn AI and HPC networking through
             interactive chapters, stateful labs, and a simulator built for network engineers.
+            Sign in once, then keep your progress and discussion history attached to one account.
           </p>
 
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
@@ -376,8 +377,8 @@ export default function Home() {
             A structured path from hardware to protocol.
           </h2>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-400">
-            {homepageChapterCount} chapters. {homepageLabCount} scenario labs. One simulator. All
-            published content is open.
+            {homepageChapterCount} chapters. {homepageLabCount} scenario labs. One simulator. Browse
+            the catalog in public, then sign in to open the learning surfaces.
           </p>
 
           <div className="mt-10 flex gap-6 overflow-x-auto pb-4 lg:grid lg:grid-cols-3 lg:overflow-visible">
@@ -535,8 +536,8 @@ export default function Home() {
               Learn the fabric in the open.
             </h2>
             <p className="mt-4 text-lg leading-8 text-slate-400">
-              Published chapters and labs are open to everyone. Sign in if you want synced progress,
-              to join the discussion, or to help with release testing.
+              Browse the catalog in public, then sign in to open chapters and labs, join tracked
+              discussions, and keep your progress attached to one account.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link

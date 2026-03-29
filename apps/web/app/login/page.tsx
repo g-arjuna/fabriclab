@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { Provider } from "@supabase/supabase-js";
 
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -88,10 +89,19 @@ function getSocialProviderIcon(provider: Provider) {
   }
 }
 
-export default function LoginPage() {
+function LoginPageContent() {
   const { user, enabled } = useAuth();
+  const searchParams = useSearchParams();
   const env = useMemo(() => getPublicSupabaseEnv(), []);
   const socialProviders = useMemo(() => getEnabledSocialAuthProviders(), []);
+  const nextPath = searchParams.get("next") ?? "/curriculum";
+  const callbackUrl = useMemo(() => {
+    if (!env) {
+      return null;
+    }
+
+    return `${env.appUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+  }, [env, nextPath]);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -104,10 +114,8 @@ export default function LoginPage() {
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Auth unavailable</p>
           <h1 className="mt-4 text-3xl font-semibold text-white">Supabase is not configured</h1>
           <p className="mt-4 text-sm leading-7 text-slate-400">
-            Add the Supabase environment variables from
-            {" "}
-            <code className="rounded bg-slate-800 px-1.5 py-0.5 text-cyan-300">.env.example</code>
-            {" "}
+            Add the Supabase environment variables from{" "}
+            <code className="rounded bg-slate-800 px-1.5 py-0.5 text-cyan-300">.env.example</code>{" "}
             to enable sign-in and gated access.
           </p>
         </div>
@@ -130,8 +138,8 @@ export default function LoginPage() {
                 {user ? "You're already signed in" : "Sign in"}
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-7 text-slate-300">
-                Continue into the interactive AI networking curriculum, save progress across chapters
-                and labs, and join technical discussion under each lesson.
+                Continue into the interactive AI networking curriculum, open chapters and labs, save
+                progress across the platform, and join technical discussion under each lesson.
               </p>
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
                 <span className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1">
@@ -149,7 +157,8 @@ export default function LoginPage() {
         </div>
         <p className="mt-6 text-sm leading-7 text-slate-400">
           Use Google or GitHub for the fastest path, or request a branded FabricLab magic link by
-          email. Sign-in is optional and mainly used for synced progress, discussion, and admin tooling.
+          email. Sign-in is now the entry point for chapter access, lab access, progress sync, and
+          community participation.
         </p>
 
         {!user && (
@@ -165,7 +174,7 @@ export default function LoginPage() {
                       disabled={oauthSubmitting !== null}
                       onClick={async () => {
                         const client = getBrowserSupabaseClient();
-                        if (!client || !env) {
+                        if (!client || !callbackUrl) {
                           return;
                         }
 
@@ -175,7 +184,7 @@ export default function LoginPage() {
                         const { error } = await client.auth.signInWithOAuth({
                           provider,
                           options: {
-                            redirectTo: `${env.appUrl}/auth/callback`,
+                            redirectTo: callbackUrl,
                           },
                         });
 
@@ -201,7 +210,7 @@ export default function LoginPage() {
                           </span>
                         </span>
                       </span>
-                      <span className="text-cyan-300">↗</span>
+                      <span className="text-cyan-300">{"\u2197"}</span>
                     </button>
                   ))}
                 </div>
@@ -228,7 +237,7 @@ export default function LoginPage() {
                 disabled={!email || submitting || oauthSubmitting !== null}
                 onClick={async () => {
                   const client = getBrowserSupabaseClient();
-                  if (!client || !env) {
+                  if (!client || !callbackUrl) {
                     return;
                   }
 
@@ -238,7 +247,7 @@ export default function LoginPage() {
                   const { error } = await client.auth.signInWithOtp({
                     email,
                     options: {
-                      emailRedirectTo: `${env.appUrl}/auth/callback`,
+                      emailRedirectTo: callbackUrl,
                     },
                   });
 
@@ -273,5 +282,23 @@ export default function LoginPage() {
         ) : null}
       </div>
     </main>
+  );
+}
+
+function LoginPageFallback() {
+  return (
+    <main className="min-h-screen bg-[#020617] px-6 py-16 text-slate-100">
+      <div className="mx-auto max-w-2xl rounded-3xl border border-white/10 bg-slate-900/70 p-8 shadow-2xl shadow-slate-950/40">
+        <p className="text-sm text-slate-400">Preparing sign-in...</p>
+      </div>
+    </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageFallback />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

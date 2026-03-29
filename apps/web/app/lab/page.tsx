@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 
 import { LabExperience } from "@/app/module/rocev2/lab/LabExperience";
+import { AuthRequiredContentShell } from "@/components/catalog/AuthRequiredContentShell";
 import { getServerViewer } from "@/lib/auth/server";
 import { getCatalogAccessState } from "@/lib/catalog/runtime";
 
@@ -29,7 +30,13 @@ export default async function LabPage({ searchParams }: LabPageProps) {
   }
 
   if (!accessState.canAccess) {
-    notFound();
+    return (
+      <AuthRequiredContentShell
+        item={accessState.item}
+        kind="lab"
+        nextPath={`/lab?lab=${encodeURIComponent(labId)}`}
+      />
+    );
   }
 
   return (

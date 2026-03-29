@@ -7,13 +7,14 @@ import { getCurriculumCatalog, groupChaptersByPart } from "@/lib/catalog/runtime
 import { PARTS, type CatalogItem } from "@/lib/catalog/source";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
-function canAccessItem(item: CatalogItem) {
-  return true;
+function canAccessItem(item: CatalogItem, hasSession: boolean, authEnabled: boolean) {
+  return !authEnabled || hasSession;
 }
 
 export default async function CurriculumPage() {
   const viewer = await getServerViewer();
   const authEnabled = isSupabaseConfigured();
+  const hasSession = !!viewer.user || viewer.isAdmin;
   const { chapters, labs } = await getCurriculumCatalog(viewer);
   const chaptersByPart = groupChaptersByPart(chapters);
 
@@ -33,8 +34,8 @@ export default async function CurriculumPage() {
             HPC networking from hardware to routed AI fabrics
           </h1>
           <p className="mt-4 text-lg leading-8 text-slate-300">
-            Every published chapter and lab is open. Sign in if you want synced progress, an account
-            page, or admin access for release-control work.
+            Browse the full learning path in public. Sign in to open chapters and labs, sync
+            progress, and participate in the technical discussion.
           </p>
         </header>
 
@@ -66,7 +67,7 @@ export default async function CurriculumPage() {
                   <CurriculumCard
                     key={item.slug}
                     item={item}
-                    canAccess={canAccessItem(item)}
+                    canAccess={canAccessItem(item, hasSession, authEnabled)}
                   />
                 ))}
               </div>
@@ -78,7 +79,8 @@ export default async function CurriculumPage() {
           <div className="mb-6">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Labs</p>
             <p className="mt-2 text-sm text-slate-500">
-              Scenario-based simulator work. All published labs are open for hands-on practice.
+              Scenario-based simulator work. Sign in to launch a lab and keep your troubleshooting
+              progress attached to one account.
             </p>
           </div>
           <div className="space-y-5">
@@ -86,7 +88,7 @@ export default async function CurriculumPage() {
               <CurriculumCard
                 key={lab.slug}
                 item={lab}
-                canAccess={canAccessItem(lab)}
+                canAccess={canAccessItem(lab, hasSession, authEnabled)}
               />
             ))}
           </div>

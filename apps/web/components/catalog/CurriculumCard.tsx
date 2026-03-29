@@ -35,7 +35,7 @@ function AccessBadge({ item, canAccess }: { item: CatalogItem; canAccess: boolea
         {item.durationLabel}
       </span>
       <span className="rounded-full bg-amber-950 px-3 py-1 text-xs text-amber-300">
-        Unavailable
+        Sign in required
       </span>
     </>
   );

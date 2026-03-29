@@ -70,14 +70,14 @@ function buildAccessState(item: CatalogItem, viewer: ServerViewer, bypassAuth: b
     };
   }
 
-  const canAccess = true;
-  const isLocked = false;
+  const canAccess = viewer.isAdmin || !!viewer.user;
+  const isLocked = !canAccess;
 
   return {
     item,
     canAccess,
     isLocked,
-    shouldShowPreview: false,
+    shouldShowPreview: isLocked,
     isPublished: item.isPublished,
     isAdmin: viewer.isAdmin,
     hasPaidEntitlement: viewer.hasPaidEntitlement,

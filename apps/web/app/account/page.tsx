@@ -18,8 +18,9 @@ export default async function AccountPage() {
         {!viewer.user ? (
           <div className="mt-8 rounded-2xl border border-white/8 bg-[#020b16] p-6">
             <p className="text-sm leading-7 text-slate-300">
-              You are currently browsing as a guest. Sign in if you want synced progress across
-              devices or access to admin tooling.
+              You are currently browsing the public catalog as a guest. Sign in to open chapters and
+              labs, keep progress synced across devices, and access any admin tooling attached to
+              your account.
             </p>
             <Link
               href="/login"
@@ -40,12 +41,10 @@ export default async function AccountPage() {
 
             <div className="rounded-2xl border border-white/8 bg-[#020b16] p-6">
               <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Access</p>
-              <p className="mt-4 text-lg font-semibold text-white">
-                Full public catalog
-              </p>
+              <p className="mt-4 text-lg font-semibold text-white">Signed-in learner access</p>
               <p className="mt-2 text-sm text-slate-400">
-                Published chapters and labs are open to everyone. This account is mainly useful for
-                synced progress and any admin privileges attached to it.
+                This account can open published chapters and labs, save progress, and participate in
+                community discussion. Any admin privileges attached to it appear below.
               </p>
             </div>
 

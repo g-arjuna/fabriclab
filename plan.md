@@ -128,7 +128,7 @@ Fill in:
 - `NEXT_PUBLIC_COMMUNITY_ISSUES_URL` (optional)
 - `NEXT_PUBLIC_COMMUNITY_DISCUSSIONS_URL` (optional)
 - `NEXT_PUBLIC_SUPPORT_URL` (optional)
-- `GITHUB_COMMUNITY_ISSUES_TOKEN` (optional)
+- `GITHUB_COMMUNITY_ISSUES_TOKEN` (optional, GitHub issue-create token with `Issues: Read and write` on `g-arjuna/fabriclab`)
 - `GITHUB_COMMUNITY_ISSUE_LABELS` (optional)
 
 ### 5. Seed catalog metadata

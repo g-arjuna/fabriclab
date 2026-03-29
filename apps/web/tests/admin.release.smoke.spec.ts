@@ -17,7 +17,7 @@ const target = {
 };
 
 test.describe.serial("Admin release controls smoke", () => {
-  test("admin can unpublish and restore a public chapter", async ({ browser, page }) => {
+  test("admin can unpublish and restore a published chapter while keeping guest sign-in gating intact", async ({ browser, page }) => {
     const tracker = trackErrors(page);
     const original = await readCatalogState(target.kind, target.slug);
     const guestContext = await browser.newContext();
@@ -27,31 +27,46 @@ test.describe.serial("Admin release controls smoke", () => {
       await signInWithMagicLink(page);
 
       await page.goto("/admin/releases", { waitUntil: "domcontentloaded" });
-      const card = page.locator("div.rounded-3xl").filter({
-        has: page.getByRole("heading", { name: target.title }),
-      }).first();
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(1500);
+      const heading = page.getByRole("heading", { name: target.title });
+      const card = heading.locator("xpath=ancestor::div[contains(@class,'rounded-3xl')][1]");
 
-      await expect(card.getByRole("heading", { name: target.title })).toBeVisible();
+      await expect(heading).toBeVisible();
 
       await card.getByRole("button", { name: "Hidden" }).click();
-      await card.getByRole("button", { name: "Save" }).click();
-      await expect(page.getByText(`Saved ${target.title}.`)).toBeVisible();
+      await Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.url().includes("/api/admin/catalog") &&
+            response.request().method() === "PATCH" &&
+            response.status() === 200,
+        ),
+        card.getByRole("button", { name: "Save" }).click(),
+      ]);
+      await expect(card.getByRole("button", { name: "Save" })).toBeVisible();
       await expect.poll(async () => (await readCatalogState(target.kind, target.slug)).is_published).toBe(false);
 
       const hiddenResponse = await guestPage.goto(`${appUrl}${target.route}`, { waitUntil: "domcontentloaded" });
       expect(hiddenResponse?.status()).toBe(404);
 
       await card.getByRole("button", { name: "Live" }).click();
-      await card.getByRole("button", { name: "Save" }).click();
-      await expect(page.getByText(`Saved ${target.title}.`)).toBeVisible();
+      await Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.url().includes("/api/admin/catalog") &&
+            response.request().method() === "PATCH" &&
+            response.status() === 200,
+        ),
+        card.getByRole("button", { name: "Save" }).click(),
+      ]);
+      await expect(card.getByRole("button", { name: "Save" })).toBeVisible();
       await expect.poll(async () => (await readCatalogState(target.kind, target.slug)).is_published).toBe(true);
 
       const restoredResponse = await guestPage.goto(`${appUrl}${target.route}`, { waitUntil: "domcontentloaded" });
       expect(restoredResponse?.status()).toBe(200);
       await expect(guestPage.getByRole("heading", { name: target.title })).toBeVisible();
-      await expect(
-        guestPage.getByText(/Every chapter so far has assumed that traffic finds its way between GPUs/i),
-      ).toBeVisible();
+      await expect(guestPage.getByRole("link", { name: /Sign in to continue/i })).toBeVisible();
 
       assertNoBrowserErrors(tracker);
     } finally {

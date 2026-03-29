@@ -8,9 +8,7 @@ test.describe.serial("Homepage and curriculum catalog smoke", () => {
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /Master the fabric/i })).toBeVisible();
-    await expect(
-      page.getByText("17 chapters. 12 scenario labs. One interactive CLI simulator."),
-    ).toBeVisible();
+    await expect(page.getByText(/17 chapters\. 12 scenario labs\./i)).toBeVisible();
     await expect(
       page.getByRole("link", { name: /The GPU Compute Network - Packet Anatomy/i }),
     ).toBeVisible();
@@ -22,21 +20,21 @@ test.describe.serial("Homepage and curriculum catalog smoke", () => {
     ).toBeVisible();
     await expect(page.getByText(/Part 1 - Foundations/i)).toBeVisible();
     await expect(page.getByText(/Part 4 - Scale and Architecture/i)).toBeVisible();
-    await expect(page.getByRole("link", { name: /The Hardware Story/i })).toContainText("Available");
+    await expect(page.getByRole("link", { name: /The Hardware Story/i })).toContainText("Sign in required");
     await expect(
       page.getByRole("link", { name: /The GPU Compute Network - Packet Anatomy/i }),
-    ).toContainText("Available");
+    ).toContainText("Sign in required");
     await expect(
       page.getByRole("link", { name: /Identify the failed rail/i }),
-    ).toContainText("Available");
+    ).toContainText("Sign in required");
     await expect(
       page.getByRole("link", { name: /BGP suboptimal routing: spine ASN design/i }),
-    ).toContainText("Available");
+    ).toContainText("Sign in required");
 
     assertNoBrowserErrors(tracker);
   });
 
-  test("signed-in users see the same open catalog plus account features", async ({ page }) => {
+  test("signed-in users see the same catalog unlocked for learning", async ({ page }) => {
     const tracker = trackErrors(page);
 
     await signInWithMagicLink(page);
@@ -48,8 +46,7 @@ test.describe.serial("Homepage and curriculum catalog smoke", () => {
     await expect(
       page.getByRole("link", { name: /BGP suboptimal routing: spine ASN design/i }),
     ).toContainText("Available");
-    await expect(page.getByText("Paid preview")).toHaveCount(0);
-    await expect(page.getByText("Free")).toHaveCount(0);
+    await expect(page.getByText("Sign in required")).toHaveCount(0);
 
     assertNoBrowserErrors(tracker);
   });

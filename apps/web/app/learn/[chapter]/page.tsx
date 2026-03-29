@@ -7,6 +7,7 @@ import { AuthControls } from "@/components/auth/AuthControls";
 import { ChapterSidebar } from "@/components/chapter/ChapterSidebar";
 import { CommunityThread } from "@/components/community/CommunityThread";
 import { PageProgressMarker } from "@/components/chapter/PageProgressMarker";
+import { AuthRequiredContentShell } from "@/components/catalog/AuthRequiredContentShell";
 import { getServerViewer } from "@/lib/auth/server";
 import { getCatalogAccessState, getCurriculumCatalog } from "@/lib/catalog/runtime";
 import { getChapterDocument, getChapterPage, splitIntoPages } from "@/lib/chapters";
@@ -29,7 +30,14 @@ export default async function ChapterPage({ params, searchParams }: Props) {
   }
 
   if (!accessState.canAccess) {
-    notFound();
+    const nextPath = pageIndex > 0 ? `/learn/${chapter}?page=${pageIndex}` : `/learn/${chapter}`;
+    return (
+      <AuthRequiredContentShell
+        item={accessState.item}
+        kind="chapter"
+        nextPath={nextPath}
+      />
+    );
   }
 
   const result = await getChapterPage(chapter, pageIndex);

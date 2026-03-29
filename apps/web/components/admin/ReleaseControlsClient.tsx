@@ -102,13 +102,11 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
   }
 
   function updateItem(slug: string, patch: Partial<AdminCatalogItem>) {
-    setItems((current) => {
-      const nextItems = current.map((item) =>
-        item.slug === slug ? { ...item, ...patch } : item,
-      );
-      itemsRef.current = nextItems;
-      return nextItems;
-    });
+    const nextItems = itemsRef.current.map((item) =>
+      item.slug === slug ? { ...item, ...patch } : item,
+    );
+    itemsRef.current = nextItems;
+    setItems(nextItems);
   }
 
   function renderCard(item: AdminCatalogItem) {
@@ -193,7 +191,8 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
               </button>
             </div>
             <p className="mt-3 text-xs leading-6 text-slate-500">
-              Public routes currently ignore this flag and treat all published content as open.
+              Published items stay visible in the public catalog, but signed-in access controls now
+              decide whether learners can open the full chapter or lab experience.
             </p>
           </div>
 
