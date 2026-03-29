@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { AppProviders } from "@/components/providers/AppProviders";
 
 import "./globals.css";
@@ -18,7 +19,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
       <body className="min-h-screen bg-[#07111f] text-slate-100 antialiased">
-        <AppProviders>{children}</AppProviders>
+        <AppProviders>
+          {children}
+          <SiteFooter />
+        </AppProviders>
       </body>
     </html>
   );

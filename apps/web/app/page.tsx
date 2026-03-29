@@ -5,7 +5,6 @@ import Link from "next/link";
 
 import { AuthControls } from "@/components/auth/AuthControls";
 import { SOURCE_CHAPTERS, SOURCE_LABS } from "@/lib/catalog/source";
-import { getPublicCommunityConfig } from "@/lib/community/config";
 
 const TERMINAL_LINES = [
   { text: "fabric-sim:~$ show dcb pfc", color: "#e2e8f0" },
@@ -227,8 +226,6 @@ function tagClasses(tag: string) {
 }
 
 export default function Home() {
-  const communityConfig = getPublicCommunityConfig();
-
   return (
     <main className="bg-[#020617] text-slate-100">
       <style jsx global>{`
@@ -564,36 +561,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      <footer className="border-t border-white/8 py-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-mono uppercase tracking-[0.28em] text-cyan-400">FABRICLAB</span>
-            <span>{"\u00A9"} 2026</span>
-          </div>
-          <div className="flex items-center gap-5">
-            <Link href="/curriculum" className="transition hover:text-slate-400">
-              Curriculum
-            </Link>
-            <Link href="/lab" className="transition hover:text-slate-400">
-              Labs
-            </Link>
-            <Link href="/community" className="transition hover:text-slate-400">
-              Community
-            </Link>
-            {communityConfig.supportUrl ? (
-              <a
-                href={communityConfig.supportUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="transition hover:text-slate-400"
-              >
-                Support FabricLab
-              </a>
-            ) : null}
-          </div>
-        </div>
-      </footer>
     </main>
   );
 }
