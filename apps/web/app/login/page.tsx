@@ -2,17 +2,45 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import type { Provider } from "@supabase/supabase-js";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getBrowserSupabaseClient } from "@/lib/supabase/client";
-import { getPublicSupabaseEnv } from "@/lib/supabase/env";
+import { getEnabledSocialAuthProviders, getPublicSupabaseEnv } from "@/lib/supabase/env";
+
+const socialProviderLabels: Partial<Record<Provider, string>> = {
+  apple: "Apple",
+  azure: "Azure",
+  bitbucket: "Bitbucket",
+  discord: "Discord",
+  facebook: "Facebook",
+  figma: "Figma",
+  github: "GitHub",
+  gitlab: "GitLab",
+  google: "Google",
+  kakao: "Kakao",
+  keycloak: "Keycloak",
+  linkedin: "LinkedIn",
+  linkedin_oidc: "LinkedIn",
+  notion: "Notion",
+  slack: "Slack",
+  slack_oidc: "Slack",
+  spotify: "Spotify",
+  twitch: "Twitch",
+  twitter: "Twitter/X",
+  workos: "WorkOS",
+  zoom: "Zoom",
+  fly: "Fly.io",
+};
 
 export default function LoginPage() {
   const { user, enabled } = useAuth();
   const env = useMemo(() => getPublicSupabaseEnv(), []);
+  const socialProviders = useMemo(() => getEnabledSocialAuthProviders(), []);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [oauthSubmitting, setOauthSubmitting] = useState<Provider | null>(null);
 
   if (!enabled) {
     return (
@@ -40,55 +68,99 @@ export default function LoginPage() {
         </Link>
         <p className="mt-8 text-xs uppercase tracking-[0.28em] text-slate-500">FabricLab access</p>
         <h1 className="mt-4 text-3xl font-semibold text-white">
-          {user ? "You're already signed in" : "Sign in with a magic link"}
+          {user ? "You're already signed in" : "Sign in"}
         </h1>
         <p className="mt-4 text-sm leading-7 text-slate-400">
-          Use a passwordless link to sync progress, keep your place across devices, and manage release testing.
+          Use Google or GitHub for the fastest path, or fall back to a passwordless email link.
+          Sign-in is optional and mainly used for synced progress, discussion, and admin tooling.
         </p>
 
         {!user && (
-          <div className="mt-8 rounded-2xl border border-white/8 bg-[#020b16] p-5">
-            <label htmlFor="email" className="text-xs uppercase tracking-[0.28em] text-slate-500">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@fabriclab.dev"
-              className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-cyan-500/40"
-            />
-            <button
-              type="button"
-              disabled={!email || submitting}
-              onClick={async () => {
-                const client = getBrowserSupabaseClient();
-                if (!client || !env) {
-                  return;
-                }
+          <div className="mt-8 space-y-6">
+            {socialProviders.length > 0 ? (
+              <div className="rounded-2xl border border-white/8 bg-[#020b16] p-5">
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Social sign-in</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {socialProviders.map((provider) => (
+                    <button
+                      key={provider}
+                      type="button"
+                      disabled={oauthSubmitting !== null}
+                      onClick={async () => {
+                        const client = getBrowserSupabaseClient();
+                        if (!client || !env) {
+                          return;
+                        }
 
-                setSubmitting(true);
-                setStatus(null);
+                        setOauthSubmitting(provider);
+                        setStatus(null);
 
-                const { error } = await client.auth.signInWithOtp({
-                  email,
-                  options: {
-                    emailRedirectTo: `${env.appUrl}/auth/callback`,
-                  },
-                });
+                        const { error } = await client.auth.signInWithOAuth({
+                          provider,
+                          options: {
+                            redirectTo: `${env.appUrl}/auth/callback`,
+                          },
+                        });
 
-                setSubmitting(false);
-                setStatus(
-                  error
-                    ? error.message
-                    : "Magic link sent. Open the email on this device to complete sign-in.",
-                );
-              }}
-              className="mt-4 rounded-full bg-cyan-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitting ? "Sending..." : "Send magic link"}
-            </button>
+                        if (error) {
+                          setOauthSubmitting(null);
+                          setStatus(error.message);
+                        }
+                      }}
+                      className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-medium text-slate-100 transition hover:border-cyan-500/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {oauthSubmitting === provider
+                        ? `Redirecting to ${socialProviderLabels[provider] ?? provider}...`
+                        : `Continue with ${socialProviderLabels[provider] ?? provider}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="rounded-2xl border border-white/8 bg-[#020b16] p-5">
+              <label htmlFor="email" className="text-xs uppercase tracking-[0.28em] text-slate-500">
+                Email magic link
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@fabriclab.dev"
+                className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-cyan-500/40"
+              />
+              <button
+                type="button"
+                disabled={!email || submitting || oauthSubmitting !== null}
+                onClick={async () => {
+                  const client = getBrowserSupabaseClient();
+                  if (!client || !env) {
+                    return;
+                  }
+
+                  setSubmitting(true);
+                  setStatus(null);
+
+                  const { error } = await client.auth.signInWithOtp({
+                    email,
+                    options: {
+                      emailRedirectTo: `${env.appUrl}/auth/callback`,
+                    },
+                  });
+
+                  setSubmitting(false);
+                  setStatus(
+                    error
+                      ? error.message
+                      : "Magic link sent. Open the email on this device to complete sign-in.",
+                  );
+                }}
+                className="mt-4 rounded-full bg-cyan-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitting ? "Sending..." : "Send magic link"}
+              </button>
+            </div>
           </div>
         )}
 
