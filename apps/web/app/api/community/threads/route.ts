@@ -9,6 +9,9 @@ import {
   type CommunityForumThread,
 } from "@/lib/community/forum";
 import { createGitHubIssueFromThread, getGitHubIssueMirrorPublicAvailability } from "@/lib/community/github";
+import { notifyThreadActivity } from "@/lib/notifications/dispatch";
+import { ensureViewerNotificationSubscription } from "@/lib/notifications/subscriptions";
+import { getAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
@@ -181,9 +184,18 @@ export async function POST(request: Request) {
   let message = "Discussion created.";
   let githubIssueUrl: string | null = (data as { github_issue_url: string | null }).github_issue_url;
   const appEnv = getPublicSupabaseEnv();
+  const threadId = (data as { id: string }).id;
+  const admin = getAdminSupabaseClient();
+
+  if (admin) {
+    await ensureViewerNotificationSubscription(admin, {
+      user: viewer.user,
+      email: viewer.email,
+    }).catch(() => undefined);
+  }
 
   if (openGitHubIssue && appEnv) {
-    const threadUrl = `${appEnv.appUrl}/community/${(data as { id: string }).id}`;
+    const threadUrl = `${appEnv.appUrl}/community/${threadId}`;
     const issueResult = await createGitHubIssueFromThread({
       title,
       body,
@@ -199,11 +211,23 @@ export async function POST(request: Request) {
           github_issue_url: issueResult.issueUrl,
           github_issue_number: issueResult.issueNumber,
         })
-        .eq("id", (data as { id: string }).id);
+        .eq("id", threadId);
       message = `Discussion created and mirrored to GitHub issue #${issueResult.issueNumber}.`;
     } else {
       message = `Discussion created, but GitHub issue mirroring was skipped: ${issueResult.error}`;
     }
+  }
+
+  if (appEnv && admin) {
+    await notifyThreadActivity({
+      admin,
+      threadId,
+      actorUserId: viewer.user.id,
+      actorName: authorName,
+      threadTitle: title,
+      threadUrl: `${appEnv.appUrl}/community/${threadId}`,
+      event: "thread_created",
+    }).catch(() => undefined);
   }
 
   return NextResponse.json({

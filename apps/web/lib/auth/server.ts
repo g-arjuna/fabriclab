@@ -1,21 +1,20 @@
-import type { User } from "@supabase/supabase-js";
-
 import { getAdminSupabaseEnv } from "@/lib/supabase/env";
 import { getAdminSupabaseClient } from "@/lib/supabase/admin";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { readSessionUserFromCookies } from "@/lib/auth/session";
+import type { ViewerUser } from "@/lib/auth/types";
 
 export type ServerViewer = {
-  user: User | null;
+  user: ViewerUser | null;
   isAdmin: boolean;
   hasPaidEntitlement: boolean;
   email: string | null;
 };
 
-function getEmail(user: User | null): string | null {
+function getEmail(user: ViewerUser | null): string | null {
   return user?.email?.toLowerCase() ?? null;
 }
 
-async function ensureProfile(user: User, isAdmin: boolean) {
+async function ensureProfile(user: ViewerUser, isAdmin: boolean) {
   const adminClient = getAdminSupabaseClient();
   if (!adminClient) {
     return;
@@ -41,8 +40,9 @@ async function ensureProfile(user: User, isAdmin: boolean) {
 }
 
 export async function getServerViewer(): Promise<ServerViewer> {
-  const supabase = await getServerSupabaseClient();
-  if (!supabase) {
+  const viewerUser = await readSessionUserFromCookies();
+
+  if (!viewerUser) {
     return {
       user: null,
       isAdmin: false,
@@ -51,36 +51,34 @@ export async function getServerViewer(): Promise<ServerViewer> {
     };
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return {
-      user: null,
-      isAdmin: false,
-      hasPaidEntitlement: false,
-      email: null,
-    };
-  }
-
-  const email = getEmail(user);
+  const email = getEmail(viewerUser);
   const adminEnv = getAdminSupabaseEnv();
   const isAdmin = !!email && !!adminEnv?.adminEmails.includes(email);
 
-  await ensureProfile(user, isAdmin);
+  await ensureProfile(viewerUser, isAdmin);
+  const adminClient = getAdminSupabaseClient();
+  if (!adminClient) {
+    return {
+      user: viewerUser,
+      isAdmin,
+      hasPaidEntitlement: false,
+      email,
+    };
+  }
+
+  const adminDb = adminClient as any;
 
   const [{ data: profile }, { data: entitlements }] = await Promise.all([
-    supabase.from("profiles").select("is_admin").eq("user_id", user.id).maybeSingle(),
-    supabase
+    adminDb.from("profiles").select("is_admin").eq("user_id", viewerUser.id).maybeSingle(),
+    adminDb
       .from("user_entitlements")
       .select("entitlement_key")
-      .eq("user_id", user.id)
+      .eq("user_id", viewerUser.id)
       .eq("entitlement_key", "core_paid"),
   ]);
 
   return {
-    user,
+    user: viewerUser,
     isAdmin: isAdmin || profile?.is_admin === true,
     hasPaidEntitlement: (entitlements?.length ?? 0) > 0,
     email,

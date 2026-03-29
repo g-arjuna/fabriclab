@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 
 import { requireAdminViewer } from "@/lib/auth/server";
 import { getSourceCatalogItem, type AccessTier, type CatalogKind } from "@/lib/catalog/source";
+import { notifyNewContentPublished } from "@/lib/notifications/dispatch";
 import { getAdminSupabaseClient } from "@/lib/supabase/admin";
+import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
 type CatalogPatch = {
   isPublished?: boolean;
@@ -68,6 +70,20 @@ export async function PATCH(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const becamePublished = (existing?.is_published ?? false) === false && payload.is_published === true;
+  if (becamePublished) {
+    const appEnv = getPublicSupabaseEnv();
+    if (appEnv) {
+      await notifyNewContentPublished({
+        admin: adminDb,
+        kind: body.kind,
+        slug: body.slug,
+        title: source.title,
+        appUrl: appEnv.appUrl,
+      }).catch(() => undefined);
+    }
   }
 
   return NextResponse.json({ ok: true });
