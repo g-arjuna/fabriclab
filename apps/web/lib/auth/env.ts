@@ -39,7 +39,13 @@ function getProviderConfig(provider: OAuthProvider): OAuthProviderConfig | null 
 }
 
 export function getEnabledOAuthProviders(): OAuthProvider[] {
-  const raw = (process.env.NEXT_PUBLIC_OAUTH_PROVIDERS ?? "").trim().toLowerCase();
+  const raw = (
+    process.env.NEXT_PUBLIC_OAUTH_PROVIDERS ??
+    process.env.NEXT_PUBLIC_SOCIAL_AUTH_PROVIDERS ??
+    ""
+  )
+    .trim()
+    .toLowerCase();
   if (!raw) {
     return [];
   }
@@ -55,7 +61,7 @@ export function getOAuthProviderConfig(provider: OAuthProvider): OAuthProviderCo
 }
 
 export function getAuthSessionSecret(): string | null {
-  return process.env.AUTH_SESSION_SECRET?.trim() ?? null;
+  return process.env.AUTH_SESSION_SECRET?.trim() ?? process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? null;
 }
 
 export function getAuthAppUrl(): string {

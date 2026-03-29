@@ -1,7 +1,7 @@
 # Engineering Sync
 
-Last updated: 2026-03-29
-Current baseline commit: `5ab5fc2`
+Last updated: 2026-03-30
+Current baseline commit: `9d0ad78`
 Primary branch: `main`
 
 This file is the shared engineering source of truth for FabricLab when work is split across
@@ -197,6 +197,30 @@ Important caveat:
   - community thread activity updates for participating users
   - signed-in subscription preference persistence in Supabase (`email_subscriptions`)
 
+### 2026-03-30
+
+- Pulled the Codex web auth/notification branch into desktop for local review and fix-up:
+  - remote branch: `origin/codex/read-agents.md,-plan.md,-engineering_sync.md`
+  - local tracking branch: `codex/read-agents-md-plan-md-engineering-sync-md`
+- Fixed the legacy standalone auth callback so Supabase code and magic-link callbacks can still mint
+  FabricLab session cookies:
+  - `apps/web/app/auth/callback/route.ts`
+- Restored the branded magic-link fallback on the login page while keeping the new first-party OAuth
+  entry points:
+  - `apps/web/app/login/page.tsx`
+- Added migration compatibility for auth env handling:
+  - `apps/web/lib/auth/env.ts`
+  - `NEXT_PUBLIC_OAUTH_PROVIDERS` now falls back to `NEXT_PUBLIC_SOCIAL_AUTH_PROVIDERS`
+  - `AUTH_SESSION_SECRET` now falls back to `SUPABASE_SERVICE_ROLE_KEY` during migration
+- Verified branch-level auth behavior locally:
+  - `apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json`
+  - `npm run build`
+  - `npm run test:browser:deploy`
+  - `npm run test:browser:progress`
+- Review conclusion:
+  - the web branch builds cleanly
+  - main remaining risk is rollout/config migration, not a compile-time issue
+
 ## Open Items
 
 ### 1. Domain integration
@@ -266,6 +290,8 @@ Needed:
 - update Playwright smoke helpers/fixtures to use new auth flow
 - keep Supabase for data only (profiles/progress/community/release metadata)
 - define migration for `auth.users` foreign-key dependency in Supabase schema
+- remove temporary migration fallback from `getAuthSessionSecret()` once `AUTH_SESSION_SECRET` is set
+  in all environments
 
 ### 6. Email notification provider configuration
 
