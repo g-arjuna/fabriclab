@@ -127,6 +127,7 @@ Defined in `apps/web/.env.example`:
 FabricLab now supports two community surfaces:
 
 - in-app chapter and lab comment threads
+- in-app chapter and lab tracked discussions with optional GitHub issue mirroring
 - an in-app general forum at `/community`
 - optional external links for repo, issues, discussions, and support
 

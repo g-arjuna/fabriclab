@@ -167,12 +167,26 @@ export function CommunityForumThreadView({ threadId }: { threadId: string }) {
       <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-8">
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
           <span className="rounded-full border border-white/10 px-2.5 py-1 uppercase tracking-[0.24em] text-cyan-300">
-            General discussion
+            {thread.thread_type === "general" ? "General discussion" : thread.thread_type}
           </span>
           <span>{thread.author_name}</span>
           <span>{formatDate(thread.created_at)}</span>
           <span>{thread.reply_count} repl{thread.reply_count === 1 ? "y" : "ies"}</span>
         </div>
+        {thread.thread_type !== "general" && thread.content_slug ? (
+          <div className="mt-4">
+            <Link
+              href={
+                thread.thread_type === "chapter"
+                  ? `/learn/${thread.content_slug}`
+                  : `/lab?lab=${encodeURIComponent(thread.content_slug)}`
+              }
+              className="inline-flex rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+            >
+              Back to source {thread.thread_type}
+            </Link>
+          </div>
+        ) : null}
         <h1 className="mt-5 text-4xl font-semibold text-white">{thread.title}</h1>
         <p className="mt-5 whitespace-pre-line text-base leading-8 text-slate-300">{thread.body}</p>
         {thread.github_issue_url ? (

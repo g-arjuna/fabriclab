@@ -216,6 +216,7 @@ Useful routes:
 - add per-chapter and per-lab discussion threads
 - add a broader in-app forum at `/community` with standalone titled discussions
 - optionally mirror general forum threads into GitHub issues
+- allow chapter/lab-specific tracked discussions to mirror into GitHub issues too
 - expose optional repo / issues / support links in the app shell
 - keep contribution docs and issue templates aligned with the live platform
 

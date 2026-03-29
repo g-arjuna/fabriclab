@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
+import type { CommunityForumThread } from "@/lib/community/forum";
 
 type ContentKind = "chapter" | "lab";
 type CommentType = "feedback" | "correction" | "issue" | "question";
@@ -62,13 +63,22 @@ export function CommunityThread({
 }: CommunityThreadProps) {
   const { user, loading } = useAuth();
   const [comments, setComments] = useState<CommunityComment[]>([]);
+  const [threads, setThreads] = useState<CommunityForumThread[]>([]);
   const [commentType, setCommentType] = useState<CommentType>("feedback");
+  const [threadTitle, setThreadTitle] = useState("");
+  const [threadBody, setThreadBody] = useState("");
+  const [openGitHubIssue, setOpenGitHubIssue] = useState(false);
   const [body, setBody] = useState("");
   const [fetching, setFetching] = useState(true);
+  const [threadsFetching, setThreadsFetching] = useState(true);
   const [setupPending, setSetupPending] = useState(false);
+  const [forumSetupPending, setForumSetupPending] = useState(false);
+  const [githubIssueMirrorAvailable, setGitHubIssueMirrorAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
+  const [postingThread, setPostingThread] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [threadMessage, setThreadMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -115,6 +125,55 @@ export function CommunityThread({
       active = false;
     };
   }, [contentKind, contentSlug]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadThreads() {
+      setThreadsFetching(true);
+
+      const response = await fetch(
+        `/api/community/threads?type=${contentKind}&kind=${contentKind}&slug=${encodeURIComponent(contentSlug)}`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            threads?: CommunityForumThread[];
+            error?: string;
+            setupPending?: boolean;
+            githubIssueMirrorAvailable?: boolean;
+          }
+        | null;
+
+      if (!active) {
+        return;
+      }
+
+      if (!response.ok) {
+        setThreads([]);
+        setForumSetupPending(Boolean(payload?.setupPending));
+        setThreadsFetching(false);
+        if (!error) {
+          setError(payload?.error ?? "Could not load tracked discussions.");
+        }
+        return;
+      }
+
+      setThreads(payload?.threads ?? []);
+      setForumSetupPending(Boolean(payload?.setupPending));
+      setGitHubIssueMirrorAvailable(Boolean(payload?.githubIssueMirrorAvailable));
+      setThreadsFetching(false);
+    }
+
+    void loadThreads();
+
+    return () => {
+      active = false;
+    };
+  }, [contentKind, contentSlug, error]);
 
   const introCopy = useMemo(
     () =>
@@ -173,6 +232,65 @@ export function CommunityThread({
     setBody("");
     setCommentType("feedback");
     setMessage(payload?.message ?? "Comment posted.");
+  }
+
+  async function handleThreadSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (threadTitle.trim().length < 6) {
+      setError("Discussion subject should be at least 6 characters.");
+      return;
+    }
+
+    if (threadBody.trim().length < 20) {
+      setError("Discussion body should be at least 20 characters.");
+      return;
+    }
+
+    setPostingThread(true);
+    setError(null);
+    setThreadMessage(null);
+
+    const response = await fetch("/api/community/threads", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        threadType: contentKind,
+        contentKind,
+        contentSlug,
+        title: threadTitle,
+        body: threadBody,
+        openGitHubIssue,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          thread?: CommunityForumThread;
+          error?: string;
+          message?: string;
+          setupPending?: boolean;
+        }
+      | null;
+
+    setPostingThread(false);
+
+    if (!response.ok) {
+      setError(payload?.error ?? "Could not create tracked discussion.");
+      setForumSetupPending(Boolean(payload?.setupPending));
+      return;
+    }
+
+    if (payload?.thread) {
+      setThreads((current) => [payload.thread!, ...current]);
+    }
+
+    setThreadTitle("");
+    setThreadBody("");
+    setOpenGitHubIssue(false);
+    setThreadMessage(payload?.message ?? "Tracked discussion created.");
   }
 
   return (
@@ -243,6 +361,155 @@ export function CommunityThread({
             </article>
           ))
         )}
+      </div>
+
+      <div className="mt-8 rounded-2xl border border-white/8 bg-[#020b16] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Tracked discussions</p>
+            <h4 className="mt-2 text-lg font-semibold text-white">
+              Escalate this {contentKind} into a titled thread
+            </h4>
+            <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-400">
+              Use this when a fix needs follow-through, multiple comments, or a matching GitHub issue.
+            </p>
+          </div>
+        </div>
+
+        {forumSetupPending ? (
+          <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm leading-7 text-amber-100">
+            The tracked-discussion forum tables are not provisioned yet. Apply the latest community forum migration first.
+          </div>
+        ) : null}
+
+        {threadMessage ? (
+          <div className="mt-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm leading-7 text-emerald-100">
+            {threadMessage}
+          </div>
+        ) : null}
+
+        <div className="mt-5 space-y-4">
+          {threadsFetching ? (
+            <div className="rounded-2xl border border-white/8 bg-slate-950 px-4 py-3 text-sm text-slate-400">
+              Loading tracked discussions...
+            </div>
+          ) : threads.length === 0 ? (
+            <div className="rounded-2xl border border-white/8 bg-slate-950 px-4 py-3 text-sm text-slate-400">
+              No tracked discussions yet. Start one when this needs a titled thread or GitHub follow-up.
+            </div>
+          ) : (
+            threads.map((thread) => (
+              <article key={thread.id} className="rounded-2xl border border-white/8 bg-slate-950 p-4">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                  <span className="rounded-full border border-white/10 px-2.5 py-1 uppercase tracking-[0.24em] text-cyan-300">
+                    {contentKind}
+                  </span>
+                  <span>{thread.author_name}</span>
+                  <span>{formatDate(thread.created_at)}</span>
+                  <span>{thread.reply_count} repl{thread.reply_count === 1 ? "y" : "ies"}</span>
+                </div>
+                <h5 className="mt-3 text-base font-semibold text-white">
+                  <Link href={`/community/${thread.id}`} className="transition hover:text-cyan-300">
+                    {thread.title}
+                  </Link>
+                </h5>
+                <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm leading-7 text-slate-400">
+                  {thread.body}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Link
+                    href={`/community/${thread.id}`}
+                    className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
+                  >
+                    Open discussion
+                  </Link>
+                  {thread.github_issue_url ? (
+                    <a
+                      href={thread.github_issue_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+                    >
+                      GitHub issue
+                    </a>
+                  ) : null}
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-white/8 bg-slate-950 p-4">
+          {loading ? (
+            <p className="text-sm text-slate-500">Checking session...</p>
+          ) : user ? (
+            <form className="space-y-4" onSubmit={handleThreadSubmit}>
+              <label className="block text-sm text-slate-300">
+                <span className="mb-2 block text-xs uppercase tracking-[0.24em] text-slate-500">
+                  Subject
+                </span>
+                <input
+                  value={threadTitle}
+                  onChange={(event) => setThreadTitle(event.target.value)}
+                  placeholder={`Example: ${contentKind === "chapter" ? "Chapter 5 should cite NVIDIA QoS defaults" : "Lab 8 PFC mismatch flow needs switch-side verification output"}`}
+                  className="w-full rounded-2xl border border-white/10 bg-[#020b16] px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-cyan-500/40"
+                />
+              </label>
+              <label className="block text-sm text-slate-300">
+                <span className="mb-2 block text-xs uppercase tracking-[0.24em] text-slate-500">
+                  Opening post
+                </span>
+                <textarea
+                  value={threadBody}
+                  onChange={(event) => setThreadBody(event.target.value)}
+                  rows={5}
+                  placeholder={`Describe the ${contentKind}-specific issue, the expected behavior, and any evidence or sources.`}
+                  className="w-full rounded-2xl border border-white/10 bg-[#020b16] px-4 py-3 text-sm leading-7 text-slate-100 outline-none transition focus:border-cyan-500/40"
+                />
+              </label>
+              <label className="flex items-start gap-3 rounded-2xl border border-white/8 bg-[#020b16] px-4 py-3 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={openGitHubIssue}
+                  onChange={(event) => setOpenGitHubIssue(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-cyan-400 focus:ring-cyan-400"
+                />
+                <span>
+                  <span className="block font-medium text-slate-200">Also open GitHub issue</span>
+                  <span className="mt-1 block text-xs leading-6 text-slate-500">
+                    {githubIssueMirrorAvailable
+                      ? "Mirror this tracked discussion into the GitHub issue tracker for maintainer follow-up."
+                      : "GitHub mirroring is not configured on the server yet, but the thread will still be created here."}
+                  </span>
+                </span>
+              </label>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs leading-6 text-slate-500">
+                  Use tracked discussions for issues that deserve a durable subject line and replies over time.
+                </p>
+                <button
+                  type="submit"
+                  disabled={postingThread}
+                  className="rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {postingThread ? "Creating..." : "Create tracked discussion"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm leading-7 text-slate-400">
+                Sign in to open a tracked discussion for this {contentKind} and optionally mirror it to GitHub.
+              </p>
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              >
+                Sign in to start a tracked discussion
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 rounded-2xl border border-white/8 bg-[#020b16] p-4">
