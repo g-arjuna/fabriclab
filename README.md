@@ -7,7 +7,7 @@ The repo now combines:
 
 - repo-backed chapter content and visualisations
 - a state-driven lab simulator
-- Supabase-backed auth, release metadata, synced progress, and community comments
+- Supabase-backed auth, release metadata, synced progress, community comments, and forum threads
 - a Vercel-ready Next.js app in `apps/web`
 
 ## Repo status
@@ -117,13 +117,15 @@ Defined in `apps/web/.env.example`:
 5. Add `http://localhost:3000/auth/callback` as a redirect URL.
 6. Apply the SQL in `supabase/migrations/20260328_001_auth_access_release_control.sql`.
 7. Apply the SQL in `supabase/migrations/20260329_002_community_comments.sql`.
-8. Run `npm run catalog:sync` from `apps/web`.
+8. Apply the SQL in `supabase/migrations/20260329_003_community_forum_threads.sql`.
+9. Run `npm run catalog:sync` from `apps/web`.
 
 ## Community setup
 
 FabricLab now supports two community surfaces:
 
 - in-app chapter and lab comment threads
+- an in-app general forum at `/community`
 - optional external links for repo, issues, discussions, and support
 
 If you want to expose public community destinations, set the optional `NEXT_PUBLIC_COMMUNITY_*`

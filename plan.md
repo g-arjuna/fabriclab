@@ -50,6 +50,8 @@ Platform engineering is Codex-owned.
 - `chapter_progress`
 - `lab_progress`
 - `community_comments`
+- `community_threads`
+- `community_posts`
 
 ### Access model
 
@@ -91,6 +93,7 @@ Run the SQL in:
 
 - `supabase/migrations/20260328_001_auth_access_release_control.sql`
 - `supabase/migrations/20260329_002_community_comments.sql`
+- `supabase/migrations/20260329_003_community_forum_threads.sql`
 
 This creates:
 
@@ -99,6 +102,9 @@ This creates:
 - entitlements
 - chapter progress
 - lab progress
+- community comments
+- community threads
+- community posts
 - RLS policies
 
 ### 4. Configure local env
@@ -206,6 +212,7 @@ Useful routes:
 ### Phase 6 - Community loop
 
 - add per-chapter and per-lab discussion threads
+- add a broader in-app forum at `/community` with standalone titled discussions
 - expose optional repo / issues / support links in the app shell
 - keep contribution docs and issue templates aligned with the live platform
 
