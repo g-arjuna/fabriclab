@@ -38,13 +38,23 @@ function ThreadCard({ thread }: { thread: CommunityForumThread }) {
       <p className="mt-3 line-clamp-4 whitespace-pre-line text-sm leading-7 text-slate-400">
         {thread.body}
       </p>
-      <div className="mt-5">
+      <div className="mt-5 flex flex-wrap gap-3">
         <Link
           href={`/community/${thread.id}`}
           className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
         >
           Open discussion
         </Link>
+        {thread.github_issue_url ? (
+          <a
+            href={thread.github_issue_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+          >
+            GitHub issue
+          </a>
+        ) : null}
       </div>
     </article>
   );
@@ -55,8 +65,10 @@ export function CommunityForum() {
   const [threads, setThreads] = useState<CommunityForumThread[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [openGitHubIssue, setOpenGitHubIssue] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [setupPending, setSetupPending] = useState(false);
+  const [githubIssueMirrorAvailable, setGitHubIssueMirrorAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
@@ -77,6 +89,7 @@ export function CommunityForum() {
             threads?: CommunityForumThread[];
             error?: string;
             setupPending?: boolean;
+            githubIssueMirrorAvailable?: boolean;
           }
         | null;
 
@@ -94,6 +107,7 @@ export function CommunityForum() {
 
       setThreads(payload?.threads ?? []);
       setSetupPending(Boolean(payload?.setupPending));
+      setGitHubIssueMirrorAvailable(Boolean(payload?.githubIssueMirrorAvailable));
       setFetching(false);
     }
 
@@ -130,6 +144,7 @@ export function CommunityForum() {
         threadType: "general",
         title,
         body,
+        openGitHubIssue,
       }),
     });
 
@@ -156,6 +171,7 @@ export function CommunityForum() {
 
     setTitle("");
     setBody("");
+    setOpenGitHubIssue(false);
     setMessage(payload?.message ?? "Discussion created.");
   }
 
@@ -240,9 +256,25 @@ export function CommunityForum() {
                   className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm leading-7 text-slate-100 outline-none transition focus:border-cyan-500/40"
                 />
               </label>
+              <label className="flex items-start gap-3 rounded-2xl border border-white/8 bg-slate-950/80 px-4 py-3 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={openGitHubIssue}
+                  onChange={(event) => setOpenGitHubIssue(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-cyan-400 focus:ring-cyan-400"
+                />
+                <span>
+                  <span className="block font-medium text-slate-200">Also open GitHub issue</span>
+                  <span className="mt-1 block text-xs leading-6 text-slate-500">
+                    {githubIssueMirrorAvailable
+                      ? "If enabled, FabricLab will mirror this discussion into the GitHub issue tracker for easier maintainer follow-up."
+                      : "The issue tracker is linked publicly, but automatic GitHub issue mirroring is not configured on the server yet."}
+                  </span>
+                </span>
+              </label>
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs leading-6 text-slate-500">
-                  GitHub issue mirroring is planned next. Start by capturing the discussion cleanly here.
+                  Keep titles specific so the same thread can become an actionable issue without being renamed.
                 </p>
                 <button
                   type="submit"

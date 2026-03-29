@@ -128,6 +128,8 @@ Fill in:
 - `NEXT_PUBLIC_COMMUNITY_ISSUES_URL` (optional)
 - `NEXT_PUBLIC_COMMUNITY_DISCUSSIONS_URL` (optional)
 - `NEXT_PUBLIC_SUPPORT_URL` (optional)
+- `GITHUB_COMMUNITY_ISSUES_TOKEN` (optional)
+- `GITHUB_COMMUNITY_ISSUE_LABELS` (optional)
 
 ### 5. Seed catalog metadata
 
@@ -213,6 +215,7 @@ Useful routes:
 
 - add per-chapter and per-lab discussion threads
 - add a broader in-app forum at `/community` with standalone titled discussions
+- optionally mirror general forum threads into GitHub issues
 - expose optional repo / issues / support links in the app shell
 - keep contribution docs and issue templates aligned with the live platform
 

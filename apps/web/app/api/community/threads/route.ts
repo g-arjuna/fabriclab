@@ -8,7 +8,9 @@ import {
   parseCommunityThreadType,
   type CommunityForumThread,
 } from "@/lib/community/forum";
+import { createGitHubIssueFromThread, getGitHubIssueMirrorPublicAvailability } from "@/lib/community/github";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
 type ThreadRow = Omit<CommunityForumThread, "reply_count"> & {
   community_posts?: { id: string }[];
@@ -82,6 +84,7 @@ export async function GET(request: Request) {
     enabled: true,
     setupPending: false,
     threads,
+    githubIssueMirrorAvailable: getGitHubIssueMirrorPublicAvailability(),
   });
 }
 
@@ -98,6 +101,7 @@ export async function POST(request: Request) {
         contentSlug?: string | null;
         title?: string;
         body?: string;
+        openGitHubIssue?: boolean;
       }
     | null;
 
@@ -106,6 +110,7 @@ export async function POST(request: Request) {
   const contentSlug = payload?.contentSlug?.trim() ?? "";
   const title = payload?.title?.trim() ?? "";
   const body = payload?.body?.trim() ?? "";
+  const openGitHubIssue = payload?.openGitHubIssue === true;
 
   if (!threadType) {
     return NextResponse.json({ error: "A valid thread type is required." }, { status: 400 });
@@ -173,10 +178,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  let message = "Discussion created.";
+  let githubIssueUrl: string | null = (data as { github_issue_url: string | null }).github_issue_url;
+  const appEnv = getPublicSupabaseEnv();
+
+  if (openGitHubIssue && appEnv) {
+    const threadUrl = `${appEnv.appUrl}/community/${(data as { id: string }).id}`;
+    const issueResult = await createGitHubIssueFromThread({
+      title,
+      body,
+      authorName,
+      threadUrl,
+    });
+
+    if (issueResult.ok) {
+      githubIssueUrl = issueResult.issueUrl;
+      await supabase
+        .from("community_threads")
+        .update({
+          github_issue_url: issueResult.issueUrl,
+          github_issue_number: issueResult.issueNumber,
+        })
+        .eq("id", (data as { id: string }).id);
+      message = `Discussion created and mirrored to GitHub issue #${issueResult.issueNumber}.`;
+    } else {
+      message = `Discussion created, but GitHub issue mirroring was skipped: ${issueResult.error}`;
+    }
+  }
+
   return NextResponse.json({
-    message: "Discussion created.",
+    message,
     thread: {
       ...(data as Omit<CommunityForumThread, "reply_count">),
+      github_issue_url: githubIssueUrl,
       reply_count: 0,
     } satisfies CommunityForumThread,
   });

@@ -107,6 +107,8 @@ Defined in `apps/web/.env.example`:
 - `NEXT_PUBLIC_COMMUNITY_ISSUES_URL` (optional)
 - `NEXT_PUBLIC_COMMUNITY_DISCUSSIONS_URL` (optional)
 - `NEXT_PUBLIC_SUPPORT_URL` (optional)
+- `GITHUB_COMMUNITY_ISSUES_TOKEN` (optional, server-side issue mirroring)
+- `GITHUB_COMMUNITY_ISSUE_LABELS` (optional, comma-separated labels for mirrored issues)
 
 ## Supabase setup
 
@@ -127,6 +129,14 @@ FabricLab now supports two community surfaces:
 - in-app chapter and lab comment threads
 - an in-app general forum at `/community`
 - optional external links for repo, issues, discussions, and support
+
+If you want general forum threads to optionally create matching GitHub issues, set:
+
+- `GITHUB_COMMUNITY_ISSUES_TOKEN`
+- `GITHUB_COMMUNITY_ISSUE_LABELS`
+
+The token should have repository issue-write permissions for the FabricLab repo. The GitHub target is
+derived from `NEXT_PUBLIC_COMMUNITY_REPO_URL`.
 
 If you want to expose public community destinations, set the optional `NEXT_PUBLIC_COMMUNITY_*`
 and `NEXT_PUBLIC_SUPPORT_URL` variables in `apps/web/.env.local` and in Vercel.
