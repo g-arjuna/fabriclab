@@ -6,7 +6,11 @@ import {
   isMissingCommunityTables,
   type CommunityForumPost,
 } from "@/lib/community/forum";
+import { notifyThreadActivity } from "@/lib/notifications/dispatch";
+import { ensureViewerNotificationSubscription } from "@/lib/notifications/subscriptions";
+import { getAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 
 type RouteContext = {
   params: Promise<{ threadId: string }>;
@@ -34,7 +38,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   const [{ data: thread, error: threadError }, { data: profile }] = await Promise.all([
     supabase
       .from("community_threads")
-      .select("id")
+      .select("id, title")
       .eq("id", threadId)
       .eq("status", "published")
       .maybeSingle(),
@@ -91,6 +95,27 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const admin = getAdminSupabaseClient();
+  if (admin) {
+    await ensureViewerNotificationSubscription(admin, {
+      user: viewer.user,
+      email: viewer.email,
+    }).catch(() => undefined);
+  }
+
+  const appEnv = getPublicSupabaseEnv();
+  if (appEnv && admin) {
+    await notifyThreadActivity({
+      admin,
+      threadId,
+      actorUserId: viewer.user.id,
+      actorName: authorName,
+      threadTitle: thread.title,
+      threadUrl: `${appEnv.appUrl}/community/${threadId}`,
+      event: "reply_posted",
+    }).catch(() => undefined);
   }
 
   return NextResponse.json({

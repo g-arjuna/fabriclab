@@ -1,7 +1,7 @@
 # Engineering Sync
 
-Last updated: 2026-03-29
-Current baseline commit: `802d397`
+Last updated: 2026-03-30
+Current baseline commit: `9d0ad78`
 Primary branch: `main`
 
 This file is the shared engineering source of truth for FabricLab when work is split across
@@ -51,8 +51,10 @@ Platform engineering, auth, release control, community plumbing, and deployment 
 
 ### Auth and Access
 
-- Supabase auth is wired and working locally and on Vercel.
-- Google social login is configured in Supabase and Google Cloud for the maintainer account.
+- First-party OAuth broker routes now exist in-app (`/api/auth/login/[provider]`, `/api/auth/callback/[provider]`)
+  and issue a signed FabricLab session cookie.
+- Auth state is now read from FabricLab session cookies on the server (not Supabase auth session cookies).
+- Google and GitHub OAuth are configured via app env vars and routed through FabricLab-owned callback URLs.
 - Login is now required for:
   - `/learn/[chapter]`
   - `/lab`
@@ -69,7 +71,8 @@ Platform engineering, auth, release control, community plumbing, and deployment 
 ### Progress
 
 - Guest progress no longer starts on chapter/lab content because those surfaces require sign-in.
-- Signed-in progress sync to Supabase is working.
+- Signed-in progress sync now uses server API routes (`/api/progress*`) instead of browser Supabase auth
+  sessions, while still persisting progress in Supabase tables.
 - Local browser release smoke verifies progress behavior.
 
 ### Release Control
@@ -93,6 +96,14 @@ Platform engineering, auth, release control, community plumbing, and deployment 
   - GitHub issues
   - GitHub discussions
   - GitHub Sponsors
+
+### Email Notifications
+
+- New notification plumbing exists for Mailgun-backed outbound email from server routes.
+- Publish notifications can be sent when admins flip a chapter/lab from unpublished to published.
+- Thread activity notifications can be sent on thread creation and replies for subscribed users.
+- Subscription preferences are now persisted in Supabase (`email_subscriptions`) via
+  `/api/notifications/subscription`.
 
 ### GitHub Issue Mirroring
 
@@ -160,6 +171,66 @@ Important caveat:
   - `README.md`
   - `plan.md`
   - `apps/web/.env.example`
+- Began auth-provider decoupling prep so FabricLab can migrate away from direct Supabase user
+  types without touching route-level gating behavior:
+  - `apps/web/lib/auth/types.ts`
+  - `apps/web/lib/auth/server.ts`
+  - this centralizes a platform-owned `ViewerUser` shape and maps Supabase-auth users into it at
+    one boundary
+- Implemented Phase 1 first-party OAuth/session broker in app runtime:
+  - added OAuth login/callback/session/logout API routes under `apps/web/app/api/auth/*`
+  - added signed cookie session utilities in `apps/web/lib/auth/session.ts`
+  - added provider config/exchange utilities in `apps/web/lib/auth/env.ts` and
+    `apps/web/lib/auth/oauth.ts`
+  - added Supabase identity bridge (`apps/web/lib/auth/identity.ts`) so OAuth identities map to
+    Supabase-backed `user_id` rows for profiles/progress/community
+  - switched login UI to use app-owned OAuth start routes
+  - switched progress sync client logic to app APIs (`/api/progress*`) instead of browser
+    `supabase.auth.*`
+  - converted proxy/middleware away from Supabase session-refresh behavior
+- Deployment/DNS setup progress (operator-executed):
+  - Cloudflare root domain record setup has started and apex `A` record is now created
+  - pending DNS completion for `www` CNAME and final Vercel domain verification
+  - pending environment split finalization for preview vs production public URLs
+- Added email notification infrastructure (Mailgun-based) for:
+  - new chapter/lab publish announcements from admin release updates
+  - community thread activity updates for participating users
+  - signed-in subscription preference persistence in Supabase (`email_subscriptions`)
+
+### 2026-03-30
+
+- Pulled the Codex web auth/notification branch into desktop for local review and fix-up:
+  - remote branch: `origin/codex/read-agents.md,-plan.md,-engineering_sync.md`
+  - local tracking branch: `codex/read-agents-md-plan-md-engineering-sync-md`
+- Fixed the legacy standalone auth callback so Supabase code and magic-link callbacks can still mint
+  FabricLab session cookies:
+  - `apps/web/app/auth/callback/route.ts`
+- Restored the branded magic-link fallback on the login page while keeping the new first-party OAuth
+  entry points:
+  - `apps/web/app/login/page.tsx`
+- Added migration compatibility for auth env handling:
+  - `apps/web/lib/auth/env.ts`
+  - `NEXT_PUBLIC_OAUTH_PROVIDERS` now falls back to `NEXT_PUBLIC_SOCIAL_AUTH_PROVIDERS`
+  - `AUTH_SESSION_SECRET` now falls back to `SUPABASE_SERVICE_ROLE_KEY` during migration
+- Verified branch-level auth behavior locally:
+  - `apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json`
+  - `npm run build`
+  - `npm run test:browser:deploy`
+  - `npm run test:browser:progress`
+- Stabilized the browser smoke harness for the new session model by ignoring benign aborted
+  `/api/auth/session` probes during navigation:
+  - `apps/web/tests/helpers/liveAuth.ts`
+- Re-verified the full local release suite on the branch:
+  - `npm run test:browser:release`
+- Added optional host-based auth entrypoint redirect support so domains like
+  `auth.fabriclab.dev` can forward into the canonical app login without changing
+  `NEXT_PUBLIC_APP_URL`:
+  - `apps/web/proxy.ts`
+  - `apps/web/.env.example` (`AUTH_ENTRY_HOSTS`)
+- Review conclusion:
+  - the web branch builds cleanly
+  - local regression coverage is green again
+  - main remaining risk is rollout/config migration, not a compile-time issue
 
 ## Open Items
 
@@ -167,16 +238,17 @@ Important caveat:
 
 Status:
 
-- not started
+- in progress
 - configuration task, not code task
 
 Needed:
 
-- add `fabriclab.dev` to Vercel
-- create Cloudflare DNS records
-- update `NEXT_PUBLIC_APP_URL`
+- ensure `fabriclab.dev` and `www.fabriclab.dev` are both added and verified in Vercel
+- complete Cloudflare DNS by adding `www` CNAME target to Vercel DNS endpoint
+- set environment-specific `NEXT_PUBLIC_APP_URL` values in Vercel (Preview vs Production)
+- update OAuth provider callback URLs for both preview and production public URLs
 - update Supabase Site URL + redirect URLs
-- redeploy and test auth
+- redeploy and test auth end-to-end
 
 ### 2. GitHub issue mirroring token fix
 
@@ -216,12 +288,45 @@ Blocked by:
 
 - Supabase custom auth domain is paid
 
+### 5. Replace Supabase Auth with first-party domain auth (in progress)
+
+Status:
+
+- phase 1 implemented (OAuth broker + signed app session cookies)
+- migration still incomplete
+
+Needed:
+
+- stabilize OAuth callback and provider edge cases (state expiry, denied consent handling)
+- update Playwright smoke helpers/fixtures to use new auth flow
+- keep Supabase for data only (profiles/progress/community/release metadata)
+- define migration for `auth.users` foreign-key dependency in Supabase schema
+- remove temporary migration fallback from `getAuthSessionSecret()` once `AUTH_SESSION_SECRET` is set
+  in all environments
+
+### 6. Email notification provider configuration
+
+Status:
+
+- code path implemented
+- provider/domain configuration pending
+
+Needed:
+
+- create/verify Mailgun sending domain and API key
+- configure sender identity (Zoho-managed mailbox or alias) for `MAIL_FROM_EMAIL`
+- set `MAILGUN_*` / `MAIL_FROM_*` env vars in Vercel Preview + Production
+- apply `20260329_004_email_notifications.sql` migration in Supabase
+- verify end-to-end sends on publish and thread reply flows
+
 ## Immediate Next Steps
 
-1. Complete site domain integration on Vercel + Cloudflare.
-2. Fix the GitHub issue mirror token and verify a real issue gets created.
-3. Once the platform is stable, spend the next content-focused week on Claude-authored chapter/lab work.
-4. Keep this file updated after each meaningful engineering session.
+1. Complete remaining DNS/domain steps (`www` CNAME + Vercel verification) and set canonical public host.
+2. Configure Preview vs Production Vercel env URLs and align OAuth callback URLs for Google/GitHub.
+3. Validate first-party OAuth flows end-to-end on Vercel preview with real Google/GitHub creds.
+4. Update and pass browser smoke suites against the new session model.
+5. Fix the GitHub issue mirror token and verify a real issue gets created.
+6. Configure Mailgun + sender identity env vars and run an end-to-end notification send validation.
 
 ## Working Rules For Future Codex Sessions
 
@@ -233,4 +338,3 @@ Blocked by:
   - `apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json`
   - `npm run build` from `apps/web`
 - If you change auth, gating, admin, progress, or release behavior, run the relevant browser smoke tests.
-

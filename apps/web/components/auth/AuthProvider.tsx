@@ -8,13 +8,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-
-import { getBrowserSupabaseClient } from "@/lib/supabase/client";
+import type { ViewerUser } from "@/lib/auth/types";
 
 type AuthContextValue = {
-  user: User | null;
-  session: Session | null;
+  user: ViewerUser | null;
+  session: { user: ViewerUser } | null;
   loading: boolean;
   enabled: boolean;
   refresh: () => Promise<void>;
@@ -24,31 +22,48 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function readSession() {
-  const client = getBrowserSupabaseClient();
-  if (!client) {
+  try {
+    const response = await fetch("/api/auth/session", {
+      method: "GET",
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return {
+        session: null,
+        user: null,
+        enabled: false,
+      };
+    }
+
+    const payload = (await response.json()) as { user: ViewerUser | null; authenticated: boolean };
+    if (!payload.authenticated || !payload.user) {
+      return {
+        session: null,
+        user: null,
+        enabled: true,
+      };
+    }
+
+    return {
+      session: { user: payload.user },
+      user: payload.user,
+      enabled: true,
+    };
+  } catch {
     return {
       session: null,
       user: null,
       enabled: false,
     };
   }
-
-  const {
-    data: { session },
-  } = await client.auth.getSession();
-
-  return {
-    session,
-    user: session?.user ?? null,
-    enabled: true,
-  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<ViewerUser | null>(null);
+  const [session, setSession] = useState<{ user: ViewerUser } | null>(null);
   const [loading, setLoading] = useState(true);
-  const enabled = getBrowserSupabaseClient() !== null;
+  const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -61,27 +76,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setSession(next.session);
       setUser(next.user);
+      setEnabled(next.enabled);
       setLoading(false);
     })();
 
-    const client = getBrowserSupabaseClient();
-    if (!client) {
-      return () => {
-        active = false;
-      };
-    }
-
-    const {
-      data: { subscription },
-    } = client.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-      setLoading(false);
-    });
-
     return () => {
       active = false;
-      subscription.unsubscribe();
     };
   }, []);
 
@@ -95,14 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const next = await readSession();
         setSession(next.session);
         setUser(next.user);
+        setEnabled(next.enabled);
       },
       signOut: async () => {
-        const client = getBrowserSupabaseClient();
-        if (!client) {
-          return;
-        }
-
-        await client.auth.signOut();
+        await fetch("/api/auth/logout", {
+          method: "POST",
+        });
         setSession(null);
         setUser(null);
       },
@@ -121,4 +119,3 @@ export function useAuth() {
 
   return context;
 }
-

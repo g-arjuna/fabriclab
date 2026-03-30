@@ -61,4 +61,3 @@ export function AuthControls({ compact = false }: AuthControlsProps) {
     </div>
   );
 }
-
