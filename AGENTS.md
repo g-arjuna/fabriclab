@@ -1,6 +1,6 @@
 # AGENTS.md
 > Read this file first. Read `plan.md` second. Then build.
-> Content still comes from Claude. Platform engineering now includes Supabase + Vercel.
+> Content still comes from Claude. Platform engineering now includes FabricLab-owned auth, Supabase data infrastructure, and Vercel.
 
 ---
 
@@ -48,18 +48,19 @@ Do not move educational content into Supabase.
 
 Supabase stores only:
 
-- auth/session state
 - profiles
 - release metadata
 - synced learner progress
 - community comments
-- optional legacy entitlements kept only for internal regression/testing
+- community threads / posts
+- notification preferences
+- optional legacy entitlements kept only for schema/backward-compatibility testing
 
 ### Rule 2 - Runtime APIs are now allowed, but only for platform infrastructure
 
 Allowed runtime infrastructure:
 
-- Supabase auth/db/storage APIs used by the app shell
+- Supabase db/storage APIs used by the app shell
 - Vercel deployment/runtime environment
 
 Still forbidden in the running app:
@@ -156,10 +157,14 @@ Also validate the relevant browser routes when touching auth, gating, progress, 
 
 Current product shape:
 
-- all published chapters are open
-- all published labs are open
+- public users can browse `/`, `/curriculum`, and `/community`
+- sign-in is required to open published chapters and labs
+- all published chapters are open to signed-in learners
+- all published labs are open to signed-in learners
 - FabricLab-owned Google/GitHub OAuth is the preferred sign-in path
+- FabricLab session cookies are the canonical app session
 - community comments can live alongside chapters and labs once the migration is applied
+- Mailgun-backed notifications can be configured for publish/reply events
 - minimal protected admin UI remains for release flags and internal tooling
 - entitlement plumbing may remain in the schema for future experimentation, but it is not part of the public learner journey
 

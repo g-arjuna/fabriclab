@@ -7,7 +7,8 @@ The repo now combines:
 
 - repo-backed chapter content and visualisations
 - a state-driven lab simulator
-- Supabase-backed learner data, release metadata, synced progress, community comments, and forum threads
+- Supabase-backed learner data, release metadata, synced progress, community comments, forum threads,
+  and notification preferences
 - a Vercel-ready Next.js app in `apps/web`
 
 ## Repo status
@@ -22,11 +23,19 @@ The repo now combines:
 
 Current defaults:
 
-- every published chapter is open
-- every published lab is open
+- every published chapter is open to signed-in learners
+- every published lab is open to signed-in learners
+- public visitors can still browse the curriculum and community
 - sign-in is required for chapters and labs
 - signed-in learners get synced progress plus community/admin features
 - release controls still exist so unfinished content can stay unpublished
+
+Auth defaults:
+
+- first-party FabricLab session cookies
+- Google and GitHub OAuth on the real domain
+- canonical site domain: `https://fabriclab.dev`
+- branded auth entrypoint: `https://auth.fabriclab.dev`
 
 ## Chapter status
 
@@ -117,6 +126,19 @@ Defined in `apps/web/.env.example`:
 - `GITHUB_COMMUNITY_ISSUES_TOKEN` (optional, server-side issue mirroring)
 - `GITHUB_COMMUNITY_ISSUE_LABELS` (optional, comma-separated labels for mirrored issues)
 
+## Public repo checklist
+
+Before making the GitHub repository public:
+
+1. confirm `.env.local` and any exported env files are still ignored
+2. rotate live secrets if they were ever exposed in shell output or screenshots
+3. verify Vercel and Supabase now use the rotated values
+4. keep `.env.example` placeholder-only
+5. keep admin-only routes protected:
+   - `/api/admin/notifications/test`
+   - `/api/admin/testing/session`
+   - `/api/admin/community/cleanup-test-artifacts`
+
 ## Supabase setup
 
 1. Create a Supabase dev project.
@@ -126,6 +148,7 @@ Defined in `apps/web/.env.example`:
 5. Apply the SQL in `supabase/migrations/20260329_003_community_forum_threads.sql`.
 6. Run `npm run catalog:sync` from `apps/web`.
 7. Configure Google and/or GitHub OAuth clients for the FabricLab-owned callback routes if you want live sign-in.
+8. Apply `supabase/migrations/20260330_005_notification_preferences_confirmed.sql`.
 
 ## Community setup
 
@@ -151,6 +174,22 @@ and `NEXT_PUBLIC_SUPPORT_URL` variables in `apps/web/.env.local` and in Vercel.
 
 If you enable first-party OAuth providers, set `NEXT_PUBLIC_OAUTH_PROVIDERS`
 to a comma-separated list such as `google,github` so the login page can show the corresponding buttons.
+
+## Notifications
+
+FabricLab now supports:
+
+- first-sign-in notification preference onboarding
+- persistent email preferences in `/account`
+- reply-notification opt-ins when creating discussions
+- Mailgun-backed outbound notification delivery
+
+Production notification tooling currently includes:
+
+- admin Mailgun test panel in `/admin/releases`
+- admin smoke-session route for production browser smoke tests
+
+These are internal ops tools, not learner-facing features.
 
 ## Project structure
 
@@ -184,6 +223,16 @@ Content remains git-driven:
 6. publish from `/admin/releases` when the content is ready
 
 This prevents unfinished weekly content drops from automatically going live.
+
+## Content-week guidance
+
+If the focus is content rather than engineering:
+
+- keep chapter/lab slugs stable
+- keep `apps/web/content/catalog.json` in sync with any new content drops
+- default new content to unpublished
+- use `/admin/releases` only to publish once the repo content and catalog row are ready
+- do not touch auth/community/deployment unless there is a real regression
 
 ## Validation
 

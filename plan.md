@@ -9,7 +9,9 @@
 FabricLab is moving from a fully static MVP to a hybrid platform:
 
 - content remains repo-backed
-- Supabase becomes the source of truth for auth, release metadata, synced progress, and community comments
+- FabricLab-owned auth/session flows sit in the app layer
+- Supabase becomes the source of truth for profiles, release metadata, synced progress, community data,
+  and notification preferences
 - Vercel becomes the canonical host for `apps/web`
 
 Content writing is still Claude-owned.
@@ -24,14 +26,14 @@ Platform engineering is Codex-owned.
 - Signed-in access enables:
   - synced progress
   - community participation
+  - notification preferences
   - admin workflows
 - First-party Google/GitHub OAuth with a FabricLab session cookie
 - Minimal admin dashboard for:
   - `is_published`
-  - optional future `access_tier`
   - optional future `preview_enabled`
   - optional future `preview_summary`
-  - admin entitlement grants/revocations for internal testing if needed
+  - internal notification/community cleanup tools
 
 ---
 
@@ -54,6 +56,7 @@ Platform engineering is Codex-owned.
 - `community_comments`
 - `community_threads`
 - `community_posts`
+- `email_subscriptions`
 
 ### Access model
 
@@ -210,8 +213,8 @@ Useful routes:
 ### Phase 4 - Admin release control
 
 - protected admin page
-- catalog publish/access controls
-- manual entitlement grant/revoke tools
+- catalog publish/preview controls
+- admin notification/community cleanup tools
 
 ### Phase 5 - Deployment and handoff
 
@@ -227,6 +230,14 @@ Useful routes:
 - allow chapter/lab-specific tracked discussions to mirror into GitHub issues too
 - expose optional repo / issues / support links in the app shell
 - keep contribution docs and issue templates aligned with the live platform
+
+### Phase 7 - Notification loop
+
+- Mailgun-backed notification delivery
+- first-sign-in notification preference onboarding
+- `/account` notification preference controls
+- reply-notification opt-ins on discussion creation
+- production admin notification test tooling
 
 ---
 
@@ -261,21 +272,29 @@ apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json
 
 ### Access
 
-- guests can open all published chapters and labs
-- signed-in users see the same published catalog with progress sync/account features
+- guests can browse curriculum/community but cannot open chapter or lab bodies
+- signed-in users can open published chapters and labs with progress/account/community features
 - unpublished content remains hidden from non-admins
 
 ### Admin
 
 - non-admin users cannot access `/admin/releases`
-- admin can change publish/access/preview fields
-- admin can grant and revoke legacy test entitlements for internal regression checks if still needed
+- admin can change publish/preview fields
+- admin notification test tooling works
+- admin smoke-artifact cleanup tooling works
 
 ### Progress
 
 - guest progress stays local
 - signed-in progress syncs from Supabase
 - signing out restores guest progress
+
+### Notifications
+
+- first-sign-in preference prompt appears only until preferences are confirmed
+- `/account` preferences persist
+- discussion creation exposes reply-notification opt-ins
+- Mailgun direct test returns success in production
 
 ### Release flow
 
@@ -288,3 +307,4 @@ apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json
 
 - `README.md` - quickstart and repo status
 - `docs/CLAUDE_HANDOFF_RELEASE_CONTROL.md` - content-agent guidance
+- `docs/CLAUDE_WEEKEND_PLATFORM_SUMMARY.md` - detailed weekend engineering summary for Claude

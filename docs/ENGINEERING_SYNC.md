@@ -1,7 +1,7 @@
 # Engineering Sync
 
 Last updated: 2026-03-30
-Current baseline commit: `34dae2d`
+Current baseline commit: `92b63aa`
 Primary branch: `main`
 
 This file is the shared engineering source of truth for FabricLab when work is split across
@@ -79,7 +79,8 @@ Platform engineering, auth, release control, community plumbing, and deployment 
 
 - Admin release controls are working.
 - Publish/unpublish flows for chapters and labs are covered by browser smoke tests.
-- Access metadata remains in the schema/UI mainly for internal/legacy testing, not public monetization.
+- Access metadata remains in the schema for backward compatibility, but the stale legacy-testing UI
+  has been removed from the admin dashboard.
 
 ### Community
 
@@ -118,11 +119,8 @@ Code path exists and is live.
 Current result from live end-to-end verification:
 
 - discussion creation succeeds
-- GitHub issue mirroring attempt happens
-- GitHub rejects the token with:
-  - `Resource not accessible by personal access token`
-
-This means the feature is implemented, but the configured GitHub token permissions are insufficient.
+- GitHub issue mirroring succeeds in production
+- probe verification created GitHub issue `#4` and linked it back to the forum thread
 
 Required token shape:
 
@@ -145,6 +143,17 @@ Required token shape:
   - Google OAuth
   - GitHub OAuth
   - signed FabricLab session cookie creation
+
+### Security posture
+
+- No tracked secrets were found during the latest repo sweep.
+- `.env.example` still contains placeholders only.
+- Internal admin-only test routes remain in the app for ops verification:
+  - `/api/admin/notifications/test`
+  - `/api/admin/testing/session`
+  - `/api/admin/community/cleanup-test-artifacts`
+- Operational note: live Supabase keys should be rotated before the repository is made public if
+  they were ever exposed in shell output or screenshots during setup/debugging.
 
 ## What Changed Recently
 
@@ -304,67 +313,63 @@ Required token shape:
 - Tightened missing-table detection so forum/schema errors are no longer conflated with any error
   message that merely mentions the community tables:
   - `apps/web/lib/community/forum.ts`
+- Cleaned the admin release dashboard:
+  - removed legacy entitlement-testing controls from `apps/web/components/admin/ReleaseControlsClient.tsx`
+  - simplified release-page copy in `apps/web/app/admin/releases/page.tsx`
+- Added admin smoke-artifact cleanup tooling:
+  - `apps/web/app/api/admin/community/cleanup-test-artifacts/route.ts`
+  - linked GitHub issue closing helper in `apps/web/lib/community/github.ts`
+- Confirmed there is one known probe artifact remaining to delete through the new cleanup action:
+  - forum thread title starts with `GitHub mirror permission probe`
+  - linked GitHub issue is `#4`
 
 ## Open Items
 
-### 1. GitHub issue mirroring token fix
+### 1. Rotate live Supabase keys before public repo launch
 
 Status:
 
-- code complete
-- config incomplete / wrong token scope
+- operational security task
+- codebase itself is clean, but prior setup/debug sessions may have exposed live values locally
 
 Needed:
 
-- update `GITHUB_COMMUNITY_ISSUES_TOKEN` in Vercel
-- use token with repo access and `Issues: Read and write`
-- redeploy
-- re-run live thread mirror test
+- rotate at least `SUPABASE_SERVICE_ROLE_KEY`
+- ideally rotate `NEXT_PUBLIC_SUPABASE_ANON_KEY` too
+- update Vercel and local envs
+- re-verify auth/community/progress after rotation
 
-### 2. Decide whether to require sign-in for community reading
+### 2. Run the admin cleanup action on production
 
 Current state:
 
-- reading community is public
-- posting requires sign-in
-
-Decision still open:
-
-- keep public-read / signed-in-write
-- or require sign-in for full community participation and reading
-
-### 3. First-party auth cleanup
-
-Status:
-
-- phase 1 implemented (OAuth broker + signed app session cookies)
-- migration still incomplete
+- cleanup tooling is shipped
+- one probe discussion / issue pair still exists
 
 Needed:
 
-- stabilize OAuth callback and provider edge cases (state expiry, denied consent handling)
-- keep Supabase for data only (profiles/progress/community/release metadata)
-- define migration for `auth.users` foreign-key dependency in Supabase schema
+- open `/admin/releases`
+- use `Clean test artifacts`
+- confirm the probe thread is deleted and GitHub issue `#4` is closed
 
-### 4. Email notification provider configuration
+### 3. Decide whether to keep internal admin test routes long-term
 
 Status:
 
-- live provider path verified
-- preferences UI now deployed
+- not a blocker
+- current routes are admin-only and useful for ops verification
 
-Needed:
+Question:
 
-- test real publish notifications on a content release
-- test real thread activity notifications on thread create/reply flows once forum tables are confirmed live
-- decide whether to keep the admin notification test tool permanently or remove it after launch hardening
+- keep them as internal tooling
+- or remove/hide them after launch hardening
 
 ## Immediate Next Steps
 
-1. Confirm/apply the production community forum migration (`20260329_003_community_forum_threads.sql`).
-1. Fix the GitHub issue mirror token and verify a real issue gets created from `/community`.
-2. Run a real publish notification and a real thread-activity notification end to end.
-3. Decide whether to keep the smoke-session route and `test:browser:notifications` as the standard prod verification path.
+1. Rotate live Supabase keys before making the repository public.
+2. Run the production `Clean test artifacts` action once.
+3. Update this sync file after the cleanup/rotation pass.
+4. Freeze platform work and focus on content unless a real regression appears.
 
 ## Working Rules For Future Codex Sessions
 
