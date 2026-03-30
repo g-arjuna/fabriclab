@@ -222,6 +222,11 @@ Important caveat:
   - `apps/web/tests/helpers/liveAuth.ts`
 - Re-verified the full local release suite on the branch:
   - `npm run test:browser:release`
+- Added optional host-based auth entrypoint redirect support so domains like
+  `auth.fabriclab.dev` can forward into the canonical app login without changing
+  `NEXT_PUBLIC_APP_URL`:
+  - `apps/web/proxy.ts`
+  - `apps/web/.env.example` (`AUTH_ENTRY_HOSTS`)
 - Review conclusion:
   - the web branch builds cleanly
   - local regression coverage is green again
