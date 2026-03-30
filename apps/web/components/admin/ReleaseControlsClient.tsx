@@ -10,7 +10,6 @@ type AdminCatalogItem = {
   number: number;
   partTitle?: string;
   durationLabel: string;
-  accessTier: "free" | "paid";
   isPublished: boolean;
   previewEnabled: boolean;
   previewSummary: string;
@@ -26,11 +25,11 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
   const itemsRef = useRef(initialItems);
   const [savingSlug, setSavingSlug] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [entitlementEmail, setEntitlementEmail] = useState("");
-  const [entitlementPending, setEntitlementPending] = useState<"grant" | "revoke" | null>(null);
   const [notificationTestEmail, setNotificationTestEmail] = useState("");
   const [notificationTestPending, setNotificationTestPending] = useState(false);
   const [notificationTestResult, setNotificationTestResult] = useState<string | null>(null);
+  const [cleanupPending, setCleanupPending] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<string | null>(null);
 
   useEffect(() => {
     itemsRef.current = items;
@@ -64,7 +63,6 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
         slug: item.slug,
         patch: {
           isPublished: item.isPublished,
-          accessTier: item.accessTier,
           previewEnabled: item.previewEnabled,
           previewSummary: item.previewSummary,
         },
@@ -80,28 +78,6 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
     }
 
     setMessage(`Saved ${item.title}.`);
-  }
-
-  async function updateEntitlement(mode: "grant" | "revoke") {
-    if (!entitlementEmail.trim()) {
-      setMessage("Enter an email address first.");
-      return;
-    }
-
-    setEntitlementPending(mode);
-    setMessage(null);
-
-    const response = await fetch("/api/admin/entitlements", {
-      method: mode === "grant" ? "POST" : "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email: entitlementEmail.trim() }),
-    });
-
-    const payload = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
-    setEntitlementPending(null);
-    setMessage(payload?.message ?? payload?.error ?? "Entitlement update completed.");
   }
 
   async function sendNotificationTest() {
@@ -149,6 +125,49 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
     ].filter(Boolean);
 
     setNotificationTestResult(lines.join("\n"));
+  }
+
+  async function cleanupTestArtifacts() {
+    setCleanupPending(true);
+    setCleanupResult(null);
+
+    const response = await fetch("/api/admin/community/cleanup-test-artifacts", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          error?: string;
+          closedIssues?: number[];
+          deletedThreads?: string[];
+          deletedPosts?: number;
+          skippedIssueClosures?: string[];
+          matchedThreads?: Array<{ id: string; title: string }>;
+        }
+      | null;
+
+    setCleanupPending(false);
+
+    if (!response.ok) {
+      setCleanupResult(payload?.error ?? "Smoke artifact cleanup failed.");
+      return;
+    }
+
+    const lines = [
+      `Matched threads: ${payload?.matchedThreads?.length ?? 0}`,
+      payload?.deletedThreads?.length ? `Deleted thread ids: ${payload.deletedThreads.join(", ")}` : null,
+      payload?.deletedPosts != null ? `Deleted replies: ${payload.deletedPosts}` : null,
+      payload?.closedIssues?.length ? `Closed GitHub issues: ${payload.closedIssues.join(", ")}` : null,
+      payload?.skippedIssueClosures?.length
+        ? `Skipped issue closures: ${payload.skippedIssueClosures.join(" | ")}`
+        : null,
+      !(payload?.matchedThreads?.length ?? 0) ? "Nothing matched the smoke-artifact patterns." : null,
+    ].filter(Boolean);
+
+    setCleanupResult(lines.join("\n"));
   }
 
   function updateItem(slug: string, patch: Partial<AdminCatalogItem>) {
@@ -215,38 +234,6 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
           </div>
 
           <div className="rounded-2xl border border-white/8 bg-[#020b16] p-4">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Access metadata</p>
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => updateItem(item.slug, { accessTier: "free" })}
-                className={`rounded-full px-3 py-1.5 text-xs transition ${
-                  item.accessTier === "free"
-                    ? "bg-emerald-400 text-slate-950"
-                    : "border border-white/10 text-slate-400 hover:text-white"
-                }`}
-              >
-                Open
-              </button>
-              <button
-                type="button"
-                onClick={() => updateItem(item.slug, { accessTier: "paid" })}
-                className={`rounded-full px-3 py-1.5 text-xs transition ${
-                  item.accessTier === "paid"
-                    ? "bg-amber-300 text-slate-950"
-                    : "border border-white/10 text-slate-400 hover:text-white"
-                }`}
-              >
-                Legacy test
-              </button>
-            </div>
-            <p className="mt-3 text-xs leading-6 text-slate-500">
-              Published items stay visible in the public catalog, but signed-in access controls now
-              decide whether learners can open the full chapter or lab experience.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-white/8 bg-[#020b16] p-4">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Preview page</p>
             <div className="mt-3 flex gap-2">
               <button
@@ -272,6 +259,14 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
                 Disabled
               </button>
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-[#020b16] p-4">
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Access model</p>
+            <p className="mt-3 text-sm leading-7 text-slate-300">
+              Published items stay visible in the public catalog. Signed-in access and route-level
+              checks now decide whether learners can open the full chapter or lab experience.
+            </p>
           </div>
         </div>
 
@@ -305,46 +300,6 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
   return (
     <div className="space-y-10">
       <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Internal entitlement testing</p>
-        <h2 className="mt-3 text-2xl font-semibold text-white">Grant or revoke legacy test access</h2>
-        <p className="mt-3 text-sm leading-7 text-slate-400">
-          Use an email address from Supabase Auth. This adds or removes the dormant legacy
-          entitlement row for internal regression testing. The public app no longer depends on it
-          for normal access.
-        </p>
-        <div className="mt-5 flex flex-col gap-3 md:flex-row">
-          <input
-            type="email"
-            value={entitlementEmail}
-            onChange={(event) => setEntitlementEmail(event.target.value)}
-            placeholder="learner@fabriclab.dev"
-            className="flex-1 rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-cyan-500/40"
-          />
-          <button
-            type="button"
-            onClick={() => void updateEntitlement("grant")}
-            disabled={entitlementPending !== null}
-            className="rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {entitlementPending === "grant" ? "Granting..." : "Grant test access"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void updateEntitlement("revoke")}
-            disabled={entitlementPending !== null}
-            className="rounded-full border border-white/10 px-5 py-3 text-sm text-slate-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {entitlementPending === "revoke" ? "Revoking..." : "Revoke"}
-          </button>
-        </div>
-        {message ? (
-          <div className="mt-4 rounded-2xl border border-white/8 bg-[#020b16] px-4 py-3 text-sm text-slate-300">
-            {message}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
         <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Notification testing</p>
         <h2 className="mt-3 text-2xl font-semibold text-white">Send a Mailgun test email</h2>
         <p className="mt-3 text-sm leading-7 text-slate-400">
@@ -374,6 +329,36 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
           </pre>
         ) : null}
       </section>
+
+      <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Community cleanup</p>
+        <h2 className="mt-3 text-2xl font-semibold text-white">Remove smoke discussions and issues</h2>
+        <p className="mt-3 text-sm leading-7 text-slate-400">
+          Closes GitHub issues and removes forum threads that match FabricLab smoke-test naming
+          patterns. This only targets engineering probe artifacts, not normal learner discussions.
+        </p>
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={() => void cleanupTestArtifacts()}
+            disabled={cleanupPending}
+            className="rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {cleanupPending ? "Cleaning..." : "Clean test artifacts"}
+          </button>
+        </div>
+        {cleanupResult ? (
+          <pre className="mt-4 whitespace-pre-wrap rounded-2xl border border-white/8 bg-[#020b16] px-4 py-3 text-sm text-slate-300">
+            {cleanupResult}
+          </pre>
+        ) : null}
+      </section>
+
+      {message ? (
+        <div className="rounded-2xl border border-white/8 bg-[#020b16] px-4 py-3 text-sm text-slate-300">
+          {message}
+        </div>
+      ) : null}
 
       <section>
         <div className="mb-4">

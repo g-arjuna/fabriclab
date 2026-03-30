@@ -17,6 +17,8 @@ type CreateGitHubIssueResult =
   | { ok: true; issueUrl: string; issueNumber: number }
   | { ok: false; error: string };
 
+type CloseGitHubIssueResult = { ok: true } | { ok: false; error: string };
+
 function parseGitHubRepoUrl(value: string | null): GitHubIssueTarget | null {
   if (!value) {
     return null;
@@ -115,4 +117,41 @@ export async function createGitHubIssueFromThread(
     issueUrl: payload.html_url,
     issueNumber: payload.number,
   };
+}
+
+export async function closeGitHubIssue(issueNumber: number): Promise<CloseGitHubIssueResult> {
+  const token = process.env.GITHUB_COMMUNITY_ISSUES_TOKEN?.trim();
+  const target = getIssueTarget();
+
+  if (!token || !target) {
+    return {
+      ok: false,
+      error: "GitHub issue mirroring is not configured yet.",
+    };
+  }
+
+  const response = await fetch(
+    `https://api.github.com/repos/${target.owner}/${target.repo}/issues/${issueNumber}`,
+    {
+      method: "PATCH",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2026-03-10",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ state: "closed" }),
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    return {
+      ok: false,
+      error: payload?.message ?? "GitHub issue close failed.",
+    };
+  }
+
+  return { ok: true };
 }

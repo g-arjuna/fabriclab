@@ -9,7 +9,6 @@ import { getAdminSupabaseClient } from "@/lib/supabase/admin";
 type CatalogRow = {
   kind: "chapter" | "lab";
   slug: string;
-  access_tier: "free" | "paid";
   is_published: boolean;
   preview_enabled: boolean;
   preview_summary: string | null;
@@ -26,7 +25,7 @@ export default async function AdminReleasesPage() {
   const { data } = admin
     ? await admin
         .from("content_catalog")
-        .select("kind, slug, access_tier, is_published, preview_enabled, preview_summary")
+        .select("kind, slug, is_published, preview_enabled, preview_summary")
     : { data: [] as CatalogRow[] };
 
   const rowMap = new Map(
@@ -44,7 +43,6 @@ export default async function AdminReleasesPage() {
       number: item.number,
       partTitle: item.partTitle,
       durationLabel: item.durationLabel,
-      accessTier: row?.access_tier ?? item.defaultAccessTier,
       isPublished: row?.is_published ?? item.defaultPublished,
       previewEnabled: row?.preview_enabled ?? item.defaultPreviewEnabled,
       previewSummary: row?.preview_summary ?? item.previewSummary,
@@ -75,12 +73,10 @@ export default async function AdminReleasesPage() {
 
         <header className="mt-10 max-w-3xl">
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Admin release control</p>
-          <h1 className="mt-4 text-4xl font-semibold text-white">
-            Manage publish state and internal access metadata
-          </h1>
+          <h1 className="mt-4 text-4xl font-semibold text-white">Manage publish state and previews</h1>
           <p className="mt-4 text-lg leading-8 text-slate-300">
-            Content remains git-backed. This dashboard controls release metadata in Supabase and
-            keeps the legacy entitlement plumbing available for internal testing only.
+            Content remains git-backed. This dashboard controls what is live in the public catalog,
+            what still stays hidden, and how preview shells read before full access is granted.
           </p>
         </header>
 
