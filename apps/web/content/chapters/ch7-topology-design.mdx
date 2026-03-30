@@ -1,5 +1,5 @@
 ---
-title: "Chapter 7: Topology Design — From One Node to a SuperPOD"
+title: "Chapter 7: Topology Design -- From One Node to a SuperPOD"
 module: "HPC Networking Foundations"
 level: "Intermediate"
 estimatedMinutes: 60
@@ -8,29 +8,29 @@ labLink: "/lab?lab=lab4-topology-sizing"
 
 ## The view from one switch
 
-Every chapter so far has shown you a single leaf switch, a handful of DGX nodes, a spine or two. You have learned to read counters on that switch, configure PFC on its ports, diagnose load balancing failures across its uplinks. The fabric has felt local — something you can touch by SSHing into two or three devices.
+Every chapter so far has shown you a single leaf switch, a handful of DGX nodes, a spine or two. You have learned to read counters on that switch, configure PFC on its ports, diagnose load balancing failures across its uplinks. The fabric has felt local -- something you can touch by SSHing into two or three devices.
 
-Real AI training clusters do not feel that way. A DGX SuperPOD has 32 nodes, 8 leaf switches, and 8 spine switches — 16 switches total, 256 GPUs, thousands of cables. A hyperscale cluster is 4,000 nodes, hundreds of switches, and a cabling plant that fills multiple data center rows. The operational problems you have been diagnosing on one switch happen simultaneously on all of them.
+Real AI training clusters do not feel that way. A DGX SuperPOD has 32 nodes, 8 leaf switches, and 8 spine switches -- 16 switches total, 256 GPUs, thousands of cables. A hyperscale cluster is 4,000 nodes, hundreds of switches, and a cabling plant that fills multiple data center rows. The operational problems you have been diagnosing on one switch happen simultaneously on all of them.
 
-This chapter zooms out. It shows how the single-leaf topology you have been working with scales into a complete cluster fabric — and why the design decisions made at the topology level determine whether every chapter's worth of PFC, ECN, and load balancing configuration actually has a chance to work.
+This chapter zooms out. It shows how the single-leaf topology you have been working with scales into a complete cluster fabric -- and why the design decisions made at the topology level determine whether every chapter's worth of PFC, ECN, and load balancing configuration actually has a chance to work.
 
 By the end you will be able to look at a topology diagram, calculate whether it can support AllReduce at line rate, identify where the bottlenecks will appear, and explain why NVIDIA chose specific port counts and stage configurations for their reference architectures.
 
 ---
 
-## Act 1 — The scaling problem: why one switch is not enough
+## Act 1 -- The scaling problem: why one switch is not enough
 
-A single 400G switch with 64 ports can connect 64 DGX NICs directly. If each DGX node has 8 NICs, that is 8 nodes connected through one switch. During AllReduce, all 8 nodes send to all other nodes — 8 × 400G = 3.2 Tb/s of total traffic, all staying within one switch. No spine needed. Perfect bisection bandwidth. No bottlenecks.
+A single 400G switch with 64 ports can connect 64 DGX NICs directly. If each DGX node has 8 NICs, that is 8 nodes connected through one switch. During AllReduce, all 8 nodes send to all other nodes -- 8 x 400G = 3.2 Tb/s of total traffic, all staying within one switch. No spine needed. Perfect bisection bandwidth. No bottlenecks.
 
-This is the 1-stage topology — a single switch connecting all servers. It works beautifully for small clusters. The problem is radix.
+This is the 1-stage topology -- a single switch connecting all servers. It works beautifully for small clusters. The problem is radix.
 
-**Radix** is the number of ports on a switch. Even the largest commercially available switches top out at 128 ports at 400G or 64 ports at 800G. With 128 × 400G ports and 8 ports per DGX node, a single switch can serve 16 DGX nodes — 128 GPUs. That covers a BasePOD. For anything larger, you need more switches and a way to connect them.
+**Radix** is the number of ports on a switch. Even the largest commercially available switches top out at 128 ports at 400G or 64 ports at 800G. With 128 x 400G ports and 8 ports per DGX node, a single switch can serve 16 DGX nodes -- 128 GPUs. That covers a BasePOD. For anything larger, you need more switches and a way to connect them.
 
 Connecting switches to each other requires uplinks. Every port used as an uplink is a port not used for a DGX node. A switch with 64 ports that dedicates 16 to uplinks only has 48 ports for servers. The fundamental tension in fabric design: **every uplink port is a server port you cannot use.**
 
 <TopologyScalingViz />
 
-The solution — and the architecture that all large AI clusters use — is the **fat-tree**: multiple layers of switches where lower layers connect to servers and upper layers interconnect the lower-layer switches. As you add layers, you can connect more servers. As you widen each layer, you get more bandwidth between the layers.
+The solution -- and the architecture that all large AI clusters use -- is the **fat-tree**: multiple layers of switches where lower layers connect to servers and upper layers interconnect the lower-layer switches. As you add layers, you can connect more servers. As you widen each layer, you get more bandwidth between the layers.
 
 > **Real deployment**: A DGX SuperPOD production rack.
 > The image below shows the physical reality: DGX nodes stacked in compute racks on the left,
@@ -38,44 +38,44 @@ The solution — and the architecture that all large AI clusters use — is the 
 > connecting them. Every cable you see represents one of the logical connections described
 > in this chapter.
 >
-> ![DGX SuperPOD rack layout — compute racks, switch racks, and structured cabling plant]
+> ![DGX SuperPOD rack layout -- compute racks, switch racks, and structured cabling plant]
 > *Source: NVIDIA DGX SuperPOD Reference Architecture documentation*
 > **Image placeholder**: Search "NVIDIA DGX SuperPOD rack reference architecture" for the
 > official NVIDIA documentation diagram showing the physical rack layout.
 
 ---
 
-## Act 2 — Fat-tree: the topology that provides full bisection bandwidth
+## Act 2 -- Fat-tree: the topology that provides full bisection bandwidth
 
 ### What bisection bandwidth means
 
-**Bisection bandwidth** is the minimum bandwidth across any cut that divides the cluster into two equal halves. It is the fundamental measure of whether your fabric can support all-to-all communication patterns — like AllReduce.
+**Bisection bandwidth** is the minimum bandwidth across any cut that divides the cluster into two equal halves. It is the fundamental measure of whether your fabric can support all-to-all communication patterns -- like AllReduce.
 
-If you bisect a 32-node cluster, you get two groups of 16 nodes. During AllReduce, the nodes in one half need to exchange gradient data with the nodes in the other half. If the links crossing the bisection can carry less bandwidth than the server NICs can generate, those links are the bottleneck — every AllReduce step will be constrained by how fast data can cross the bisection.
+If you bisect a 32-node cluster, you get two groups of 16 nodes. During AllReduce, the nodes in one half need to exchange gradient data with the nodes in the other half. If the links crossing the bisection can carry less bandwidth than the server NICs can generate, those links are the bottleneck -- every AllReduce step will be constrained by how fast data can cross the bisection.
 
-**Full bisection bandwidth** means the links across any bisection cut can carry as much data as all the servers on either side can generate simultaneously. For a cluster with 16 nodes per half, each with 400G of NIC bandwidth, full bisection requires 16 × 400G = 6.4 Tb/s of bandwidth across the cut. If your spine links can only carry 3.2 Tb/s, you have 2:1 oversubscription at the bisection — AllReduce will run at half speed during fully saturated training.
+**Full bisection bandwidth** means the links across any bisection cut can carry as much data as all the servers on either side can generate simultaneously. For a cluster with 16 nodes per half, each with 400G of NIC bandwidth, full bisection requires 16 x 400G = 6.4 Tb/s of bandwidth across the cut. If your spine links can only carry 3.2 Tb/s, you have 2:1 oversubscription at the bisection -- AllReduce will run at half speed during fully saturated training.
 
 ### The k-ary fat-tree construction
 
-A k-ary fat-tree is defined by one number: **k**, the switch radix (number of ports per switch). A k-ary fat-tree has three layers — edge (leaf), aggregate, and core — with specific port allocation rules:
+A k-ary fat-tree is defined by one number: **k**, the switch radix (number of ports per switch). A k-ary fat-tree has three layers -- edge (leaf), aggregate, and core -- with specific port allocation rules:
 
 ```
 Each switch has k ports.
-Each edge switch connects:   k/2 ports → servers
-                             k/2 ports → aggregate switches (uplinks)
+Each edge switch connects:   k/2 ports -> servers
+                             k/2 ports -> aggregate switches (uplinks)
 
-Each aggregate switch:       k/2 ports → edge switches (downlinks)
-                             k/2 ports → core switches (uplinks)
+Each aggregate switch:       k/2 ports -> edge switches (downlinks)
+                             k/2 ports -> core switches (uplinks)
 
-Core switches:               All k ports → aggregate switches
+Core switches:               All k ports -> aggregate switches
 ```
 
 For a k-ary fat-tree:
 - Number of pods: k
 - Edge switches per pod: k/2
 - Aggregate switches per pod: k/2
-- Core switches: (k/2)²
-- Servers: k³/4
+- Core switches: (k/2)^2
+- Servers: k^3/4
 
 <FatTreeViz />
 
@@ -84,22 +84,22 @@ For a k-ary fat-tree:
 - 4 edge switches per pod = 32 edge switches total
 - 4 aggregate switches per pod = 32 aggregate switches total
 - 16 core switches
-- 8³/4 = 128 servers
+- 8^3/4 = 128 servers
 
-**Worked example with k=64** (64-port switches — more realistic for AI):
+**Worked example with k=64** (64-port switches -- more realistic for AI):
 - 64 pods
 - 32 edge switches per pod = 2,048 edge switches total
 - 32 aggregate per pod = 2,048 aggregate switches total
 - 1,024 core switches
-- 64³/4 = 65,536 servers
+- 64^3/4 = 65,536 servers
 
-The k-ary formula shows why switch radix matters so much: doubling radix from 32 to 64 does not double the cluster capacity — it multiplies it by 8 (2³). High-radix switches are disproportionately powerful for building large clusters.
+The k-ary formula shows why switch radix matters so much: doubling radix from 32 to 64 does not double the cluster capacity -- it multiplies it by 8 (2^3). High-radix switches are disproportionately powerful for building large clusters.
 
 > **Real hardware**: A Spectrum-X SN5600 leaf switch in a data center rack.
 > 64 OSFP ports visible on the front panel. Each port carries 400G.
 > Half the ports face downward toward DGX nodes; half face upward toward spine switches.
 >
-> ![NVIDIA Spectrum-X SN5600 switch front panel — 64 OSFP 400G ports]
+> ![NVIDIA Spectrum-X SN5600 switch front panel -- 64 OSFP 400G ports]
 > *Source: NVIDIA networking hardware documentation*
 > **Image placeholder**: Search "NVIDIA Spectrum-X SN5600 datasheet" for the
 > official front-panel image showing the 64-port OSFP configuration.
@@ -110,15 +110,15 @@ The leaf-spine topology used in DGX deployments is a special case of the k-ary f
 
 In a 2-stage fat-tree:
 - Leaf switches connect to DGX nodes (downlinks) and spine switches (uplinks)
-- Spine switches only connect to leaf switches — no servers
+- Spine switches only connect to leaf switches -- no servers
 
 The number of spine switches equals the number of uplink ports per leaf switch. If each leaf switch has 32 downlinks (to DGX NICs) and 32 uplinks (to spine), you need 32 spine switches. Adding more spine switches requires changing the leaf switches to have more ports, which means buying different hardware.
 
-This is the BasePOD configuration. It is simple, fast, and fully non-blocking — every server port has exactly one spine port backing it up. The limitation is scale: to connect more nodes, you eventually need a third layer.
+This is the BasePOD configuration. It is simple, fast, and fully non-blocking -- every server port has exactly one spine port backing it up. The limitation is scale: to connect more nodes, you eventually need a third layer.
 
 ---
 
-## Act 3 — DGX BasePOD and SuperPOD: NVIDIA's reference designs
+## Act 3 -- DGX BasePOD and SuperPOD: NVIDIA's reference designs
 
 NVIDIA publishes two reference architectures for DGX clusters. Understanding their exact port allocation and switch counts gives you a concrete framework for topology calculations.
 
@@ -131,17 +131,17 @@ NVIDIA publishes two reference architectures for DGX clusters. Understanding the
 **Compute fabric structure** (2-stage, non-blocking):
 - 8 leaf switches (one per rail), each: 32 downlinks to DGX NICs + 32 uplinks to spine
 - 32 spine switches, each: 8 downlinks to leaf switches (one per leaf)
-- Switch hardware: Spectrum-X SN5600 (64 ports × 400G each)
+- Switch hardware: Spectrum-X SN5600 (64 ports x 400G each)
 
 **How the port math works**:
 Each SN5600 has 64 ports. A leaf switch uses:
-- 32 ports facing DGX nodes (4 DGX nodes × 8 NICs each? No — 32 nodes × 1 NIC per rail = 32 downlinks)
+- 32 ports facing DGX nodes (4 DGX nodes x 8 NICs each? No -- 32 nodes x 1 NIC per rail = 32 downlinks)
 - 32 ports facing spine switches
 
-A spine switch uses all 8 ports to connect to the 8 leaf switches. All 32 spine switches do the same, giving each leaf switch 32 uplink paths — one to each spine switch.
+A spine switch uses all 8 ports to connect to the 8 leaf switches. All 32 spine switches do the same, giving each leaf switch 32 uplink paths -- one to each spine switch.
 
 **Bisection bandwidth check**:
-Split 32 nodes into two halves of 16. Each node has 8 NICs at 400G = 3.2 Tb/s per node. 16 nodes = 51.2 Tb/s of potential traffic crossing the bisection. How much spine bandwidth crosses the cut? Each leaf switch contributes 32 uplinks × 400G = 12.8 Tb/s to the spine layer. 8 leaf switches × 12.8 Tb/s = 102.4 Tb/s total spine bandwidth. Split evenly = 51.2 Tb/s per half. **Full bisection bandwidth achieved.**
+Split 32 nodes into two halves of 16. Each node has 8 NICs at 400G = 3.2 Tb/s per node. 16 nodes = 51.2 Tb/s of potential traffic crossing the bisection. How much spine bandwidth crosses the cut? Each leaf switch contributes 32 uplinks x 400G = 12.8 Tb/s to the spine layer. 8 leaf switches x 12.8 Tb/s = 102.4 Tb/s total spine bandwidth. Split evenly = 51.2 Tb/s per half. **Full bisection bandwidth achieved.**
 
 AllReduce on a BasePOD can run at exactly line rate, bounded only by NIC speed.
 
@@ -149,7 +149,7 @@ AllReduce on a BasePOD can run at exactly line rate, bounded only by NIC speed.
 > Shows 32 DGX H100 nodes across 4 compute racks, connected to 8 leaf switches,
 > which connect to 32 spine switches in a separate switch rack.
 >
-> ![DGX BasePOD reference wiring diagram — 32 nodes, 8 leaf, 32 spine]
+> ![DGX BasePOD reference wiring diagram -- 32 nodes, 8 leaf, 32 spine]
 > *Source: NVIDIA DGX BasePOD Reference Architecture document, available at*
 > *developer.nvidia.com/dgx-basepod*
 > **Image placeholder**: The NVIDIA BasePOD documentation contains an official
@@ -160,12 +160,12 @@ AllReduce on a BasePOD can run at exactly line rate, bounded only by NIC speed.
 **Scale**: Up to 256 DGX H100 nodes = 2,048 GPUs (standard configuration)
 
 **Compute fabric structure** (3-stage):
-- 64 leaf switches (8 rails × 8 groups of 8 nodes per rail)
+- 64 leaf switches (8 rails x 8 groups of 8 nodes per rail)
 - 64 spine switches (connecting leaf to core)
 - Additional core layer for inter-group traffic
 
 **Why 3 stages are needed**:
-With 256 nodes and 8 NICs per node, you have 2,048 NIC connections. Even with 64-port switches, 2,048 / 32 (downlinks per switch) = 64 leaf switches. 64 leaf switches need 64 uplink ports each = 4,096 uplinks. With 64 ports per spine switch and all ports used for downlinks = 64 switches handle only 64 × 64 = 4,096 connections. This works for a 2-stage design, but the bandwidth at the spine layer would be oversubscribed if all 256 nodes tried to AllReduce simultaneously.
+With 256 nodes and 8 NICs per node, you have 2,048 NIC connections. Even with 64-port switches, 2,048 / 32 (downlinks per switch) = 64 leaf switches. 64 leaf switches need 64 uplink ports each = 4,096 uplinks. With 64 ports per spine switch and all ports used for downlinks = 64 switches handle only 64 x 64 = 4,096 connections. This works for a 2-stage design, but the bandwidth at the spine layer would be oversubscribed if all 256 nodes tried to AllReduce simultaneously.
 
 The SuperPOD uses a 3-stage design with a core layer to maintain non-blocking bandwidth across the full 256-node cluster.
 
@@ -181,13 +181,13 @@ The SuperPOD uses a 3-stage design with a core layer to maintain non-blocking ba
 | Max bisection bandwidth | Full | Full (with correct config) |
 | AllReduce hop count | 2 | 4 |
 
-The SuperPOD's extra stages double the AllReduce hop count — 2 hops in BasePOD (down to leaf, up through spine), 4 hops in SuperPOD (down to leaf, up to spine, up to core, back down). Each hop adds microseconds of latency. For a training run that executes millions of AllReduce steps, the latency difference compounds.
+The SuperPOD's extra stages double the AllReduce hop count -- 2 hops in BasePOD (down to leaf, up through spine), 4 hops in SuperPOD (down to leaf, up to spine, up to core, back down). Each hop adds microseconds of latency. For a training run that executes millions of AllReduce steps, the latency difference compounds.
 
-This is why NVIDIA's reference designs use the highest-radix switches available — to minimise the number of fabric stages needed and keep AllReduce hop counts low.
+This is why NVIDIA's reference designs use the highest-radix switches available -- to minimise the number of fabric stages needed and keep AllReduce hop counts low.
 
 ---
 
-## Act 4 — Oversubscription: when the topology cannot keep up
+## Act 4 -- Oversubscription: when the topology cannot keep up
 
 ### Definition and calculation
 
@@ -197,27 +197,27 @@ This is why NVIDIA's reference designs use the highest-radix switches available 
 Oversubscription ratio = Total downlink bandwidth / Total uplink bandwidth
 
 Where:
-  Total downlink bandwidth = (number of switches in layer) × (downlinks per switch) × (link speed)
-  Total uplink bandwidth   = (number of switches in layer) × (uplinks per switch) × (link speed)
+  Total downlink bandwidth = (number of switches in layer) x (downlinks per switch) x (link speed)
+  Total uplink bandwidth   = (number of switches in layer) x (uplinks per switch) x (link speed)
 ```
 
 For a non-blocking (fully subscribed) design, every server port has a corresponding uplink. Oversubscription ratio = 1:1.
 
-For a 2:1 oversubscribed design, every two server ports share one uplink. During AllReduce, when both servers send simultaneously, they compete for one uplink — half of each server's bandwidth is unusable.
+For a 2:1 oversubscribed design, every two server ports share one uplink. During AllReduce, when both servers send simultaneously, they compete for one uplink -- half of each server's bandwidth is unusable.
 
 <OversubscriptionCalculatorViz />
 
 ### Why enterprise oversubscription assumptions fail for AI
 
-Enterprise data centers routinely use 4:1 or even 8:1 oversubscription at the spine layer. The justification: statistical multiplexing — not all servers send at full rate simultaneously. Web servers, databases, and application servers spend most of their time idle or lightly loaded. The aggregate bandwidth across all servers peaks at maybe 20–30% of theoretical maximum. A 4:1 oversubscription gives you 25% of line rate — more than enough.
+Enterprise data centers routinely use 4:1 or even 8:1 oversubscription at the spine layer. The justification: statistical multiplexing -- not all servers send at full rate simultaneously. Web servers, databases, and application servers spend most of their time idle or lightly loaded. The aggregate bandwidth across all servers peaks at maybe 20-30% of theoretical maximum. A 4:1 oversubscription gives you 25% of line rate -- more than enough.
 
 AI training destroys this assumption. During AllReduce:
 - Every GPU is transmitting at full rate simultaneously
 - Every NIC is running at 400G simultaneously
-- The aggregate bandwidth is not 20–30% of maximum — it is **100% of maximum**
+- The aggregate bandwidth is not 20-30% of maximum -- it is **100% of maximum**
 - Statistical multiplexing provides zero benefit
 
-A 2:1 oversubscribed fabric in an AI training cluster does not degrade gracefully to 50% throughput. It creates a permanent congestion condition at the spine layer — every AllReduce barrier causes PFC storms that cascade down to every leaf switch. JCT increases. The congestion management mechanisms you configured in Chapters 5 and 6 are fighting the topology rather than compensating for bursty traffic.
+A 2:1 oversubscribed fabric in an AI training cluster does not degrade gracefully to 50% throughput. It creates a permanent congestion condition at the spine layer -- every AllReduce barrier causes PFC storms that cascade down to every leaf switch. JCT increases. The congestion management mechanisms you configured in Chapters 5 and 6 are fighting the topology rather than compensating for bursty traffic.
 
 ### The compound oversubscription problem
 
@@ -227,61 +227,61 @@ In a multi-stage topology, oversubscription at each layer multiplies. If the lea
 Effective oversubscription = Product of oversubscriptions at each layer
 
 Example:
-  Leaf → Spine: 2:1 (each leaf switch has 2× more downlinks than uplinks)
-  Spine → Core: 2:1 (each spine switch has 2× more downlinks than uplinks)
-  Effective at bisection: 2:1 × 2:1 = 4:1
+  Leaf -> Spine: 2:1 (each leaf switch has 2x more downlinks than uplinks)
+  Spine -> Core: 2:1 (each spine switch has 2x more downlinks than uplinks)
+  Effective at bisection: 2:1 x 2:1 = 4:1
 
-  AllReduce will run at ≈25% of NIC line rate.
+  AllReduce will run at ~=25% of NIC line rate.
 ```
 
-This is why topology review before purchase matters. A cluster that looks like it has "enough bandwidth" may be silently 4:1 oversubscribed at the bisection — and you will only discover this when training runs at a quarter of expected throughput.
+This is why topology review before purchase matters. A cluster that looks like it has "enough bandwidth" may be silently 4:1 oversubscribed at the bisection -- and you will only discover this when training runs at a quarter of expected throughput.
 
 ### Undersubscription: when to go the other direction
 
-Some deployments deliberately use **undersubscription** — more uplink ports than server-facing ports at a given switch. This sounds wasteful (you are paying for ports you are not using for servers), but it serves two purposes:
+Some deployments deliberately use **undersubscription** -- more uplink ports than server-facing ports at a given switch. This sounds wasteful (you are paying for ports you are not using for servers), but it serves two purposes:
 
 **1. Dedicated egress buffers**: When each server-facing port has more than one uplink to the spine, each uplink can be assigned exclusively to one group of server ports. Traffic from those servers never competes with traffic from other servers for the same egress buffer. This eliminates in-cast congestion at the leaf-to-spine boundary.
 
-**2. Per-packet spraying headroom**: With more uplinks than downlinks, the leaf switch can spray each packet across a wider set of paths without any path becoming overloaded even in the worst case. The math works in your favour: if you have 2× as many uplinks as downlinks, the maximum load any spine link can receive during in-cast is 50% of its capacity — well below any PFC or ECN threshold.
+**2. Per-packet spraying headroom**: With more uplinks than downlinks, the leaf switch can spray each packet across a wider set of paths without any path becoming overloaded even in the worst case. The math works in your favour: if you have 2x as many uplinks as downlinks, the maximum load any spine link can receive during in-cast is 50% of its capacity -- well below any PFC or ECN threshold.
 
 Undersubscription adds cost but is used in ultra-performance clusters where JCT is a hard operational target and every microsecond of AllReduce latency has a dollar value.
 
 ---
 
-## Act 5 — Rail-optimised vs rail-unified design
+## Act 5 -- Rail-optimised vs rail-unified design
 
-### Rail-optimised design (ROD) — what we have been teaching
+### Rail-optimised design (ROD) -- what we have been teaching
 
-In all previous chapters, every DGX node has 8 NICs connecting to 8 different leaf switches — one NIC per rail. Leaf Switch 0 connects only to GPU 0 across all nodes. Leaf Switch 1 connects only to GPU 1. And so on.
+In all previous chapters, every DGX node has 8 NICs connecting to 8 different leaf switches -- one NIC per rail. Leaf Switch 0 connects only to GPU 0 across all nodes. Leaf Switch 1 connects only to GPU 1. And so on.
 
-This means AllReduce between GPU 0s on all nodes stays on Leaf Switch 0 — a single switch hop. GPU 0 on Node 1 sends to Leaf Switch 0; Leaf Switch 0 forwards to GPU 0 on all other nodes. The spine switches are never involved for intra-GPU-index AllReduce.
+This means AllReduce between GPU 0s on all nodes stays on Leaf Switch 0 -- a single switch hop. GPU 0 on Node 1 sends to Leaf Switch 0; Leaf Switch 0 forwards to GPU 0 on all other nodes. The spine switches are never involved for intra-GPU-index AllReduce.
 
-**The diagnostic benefit of ROD**: When you see a problem on Rail 3, you know exactly which GPU index is affected on every node (GPU 3) and exactly which leaf switch is the focus (Leaf Switch 3). The mapping is unambiguous. This is why Ch3 Lab 0's topology shows Rail 3 as a distinct failing entity — it means one GPU on every node is affected, not all GPUs on one node.
+**The diagnostic benefit of ROD**: When you see a problem on Rail 3, you know exactly which GPU index is affected on every node (GPU 3) and exactly which leaf switch is the focus (Leaf Switch 3). The mapping is unambiguous. This is why Ch3 Lab 0's topology shows Rail 3 as a distinct failing entity -- it means one GPU on every node is affected, not all GPUs on one node.
 
 <RODvsRUDViz />
 
 ### Rail-unified design (RUD)
 
-In a rail-unified deployment, all 8 NICs of a DGX node connect to the same set of leaf switches — typically 2 or 4 switches, each carrying some fraction of the node's bandwidth. All 8 GPUs on a node appear on the same leaf switches.
+In a rail-unified deployment, all 8 NICs of a DGX node connect to the same set of leaf switches -- typically 2 or 4 switches, each carrying some fraction of the node's bandwidth. All 8 GPUs on a node appear on the same leaf switches.
 
-**The bandwidth aggregation benefit**: For workloads that generate large traffic volumes from one node to another (rather than GPU-index-to-GPU-index AllReduce), RUD provides more bandwidth between a pair of nodes. Two nodes that are each connected to the same 4 leaf switches can exchange data across 4 × 400G = 1.6 Tb/s of parallel paths — more than the 400G a single rail can carry.
+**The bandwidth aggregation benefit**: For workloads that generate large traffic volumes from one node to another (rather than GPU-index-to-GPU-index AllReduce), RUD provides more bandwidth between a pair of nodes. Two nodes that are each connected to the same 4 leaf switches can exchange data across 4 x 400G = 1.6 Tb/s of parallel paths -- more than the 400G a single rail can carry.
 
 **When enterprises choose RUD**:
 - Mixed workloads: training and inference running simultaneously, where inference traffic does not follow GPU-index patterns
 - Large model parallelism: pipeline parallelism that sends large tensors between whole nodes rather than between specific GPU indices
 - Multi-tenant clusters: multiple jobs running simultaneously, where no single job owns a full rail
 
-**The diagnostic cost of RUD**: When a port fails in RUD, the impact is not a clean "Rail 3 is down." Some fraction of every GPU's bandwidth is affected. Counter patterns are harder to read — which switch, which port, which GPU. RUD trades diagnostic clarity for bandwidth flexibility.
+**The diagnostic cost of RUD**: When a port fails in RUD, the impact is not a clean "Rail 3 is down." Some fraction of every GPU's bandwidth is affected. Counter patterns are harder to read -- which switch, which port, which GPU. RUD trades diagnostic clarity for bandwidth flexibility.
 
 **The current course scope**: All labs and chapters use ROD, which is the dominant design for dedicated AI training clusters. RUD becomes relevant as clusters move toward mixed training/inference and multi-tenant workloads.
 
 ---
 
-## Act 6 — Switch selection: radix, buffers, and the speed trade-off
+## Act 6 -- Switch selection: radix, buffers, and the speed trade-off
 
 ### Why radix dominates every other spec
 
-The single most important number when selecting a switch for an AI fabric is **port count at the required speed**. As the fat-tree math shows, doubling radix from 32 to 64 ports increases cluster capacity 8× (k³ scales with the cube of radix). A 32-port switch requires 8 stages to build a 65K-server cluster; a 64-port switch requires 3 stages. Fewer stages = fewer hops = lower AllReduce latency = better JCT.
+The single most important number when selecting a switch for an AI fabric is **port count at the required speed**. As the fat-tree math shows, doubling radix from 32 to 64 ports increases cluster capacity 8x (k^3 scales with the cube of radix). A 32-port switch requires 8 stages to build a 65K-server cluster; a 64-port switch requires 3 stages. Fewer stages = fewer hops = lower AllReduce latency = better JCT.
 
 Current options in the AI fabric market:
 
@@ -292,7 +292,7 @@ Current options in the AI fabric market:
 | QM9700 (InfiniBand) | 40 | 400G NDR | 16 Tb/s | IB training clusters |
 | SN5800 | 128 | 400G | 51.2 Tb/s | Emerging for larger clusters |
 
-For 800G deployments (next-generation DGX systems), the port count halves but throughput per port doubles — the cluster-size math stays roughly the same per rack, but cable plant complexity is reduced because fewer ports carry the same total bandwidth.
+For 800G deployments (next-generation DGX systems), the port count halves but throughput per port doubles -- the cluster-size math stays roughly the same per rack, but cable plant complexity is reduced because fewer ports carry the same total bandwidth.
 
 > **Real hardware comparison**: QM9700 InfiniBand switch (left) vs Spectrum-X SN5600
 > Ethernet switch (right). Both 1U form factor. Both 400G. Physically similar but
@@ -305,25 +305,25 @@ For 800G deployments (next-generation DGX systems), the port count halves but th
 
 ### Buffer depth: the hidden performance variable
 
-Two switches with identical port counts and speeds can perform very differently in an AI fabric depending on their buffer depth — the total SRAM available for queuing in-flight packets.
+Two switches with identical port counts and speeds can perform very differently in an AI fabric depending on their buffer depth -- the total SRAM available for queuing in-flight packets.
 
 **Deep-buffer switches** (Spectrum-X SN5600: ~64 MB shared buffer):
 - Can absorb large AllReduce bursts without ECN or PFC firing
 - Packets queue in the switch SRAM rather than being held back by PFC
 - Higher base latency per packet (serialisation through the buffer)
 - Better tolerance for bursty, in-cast traffic patterns
-- PFC and ECN are used sparingly — as intended backup mechanisms
+- PFC and ECN are used sparingly -- as intended backup mechanisms
 - Trade-off: slightly higher per-packet latency (nanoseconds)
 
-**Shallow-buffer switches** (various Broadcom Tomahawk-based switches: ~4–8 MB shared buffer):
-- Minimal queuing space — buffers fill and overflow quickly
+**Shallow-buffer switches** (various Broadcom Tomahawk-based switches: ~4-8 MB shared buffer):
+- Minimal queuing space -- buffers fill and overflow quickly
 - PFC must fire almost immediately during any burst
 - Very low base latency when the fabric is uncongested
-- Require excellent load balancing (sDLB/per-packet spraying) — without it, buffers overflow before PFC can respond
-- Require aggressive ECN thresholds — must mark early because the buffer fills fast
+- Require excellent load balancing (sDLB/per-packet spraying) -- without it, buffers overflow before PFC can respond
+- Require aggressive ECN thresholds -- must mark early because the buffer fills fast
 - Trade-off: fragile under bursty AllReduce traffic without perfect load balancing
 
-**The practical implication**: A shallow-buffer switch in a poorly load-balanced fabric will drop packets during every AllReduce barrier — no amount of PFC tuning will save it because the buffer overflows faster than PFC can respond. A deep-buffer switch in the same fabric will absorb the burst, let PFC handle the overflow, and protect losslessness. The choice of switch buffer depth directly determines how much operational margin you have in your congestion management configuration.
+**The practical implication**: A shallow-buffer switch in a poorly load-balanced fabric will drop packets during every AllReduce barrier -- no amount of PFC tuning will save it because the buffer overflows faster than PFC can respond. A deep-buffer switch in the same fabric will absorb the burst, let PFC handle the overflow, and protect losslessness. The choice of switch buffer depth directly determines how much operational margin you have in your congestion management configuration.
 
 <SwitchBufferViz />
 
@@ -332,32 +332,32 @@ Two switches with identical port counts and speeds can perform very differently 
 The AllReduce burst calculation tells you the minimum buffer depth you need:
 
 ```
-Burst size = (number of nodes per rail) × (link speed) × (AllReduce synchronisation window)
+Burst size = (number of nodes per rail) x (link speed) x (AllReduce synchronisation window)
 
 Example: 32-node cluster, 400G links, 1ms synchronisation window
-  Burst = 32 × 400 Gb/s × 0.001s = 16 Gb = 2 GB
+  Burst = 32 x 400 Gb/s x 0.001s = 16 Gb = 2 GB
 
 Minimum buffer per port to absorb this burst:
-  2 GB / 32 ports (paths the burst can spread across) ≈ 64 MB per leaf switch
+  2 GB / 32 ports (paths the burst can spread across) ~= 64 MB per leaf switch
 
 A switch with 64 MB total shared buffer can absorb this burst.
 A switch with 8 MB total shared buffer will overflow after:
-  8 MB / (400 Gb/s / 8) = 0.16ms — well before the 1ms synchronisation window ends.
+  8 MB / (400 Gb/s / 8) = 0.16ms -- well before the 1ms synchronisation window ends.
 ```
 
-This calculation is the quantitative argument for deep-buffer switches in large AI training clusters. Shallow-buffer switches are better suited for inference workloads — many small requests, low burst amplitude, latency-per-request is the critical metric rather than burst absorption.
+This calculation is the quantitative argument for deep-buffer switches in large AI training clusters. Shallow-buffer switches are better suited for inference workloads -- many small requests, low burst amplitude, latency-per-request is the critical metric rather than burst absorption.
 
 ---
 
-## Act 7 — Cabling: where topology meets the physical world
+## Act 7 -- Cabling: where topology meets the physical world
 
 ### Connector types at 400G
 
 All current 400G AI fabric links use one of two connector families:
 
-**QSFP-DD (Quad Small Form-factor Double Density)**: 8 lanes × 50G PAM4 = 400G. The dominant connector for 400G Ethernet. Compatible with the QSFP28 form factor with an adapter. Used on most Spectrum-X switches.
+**QSFP-DD (Quad Small Form-factor Double Density)**: 8 lanes x 50G PAM4 = 400G. The dominant connector for 400G Ethernet. Compatible with the QSFP28 form factor with an adapter. Used on most Spectrum-X switches.
 
-**OSFP (Octal Small Form-factor Pluggable)**: Also 8 lanes × 50G PAM4 = 400G. Physically larger than QSFP-DD, with better thermal headroom. Used on some high-port-density switches and on the ConnectX-7 NIC in DGX H100/H200.
+**OSFP (Octal Small Form-factor Pluggable)**: Also 8 lanes x 50G PAM4 = 400G. Physically larger than QSFP-DD, with better thermal headroom. Used on some high-port-density switches and on the ConnectX-7 NIC in DGX H100/H200.
 
 Both connectors use the same optical transceivers at 400G. They are incompatible without an adapter, so it is important to match connector types when selecting switches and cables.
 
@@ -374,14 +374,14 @@ Both connectors use the same optical transceivers at 400G. They are incompatible
 
 | Cable type | Max reach | Use case | Cost relative |
 |---|---|---|---|
-| DAC (Direct Attach Copper) | 3–5m | Within same rack or adjacent rack | Lowest |
-| AOC (Active Optical Cable) | 10–100m | Between racks, patch panel reach | Medium |
+| DAC (Direct Attach Copper) | 3-5m | Within same rack or adjacent rack | Lowest |
+| AOC (Active Optical Cable) | 10-100m | Between racks, patch panel reach | Medium |
 | Passive optical + transceiver | Up to 100m | Structured cabling plants | Medium-high |
 | Active optical + amplifier | 500m+ | Campus or multi-building | High |
 
-For a DGX BasePOD where compute and switch racks are adjacent, DAC cables are common for the DGX-to-leaf connections (typically 3m or less between racks). Leaf-to-spine connections often require AOC cables (10–30m if switch racks are separated).
+For a DGX BasePOD where compute and switch racks are adjacent, DAC cables are common for the DGX-to-leaf connections (typically 3m or less between racks). Leaf-to-spine connections often require AOC cables (10-30m if switch racks are separated).
 
-For a SuperPOD with structured cabling to a patch panel, passive optical with MPO trunks and OSFP transceivers is standard. The patch panel approach allows re-patching without running new cable through the data center — critical when you cannot recable without a maintenance window.
+For a SuperPOD with structured cabling to a patch panel, passive optical with MPO trunks and OSFP transceivers is standard. The patch panel approach allows re-patching without running new cable through the data center -- critical when you cannot recable without a maintenance window.
 
 ### Why one wrong cable ruins a rail
 
@@ -392,9 +392,9 @@ The rail-optimised design's physical constraint is that every cable path must be
 - When Rail 4's AllReduce runs, this GPU 3 appears but creates asymmetry (one node has 2 GPUs on Rail 4)
 - The training framework (NCCL) will detect the topology inconsistency and either fail or run at degraded performance
 
-This is the specific failure `ibstat` would show as Rail 3 having one fewer node than expected, and Rail 4 having one extra. It is a cabling error, not a hardware failure, and it is not obvious from any counter alone — you need UFM topology view or `show topology` to see the misconnection.
+This is the specific failure `ibstat` would show as Rail 3 having one fewer node than expected, and Rail 4 having one extra. It is a cabling error, not a hardware failure, and it is not obvious from any counter alone -- you need UFM topology view or `show topology` to see the misconnection.
 
-Cabling documentation — labelling every cable with source port, destination port, and rail assignment — is not optional in a production AI cluster. NVIDIA's reference deployments include a specific labelling standard for exactly this reason.
+Cabling documentation -- labelling every cable with source port, destination port, and rail assignment -- is not optional in a production AI cluster. NVIDIA's reference deployments include a specific labelling standard for exactly this reason.
 
 > **Real deployment**: A structured cabling patch panel for a DGX SuperPOD installation.
 > MPO fibre trunks fanned out to individual LC or OSFP connections. Each connection
@@ -407,16 +407,16 @@ Cabling documentation — labelling every cable with source port, destination po
 
 ---
 
-## Act 8 — Putting it together: topology sizing decisions
+## Act 8 -- Putting it together: topology sizing decisions
 
-The calculations from Acts 2–6 combine into a topology sizing workflow. An engineer given a set of requirements (number of nodes, required AllReduce bandwidth, budget) follows this sequence:
+The calculations from Acts 2-6 combine into a topology sizing workflow. An engineer given a set of requirements (number of nodes, required AllReduce bandwidth, budget) follows this sequence:
 
 <TopologySizingWorkflowViz />
 
 **Step 1: Calculate NIC bandwidth**
-`Total NIC bandwidth = node count × NICs per node × NIC speed`
+`Total NIC bandwidth = node count x NICs per node x NIC speed`
 
-For 128 DGX H100 nodes: 128 × 8 × 400G = 409.6 Tb/s
+For 128 DGX H100 nodes: 128 x 8 x 400G = 409.6 Tb/s
 
 **Step 2: Choose target oversubscription**
 For AI training: 1:1 (non-blocking). For mixed workloads: up to 2:1.
@@ -426,51 +426,51 @@ At 1:1: fabric must carry 409.6 Tb/s. Bisection must carry 204.8 Tb/s.
 
 **Step 4: Choose switch radix and calculate stage count**
 With 64-port switches (32 downlinks, 32 uplinks per leaf):
-- 128 nodes × 8 NICs = 1,024 NIC connections
+- 128 nodes x 8 NICs = 1,024 NIC connections
 - At 32 downlinks per leaf: 1,024 / 32 = 32 leaf switches
-- 32 leaf switches × 32 uplinks = 1,024 uplinks to spine
+- 32 leaf switches x 32 uplinks = 1,024 uplinks to spine
 - At 32 ports per spine switch (all uplinks): 1,024 / 32 = 32 spine switches
 - This is a 2-stage design (32 leaf + 32 spine = 64 switches)
 
 Check non-blocking:
-- Each leaf: 32 downlinks × 400G = 12.8 Tb/s downlink
-- Each leaf: 32 uplinks × 400G = 12.8 Tb/s uplink
-- 1:1 → non-blocking ✓
+- Each leaf: 32 downlinks x 400G = 12.8 Tb/s downlink
+- Each leaf: 32 uplinks x 400G = 12.8 Tb/s uplink
+- 1:1 -> non-blocking [ok]
 
 **Step 5: Calculate AllReduce hop count**
-2-stage (leaf-spine): 2 hops (DGX → Leaf → Spine → Leaf → DGX) = 4 total traversals = 2 round trips
+2-stage (leaf-spine): 2 hops (DGX -> Leaf -> Spine -> Leaf -> DGX) = 4 total traversals = 2 round trips
 
 **Step 6: Verify with buffer calculation**
-32-node AllReduce burst per rail: 32 × 400G × 1ms = 1.6 Gb = 200 MB needed per switch
-Spectrum-X SN5600 shared buffer: 64 MB — tight but manageable with per-packet load balancing distributing the burst across multiple uplinks.
+32-node AllReduce burst per rail: 32 x 400G x 1ms = 1.6 Gb = 200 MB needed per switch
+Spectrum-X SN5600 shared buffer: 64 MB -- tight but manageable with per-packet load balancing distributing the burst across multiple uplinks.
 
 **The 128-node BasePOD conclusion**: A 2-stage, 64-port switch, non-blocking design with Spectrum-X SN5600 supports full AllReduce at line rate with adequate buffer headroom when RSHP is enabled.
 
 ---
 
-## Act 9 — Lab 4 preparation: comparing two topology proposals
+## Act 9 -- Lab 4 preparation: comparing two topology proposals
 
-Lab 4 presents a topology decision scenario. A team is deploying 64 DGX H100 nodes and has received two proposals from different integrators. The learner must evaluate which supports full AllReduce bandwidth and which does not — using the calculations from this chapter.
+Lab 4 presents a topology decision scenario. A team is deploying 64 DGX H100 nodes and has received two proposals from different integrators. The learner must evaluate which supports full AllReduce bandwidth and which does not -- using the calculations from this chapter.
 
 ### Proposal A: 32-port switches, 3 stages
 
 ```
 Leaf switches:    32 switches
-  Downlinks:       16 ports × 400G to DGX nodes
-  Uplinks:         16 ports × 400G to spine
+  Downlinks:       16 ports x 400G to DGX nodes
+  Uplinks:         16 ports x 400G to spine
 
 Spine switches:  16 switches
-  Downlinks:       32 ports × 400G to leaf
+  Downlinks:       32 ports x 400G to leaf
   Uplinks:         0 (2-stage only)
 
-Wait — this requires 16 uplinks per leaf, but only 16 spine switches.
-Each leaf sends 1 uplink to each spine. 32 leafs × 16 uplinks = 512 uplink connections.
-16 spine switches × 32 ports = 512 connections. Matches. ✓
+Wait -- this requires 16 uplinks per leaf, but only 16 spine switches.
+Each leaf sends 1 uplink to each spine. 32 leafs x 16 uplinks = 512 uplink connections.
+16 spine switches x 32 ports = 512 connections. Matches. [ok]
 
 Oversubscription check:
-  Leaf downlinks:   32 switches × 16 ports × 400G = 204.8 Tb/s
-  Leaf uplinks:     32 switches × 16 ports × 400G = 204.8 Tb/s
-  Ratio: 1:1 → non-blocking ✓
+  Leaf downlinks:   32 switches x 16 ports x 400G = 204.8 Tb/s
+  Leaf uplinks:     32 switches x 16 ports x 400G = 204.8 Tb/s
+  Ratio: 1:1 -> non-blocking [ok]
 
 Total switches: 32 leaf + 16 spine = 48 switches
 AllReduce hops: 2 (non-blocking, direct path)
@@ -480,18 +480,18 @@ AllReduce hops: 2 (non-blocking, direct path)
 
 ```
 Leaf switches:    8 switches (one per GPU rail)
-  Downlinks:       32 ports × 400G to DGX nodes
-  Uplinks:         32 ports × 400G to spine
+  Downlinks:       32 ports x 400G to DGX nodes
+  Uplinks:         32 ports x 400G to spine
 
 Spine switches:  32 switches
-  Downlinks:       8 ports × 400G to leaf
+  Downlinks:       8 ports x 400G to leaf
 
-Wait — 64-node cluster, 8 NICs per node = 512 NICs.
+Wait -- 64-node cluster, 8 NICs per node = 512 NICs.
 8 leaf switches with 32 downlinks each = 256 NIC connections. Only 256 of 512 are connected.
-This configuration can only support 32 nodes, not 64. ✗
+This configuration can only support 32 nodes, not 64. [x]
 ```
 
-Proposal B as stated has an error — 8 leaf switches with 32 downlinks each gives only 256 NIC connections, insufficient for 64 nodes × 8 NICs = 512 connections. The vendor specified too few leaf switches for the stated node count. Correcting this to 16 leaf switches would provide the 512 connections needed. But then 16 leaf × 32 uplinks = 512 uplinks to spine, requiring 32 spine switches with 16 active ports each. With 64-port spine switches, 48 of 64 ports on every spine switch would be dark — 75% port waste. This is technically functional but economically irrational: you are paying for 64-port switch hardware while using fewer than 16 ports. The actual root failure of Proposal B is not switch radix — it is that the vendor quoted the wrong leaf count for the node target.
+Proposal B as stated has an error -- 8 leaf switches with 32 downlinks each gives only 256 NIC connections, insufficient for 64 nodes x 8 NICs = 512 connections. The vendor specified too few leaf switches for the stated node count. Correcting this to 16 leaf switches would provide the 512 connections needed. But then 16 leaf x 32 uplinks = 512 uplinks to spine, requiring 32 spine switches with 16 active ports each. With 64-port spine switches, 48 of 64 ports on every spine switch would be dark -- 75% port waste. This is technically functional but economically irrational: you are paying for 64-port switch hardware while using fewer than 16 ports. The actual root failure of Proposal B is not switch radix -- it is that the vendor quoted the wrong leaf count for the node target.
 
 The lab exercises this calculation: given a node count and switch radix, determine how many switches are needed, whether the design is non-blocking, and what the AllReduce hop count will be. This is the core skill a network engineer needs before committing to a hardware order for a new AI cluster.
 
@@ -501,14 +501,14 @@ The lab exercises this calculation: given a node count and switch radix, determi
 
 The single leaf switch you have been diagnosing for six chapters now has a place in a much larger picture.
 
-You know what bisection bandwidth is and why full bisection is required for AllReduce at line rate. You know the k-ary fat-tree formula — how switch radix and stage count determine maximum cluster size and whether the fabric can support non-blocking all-to-all communication.
+You know what bisection bandwidth is and why full bisection is required for AllReduce at line rate. You know the k-ary fat-tree formula -- how switch radix and stage count determine maximum cluster size and whether the fabric can support non-blocking all-to-all communication.
 
 You know the BasePOD (32 nodes, 2 stages, 8 leaf + 32 spine) and SuperPOD (256 nodes, 3 stages) as concrete reference designs with specific port allocations, switch counts, and hop distances. You know how the extra stages in a SuperPOD double the AllReduce hop count and why that matters for JCT.
 
-You know oversubscription as a calculable number — downlink bandwidth divided by uplink bandwidth — and why a 2:1 oversubscription does not give you 50% throughput in an AI cluster: it gives you PFC storms on every AllReduce barrier because statistical multiplexing does not apply when every GPU sends simultaneously.
+You know oversubscription as a calculable number -- downlink bandwidth divided by uplink bandwidth -- and why a 2:1 oversubscription does not give you 50% throughput in an AI cluster: it gives you PFC storms on every AllReduce barrier because statistical multiplexing does not apply when every GPU sends simultaneously.
 
-You know ROD and RUD as wiring philosophies — ROD for pure training (clean rail diagnostics, one-hop AllReduce), RUD for mixed workloads (higher per-node bandwidth, less diagnostic clarity). You know the buffer depth trade-off: deep buffers absorb AllReduce bursts at the cost of base latency; shallow buffers require perfect load balancing or they overflow before PFC can respond.
+You know ROD and RUD as wiring philosophies -- ROD for pure training (clean rail diagnostics, one-hop AllReduce), RUD for mixed workloads (higher per-node bandwidth, less diagnostic clarity). You know the buffer depth trade-off: deep buffers absorb AllReduce bursts at the cost of base latency; shallow buffers require perfect load balancing or they overflow before PFC can respond.
 
-And you know the cabling constraints — connector types, reach limitations, and the critical importance of correct rail assignment — because one wrong cable can create a topology asymmetry that no diagnostic counter will directly reveal.
+And you know the cabling constraints -- connector types, reach limitations, and the critical importance of correct rail assignment -- because one wrong cable can create a topology asymmetry that no diagnostic counter will directly reveal.
 
-[Continue to Chapter 8 →](/learn/ch8-nccl-performance)
+[Continue to Chapter 8 ->](/learn/ch8-nccl-performance)

@@ -205,7 +205,7 @@ export function DPUExplainerViz() {
       {mode === "in_dgx" && (
         <div className="space-y-4">
           <p className="text-sm leading-7 text-slate-300">
-            A DGX H100 node has both types: 8 ConnectX-7 HCAs for the compute fabric, and 2 BlueField-3 DPUs for the storage fabric and security. They serve completely different purposes on completely separate networks.
+            A DGX H100 or H200 node uses 8 ConnectX-7 HCAs for the compute fabric plus 2 dual-port ConnectX-7 cards for storage and in-band management. BlueField-3 enters the picture on later platforms such as DGX B200 and GB200, where storage and security offload move onto the DPU itself.
           </p>
 
           <div className="rounded-xl bg-slate-800/50 p-4">
@@ -213,7 +213,7 @@ export function DPUExplainerViz() {
             <div className="space-y-2">
               {[
                 { name: "ConnectX-7 × 8", count: "One per GPU", network: "Compute fabric", purpose: "AllReduce, RDMA training traffic — Rails 0–7", color: "#1e40af" },
-                { name: "BlueField-3 × 2", count: "One per CPU socket", network: "Storage fabric", purpose: "NVMe-oF storage, management, security offload", color: "#6d28d9" },
+                { name: "BlueField-3 × 2", count: "Slot1 / Slot2", network: "Storage fabric", purpose: "NVMe-oF storage and in-band management", color: "#6d28d9" },
               ].map(item => (
                 <div key={item.name} className="rounded-xl p-3"
                   style={{ backgroundColor: item.color + "22", border: `1px solid ${item.color}44` }}>
@@ -236,7 +236,7 @@ export function DPUExplainerViz() {
 
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
             <span className="font-semibold">Important: </span>
-            ConnectX-7 and BlueField-3 are on different physical networks. The ConnectX-7s connect to InfiniBand or Spectrum-X switches. The BlueField-3s connect to Ethernet storage switches. They never share a switch. This physical separation is what prevents storage traffic from impacting training performance.
+            On DGX H100 and H200, the compute and storage fabrics are still physically separate, but both use ConnectX-7 adapters. The compute HCAs connect to InfiniBand or Spectrum-X switches. The Slot1 and Slot2 dual-port ConnectX-7 cards connect to the Ethernet storage fabric. This physical separation is what prevents storage traffic from impacting training performance.
           </div>
         </div>
       )}

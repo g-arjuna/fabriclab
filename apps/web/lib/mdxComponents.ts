@@ -138,6 +138,15 @@ import { StorageFrameAnatomyViz } from "@/components/visualisations/StorageFrame
 import { GDSPathViz } from "@/components/visualisations/GDSPathViz"
 import { StorageDiagnosticsViz } from "@/components/visualisations/StorageDiagnosticsViz"
 import { ComputeVsStorageFabricViz } from "@/components/visualisations/ComputeVsStorageFabricViz"
+import { ThreeFabricMapViz } from "@/components/visualisations/ThreeFabricMapViz"
+import { BMCArchitectureViz } from "@/components/visualisations/BMCArchitectureViz"
+import { IPMIProtocolViz } from "@/components/visualisations/IPMIProtocolViz"
+import { RedfishAPIViz } from "@/components/visualisations/RedfishAPIViz"
+import { OOBTopologyViz } from "@/components/visualisations/OOBTopologyViz"
+import { SwitchMgmtVsDataViz } from "@/components/visualisations/SwitchMgmtVsDataViz"
+import { UFMManagementPlaneViz } from "@/components/visualisations/UFMManagementPlaneViz"
+import { BF3ManagementArchViz } from "@/components/visualisations/BF3ManagementArchViz"
+import { OOBSecurityViz } from "@/components/visualisations/OOBSecurityViz"
 import {
   LeafSwitchProcessingViz,
   SpineForwardingViz,
@@ -278,6 +287,15 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   GDSPathViz,
   StorageDiagnosticsViz,
   ComputeVsStorageFabricViz,
+  ThreeFabricMapViz,
+  BMCArchitectureViz,
+  IPMIProtocolViz,
+  RedfishAPIViz,
+  OOBTopologyViz,
+  SwitchMgmtVsDataViz,
+  UFMManagementPlaneViz,
+  BF3ManagementArchViz,
+  OOBSecurityViz,
   LeafSwitchProcessingViz,
   SpineForwardingViz,
   DestinationNICDeliveryViz,

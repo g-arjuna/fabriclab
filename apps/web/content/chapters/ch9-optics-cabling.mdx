@@ -18,7 +18,7 @@ explains what it takes to make that assumption true.
 
 The physical layer in an AI cluster is not passive. It is an active, engineered,
 thermally significant system. The optics industry is moving faster than switch
-ASICs — 400G is the H100 baseline, 800G is ramping now, 1.6T is arriving in
+ASICs -- 400G is the H100 baseline, 800G is ramping now, 1.6T is arriving in
 2026, and co-packaged optics will fundamentally change how AI switches are
 built and managed. If you are sizing, deploying, or troubleshooting an
 AI fabric, the physical layer is not infrastructure background noise.
@@ -26,7 +26,7 @@ It is a primary constraint.
 
 ---
 
-## Act 1 — Why the physical layer now defines AI cluster performance
+## Act 1 -- Why the physical layer now defines AI cluster performance
 
 For most of networking history, the physical layer was invisible to network
 engineers. You plugged in a cable, the link came up, and you moved on.
@@ -35,14 +35,14 @@ The interesting work happened at layer 2 and above.
 AI clusters broke this assumption along three dimensions simultaneously.
 
 **Bandwidth density**. A DGX H100 node has eight ConnectX-7 NICs, each running
-at 400 Gbps. Eight ports × 400 Gbps = 3.2 Tbps per node of total network
-bandwidth. The switch that aggregates 32 DGX nodes must handle 32 × 400 Gbps =
-12.8 Tbps on its downlink side alone — and it must do this from a
+at 400 Gbps. Eight ports x 400 Gbps = 3.2 Tbps per node of total network
+bandwidth. The switch that aggregates 32 DGX nodes must handle 32 x 400 Gbps =
+12.8 Tbps on its downlink side alone -- and it must do this from a
 one-rack-unit chassis. Delivering that bandwidth density requires precision
 engineering at the photon level. There is no headroom for mediocre cabling.
 
 **Distance sensitivity**. AllReduce in a DGX SuperPOD traverses four hops:
-NIC → leaf → spine → leaf → NIC. Each hop crosses a cable. At 400 Gbps with
+NIC -> leaf -> spine -> leaf -> NIC. Each hop crosses a cable. At 400 Gbps with
 PAM-4 modulation, that cable must maintain single-photon-level signal integrity
 across every lane, simultaneously, with sub-nanosecond timing precision.
 A damaged cable that would have been tolerable at 10 Gbps destroys the
@@ -50,7 +50,7 @@ signal at 400 Gbps. Physical quality standards that were aspirational in
 enterprise networking are mandatory minimums in AI clusters.
 
 **Thermal coupling**. A single 64-port 800G leaf switch approaches 1,500 watts
-of power — roughly 1,000 watts from the optics alone. Multiply by eight leaf
+of power -- roughly 1,000 watts from the optics alone. Multiply by eight leaf
 switches in a DGX BasePOD and the switching layer alone consumes 12 kilowatts.
 The cooling infrastructure needed to support AI clusters is driven significantly
 by the optics inside the switches, not just the GPUs. The physical layer is an
@@ -58,18 +58,18 @@ energy system, not just a signal system.
 
 These three pressures are why the optics industry is reinventing itself around
 AI cluster requirements. Speed is doubling faster than transistor density.
-Form factors are being redesigned from scratch. The DSP — the chip inside every
-transceiver that decodes the signal — is migrating from pluggable modules
+Form factors are being redesigned from scratch. The DSP -- the chip inside every
+transceiver that decodes the signal -- is migrating from pluggable modules
 into the switch ASIC itself.
 
 Understanding this trajectory is not academic. The cables you are specifying
 today, the switch ports you are choosing, and the cabling infrastructure you
-are laying — these decisions have a lifetime measured in years during which
+are laying -- these decisions have a lifetime measured in years during which
 the cluster will scale through multiple optics generations.
 
 ---
 
-## Act 2 — The speed roadmap: where 400G, 800G, and 1.6T sit today
+## Act 2 -- The speed roadmap: where 400G, 800G, and 1.6T sit today
 
 The optics industry measures progress in generations of port speed. Each
 generation doubles throughput per port and requires substantially more
@@ -79,28 +79,28 @@ sophisticated signal engineering.
 
 The current landscape, as of 2026:
 
-**400G per port** — the H100 DGX baseline. Every ConnectX-7 NIC on a DGX H100
+**400G per port** -- the H100 DGX baseline. Every ConnectX-7 NIC on a DGX H100
 node runs at 400G. Every OSFP port on the SN5600 leaf switch runs at 400G.
 This generation is mature and widely deployed. Supply is stable, costs are
 falling. 400G pluggable optics are the anchor of every AI cluster in production
 today.
 
-**800G per port** — the H200 and B200 (Blackwell) era. These next-generation
+**800G per port** -- the H200 and B200 (Blackwell) era. These next-generation
 DGX systems expose 800G on their NIC ports, requiring switches with 800G
 QSFP-DD or OSFP ports on the downlink side. 800G is ramping fast. According
-to Dell'Oro Group's 2025–2026 forecasts, 800G is the fastest-growing segment
+to Dell'Oro Group's 2025-2026 forecasts, 800G is the fastest-growing segment
 in the AI networking market. Nearly all hyperscalers have moved or are moving
 to 800G as their baseline for new deployments.
 
-**1.6T per port** — early ramp beginning in 2026. The technology was
+**1.6T per port** -- early ramp beginning in 2026. The technology was
 demonstrated at industry events in 2025. Volume production is limited to
 select NVIDIA and hyperscale deployments, with broader availability expected
-through 2026–2027. 1.6T is based on 8 × 200G lanes using the 448G PAM-4
-standard, and uses a new form factor — OSFP-XD (OSFP Extended Density).
+through 2026-2027. 1.6T is based on 8 x 200G lanes using the 448G PAM-4
+standard, and uses a new form factor -- OSFP-XD (OSFP Extended Density).
 The Open Compute Project has standardised OSFP-XD as the primary 1.6T carrier.
 
-**3.2T per port** — demonstrated in 2025, commercial deployments expected by
-2026–2027. Uses 16 lanes at 200G each. This generation requires infrastructure
+**3.2T per port** -- demonstrated in 2025, commercial deployments expected by
+2026-2027. Uses 16 lanes at 200G each. This generation requires infrastructure
 built to OSFP-XD density and is primarily relevant for planning longer-term
 cabling plant investments.
 
@@ -117,7 +117,7 @@ The mapping between DGX generations and optics generations is direct:
 The implication for infrastructure decisions: if you are installing a cabling
 plant today, the fiber runs you lay and the patch panel infrastructure you
 build will serve multiple optics generations. The physical fiber is not
-the constraint — OM4 fiber that supports 400G will support 800G and 1.6T
+the constraint -- OM4 fiber that supports 400G will support 800G and 1.6T
 with upgraded transceivers. What changes per generation is the pluggable
 module, the switch port, and the cabling end connector type.
 
@@ -126,7 +126,7 @@ switches for a 3-year refresh cycle.
 
 ---
 
-## Act 3 — How a signal becomes a packet: the demux → DSP → SerDes → ASIC chain
+## Act 3 -- How a signal becomes a packet: the demux -> DSP -> SerDes -> ASIC chain
 
 Before we talk about cables, form factors, and connectors, we need to
 understand the signal processing chain inside the switch. This chain explains
@@ -146,7 +146,7 @@ If optical, the transceiver converts photons to electrical signals internally.
 **2. The demultiplexer splits the signal into lanes**
 
 400G does not arrive as a single 400G stream. It arrives as multiple
-lanes running in parallel — for example, eight lanes at 50 Gbps each,
+lanes running in parallel -- for example, eight lanes at 50 Gbps each,
 or four lanes at 100 Gbps each. A demultiplexer (demux) separates the
 incoming signal into these individual lanes and routes each one to a
 dedicated DSP input.
@@ -158,15 +158,15 @@ It performs four critical functions on each lane:
 
 *Demodulation*: interprets the voltage levels in the incoming PAM-4 signal
 and converts them to binary bits. A PAM-4 signal uses four voltage levels
-to represent two bits per symbol — the DSP must precisely distinguish
+to represent two bits per symbol -- the DSP must precisely distinguish
 between them despite noise accumulated over the cable run.
 
 *Forward Error Correction (FEC)*: checks and corrects bit errors introduced
-during transmission. At 400G and above, FEC is mandatory — the raw bit
+during transmission. At 400G and above, FEC is mandatory -- the raw bit
 error rate of PAM-4 over typical cable runs is too high for reliable
 communication without correction. Common algorithms are RS-FEC (Reed-Solomon)
 and LDPC (Low-Density Parity-Check). FEC adds approximately 100 nanoseconds
-of latency per hop — a cost that is paid on every link in every AllReduce path.
+of latency per hop -- a cost that is paid on every link in every AllReduce path.
 
 *Clock Data Recovery (CDR)*: extracts timing information from the incoming data
 stream and uses it to precisely sample each bit. At 400G speeds, the timing
@@ -174,7 +174,7 @@ window for sampling each bit is measured in picoseconds. CDR is what prevents
 accumulated timing drift from causing cascading errors.
 
 *Equalization*: compensates for signal distortion caused by the cable and
-connector. Cables have frequency-dependent attenuation — high-frequency
+connector. Cables have frequency-dependent attenuation -- high-frequency
 components of the signal travel slower and attenuate more than low-frequency
 components. Two equalization techniques are used: FFE (feed-forward equalization)
 pre-compensates the transmitted signal before it enters the cable, and DFE
@@ -194,25 +194,25 @@ lanes with the transceiver.
 Once the SerDes has assembled the bits into frames, the PFE can parse the
 Ethernet or InfiniBand packet, look up the destination, and forward it.
 
-The entire chain runs in reverse for transmitted packets: PFE → SerDes →
-DSP (modulation, FEC encoding, equalization) → multiplexer (combines lanes) →
-pluggable module (converts to optical or electrical) → cable.
+The entire chain runs in reverse for transmitted packets: PFE -> SerDes ->
+DSP (modulation, FEC encoding, equalization) -> multiplexer (combines lanes) ->
+pluggable module (converts to optical or electrical) -> cable.
 
 **The cost of this chain**
 
-The DSP is the dominant cost centre. It consumes approximately 20–40% of
+The DSP is the dominant cost centre. It consumes approximately 20-40% of
 the bill of materials for a pluggable module and roughly 50% of the module's
-power dissipation. A 400G QSFP-DD module draws 3–4 watts in total — the
-DSP accounts for 1.5–2 watts of that. An 800G OSFP module draws 12–15 watts.
+power dissipation. A 400G QSFP-DD module draws 3-4 watts in total -- the
+DSP accounts for 1.5-2 watts of that. An 800G OSFP module draws 12-15 watts.
 
-This cost structure explains why three disruptive technologies — CPO, LPO,
-and LRO — are entering the market. Each one moves some or all DSP function
+This cost structure explains why three disruptive technologies -- CPO, LPO,
+and LRO -- are entering the market. Each one moves some or all DSP function
 out of the pluggable module and into the switch ASIC, which is already
 cooled by the same heatsink. We return to this in Act 9.
 
 ---
 
-## Act 4 — PAM-4: why the industry moved away from NRZ and what it costs
+## Act 4 -- PAM-4: why the industry moved away from NRZ and what it costs
 
 To understand why high-speed optics are hard, you need to understand the
 modulation scheme that enables them.
@@ -226,7 +226,7 @@ As you increase the baud rate (symbols per second), the electrical signal at
 the receiving end degrades due to intersymbol interference, cable attenuation,
 and reflections. NRZ with two voltage levels runs out of signal integrity
 headroom at approximately 56 Gbps per lane under practical cable conditions.
-You cannot simply push NRZ faster — the error rate becomes unacceptable.
+You cannot simply push NRZ faster -- the error rate becomes unacceptable.
 
 **PAM-4: doubling the bits per symbol**
 
@@ -236,7 +236,7 @@ of one. At the same baud rate as NRZ, PAM-4 delivers twice the bandwidth.
 
 This is the insight that enabled 400G: instead of running a single lane
 at 400 Gbps (physically impossible today), you run eight lanes at 50 Gbps
-each with PAM-4 modulation, giving you 8 × 50 Gbps × 2 bits/symbol = 800 Gbps
+each with PAM-4 modulation, giving you 8 x 50 Gbps x 2 bits/symbol = 800 Gbps
 effective bit rate, which after protocol overhead yields 400G usable throughput.
 
 **The cost of PAM-4**
@@ -246,21 +246,21 @@ between adjacent voltage levels (the "eye opening") is proportionally smaller.
 Any noise that pushes a received voltage from one level toward an adjacent
 level causes a bit error. This is why:
 
-FEC is mandatory at 400G and above — the raw PAM-4 bit error rate over typical
-data center cable runs is typically in the range of 10⁻⁴ to 10⁻⁵, far too
-high for reliable networking without correction. FEC can reduce this to 10⁻¹²
+FEC is mandatory at 400G and above -- the raw PAM-4 bit error rate over typical
+data center cable runs is typically in the range of 10^-4 to 10^-5, far too
+high for reliable networking without correction. FEC can reduce this to 10^-12
 or better, but at the cost of computational work and latency.
 
-DSP equalization is mandatory — without FFE and DFE compensation, PAM-4
+DSP equalization is mandatory -- without FFE and DFE compensation, PAM-4
 eye diagrams at the receiver are too closed to decode reliably.
 
-Cable quality and length matter more than they did at NRZ speeds — a cable
+Cable quality and length matter more than they did at NRZ speeds -- a cable
 that barely passed specification for 100G might be marginal for 400G and
 will fail for 800G.
 
 **The lane count arithmetic**
 
-Understanding lane count × lane speed = total bandwidth is fundamental
+Understanding lane count x lane speed = total bandwidth is fundamental
 to reading datasheet specs:
 
 | Speed | Lanes | Lane speed | Modulation |
@@ -277,7 +277,7 @@ fiber strands the connector on the cable must carry.
 
 ---
 
-## Act 5 — Fiber: multi-mode vs single-mode, grades, and the distance boundary
+## Act 5 -- Fiber: multi-mode vs single-mode, grades, and the distance boundary
 
 Fiber optic cable transmits data as pulses of light. Two fundamentally
 different physical designs serve different distance requirements.
@@ -286,13 +286,13 @@ different physical designs serve different distance requirements.
 
 ### Multi-Mode Fiber (MMF)
 
-MMF has a core diameter of 50 micrometres — large enough for multiple light
+MMF has a core diameter of 50 micrometres -- large enough for multiple light
 paths (modes) to travel simultaneously. The light source is a VCSEL
-(Vertical-Cavity Surface-Emitting Laser) — a cheap, low-power laser
+(Vertical-Cavity Surface-Emitting Laser) -- a cheap, low-power laser
 that can be modulated at high speed without precision cooling or alignment.
 
 The multiple modes that propagate through MMF arrive at slightly different
-times, causing modal dispersion — a smearing of the signal over distance.
+times, causing modal dispersion -- a smearing of the signal over distance.
 This limits MMF to shorter reaches. The larger core and cheaper light source
 make it the right choice for short distances where cost matters.
 
@@ -308,12 +308,12 @@ connections within the same switch row.
 
 OM5 adds a second wavelength (953 nm alongside the standard 850 nm). With
 WDM (wavelength division multiplexing), OM5 can achieve 400G over 150m using
-only four fiber strands instead of eight — useful for congested cabling trays.
+only four fiber strands instead of eight -- useful for congested cabling trays.
 OM5 is backward compatible with OM4 transceivers.
 
 ### Single-Mode Fiber (SMF)
 
-SMF has a core diameter of 8–10 micrometres — narrow enough to allow only
+SMF has a core diameter of 8-10 micrometres -- narrow enough to allow only
 a single light path. The light source is a precision edge-emitting laser at
 1310 nm or 1550 nm wavelength. Because there is only one mode, there is no
 modal dispersion. SMF can carry signals for kilometres with only gradual
@@ -343,10 +343,10 @@ centre interconnects, not AI cluster internal fabric.
 
 The decision tree follows distance:
 
-Within a rack (1–5m): copper DAC or AEC — no fiber at all.
-Within a row (5–30m): OM4 MMF with AOC or SR4/SR8 pluggable.
-Cross-row within the same hall (30–100m): OM4 MMF SR4/SR8 pluggable.
-Cross-row in a large hall (100–500m): SMF DR4/DR8 pluggable.
+Within a rack (1-5m): copper DAC or AEC -- no fiber at all.
+Within a row (5-30m): OM4 MMF with AOC or SR4/SR8 pluggable.
+Cross-row within the same hall (30-100m): OM4 MMF SR4/SR8 pluggable.
+Cross-row in a large hall (100-500m): SMF DR4/DR8 pluggable.
 Cross-building within campus: SMF FR4.
 Between buildings or DCs: SMF LR4 or ZR/DWDM.
 
@@ -357,7 +357,7 @@ The server-to-leaf connections within the same rack use passive DAC copper.
 
 ---
 
-## Act 6 — Form factors: OSFP, QSFP-DD, and the port compatibility map
+## Act 6 -- Form factors: OSFP, QSFP-DD, and the port compatibility map
 
 A transceiver form factor defines the mechanical and electrical interface
 between the pluggable module and the switch port. Not all ports accept
@@ -370,16 +370,16 @@ transceivers that physically cannot be installed.
 
 QSFP28 supports 100G using four lanes at 25G each (NRZ modulation). This was
 the dominant form factor through the 100G era. A QSFP28 port is electrically
-identical to a QSFP+ port (40G) — full backward compatibility.
+identical to a QSFP+ port (40G) -- full backward compatibility.
 
 QSFP56 supports 200G using four lanes at 50G each (PAM-4). Some 200G switch
 deployments use this. Backward compatible with QSFP28 and QSFP+.
 
 QSFP-DD (Double Density) supports 400G or 800G using eight lanes. The extra
 four lanes (vs QSFP56) come from a second row of electrical contacts in the
-connector — the "double density" in the name. QSFP-DD is backward compatible
+connector -- the "double density" in the name. QSFP-DD is backward compatible
 with QSFP28, QSFP56, and QSFP+. This backward compatibility is its primary
-advantage — a switch bought today with QSFP-DD ports can accept 100G modules
+advantage -- a switch bought today with QSFP-DD ports can accept 100G modules
 from existing inventory while being ready for 400G and 800G upgrades.
 
 OSFP (Octal Small Form-factor Pluggable) was designed specifically for the
@@ -390,14 +390,14 @@ the 2026-era form factor for 1.6T links.
 
 ### The DGX H100 port identity
 
-Every DGX H100 node has eight OSFP ports — one per ConnectX-7 NIC. The
+Every DGX H100 node has eight OSFP ports -- one per ConnectX-7 NIC. The
 switch connecting these nodes (the SN5600 leaf switch in NVIDIA's reference
-design) also has OSFP ports. This is not a coincidence — NVIDIA designed
+design) also has OSFP ports. This is not a coincidence -- NVIDIA designed
 the H100 DGX system and the SN5600 to use the same form factor, enabling
 a single cable type to connect server to switch across all eight rails.
 
 This also means that when NVIDIA says "the same OSFP ports are used for
-both InfiniBand and Ethernet operation" — they mean the same physical port,
+both InfiniBand and Ethernet operation" -- they mean the same physical port,
 same transceiver, same cable. The mode is set in firmware on the ConnectX-7.
 This is the physical reality underlying Chapter 0's "same cable for IB and
 RoCEv2" statement.
@@ -409,15 +409,15 @@ determines switch total power, which determines rack cooling requirements:
 
 | Form factor | Speed | Module power |
 |---|---|---|
-| QSFP-DD | 400G | 3–4W per port |
-| QSFP-DD | 800G | 8–10W per port |
-| OSFP | 400G | 5–8W per port |
-| OSFP | 800G | 12–15W per port |
-| OSFP-XD | 1.6T | 20–25W projected |
+| QSFP-DD | 400G | 3-4W per port |
+| QSFP-DD | 800G | 8-10W per port |
+| OSFP | 400G | 5-8W per port |
+| OSFP | 800G | 12-15W per port |
+| OSFP-XD | 1.6T | 20-25W projected |
 
-A 64-port 800G switch with OSFP modules: 64 × 15W = 960W in optics alone.
+A 64-port 800G switch with OSFP modules: 64 x 15W = 960W in optics alone.
 Add ~500W for the switch ASIC on a 51.2 Tbps chip, and the total switch
-power approaches 1,500W — from a device roughly the width of a pizza box.
+power approaches 1,500W -- from a device roughly the width of a pizza box.
 
 Eight such switches in a DGX BasePOD compute fabric: 12,000W from switching
 alone. This is before accounting for the 32 DGX nodes, storage switches,
@@ -426,7 +426,7 @@ minor thermal contribution. They are a primary input to rack cooling design.
 
 ---
 
-## Act 7 — Cable types: the practitioner's selection guide
+## Act 7 -- Cable types: the practitioner's selection guide
 
 Five types of cable serve AI cluster connections. The choice is determined
 primarily by distance and secondarily by whether you need field-replaceability
@@ -434,7 +434,7 @@ of the optical components.
 
 <CableSelectionViz />
 
-### Passive DAC — Direct Attach Copper
+### Passive DAC -- Direct Attach Copper
 
 A passive copper cable with OSFP or QSFP-DD connectors at both ends.
 No electronics inside the connectors. The electrical signal runs directly
@@ -443,19 +443,19 @@ through copper wire from port to port.
 Maximum distance: 7m for 400G, shorter for 800G.
 Power consumption: below 0.15W (essentially parasitic).
 Cost: the cheapest cable option by a wide margin.
-Latency: lowest of all options — no optical conversion, no active components.
+Latency: lowest of all options -- no optical conversion, no active components.
 
-Use for: server-to-ToR switch connections (1–3m typical in a standard rack).
+Use for: server-to-ToR switch connections (1-3m typical in a standard rack).
 This is the standard cable type for all eight DGX NIC to leaf switch connections
 within the same rack in a BasePOD.
 
 Failure mode: internal copper strand break, usually from excessive bending.
 When a passive DAC fails, the switch port goes Err-Disabled. The NIC, however,
-continues reporting the port as Active — it cannot detect the failure at the
+continues reporting the port as Active -- it cannot detect the failure at the
 electrical level. This two-views-disagree failure mode is exactly what Lab 0
-simulates. The diagnostic chain is: NCCL timeout → ibstat shows rail down →
-show interface counters on switch shows Err-Disabled → ethtool -S on the DGX
-NIC shows the NIC thinks the link is up → suspect cable.
+simulates. The diagnostic chain is: NCCL timeout -> ibstat shows rail down ->
+show interface counters on switch shows Err-Disabled -> ethtool -S on the DGX
+NIC shows the NIC thinks the link is up -> suspect cable.
 
 ### Active Electrical Cable / AEC
 
@@ -464,30 +464,30 @@ The electronics amplify and reshape the signal, allowing slightly longer
 copper runs than passive DAC at high speeds.
 
 Maximum distance: 7m at 800G.
-Power consumption: 1–2W per cable.
+Power consumption: 1-2W per cable.
 Cost: higher than passive DAC, lower than optical.
 Use for: intra-rack 800G connections where passive DAC cannot maintain
-signal integrity (at 800G, passive DAC is typically limited to 3–5m).
+signal integrity (at 800G, passive DAC is typically limited to 3-5m).
 
 ### Active Optical Cable / AOC
 
 Multi-mode fiber with fixed active optical transceivers built into the
-connector heads. The transceiver is not pluggable — it is permanently
+connector heads. The transceiver is not pluggable -- it is permanently
 attached to the cable.
 
 Maximum distance: 100m.
-Power consumption: 1–3W per cable.
+Power consumption: 1-3W per cable.
 Cost: lower than pluggable SR4 for distances under 100m.
 Weight and bend radius: significantly lighter and more flexible than copper
 DAC at longer lengths.
 
 Tradeoff: when the transceiver fails, the entire cable must be replaced.
-In a large cluster with thousands of AOC runs, this is manageable — a
+In a large cluster with thousands of AOC runs, this is manageable -- a
 field technician swaps the full assembly. In installations where the fiber
 run is difficult to access (through conduit, under raised floor), the
 inability to replace just the transceiver is a maintenance consideration.
 
-Use for: leaf-to-spine connections in BasePOD (typically 10–30m).
+Use for: leaf-to-spine connections in BasePOD (typically 10-30m).
 Also common for ToR-to-spine runs in end-of-row designs.
 
 ### Pluggable SR4 / SR8
@@ -501,7 +501,7 @@ Cost: higher than AOC, but transceiver and cable are replaced separately.
 
 The key advantage: when a transceiver fails in a high-density deployment,
 you replace the 4kg transceiver, not the cable run through the raised floor.
-The fiber plant — which may represent years of structured cabling investment —
+The fiber plant -- which may represent years of structured cabling investment --
 stays in place.
 
 Use for: any connection where the cable run has a lifetime significantly
@@ -511,7 +511,7 @@ replaced frequently due to operational environment.
 ### Pluggable DR4 / DR8 / FR4
 
 Single-mode fiber transceivers for longer distances. Same pluggable model
-as SR4/SR8 — separate transceiver and cable — but using SMF instead of MMF.
+as SR4/SR8 -- separate transceiver and cable -- but using SMF instead of MMF.
 
 DR4 (Data center Reach): 500m, MPO-12 connector. Cross-row and cross-hall.
 FR4 (Far Reach): 2km, LC duplex. Cross-building.
@@ -520,19 +520,19 @@ LR4 (Long Reach): 10km, LC duplex. Campus-scale.
 ### The selection decision tree
 
 ```
-Same rack, ≤3m:          Passive DAC
-Same rack, 3–7m (800G):  AEC
-Same row, 7–30m:         AOC or pluggable SR4/SR8
-Cross-row, 30–100m:      Pluggable SR4/SR8 (OM4 MMF)
-Cross-row, 100–500m:     Pluggable DR4/DR8 (SMF)
-Cross-building, ≤2km:    Pluggable FR4 (SMF)
-Cross-building, ≤10km:   Pluggable LR4 (SMF)
+Same rack, <=3m:          Passive DAC
+Same rack, 3-7m (800G):  AEC
+Same row, 7-30m:         AOC or pluggable SR4/SR8
+Cross-row, 30-100m:      Pluggable SR4/SR8 (OM4 MMF)
+Cross-row, 100-500m:     Pluggable DR4/DR8 (SMF)
+Cross-building, <=2km:    Pluggable FR4 (SMF)
+Cross-building, <=10km:   Pluggable LR4 (SMF)
 Between DCs:             ZR / DWDM coherent (not AI cluster fabric)
 ```
 
 ---
 
-## Act 8 — Connectors: LC and MPO/MTP
+## Act 8 -- Connectors: LC and MPO/MTP
 
 The connector is the physical interface between the cable and the transceiver.
 At AI cluster scales, connector selection determines fiber count per run,
@@ -540,7 +540,7 @@ cabling density, and termination cost.
 
 ### LC Connector
 
-The LC (Lucent Connector) is a duplex connector — two fibers, one for TX
+The LC (Lucent Connector) is a duplex connector -- two fibers, one for TX
 and one for RX. It is used with long-reach SMF transceivers (FR4, LR4).
 An LC connector handles a single 400G lane when used with WDM technology,
 or a full 400G link for FR4 modules (which multiplex four wavelengths over
@@ -553,7 +553,7 @@ a single fiber pair carries a complete high-speed link.
 
 MPO (Multi-fiber Push On) is the connector standard for multi-fiber
 assemblies. A single MPO connector can carry 8, 12, 16, or 24 fibers.
-MTP is Corning's brand name for an MPO connector — same physical standard,
+MTP is Corning's brand name for an MPO connector -- same physical standard,
 marginally different mechanical characteristics in some variants. The two
 names are used interchangeably in the field.
 
@@ -569,19 +569,19 @@ deployments use MPO-16 assemblies.
 
 ### Trunk cable systems
 
-At SuperPOD scale — 256 DGX nodes, thousands of individual fiber runs —
+At SuperPOD scale -- 256 DGX nodes, thousands of individual fiber runs --
 managing per-link cable assemblies is operationally impractical. Trunk cable
 systems are the standard solution.
 
 A trunk cable bundles multiple MPO-to-MPO fiber runs into a single sheath,
 typically 12, 24, or 48 fibres per trunk. Pre-terminated trunk assemblies
 are factory-built, tested, and shipped ready to plug in. The two ends are
-labeled with their port assignments — no field splicing, no field termination,
+labeled with their port assignments -- no field splicing, no field termination,
 no field testing.
 
 A fully deployed DGX SuperPOD has:
-- 256 DGX nodes × 8 NIC ports = 2,048 server-to-leaf runs
-- 8 leaf switches × 32 spine uplinks each = 256 leaf-to-spine runs
+- 256 DGX nodes x 8 NIC ports = 2,048 server-to-leaf runs
+- 8 leaf switches x 32 spine uplinks each = 256 leaf-to-spine runs
 - Total: approximately 2,300 individual cable runs
 
 These are physically organised into trunk bundles that run through overhead
@@ -592,13 +592,13 @@ MPO connectors in the field would take hours and introduces field quality risk.
 
 ---
 
-## Act 9 — CPO, LPO, LRO: why the DSP is leaving the pluggable module
+## Act 9 -- CPO, LPO, LRO: why the DSP is leaving the pluggable module
 
 The signal processing chain described in Act 3 has a problem: the DSP inside
 the pluggable module is expensive, hot, and increasingly redundant in a world
 where switch ASICs are already performing sophisticated signal processing.
 
-Three architectural responses are entering the market in 2025–2026, each
+Three architectural responses are entering the market in 2025-2026, each
 moving DSP function differently.
 
 <CPOEvolutionViz />
@@ -606,7 +606,7 @@ moving DSP function differently.
 ### The economics of DSP displacement
 
 Today, in a standard pluggable transceiver:
-- DSP: 20–40% of module Bill of Materials
+- DSP: 20-40% of module Bill of Materials
 - DSP: ~50% of module power consumption
 - DSP cost scales with lane count and speed
 
@@ -618,7 +618,7 @@ and thermal management. This is the economic pressure driving change.
 ### Linear-Drive Pluggable Optics (LPO)
 
 LPO removes the DSP from the pluggable module entirely. The switch ASIC
-takes over the DSP functions — FEC, equalization, clock recovery — for the
+takes over the DSP functions -- FEC, equalization, clock recovery -- for the
 connected link.
 
 The result: a dramatically simpler, smaller, cheaper pluggable module.
@@ -626,8 +626,8 @@ No DSP silicon. Lower power. Less heat per transceiver.
 
 The tradeoff: each switch vendor implements DSP differently. A pluggable LPO
 module designed for a Broadcom-based ASIC may not work with an Intel or
-NVIDIA ASIC. Mixed-vendor fabrics — common in large deployments where you
-may have multiple switch brands — face interoperability challenges that were
+NVIDIA ASIC. Mixed-vendor fabrics -- common in large deployments where you
+may have multiple switch brands -- face interoperability challenges that were
 not present with pluggable optics that contained their own standardised DSP.
 
 LPO primarily benefits switch vendors, who gain simpler, cheaper optics and
@@ -639,8 +639,8 @@ LRO is a partial solution: the DSP is removed from the receive path of the
 module only. The transmit path retains its DSP for signal conditioning before
 the signal enters the cable.
 
-This gives a better interoperability profile than full LPO — the receive-side
-DSP removal is more standardisable across vendors — while still reducing
+This gives a better interoperability profile than full LPO -- the receive-side
+DSP removal is more standardisable across vendors -- while still reducing
 module cost and power. LRO primarily benefits optics vendors: they can offer
 a reduced-cost, reduced-power module while the interface contract with the
 switch ASIC is more tractable than full LPO.
@@ -681,44 +681,44 @@ market size as optics costs are absorbed into switch pricing.
 The practical meaning for infrastructure teams: switches purchased from 2026
 onward may ship with CPO by default on some port types, particularly spine-layer
 connections where the reach profile is fixed at design time. Understanding CPO
-is not just academic preparation — it will appear in procurement decisions
+is not just academic preparation -- it will appear in procurement decisions
 within the current hardware refresh cycle.
 
 ---
 
-## Act 10 — Power and heat: the thermal budget behind the 80 kW/rack cluster
+## Act 10 -- Power and heat: the thermal budget behind the 80 kW/rack cluster
 
 The physical layer is an energy system. Every watt of optical power that
 enters a switch leaves as heat that must be removed. At AI cluster scale,
-this is not a minor concern — it is a primary design constraint that cascades
+this is not a minor concern -- it is a primary design constraint that cascades
 into data centre infrastructure, cooling system capacity, and operational costs.
 
 ### The switch power arithmetic
 
 A 64-port 400G switch with QSFP-DD modules:
-64 ports × 3.5W per module = 224W in optics
-Switch ASIC (25.6 Tbps tier) ≈ 250W
+64 ports x 3.5W per module = 224W in optics
+Switch ASIC (25.6 Tbps tier) ~= 250W
 Total switch power: ~500W
 
 A 64-port 800G switch with OSFP modules:
-64 ports × 14W per module = 896W in optics
-Switch ASIC (51.2 Tbps tier) ≈ 500W
+64 ports x 14W per module = 896W in optics
+Switch ASIC (51.2 Tbps tier) ~= 500W
 Total switch power: ~1,400W
 
-The step from 400G to 800G nearly triples switch power — from 500W to 1,400W —
+The step from 400G to 800G nearly triples switch power -- from 500W to 1,400W --
 because optics scale faster than ASIC power. The ASIC roughly doubles power
-when you double capacity. The optics nearly quadruple (4× more ports at 800G
+when you double capacity. The optics nearly quadruple (4x more ports at 800G
 vs 400G if you consider that 800G replaces two 400G switches in some designs,
-but at roughly 4× per-port power).
+but at roughly 4x per-port power).
 
 ### The BasePOD power profile
 
 A DGX BasePOD consists of:
 - 32 DGX H100 nodes: each draws ~10.2 kW under full GPU load
-  Total DGX power: 32 × 10.2 kW = 326 kW
-- 8 leaf switches (400G): 8 × 500W = 4 kW
-- 32 spine switches (400G): 32 × 300W = 9.6 kW
-  (spine switches are smaller — 8-port per switch)
+  Total DGX power: 32 x 10.2 kW = 326 kW
+- 8 leaf switches (400G): 8 x 500W = 4 kW
+- 32 spine switches (400G): 32 x 300W = 9.6 kW
+  (spine switches are smaller -- 8-port per switch)
 - Storage switches, management switches, out-of-band: ~5 kW
 
 Total BasePOD power: approximately 345 kW in a standard DGX H100 deployment.
@@ -729,28 +729,28 @@ Distributed across the racks:
 
 This is why AI clusters require direct liquid cooling, rear-door heat
 exchangers, or high-density air-cooling with elevated airflow rates.
-Standard enterprise rack cooling (which handles 5–15 kW/rack) is
+Standard enterprise rack cooling (which handles 5-15 kW/rack) is
 completely inadequate for AI cluster infrastructure.
 
 When you upgrade from 400G to 800G switching in a future refresh:
-- Leaf switch power: 8 × 1,400W = 11.2 kW (up from 4 kW)
+- Leaf switch power: 8 x 1,400W = 11.2 kW (up from 4 kW)
 - Additional cooling load from switching alone: 7.2 kW
 
 This 7 kW delta must be accommodated in the data centre's cooling design.
-It is not an afterthought — it must be specified in the building infrastructure
+It is not an afterthought -- it must be specified in the building infrastructure
 before the hardware is installed.
 
 ### What CPO and LPO actually solve
 
 The motivation for CPO and LPO is partly cost and partly thermal.
 
-In a CPO switch, the DSP's heat is managed by the switch ASIC heatsink —
+In a CPO switch, the DSP's heat is managed by the switch ASIC heatsink --
 an already-engineered, already-paid-for thermal solution. There are no dozens
 of individual hot pluggable module heads radiating heat into the switch airspace.
 CPO switches can potentially deliver the same throughput as pluggable switches
 at significantly lower total power.
 
-Early prototypes suggest CPO can reduce per-port power by 30–50% compared
+Early prototypes suggest CPO can reduce per-port power by 30-50% compared
 to pluggable equivalents. At the scale of a hyperscale AI cluster with
 thousands of switch ports, a 40% reduction in per-port switching power
 represents tens of megawatts of data centre power capacity that does not
@@ -758,7 +758,7 @@ need to be built.
 
 This is the economic case that is driving CPO from academic research to
 production deployment. It is not primarily about cost per module. It is about
-infrastructure capacity — the ability to deploy more compute per megawatt of
+infrastructure capacity -- the ability to deploy more compute per megawatt of
 facility power.
 
 ---
@@ -774,7 +774,7 @@ You know the optics roadmap: 400G is today's baseline, 800G is the current
 frontier, 1.6T is the near-term future. Each generation doubles the modulation
 complexity and the signal engineering challenge.
 
-You understand the signal chain: pluggable module → demux → DSP → SerDes →
+You understand the signal chain: pluggable module -> demux -> DSP -> SerDes ->
 ASIC, and why the DSP is the cost and thermal centre of the current architecture.
 
 You know PAM-4: four voltage levels, two bits per symbol, mandatory FEC,
@@ -801,8 +801,8 @@ And you understand the thermal reality: a 64-port 800G switch draws roughly
 clusters drive 80 kW/rack densities and why CPO exists.
 
 When the NCCL log shows a timeout on rail 4, and ibstat shows Err-Disabled
-on that rail, and ethtool -S eth3 shows the NIC thinks the link is active —
+on that rail, and ethtool -S eth3 shows the NIC thinks the link is active --
 you now know the complete physical layer story behind that single line of
 diagnostic output. A photon stopped. The question is which one, and why.
 
-[Continue to Chapter 10 →](/learn/ch10-storage-fabric)
+[Continue to Chapter 10 ->](/learn/ch10-storage-fabric)

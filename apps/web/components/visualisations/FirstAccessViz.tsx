@@ -66,10 +66,10 @@ const accessInfo: Record<Device, AccessInfo> = {
     border: "#fbbf24",
   },
   bluefield: {
-    device: "BlueField-3 DPU (Arm-side OS)",
-    physicalAccess: "SSH to DPU management IP (separate from DGX IP). Or from the DGX host: ssh ubuntu@192.168.100.2 via the rshim virtual network interface.",
+    device: "BlueField-3 adapter (B200-class)",
+    physicalAccess: "On later platforms such as DGX B200, SSH to the adapter management IP (separate from the host IP). Or from the host: ssh ubuntu@192.168.100.2 via the rshim virtual network interface.",
     terminalSettings: "SSH: ssh ubuntu@[dpu-mgmt-ip]\nFrom DGX host: ssh ubuntu@192.168.100.2 (rshim0 virtual interface)\nConsole via rshim: minicom -D /dev/rshim0/console",
-    loginCredentials: "Default: ubuntu / ubuntu or ubuntu with SSH key set during provisioning\nThe DPU has its own user accounts, completely independent of the DGX host.",
+    loginCredentials: "Default: ubuntu / ubuntu or ubuntu with SSH key set during provisioning\nThe adapter has its own user accounts, completely independent of the host. DGX H100/H200 do not use this BlueField path.",
     firstThingsToCheck: [
       "uname -a — confirms BF-Bundle OS version (Arm architecture)",
       "mlxconfig -d /dev/mst/mt41692_pciconf0 q — shows DPU configuration",

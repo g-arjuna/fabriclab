@@ -1,0 +1,592 @@
+---
+title: "Chapter 18: OOB and Management Network"
+module: "HPC Networking Foundations"
+level: "Advanced"
+estimatedMinutes: 60
+labLink: ""
+---
+
+You have just watched a training job die. The compute fabric is dark -- no ping, no SSH, no NCCL
+traffic. You need to find out what happened, power-cycle a hung node, check switch console output,
+and get things moving again. There is one problem: the compute fabric is what you normally use to
+reach everything.
+
+This is exactly why the out-of-band management network exists. It is a completely separate physical
+network -- separate switches, separate cables, separate IP ranges -- that gives you a path to every
+device in the cluster regardless of what the compute or storage fabric is doing. When everything
+else breaks, the OOB network is how you fix it.
+
+Chapter 1 introduced the concept and described the power-on sequence. This chapter goes inside the
+machinery: how the BMC works at the silicon level, what IPMI and Redfish actually exchange, how
+the switch management port differs from its data ports, how UFM reaches switches over the OOB
+network, and how the DGX B200's BlueField-3 changes the management architecture compared to H100.
+If you have ever wondered why you need a dedicated 1GbE management NIC when the server already has
+ten 100GbE ports, this chapter answers that question in full.
+
+## Act 1 -- The Three-Fabric Model Completed
+
+You have traced the compute fabric (Ch16) and the storage fabric (Ch17). The OOB management
+network is the third fabric. Unlike the first two, it is not designed for data throughput. It
+is designed for control-plane reliability: it must work when everything else does not.
+
+<ThreeFabricMapViz />
+
+The three fabrics carry fundamentally different traffic:
+
+**Compute fabric** -- GPU-to-GPU RDMA, AllReduce synchronisation, pipeline parallel messages.
+100/200/400 Gbps per port. Lossless with PFC. Rail-optimised topology. Lives on the QM9700
+or SN5600 switches.
+
+**Storage fabric** -- NVMe-oF checkpoint writes and dataset reads. 100 Gbps per port.
+No PFC. 2:1 oversubscription acceptable. Lives on the SN4600C switches.
+
+**OOB management fabric** -- BMC communication, SSH to switches, UFM polling, DCGM telemetry,
+firmware uploads, power control, virtual console. 1 Gbps per port. Standard L2 network.
+Completely physically separate. Lives on commodity 1GbE switches (Mellanox SN2201 or similar).
+
+As a network engineer, the OOB network is where your classical skills still apply directly.
+It is a flat L2 domain with a simple L3 gateway. No ECMP. No RDMA. No PFC. But it carries
+traffic that will determine whether you can recover from any failure in the other two fabrics.
+Getting the OOB network wrong -- wrong IP ranges, overlapping with production, inadequate
+switch redundancy -- is how a bad day becomes a catastrophic day.
+
+## Act 2 -- Inside the BMC: AST2600 Architecture
+
+Every DGX H100 has a Baseboard Management Controller. It is not running on the host CPU.
+It is a completely separate SoC (system-on-chip) soldered to the motherboard: the ASPEED
+AST2600. Understanding this chip is essential for understanding what IPMI and Redfish can
+actually do.
+
+<BMCArchitectureViz />
+
+The AST2600 is a dual-core ARM Cortex-A7 running at 1.2 GHz. It has its own DDR4 DRAM (typically
+512 MB to 1 GB), its own flash storage (128 MB SPI NOR for the BMC firmware), and its own
+dedicated 1GbE PHY that connects to the OOB management switch. It boots independently from
+the host server -- the BMC is powered by the server's standby power rail, which means it is
+alive as long as the server has AC mains power, even if the host is powered off.
+
+This has a critical operational implication: you can SSH into the BMC while the host is
+completely off and power-cycle it, read its power consumption, check hardware sensor values,
+and stream the virtual console output -- all without the host OS being involved at all.
+
+The AST2600 also has a direct connection to the host server's data planes:
+
+- **I2C/SMBus buses**: connects to every power regulator, fan controller, temperature sensor,
+  and voltage monitor on the motherboard. The BMC polls these continuously and logs readings
+  with timestamps. This is how IPMI sensor data is generated.
+- **LPC bus (Low Pin Count)**: the legacy path between the BMC and the host CPU. This is
+  how the BMC intercepts the host POST output and presents it on the virtual console.
+- **PCIe BMC virtual NIC**: in newer platforms, the BMC exposes a virtual NIC to the host
+  over PCIe. Host-to-BMC communication uses this path for in-band management (as opposed
+  to the dedicated 1GbE OOB port for out-of-band).
+- **VGA controller**: the AST2600 has a built-in 2D graphics controller that intercepts
+  the host server's video output and streams it over the network as the KVM-over-IP console.
+  The host never knows it is being watched.
+- **USB 2.0 controller**: used for virtual media -- mounting an ISO image from a management
+  workstation as a virtual USB drive on the host. This is how you provision OS images without
+  physically touching the server.
+
+The BMC runs a custom Linux distribution (typically Yocto-based) provided by NVIDIA for the
+DGX platform. NVIDIA calls their BMC management stack NVSM (NVIDIA System Management). The
+operating system on the BMC is separate from the DGX OS (Ubuntu) running on the host CPUs.
+
+## Act 3 -- IPMI: How It Works at the Protocol Level
+
+IPMI (Intelligent Platform Management Interface) is the industry standard protocol for
+hardware-level management. As a network engineer, you have probably used IPMI commands to
+power-cycle servers. But what is IPMI actually doing under the hood?
+
+<IPMIProtocolViz />
+
+IPMI defines a message-based protocol. Every message has a header containing:
+
+- **NetFn (Network Function)**: a 6-bit field that categorises the command. Common values:
+  `0x00` = Chassis commands (power control, boot order), `0x04` = Sensor commands,
+  `0x06` = Application commands (get device ID, self-test), `0x0A` = Storage commands
+  (event log, SDR -- Sensor Data Repository).
+- **Command**: an 8-bit opcode within the NetFn category. For example, within NetFn 0x00
+  (Chassis), Command 0x01 = Get Chassis Status, Command 0x02 = Chassis Control (the
+  power-on/off command).
+- **Data**: command-specific payload. The power control command carries one data byte:
+  0x00 = power down, 0x01 = power up, 0x02 = power cycle, 0x03 = hard reset.
+- **Checksum**: two 1-byte checksums, one covering the addressing bytes and one covering
+  the rest of the message.
+
+IPMI messages travel over several transport layers:
+
+**IPMI over LAN (IPMI 2.0)**: This is what you use when you run `ipmitool -H <bmc-ip>`
+from a management workstation. The message is encapsulated in UDP on port 623. IPMI 2.0
+added RAKP (Remote Authenticated Key-Exchange Protocol) for session establishment and
+HMAC-based authentication, replacing the weak MD5-based authentication in IPMI 1.5.
+
+```bash
+# Power status
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P <pass> chassis status
+
+# Power cycle
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P <pass> chassis power cycle
+
+# List all sensor readings (temperature, fan speed, voltage)
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P <pass> sdr elist
+
+# Get event log
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P <pass> sel list
+
+# Virtual console (SOL -- Serial Over LAN)
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P <pass> sol activate
+```
+
+**IPMI over KCS (Keyboard Controller Style)**: This is the in-band path. When the host OS
+runs `ipmitool` without a `-H` flag, it communicates with the local BMC via the KCS interface
+-- a small register-mapped I/O port (`0xCA0`/`0xCA2` on x86). The kernel `ipmi_si` module
+provides this path. Useful when you want to query sensor data from within the host OS without
+network access to the BMC.
+
+**Sensor Data Repository (SDR)**: The BMC maintains an SDR -- a catalogue of all sensors
+on the system. Each SDR record describes a sensor: its type (temperature, voltage, fan),
+its location (CPU 1, PCIe slot 3, PSU 2), its reading format, and its threshold values
+for warning and critical alarms. When you run `ipmitool sdr elist`, the ipmitool fetches
+these records from the SDR and formats them for display.
+
+## Act 4 -- Redfish: IPMI's Successor
+
+IPMI was designed in the late 1990s. Its binary protocol, weak authentication, and
+vendor-specific extensions had accumulated significant technical debt by the 2010s. Redfish
+is the DMTF's answer: a RESTful API over HTTPS that replaces IPMI for modern platforms.
+
+<RedfishAPIViz />
+
+Redfish is fundamentally different from IPMI in its architecture:
+
+**Transport**: HTTPS on port 443, not UDP on port 623. Standard TLS with certificates.
+No custom session negotiation -- standard HTTP session cookies or OAuth 2.0 tokens.
+
+**Data model**: JSON responses with a self-describing schema. The API root tells you what
+resources exist. Resources are navigable via URIs. You do not need to know command opcodes;
+you traverse a resource tree.
+
+**Discovery**: GET `/redfish/v1/` returns the ServiceRoot, which links to Systems, Managers,
+Chassis, and other top-level collections. No SDR catalogue needed -- the resource tree
+itself is the schema.
+
+The Redfish API tree for a DGX H100 looks like this:
+
+```
+GET /redfish/v1/
+  -> Systems/               (host CPU, memory, storage inventory)
+     -> Systems/1/          (the DGX host system)
+        -> Processors/      (Intel Xeon CPUs)
+        -> Memory/          (DRAM DIMMs)
+        -> NetworkInterfaces/ (the CX7 NICs visible to the host)
+        -> Storage/         (NVMe drives)
+        -> Actions/
+           -> ComputerSystem.Reset  (POST here to power cycle)
+  -> Managers/              (BMC management)
+     -> Managers/1/
+        -> EthernetInterfaces/ (BMC's own 1GbE port IP config)
+        -> LogServices/       (event logs)
+        -> VirtualMedia/      (ISO mounting)
+  -> Chassis/               (physical chassis)
+     -> Chassis/1/
+        -> Thermal/          (temperature sensors, fan RPM)
+        -> Power/            (power supplies, watt readings, efficiency)
+        -> PCIeDevices/      (PCIe topology as seen by BMC)
+```
+
+In practice, the transition from IPMI to Redfish is not complete in most DGX deployments.
+IPMI is still the primary tool for scripted power control and sensor polling because the
+tooling (`ipmitool`, Ansible IPMI module, monitoring exporters) is more mature. Redfish
+is preferred for firmware updates (no IPMI firmware update is reliable for a package the
+size of a DGX BMC image) and for integration with modern orchestration tools that speak
+REST natively.
+
+```bash
+# Redfish examples using curl
+# Get system overview
+curl -sk -u admin:pass https://10.0.1.10/redfish/v1/Systems/1 | python3 -m json.tool
+
+# Power off (GracefulShutdown keeps OS integrity)
+curl -sk -u admin:pass -X POST \
+  https://10.0.1.10/redfish/v1/Systems/1/Actions/ComputerSystem.Reset \
+  -H 'Content-Type: application/json' \
+  -d '{"ResetType": "GracefulShutdown"}'
+
+# Hard power cycle (use when host is hung)
+curl -sk -u admin:pass -X POST \
+  https://10.0.1.10/redfish/v1/Systems/1/Actions/ComputerSystem.Reset \
+  -H 'Content-Type: application/json' \
+  -d '{"ResetType": "PowerCycle"}'
+
+# Read all temperature sensors
+curl -sk -u admin:pass https://10.0.1.10/redfish/v1/Chassis/1/Thermal | \
+  python3 -c "import sys,json; d=json.load(sys.stdin); \
+  [print(t['Name'], t['ReadingCelsius']) for t in d['Temperatures']]"
+
+# Firmware update via Redfish MultipartHttpPush
+curl -sk -u admin:pass -X POST \
+  https://10.0.1.10/redfish/v1/UpdateService/Actions/UpdateService.SimpleUpdate \
+  -H 'Content-Type: application/json' \
+  -d '{"ImageURI": "http://10.0.1.1/firmware/dgx-bmc-v24.1.bin", "TransferProtocol": "HTTP"}'
+```
+
+## Act 5 -- OOB Switch Topology and IP Design
+
+The OOB management network is physically separate. It runs on its own switches -- typically
+the Mellanox SN2201, a 1RU switch with 48 x 1GbE RJ45 downlinks and 4 x 25GbE SFP28 uplinks.
+The SN2201 runs Cumulus Linux, same as the storage leaf switches, which means the same NVUE
+command set applies. One 48-port SN2201 can terminate the BMC ports for 16 DGX nodes (each
+DGX has one BMC RJ45), all the switch management ports (each ONYX/Cumulus switch has one
+dedicated management eth0 port), and the UFM server's management interface.
+
+<OOBTopologyViz />
+
+A BasePOD OOB network supports roughly:
+- 8 DGX nodes x 1 BMC port = 8 OOB connections
+- 8 DGX nodes x 1 in-band management port (Slot1 CX7, bonded) = used on compute fabric, not OOB
+- 4 leaf switches x 1 management port (eth0) = 4 OOB connections
+- 2 spine switches x 1 management port (eth0) = 2 OOB connections
+- 1 UFM server x 1 management port = 1 OOB connection
+- 1 storage switch x 1 management port (eth0) = 1 OOB connection
+Total: 16-20 ports consumed from a 48-port OOB switch for a single BasePOD.
+
+### IP addressing on the OOB network
+
+The OOB network uses a completely separate RFC 1918 range from the compute and storage fabrics.
+A common allocation pattern:
+
+| Device type | Example range | Notes |
+|---|---|---|
+| DGX BMC ports | 10.0.1.0/24 | One IP per DGX, statically assigned |
+| Switch management | 10.0.2.0/24 | eth0 on all leaf/spine switches |
+| UFM server | 10.0.3.1 | Static, critical |
+| Storage switch mgmt | 10.0.2.64/26 | Sub-block within switch range |
+| Management workstation | 10.0.0.1/24 | Gateway for OOB network |
+
+Do NOT use the same /24 for OOB as you use for compute or storage subnets. The most
+common mistake is allocating 10.20.x.x for everything and ending up with overlapping
+routes when you add more pods. OOB traffic should never route through the compute or
+storage fabric switches. It should always stay on its own physical switches, reaching
+the outside world via the management workstation's uplink to your corporate network.
+
+### VLANs on the OOB network
+
+Most OOB switches run untagged traffic on a single VLAN for simplicity. In multi-tenant
+or larger installations, you may VLAN-separate the BMC traffic from the switch management
+traffic for security. This prevents a compromised DGX host from reaching switch management
+interfaces directly. Both use the same physical switch but different VLAN tags:
+
+```bash
+# Cumulus Linux / NVUE on the SN2201 OOB switch
+# Create VLAN for BMC traffic
+nv set bridge domain br_default vlan 10
+# DGX BMC ports in VLAN 10
+nv set interface swp1-8 bridge domain br_default access 10
+# Switch management ports in VLAN 20
+nv set interface swp9-16 bridge domain br_default access 20
+nv config apply
+```
+
+## Act 6 -- Switch Management Port vs Data Ports
+
+As a network engineer who is used to in-band management, the distinction between switch
+management port and data ports matters here in ways that differ from enterprise switches.
+
+<SwitchMgmtVsDataViz />
+
+The ONYX and Cumulus Linux switches have a dedicated management Ethernet port -- typically
+labelled `mgmt` or `eth0` on the physical chassis. This is not a front-panel data port.
+It is a rear or side-panel RJ45 that connects to the OOB switch. The key properties:
+
+**Separate routing table**: The management port on Cumulus Linux runs in the VRF `mgmt`.
+This is a Linux VRF (Virtual Routing and Forwarding) instance -- a separate routing table
+that is completely isolated from the main forwarding table used by the data plane ports.
+Traffic sourced from or destined for `eth0` uses the `mgmt` VRF routes, not the main FIB.
+
+```bash
+# On a Cumulus Linux switch: check the management VRF routing table
+ip route show vrf mgmt
+
+# SSH into the switch uses mgmt VRF automatically if you SSH to eth0 IP
+# From the switch, to ping something using mgmt VRF explicitly:
+ip vrf exec mgmt ping 10.0.2.1
+
+# Management services (sshd, snmpd, etc.) listen only on mgmt VRF interface
+# unless explicitly configured otherwise
+```
+
+This separation has a critical implication: **if the compute fabric routing table is wrong
+or corrupted, it does not affect the switch management reachability**. You can always SSH
+into the switch via eth0 even if all 64 data ports are misconfigured. This is why you
+always configure the management port first and verify SSH connectivity before touching
+data plane configuration.
+
+**Bandwidth**: The management port is 1 Gbps, not 100/400 Gbps. It is not in the data
+plane ASIC -- it connects to a separate management CPU (typically an ARM core) that runs
+the switch OS. Heavy traffic on the management port (for example, a large `scp` of switch
+logs) does not affect forwarding performance. Conversely, a data plane ASIC storm (like
+a forwarding table corruption) does not crash the management CPU.
+
+**On ONYX switches**: The management interface is reached via `mgmt0` rather than `eth0`.
+ONYX's IB/Ethernet hybrid architecture has a dedicated management CPU with its own Linux
+instance. The ONYX CLI itself runs on this management CPU.
+
+```bash
+# From UFM or management workstation to an ONYX switch
+ssh admin@10.0.2.10
+
+# On the ONYX switch, the management interface config
+show interfaces mgmt0
+show ip interface mgmt0
+
+# Check management routing table (separate from IB subnet routing)
+show ip route vrf mgmt
+```
+
+## Act 7 -- UFM Management Plane: How It Reaches Switches
+
+UFM (Unified Fabric Manager) is the management plane for InfiniBand fabrics. You have seen
+it as a web GUI and as the source of topology visualisations. But as a network engineer,
+you want to know: how does UFM actually communicate with switches, and over which network?
+
+<UFMManagementPlaneViz />
+
+UFM runs on a dedicated server -- typically a standalone 2U server with its own BMC and
+OOB management connection. It needs two network connections:
+
+1. **OOB management connection**: UFM's management Ethernet port connects to the OOB
+   management switch. UFM uses this to SSH into every switch's `mgmt0` interface for
+   configuration pushes, log collection, and management-plane health checks.
+
+2. **InfiniBand connection**: UFM has an InfiniBand HCA connected to the fabric it manages.
+   This is how UFM discovers the fabric topology -- it uses the IB Subnet Manager protocol,
+   which runs directly over InfiniBand (not Ethernet). The SM sends `SubnGet` MADs
+   (Management Datagrams) to each switch port and node to discover LIDs, GUIDs, and link
+   properties.
+
+The key insight for network engineers: **UFM uses two completely different communication
+paths for two different functions**:
+
+- Fabric topology and LID assignment: InfiniBand MADs over the IB fabric itself.
+- Switch configuration, firmware updates, logging: SSH/REST over the OOB management network.
+
+This means if the OOB network is down, UFM can still see the fabric topology (via IB MADs)
+but cannot push configuration changes to switches. If the IB fabric is down, UFM cannot
+discover topology but can still SSH into switches via OOB for diagnostics.
+
+### UFM's switch management model
+
+When UFM needs to configure an ONYX switch, it SSHes into the switch's `mgmt0` interface
+and issues ONYX CLI commands programmatically, or calls the ONYX REST API. UFM maintains
+a list of all switch management IP addresses (the IPs you set on `mgmt0`). These must be
+reachable from UFM's OOB management interface.
+
+```bash
+# From UFM server, verifying OOB reachability to a spine switch
+ip vrf exec mgmt ping 10.0.2.10  # spine switch mgmt0 IP
+
+# Check UFM's list of managed switches
+# (In UFM web GUI: Fabric > Switches -- each row shows last management contact time)
+
+# UFM event log (on UFM server)
+tail -f /var/log/ufm/event.log | grep "switch\|mgmt\|SSH"
+```
+
+### Telemetry: DCGM and NVSM
+
+DCGM (Data Center GPU Manager) and NVSM (NVIDIA System Management) run as agents on each
+DGX node. They expose metrics -- GPU utilisation, temperature, PCIe error counts, NVLink
+bandwidth, power draw, fan speed -- via a local REST API and via NVIDIA's management stack.
+
+The monitoring collection path is in-band: the Prometheus/DCGM exporter on the DGX host
+listens on a TCP port (typically 9400), and a Prometheus scraper reaches it via the in-band
+management interface on the DGX's CX7 Slot1/Slot2. This is not the OOB network -- it is
+the DGX host's regular Ethernet interface. The OOB network is not involved in DCGM telemetry.
+
+```bash
+# On a DGX node: check DCGM exporter is running and serving metrics
+systemctl status dcgm-exporter
+curl http://localhost:9400/metrics | grep -E "dcgm_gpu_util|dcgm_mem_temp"
+
+# NVSM checks
+nvsm show health       # overall system health
+nvsm show gpus         # per-GPU state
+nvsm show nvlinks      # NVLink error counters
+nvsm show storage      # NVMe drive health
+```
+
+## Act 8 -- DGX B200 and BlueField-3: A Different Management Architecture
+
+The DGX H100 and H200 use a straightforward management model: the host CPU runs the OS,
+DCGM, and all management agents. The BMC is a separate controller for power and hardware
+monitoring only. The storage and management CX7 NICs are pure network adapters.
+
+The DGX B200 changes this. It replaces the two dual-port CX7 storage NICs with two
+dual-port BlueField-3 DPUs. These are not just NICs -- each BlueField-3 has its own
+ARM Cortex-A78 CPU complex (eight Cortex-A78 cores running at up to 3.0 GHz), its own
+DDR5 DRAM, and runs its own independent ARM Linux OS.
+
+<BF3ManagementArchViz />
+
+This matters for management because the BlueField-3's ARM cores are in the data path,
+not just monitoring it. On the DGX B200:
+
+- NVMe-oF initiator for storage: runs on the BlueField-3 ARM cores, not the host CPU.
+- In-band management NIC: the BlueField-3 acts as the network interface for the host's
+  in-band management traffic (SSH, DCGM exporter, monitoring).
+- OVS/networking offload: on B200, the BlueField-3 can run Open vSwitch in hardware,
+  offloading switching decisions from the host CPU.
+
+### rshim: the host-to-BlueField-3 communication path
+
+The host CPU communicates with the BlueField-3 via `rshim` -- a PCIe-based communication
+channel. rshim presents as a set of character devices on the host:
+
+- `/dev/rshim0/boot` -- write a BFB (BlueField-3 Bootstream Bundle) image here to
+  reflash the BlueField-3 OS.
+- `/dev/rshim0/console` -- character device giving console access to the BlueField-3's
+  ARM Linux.
+- `/dev/rshim0/misc` -- control channel for BF3 operations.
+
+The rshim channel is how you push firmware and OS updates to the BlueField-3 without
+physical access to the server:
+
+```bash
+# On the DGX B200 host: push a new BlueField-3 OS image (BFB file)
+# Requires rshim module loaded
+lsmod | grep rshim
+
+# Push the BFB image (this reflashes the BF3 and reboots it)
+bfb-install --rshim /dev/rshim0 --bfb bf3-bfb-24.1-ubuntu22.04.bfb
+
+# Monitor progress via console
+minicom -D /dev/rshim0/console
+
+# After reflash, SSH into the BlueField-3's ARM Linux directly
+# BF3 gets its own IP address on the OOB or management network
+ssh ubuntu@192.168.100.2  # default BF3 OOB IP (varies per deployment)
+```
+
+### BlueField-3 management interface
+
+The BlueField-3 exposes its own management interface (an out-of-band-equivalent path
+independent of the host OS). In DGX B200 deployments, each BF3 has an `oob_net0` interface
+that connects to the OOB switch alongside the host BMC. From the management workstation,
+you can reach the BF3's ARM Linux, inspect its NVMe-oF initiator state, check link counters
+on the storage ports, and upgrade its firmware -- all without the host DGX OS being involved.
+
+```bash
+# On the BlueField-3 ARM Linux (after SSH to BF3 IP):
+
+# Check NVMe-oF initiator state on the BF3
+nvme list-subsys
+
+# BlueField-3 port counters (storage ports)
+mlxlink -d /dev/mst/mt41692_pciconf0 -p 1 --show_counters
+
+# Check BF3 firmware version
+mlxfwmanager --query
+
+# Upgrade BF3 NIC firmware (separate from OS/BFB upgrade)
+mlxfwmanager --update -y /path/to/fw-ConnectX7-rel-28_40_1000.bin
+```
+
+This is the correct home for BlueField-3 engineering content. Ch0 and Ch1 mention that
+the DGX H100 does NOT have BF3. Ch10 describes the storage architecture difference.
+Ch18 is where you learn to actually operate the BF3 management layer.
+
+## Act 9 -- Security: Segmenting the Management Plane
+
+The OOB management network is high-value. If an attacker reaches it, they have access
+to power control, firmware update mechanisms, and console access for every node in the
+cluster. A compromised BMC is a compromised server. Getting the security posture of the
+OOB network right is not optional.
+
+<OOBSecurityViz />
+
+### Physical segmentation -- the first line
+
+The OOB management switch is physically separate from compute and storage switches. Its
+uplinks go to the management workstation or jump server, not to the production network.
+There is no route between the OOB 10.0.x.x subnet and the compute 10.10.x.x or storage
+10.20.x.x subnets. This is a routing policy decision -- enforce it at the L3 boundary.
+
+If you are using a jump server model (engineers SSH into a bastion host, then SSH to BMC
+addresses from there), the jump server is the only host with access to the OOB network.
+The jump server itself should be hardened, MFA-protected, and session-logged.
+
+### BMC authentication hardening
+
+Default BMC credentials are printed on service tag labels. Change them on every device
+before the cluster enters production:
+
+```bash
+# IPMI: change BMC password
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P oldpass \
+  user set password 2 newstrongpassword
+
+# Create a read-only monitoring user (for Prometheus IPMI exporter)
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P pass user set name 3 monitor
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P pass user set password 3 monitorpass
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P pass user priv 3 2  # 2 = USER privilege
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P pass user enable 3
+
+# Disable cipher suite 0 (unauthenticated -- a known IPMI vulnerability)
+ipmitool -I lanplus -H 10.0.1.10 -U admin -P pass lan set 1 cipher_privs .xxxxxxxxxxxxxxx
+```
+
+IPMI 2.0 with RAKP is the minimum. Disable IPMI 1.5 sessions if the BMC supports it.
+Prefer Redfish over IPMI where tooling permits -- Redfish uses TLS 1.2+ and standard
+certificate management rather than IPMI's custom session negotiation.
+
+### Switch management hardening
+
+On ONYX and Cumulus Linux switches, the management interface should listen for SSH only:
+
+```bash
+# Cumulus Linux (NVUE): restrict management plane access
+nv set system ssh-server state enabled
+# Disable Telnet if somehow enabled
+nv set system telnet state disabled
+# Restrict SSH access to the management VRF only
+nv set service ssh-server default vrf mgmt
+nv config apply
+
+# Set a strong SSH host key (if default keys need rotation)
+ssh-keygen -A  # regenerate all host keys
+systemctl restart ssh
+```
+
+### Separating BMC traffic from compute host traffic
+
+This is the most important security boundary in the OOB design. The BMC should not be
+reachable from the compute fabric. The compute CX7 NICs on each DGX (mlx5_0 to mlx5_7)
+should have no routes to the 10.0.1.x BMC subnet. The only path to the BMC is through
+the physical OOB switch.
+
+You enforce this with routing policy -- no route to 10.0.1.0/24 in the DGX host's main
+routing table, and no path from the compute leaf switches to the OOB management switch.
+If a DGX host OS is compromised, the attacker should not be able to reach the BMC and
+escalate to hardware control.
+
+## What you now know
+
+- The BMC is an independent ARM SoC (AST2600) that runs even when the host is powered off.
+  It has its own 1GbE port, its own OS, and its own communication channels to the host
+  (I2C, LPC, virtual NIC). It is the only way to control hardware when the host OS is down.
+- IPMI messages carry a NetFn + Command opcode structure over UDP port 623. Use `ipmitool`
+  with `-I lanplus` (IPMI 2.0) for all OOB operations. The KCS path (`ipmitool` without
+  `-H`) reaches the local BMC in-band via kernel interface.
+- Redfish is the REST successor to IPMI. Use it for firmware updates and modern
+  orchestration integrations. The resource tree (`/redfish/v1/`) is self-describing.
+- The OOB switch management port (`eth0` on Cumulus, `mgmt0` on ONYX) runs in a separate
+  VRF (`vrf mgmt`) isolated from the data plane forwarding table. It remains reachable
+  even if the data plane is completely misconfigured.
+- UFM uses two separate communication paths: IB MADs over the InfiniBand fabric for
+  topology discovery, and SSH over the OOB network for configuration and firmware updates.
+- The DGX B200 BlueField-3 is a full ARM Linux computer embedded in the NIC. It runs the
+  NVMe-oF initiator on its own ARM cores. Use `rshim` to push BFB OS images, and SSH
+  directly into the BF3's ARM Linux for storage-layer diagnostics.
+- OOB security means physical separation, changed default credentials, cipher suite 0
+  disabled, and no route from compute fabric to BMC subnet.
+
+[Continue to Chapter 19 -- IP Addressing and Planning ->](/learn/ch19-ip-addressing-planning)

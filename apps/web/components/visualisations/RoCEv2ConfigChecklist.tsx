@@ -114,13 +114,13 @@ export function RoCEv2ConfigChecklist() {
                     color: isDone ? "#4ade80" : "#475569",
                   }}
                 >
-                  {isDone ? "âœ“" : item.step}
+                  {isDone ? "✓" : item.step}
                 </button>
                 <div className="flex-1">
                   <div className="text-sm font-semibold text-white">{item.title}</div>
                   <div className="mt-0.5 text-[10px] text-slate-500">{item.device}</div>
                 </div>
-                <span className="text-xs text-slate-600">{isSelected ? "â–²" : "â–¼"}</span>
+                <span className="text-xs text-slate-600">{isSelected ? "▲" : "▼"}</span>
               </div>
               {isSelected && (
                 <div className="space-y-2 px-4 pb-4 text-xs">

@@ -37,7 +37,7 @@ const networks: Record<Exclude<Network, null>, NetworkInfo> = {
     borderColor: "#34d399",
     description: "A separate Ethernet network connecting DGX nodes to parallel storage systems (Lustre, BeeGFS, WEKA). Training datasets are too large for local NVMe — a 10 TB dataset is read repeatedly across hundreds of training epochs. GPUDirect Storage (GDS) allows GPUs to read training data directly from NVMe-oF targets, bypassing host CPU and system RAM entirely.",
     switches: "NVIDIA Spectrum SN4600 or SN5600 (400GbE Ethernet)",
-    nic: "BlueField-3 DPU × 2 per DGX node (NVMe-oF initiator offload)",
+    nic: "Dual-port ConnectX-7 × 2 per DGX H100/H200 node (Slot1 / Slot2)",
     bandwidth: "2× 400 GbE per node = 800 Gb/s storage bandwidth",
     protocol: "NVMe-oF over RoCEv2 (storage) + Ethernet (management)",
     why: "Storage traffic patterns (large sequential reads) are completely different from training traffic patterns (many small AllReduce messages). Mixing them causes priority inversion and unpredictable latency.",
@@ -100,13 +100,13 @@ export function FullWiringViz() {
           ))}
           <text x="110" y="248" textAnchor="middle" fill="#475569" fontSize="7">ConnectX-7 × 8</text>
 
-          {/* BlueField DPUs */}
+          {/* Storage NICs */}
           <rect x="30" y="255" width="44" height="10" rx="2"
             fill={selected === "storage" ? "#065f46" : "#1e293b"}
             stroke={selected === "storage" ? "#34d399" : "#334155"}
             strokeWidth={selected === "storage" ? 1.5 : 1}
           />
-          <text x="52" y="263" textAnchor="middle" fill="#64748b" fontSize="6">BlueField × 2</text>
+          <text x="52" y="263" textAnchor="middle" fill="#64748b" fontSize="6">Slot1/2 CX7</text>
 
           {/* BMC */}
           <rect x="80" y="255" width="36" height="10" rx="2"

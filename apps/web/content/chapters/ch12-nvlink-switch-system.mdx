@@ -1,24 +1,24 @@
 ---
-title: "Chapter 12: Scale-Up Networking — NVLink Switch System"
+title: "Chapter 12: Scale-Up Networking -- NVLink Switch System"
 module: "HPC Networking Foundations"
 level: "Advanced"
 estimatedMinutes: 45
 labLink: ""
 ---
 
-Every chapter so far has treated the DGX node as an atomic unit: eight GPUs wired together internally by NVLink, connected externally to the rest of the cluster by InfiniBand or RoCEv2. That external fabric — the scale-out fabric — is what Chapters 3 through 11 are about.
+Every chapter so far has treated the DGX node as an atomic unit: eight GPUs wired together internally by NVLink, connected externally to the rest of the cluster by InfiniBand or RoCEv2. That external fabric -- the scale-out fabric -- is what Chapters 3 through 11 are about.
 
 This chapter covers a different question: what happens when the scale-out fabric is not the bottleneck, but the boundary between scale-up and scale-out is?
 
-The answer is the NVLink Switch System — a way to extend NVLink beyond the chassis boundary and connect up to 32 DGX H100 nodes as if they were one enormous GPU.
+The answer is the NVLink Switch System -- a way to extend NVLink beyond the chassis boundary and connect up to 32 DGX H100 nodes as if they were one enormous GPU.
 
 ---
 
-## Act 1 — Two fabrics, two jobs
+## Act 1 -- Two fabrics, two jobs
 
-Inside a DGX H100 node, 4 third-generation NVSwitch chips provide 13.6 Tb/s of all-to-all bandwidth across 8 H100 GPUs. Every GPU can reach every other GPU in a single hop at 900 GB/s per GPU. This is the **scale-up fabric** — NVLink, intra-node, designed for the tightest possible GPU-to-GPU communication.
+Inside a DGX H100 node, 4 third-generation NVSwitch chips provide 13.6 Tb/s of all-to-all bandwidth across 8 H100 GPUs. Every GPU can reach every other GPU in a single hop at 900 GB/s per GPU. This is the **scale-up fabric** -- NVLink, intra-node, designed for the tightest possible GPU-to-GPU communication.
 
-Outside the DGX node, 8 ConnectX-7 HCAs connect to the external IB or RoCEv2 fabric at 400 Gbps each. A fully loaded DGX node contributes 3.2 Tbps of compute bandwidth to the external fabric. This is the **scale-out fabric** — designed for communication between nodes.
+Outside the DGX node, 8 ConnectX-7 HCAs connect to the external IB or RoCEv2 fabric at 400 Gbps each. A fully loaded DGX node contributes 3.2 Tbps of compute bandwidth to the external fabric. This is the **scale-out fabric** -- designed for communication between nodes.
 
 <NVLinkScaleViz />
 
@@ -27,21 +27,21 @@ The two fabrics have completely different bandwidths, latencies, and addressing 
 | | Scale-up (NVLink intra-node) | Scale-out (IB / RoCEv2) |
 |--|------------------------------|------------------------|
 | Bandwidth per GPU | 900 GB/s | 400 Gbps (50 GB/s) |
-| Bandwidth ratio | 18× faster | baseline |
-| Latency | ~1 µs | 1–2 µs |
+| Bandwidth ratio | 18x faster | baseline |
+| Latency | ~1 us | 1-2 us |
 | Addressing | NVLink address space | GID / GUID |
 | Topology | Full-mesh via NVSwitch | Fat-tree |
-| All-to-all (8 GPUs) | 13.6 Tb/s | — |
+| All-to-all (8 GPUs) | 13.6 Tb/s | -- |
 
-For a single DGX node, this asymmetry does not matter — all GPU-to-GPU traffic stays on NVLink. The problem emerges the moment a job needs more than 8 GPUs. Any AllReduce that crosses the node boundary immediately drops from 900 GB/s NVLink bandwidth to 50 GB/s IB bandwidth per GPU — an 18× cliff.
+For a single DGX node, this asymmetry does not matter -- all GPU-to-GPU traffic stays on NVLink. The problem emerges the moment a job needs more than 8 GPUs. Any AllReduce that crosses the node boundary immediately drops from 900 GB/s NVLink bandwidth to 50 GB/s IB bandwidth per GPU -- an 18x cliff.
 
 This cliff has a name: the **scale-up boundary**. Every model parallelism decision, every tensor partition, every pipeline stage assignment is affected by where this boundary falls.
 
 ---
 
-## Act 2 — NVLink Switch hardware
+## Act 2 -- NVLink Switch hardware
 
-The NVLink Switch System extends the scale-up fabric across the node boundary. The hardware consists of external **NVLink Switch modules** — rack-mounted chassis containing 3rd-generation NVSwitch chips, connected to DGX nodes with OSFP cables.
+The NVLink Switch System extends the scale-up fabric across the node boundary. The hardware consists of external **NVLink Switch modules** -- rack-mounted chassis containing 3rd-generation NVSwitch chips, connected to DGX nodes with OSFP cables.
 
 <ScaleUpTopologyViz />
 
@@ -49,11 +49,11 @@ The NVLink Switch System extends the scale-up fabric across the node boundary. T
 
 The NVLink Switch module uses the same OSFP form factor as the DGX H100's compute ports. The ConnectX-7 HCAs on a DGX node have a firmware mode that determines which fabric they connect to: InfiniBand, RoCEv2, or NVLink. When configured for NVLink, those same 400G OSFP ports carry NVLink traffic instead of IB/Ethernet traffic.
 
-This means a DGX H100 node connected to a NVLink Switch System has its compute ports committed to scale-up. The IB/RoCEv2 scale-out fabric is either absent or served by a separate set of ports — DGX H100 nodes in NVLink Switch configurations typically have dedicated IB connectivity for storage and management, but the primary GPU-to-GPU traffic moves on NVLink.
+This means a DGX H100 node connected to a NVLink Switch System has its compute ports committed to scale-up. The IB/RoCEv2 scale-out fabric is either absent or served by a separate set of ports -- DGX H100 nodes in NVLink Switch configurations typically have dedicated IB connectivity for storage and management, but the primary GPU-to-GPU traffic moves on NVLink.
 
 ### Topology: 2:1 tapered fat-tree
 
-The NVLink Switch System uses a **2:1 tapered fat-tree**: two tiers of NVLink Switch modules, with more bandwidth at the leaf tier than the spine tier. This is intentional — AllReduce traffic is largely within groups of 8 GPUs (one DGX node), and the tapered design provides sufficient bandwidth for inter-node AllReduce while keeping switch module count manageable.
+The NVLink Switch System uses a **2:1 tapered fat-tree**: two tiers of NVLink Switch modules, with more bandwidth at the leaf tier than the spine tier. This is intentional -- AllReduce traffic is largely within groups of 8 GPUs (one DGX node), and the tapered design provides sufficient bandwidth for inter-node AllReduce while keeping switch module count manageable.
 
 Maximum scale: **32 DGX H100 nodes** connected to a single NVLink Switch System, yielding **256 GPUs**.
 
@@ -63,11 +63,11 @@ The switch module count scales with node count:
 
 ### Cabling
 
-Same physical cable: 400G OSFP with the same DAC/AOC options covered in Chapter 9. The NVSwitch firmware running in the switch module negotiates the NVLink protocol over the OSFP physical layer. From a physical layer perspective, a NVLink Switch cable is indistinguishable from a ConnectX-7 IB cable — same connector, same reach constraints, same signal integrity considerations.
+Same physical cable: 400G OSFP with the same DAC/AOC options covered in Chapter 9. The NVSwitch firmware running in the switch module negotiates the NVLink protocol over the OSFP physical layer. From a physical layer perspective, a NVLink Switch cable is indistinguishable from a ConnectX-7 IB cable -- same connector, same reach constraints, same signal integrity considerations.
 
 ---
 
-## Act 3 — The bandwidth numbers
+## Act 3 -- The bandwidth numbers
 
 The reason to deploy a NVLink Switch System is the bandwidth gap between scale-up and scale-out. This section makes that gap concrete.
 
@@ -80,52 +80,52 @@ In a 256-GPU NVLink Switch System:
 - Aggregate all-to-all bandwidth: **57.6 TB/s**
 - This is the bandwidth available for AllReduce, tensor parallel operations, and any collective communication
 
-In a 256-GPU IB NDR fabric (8 × ConnectX-7 per node, 32 nodes):
+In a 256-GPU IB NDR fabric (8 x ConnectX-7 per node, 32 nodes):
 - Each GPU contributes 400 Gbps = 50 GB/s via IB
-- Aggregate bandwidth: **32 × 8 × 400 Gbps = 102.4 Tbps = 12.8 TB/s**
-- But this is bisection bandwidth across the fat-tree — actual per-GPU AllReduce bandwidth is approximately **3.2 Tb/s per node = 400 Gbps per GPU** in practice, accounting for the fat-tree topology
+- Aggregate bandwidth: **32 x 8 x 400 Gbps = 102.4 Tbps = 12.8 TB/s**
+- But this is bisection bandwidth across the fat-tree -- actual per-GPU AllReduce bandwidth is approximately **3.2 Tb/s per node = 400 Gbps per GPU** in practice, accounting for the fat-tree topology
 
-The NVLink Switch System delivers approximately **18× more all-to-all bandwidth** than the equivalent IB scale-out fabric at the same GPU count.
+The NVLink Switch System delivers approximately **18x more all-to-all bandwidth** than the equivalent IB scale-out fabric at the same GPU count.
 
 ### 20.5 TB unified HBM pool
 
-256 H100 SXM5 GPUs × 80 GB HBM3 per GPU = **20.5 TB** of GPU memory, addressable as a single flat pool.
+256 H100 SXM5 GPUs x 80 GB HBM3 per GPU = **20.5 TB** of GPU memory, addressable as a single flat pool.
 
-This number matters because of how large language models are trained. A 70B parameter model in BF16 requires approximately 140 GB of parameter storage. With 20.5 TB of unified memory, the entire model fits in HBM with room for activations, gradients, and optimizer state — without any tensor parallelism sharding. Tensor parallelism (splitting weight matrices across GPUs) exists specifically to distribute a model that is too large for a single GPU's memory. When the memory pool is 20.5 TB, that constraint disappears for all but the very largest models being trained today.
+This number matters because of how large language models are trained. A 70B parameter model in BF16 requires approximately 140 GB of parameter storage. With 20.5 TB of unified memory, the entire model fits in HBM with room for activations, gradients, and optimizer state -- without any tensor parallelism sharding. Tensor parallelism (splitting weight matrices across GPUs) exists specifically to distribute a model that is too large for a single GPU's memory. When the memory pool is 20.5 TB, that constraint disappears for all but the very largest models being trained today.
 
-The practical consequence: jobs that would require complex 4-way or 8-way tensor parallelism on an IB cluster run without tensor parallelism on a NVLink Switch System. Tensor parallel communication is all-to-all — eliminating it removes the most bandwidth-intensive collective from the training loop entirely.
+The practical consequence: jobs that would require complex 4-way or 8-way tensor parallelism on an IB cluster run without tensor parallelism on a NVLink Switch System. Tensor parallel communication is all-to-all -- eliminating it removes the most bandwidth-intensive collective from the training loop entirely.
 
 ### Why AllReduce busbw is a misleading metric here
 
 In Chapter 8, you learned to read NCCL `busbw` output as the primary performance indicator for AllReduce. On an IB or RoCEv2 cluster, busbw is the right metric because AllReduce is the dominant inter-GPU operation.
 
-On a NVLink Switch System, the picture changes. AllReduce busbw will be dramatically higher (scaling with NVLink bandwidth), but the more important metric is **end-to-end training throughput** — measured as training samples per second or FLOP/s utilisation. The NVLink Switch System can make AllReduce so fast that other bottlenecks (data loading, compute, checkpoint I/O) become the limiting factor instead. Optimising busbw on a system where AllReduce takes microseconds is the wrong target.
+On a NVLink Switch System, the picture changes. AllReduce busbw will be dramatically higher (scaling with NVLink bandwidth), but the more important metric is **end-to-end training throughput** -- measured as training samples per second or FLOP/s utilisation. The NVLink Switch System can make AllReduce so fast that other bottlenecks (data loading, compute, checkpoint I/O) become the limiting factor instead. Optimising busbw on a system where AllReduce takes microseconds is the wrong target.
 
 ---
 
-## Act 4 — NVLink Network: addressing and isolation
+## Act 4 -- NVLink Network: addressing and isolation
 
 Connecting 256 GPUs into a flat NVLink fabric creates an addressing problem. NVLink uses physical addresses in GPU HBM, not routable IP or IB GIDs. At 256-GPU scale with multiple jobs potentially sharing the system, hardware address translation is required.
 
 ### NVLink Network address space
 
-The NVLink Switch System introduces a **NVLink Network address space** — a virtualised address layer that sits above the physical HBM addresses. Each GPU is assigned a NVLink Network address. The NVSwitch hardware performs address translation at line rate, mapping NVLink Network addresses to physical HBM addresses in the target GPU.
+The NVLink Switch System introduces a **NVLink Network address space** -- a virtualised address layer that sits above the physical HBM addresses. Each GPU is assigned a NVLink Network address. The NVSwitch hardware performs address translation at line rate, mapping NVLink Network addresses to physical HBM addresses in the target GPU.
 
-This translation enables **tenant isolation**: two jobs running on the same NVLink Switch System fabric cannot reach each other's memory even though they share the same physical switches. The NVSwitch hardware enforces the address space boundary — there is no software routing step that could be misconfigured.
+This translation enables **tenant isolation**: two jobs running on the same NVLink Switch System fabric cannot reach each other's memory even though they share the same physical switches. The NVSwitch hardware enforces the address space boundary -- there is no software routing step that could be misconfigured.
 
 This is a meaningful difference from IB partition keys (P_Keys), which isolate traffic at the Subnet Manager level and can be misconfigured. NVLink Network isolation is enforced in hardware at the switch ASIC.
 
 ### SHARP on NVSwitch at 256-GPU scale
 
-Chapter 0 described SHARP (Scalable Hierarchical Aggregation and Reduction Protocol) in the context of InfiniBand — the IB switch performing AllReduce reduction in-network as gradients flow through it, reducing the traffic that reaches GPUs by half.
+Chapter 0 described SHARP (Scalable Hierarchical Aggregation and Reduction Protocol) in the context of InfiniBand -- the IB switch performing AllReduce reduction in-network as gradients flow through it, reducing the traffic that reaches GPUs by half.
 
-The NVSwitch SHARP equivalent operates at a different level. At 256-GPU scale, in-network reduction across 256 H100 SXM5 GPUs yields approximately **192 TFLOPS of in-network compute**. This is not the IB SHARP covered in Chapter 0 — it operates on NVLink traffic within the switch fabric, not on IB traffic. The two SHARPs are complementary in a system that has both fabrics, but they operate on different traffic types and at different scales.
+The NVSwitch SHARP equivalent operates at a different level. At 256-GPU scale, in-network reduction across 256 H100 SXM5 GPUs yields approximately **192 TFLOPS of in-network compute**. This is not the IB SHARP covered in Chapter 0 -- it operates on NVLink traffic within the switch fabric, not on IB traffic. The two SHARPs are complementary in a system that has both fabrics, but they operate on different traffic types and at different scales.
 
 The 192 TFLOPS figure is significant: it represents in-network compute capacity that exceeds many entire GPU clusters built only a few years ago. For AllReduce-heavy workloads like large language model training, offloading the gradient summation to the switch fabric reduces GPU stall time and improves FLOP/s utilisation.
 
 ---
 
-## Act 5 — Scale-up vs scale-out: when to use each
+## Act 5 -- Scale-up vs scale-out: when to use each
 
 The NVLink Switch System is not a replacement for IB or RoCEv2. It is an additional tier that makes sense for specific workload profiles and at specific scales. The decision depends on three factors: job size, model architecture, and memory requirements.
 
@@ -133,9 +133,9 @@ The NVLink Switch System is not a replacement for IB or RoCEv2. It is an additio
 
 ### When NVLink Switch wins
 
-**Job fits within 256 GPUs**: The NVLink Switch System's ceiling is 32 DGX H100 nodes / 256 GPUs. If your largest jobs stay within this bound, you get 18× more all-to-all bandwidth vs IB for the same scale.
+**Job fits within 256 GPUs**: The NVLink Switch System's ceiling is 32 DGX H100 nodes / 256 GPUs. If your largest jobs stay within this bound, you get 18x more all-to-all bandwidth vs IB for the same scale.
 
-**Tensor-parallel-heavy workloads**: Models that require tensor parallelism benefit most from the unified HBM pool and high all-to-all bandwidth. The elimination of tensor parallel communication can improve GPU utilisation by 10–30% on large transformer models.
+**Tensor-parallel-heavy workloads**: Models that require tensor parallelism benefit most from the unified HBM pool and high all-to-all bandwidth. The elimination of tensor parallel communication can improve GPU utilisation by 10-30% on large transformer models.
 
 **Mixture-of-Experts (MoE) models**: MoE architectures require expert-parallel communication patterns (all-to-all between all GPUs every forward pass). These patterns are disproportionately expensive on IB and disproportionately cheap on NVLink Switch.
 
@@ -153,17 +153,17 @@ The NVLink Switch System is not a replacement for IB or RoCEv2. It is an additio
 
 Most large-scale AI training clusters today use a **hybrid** approach:
 
-- NVLink (intra-node, always) — the 4 NVSwitch chips inside every DGX H100 node
-- NVLink Switch System (inter-node scale-up, for ≤256 GPU jobs requiring high all-to-all BW)
+- NVLink (intra-node, always) -- the 4 NVSwitch chips inside every DGX H100 node
+- NVLink Switch System (inter-node scale-up, for <=256 GPU jobs requiring high all-to-all BW)
 - InfiniBand or RoCEv2 (inter-node scale-out, for >256 GPU jobs and storage)
 
-The two external fabrics — NVLink Switch and IB — are not mutually exclusive. A DGX H100 node can have some ports committed to NVLink Switch and other ports committed to IB simultaneously, depending on the port configuration. The firmware determines which protocol each OSFP port speaks.
+The two external fabrics -- NVLink Switch and IB -- are not mutually exclusive. A DGX H100 node can have some ports committed to NVLink Switch and other ports committed to IB simultaneously, depending on the port configuration. The firmware determines which protocol each OSFP port speaks.
 
 ---
 
-## Act 6 — Diagnostics and monitoring
+## Act 6 -- Diagnostics and monitoring
 
-The NVLink Switch System requires different diagnostic tools than the IB/RoCEv2 fabric covered in Chapters 3–4.
+The NVLink Switch System requires different diagnostic tools than the IB/RoCEv2 fabric covered in Chapters 3-4.
 
 <NVLinkDiagnosticsViz />
 
@@ -172,8 +172,8 @@ The NVLink Switch System requires different diagnostic tools than the IB/RoCEv2 
 In an IB fabric, the Subnet Manager (OpenSM or UFM) manages routing, performs fabric discovery, and owns port state. A link fault shows up as a port state change that SM detects and routes around. `ibstat` and `ibdiagnet` are your primary tools.
 
 In a NVLink Switch System:
-- There is no Subnet Manager — the NVSwitch hardware manages routing internally
-- There is no adaptive re-routing — NVSwitch uses fixed routing; a failed link is a failed link, not a rerouted path
+- There is no Subnet Manager -- the NVSwitch hardware manages routing internally
+- There is no adaptive re-routing -- NVSwitch uses fixed routing; a failed link is a failed link, not a rerouted path
 - Fault isolation is at the driver level: `nvidia-smi nvlink --status` reports per-link state from the driver's perspective
 - The management interface is the NVSwitch management daemon, not UFM
 
@@ -198,8 +198,8 @@ Key counter groups:
 |---------|---------|-----------------|
 | `NVLINK_BANDWIDTH_C0_TX` / `RX` | Per-lane transmit/receive bandwidth | Drop below expected during training |
 | `NVLINK_REPLAY_ERROR_COUNT` | NVLink replay errors (like IB symbol errors) | Any non-zero value |
-| `NVLINK_CRC_FLIT_ERROR_COUNT` | CRC errors at flit level | Any non-zero value — precursor to link failure |
-| `NVLINK_CRC_DATA_ERROR_COUNT` | Data CRC errors | Any non-zero — more severe than flit errors |
+| `NVLINK_CRC_FLIT_ERROR_COUNT` | CRC errors at flit level | Any non-zero value -- precursor to link failure |
+| `NVLINK_CRC_DATA_ERROR_COUNT` | Data CRC errors | Any non-zero -- more severe than flit errors |
 
 ### When a NVLink Switch link fails
 
@@ -214,7 +214,7 @@ nvidia-smi nvlink --status
 # Step 2: Check error counters for non-zero values
 nvidia-smi nvlink --errorcounters
 
-# Step 3: Correlate with DCGM — look for NVLINK_BANDWIDTH drop
+# Step 3: Correlate with DCGM -- look for NVLINK_BANDWIDTH drop
 dcgmi dmon -e 1001
 
 # Step 4: Check nvidia-bug-report for NVSwitch driver messages
@@ -222,24 +222,24 @@ nvidia-bug-report.sh
 grep -i "nvswitch\|nvlink" /var/log/messages | tail -50
 ```
 
-If `nvidia-smi nvlink --status` shows a lane as `Inactive` and error counters are non-zero, the lane is degraded. Replace the OSFP cable connecting the affected DGX port to the NVLink Switch module. The physical diagnosis is identical to IB: marginal DAC cable → inspect both ends, replace with a known-good cable.
+If `nvidia-smi nvlink --status` shows a lane as `Inactive` and error counters are non-zero, the lane is degraded. Replace the OSFP cable connecting the affected DGX port to the NVLink Switch module. The physical diagnosis is identical to IB: marginal DAC cable -> inspect both ends, replace with a known-good cable.
 
 ---
 
 ## What you now know
 
-**NVLink Switch hardware**: External chassis containing 3rd-generation NVSwitch chips, connected via OSFP to DGX nodes. Same physical cable as IB/RoCEv2 — firmware mode selects the protocol. Maximum scale: 32 DGX H100 nodes, 256 GPUs, 2:1 tapered fat-tree topology.
+**NVLink Switch hardware**: External chassis containing 3rd-generation NVSwitch chips, connected via OSFP to DGX nodes. Same physical cable as IB/RoCEv2 -- firmware mode selects the protocol. Maximum scale: 32 DGX H100 nodes, 256 GPUs, 2:1 tapered fat-tree topology.
 
-**57.6 TB/s at 256 GPUs**: The all-to-all bandwidth of a 256-GPU NVLink Switch System — approximately 18× greater than the equivalent IB fabric. This comes from the 900 GB/s per-GPU NVLink bandwidth extended across node boundaries.
+**57.6 TB/s at 256 GPUs**: The all-to-all bandwidth of a 256-GPU NVLink Switch System -- approximately 18x greater than the equivalent IB fabric. This comes from the 900 GB/s per-GPU NVLink bandwidth extended across node boundaries.
 
-**20.5 TB unified HBM pool**: 256 × 80 GB, addressable as a single flat space. Eliminates tensor parallelism overhead for all but the largest models in production today.
+**20.5 TB unified HBM pool**: 256 x 80 GB, addressable as a single flat space. Eliminates tensor parallelism overhead for all but the largest models in production today.
 
-**NVLink Network address space**: Hardware address translation that enables tenant isolation at the NVSwitch ASIC — not at the Subnet Manager level. More tamper-resistant than IB P_Keys but less mature in management tooling.
+**NVLink Network address space**: Hardware address translation that enables tenant isolation at the NVSwitch ASIC -- not at the Subnet Manager level. More tamper-resistant than IB P_Keys but less mature in management tooling.
 
-**SHARP at 256-GPU scale**: 192 TFLOPS of in-network compute for gradient aggregation. Reduces GPU stall time during AllReduce on NVLink Switch — complementary to, not a replacement for, IB SHARP on the scale-out fabric.
+**SHARP at 256-GPU scale**: 192 TFLOPS of in-network compute for gradient aggregation. Reduces GPU stall time during AllReduce on NVLink Switch -- complementary to, not a replacement for, IB SHARP on the scale-out fabric.
 
-**Scale-up vs scale-out decision**: NVLink Switch wins for ≤256 GPU jobs with tensor-parallel or MoE workloads. IB wins for >256 GPUs and pipeline-parallel jobs. Most production clusters use both.
+**Scale-up vs scale-out decision**: NVLink Switch wins for <=256 GPU jobs with tensor-parallel or MoE workloads. IB wins for >256 GPUs and pipeline-parallel jobs. Most production clusters use both.
 
-**Diagnostics**: No SM, no adaptive re-routing. `nvidia-smi nvlink --status` and DCGM NVLink counters replace `ibstat` and UFM. A failed lane means degraded bandwidth — there is no automatic rerouting around it.
+**Diagnostics**: No SM, no adaptive re-routing. `nvidia-smi nvlink --status` and DCGM NVLink counters replace `ibstat` and UFM. A failed lane means degraded bandwidth -- there is no automatic rerouting around it.
 
-[Continue to Chapter 13 →](/learn/ch13-alternative-topologies)
+[Continue to Chapter 13 ->](/learn/ch13-alternative-topologies)

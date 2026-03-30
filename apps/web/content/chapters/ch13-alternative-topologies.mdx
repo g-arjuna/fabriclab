@@ -6,51 +6,51 @@ estimatedMinutes: 50
 labLink: ""
 ---
 
-Every large-scale supercomputer built before 2015 connected its nodes in a torus. IBM's Blue Gene machines, Cray's XT and XE lines, Fujitsu's K computer — the topology that defined a generation of scientific computing was not fat-tree. It was a grid of nodes, each wired to its nearest neighbours in multiple dimensions, no switches required.
+Every large-scale supercomputer built before 2015 connected its nodes in a torus. IBM's Blue Gene machines, Cray's XT and XE lines, Fujitsu's K computer -- the topology that defined a generation of scientific computing was not fat-tree. It was a grid of nodes, each wired to its nearest neighbours in multiple dimensions, no switches required.
 
-Today's AI training clusters overwhelmingly use fat-tree. The torus didn't lose because the engineers got bored. It lost because the workload changed — and understanding *why* it lost is the clearest possible explanation of what fat-tree actually provides, and what it costs you when you choose something different.
+Today's AI training clusters overwhelmingly use fat-tree. The torus didn't lose because the engineers got bored. It lost because the workload changed -- and understanding *why* it lost is the clearest possible explanation of what fat-tree actually provides, and what it costs you when you choose something different.
 
-This chapter covers the three topology families that matter for context: torus (and its descendants), dragonfly, and Google's TPU Pod variant. Along the way you'll see how topology choice is always a bet on traffic pattern — and why the all-to-all synchronisation barrier at the heart of transformer training makes that bet decisive.
+This chapter covers the three topology families that matter for context: torus (and its descendants), dragonfly, and Google's TPU Pod variant. Along the way you'll see how topology choice is always a bet on traffic pattern -- and why the all-to-all synchronisation barrier at the heart of transformer training makes that bet decisive.
 
-## Act 1 — The torus: nodes as their own switches
+## Act 1 -- The torus: nodes as their own switches
 
 Fat-tree needs switches. A 32-node DGX BasePOD runs 8 leaf switches and 32 spine switches before you count the GPUs. Every hop through the fabric is a hop through dedicated silicon.
 
-A torus eliminates the switches entirely. Each compute node connects directly to a fixed set of neighbours — the nodes immediately adjacent to it in every dimension of a grid. The node *is* the router.
+A torus eliminates the switches entirely. Each compute node connects directly to a fixed set of neighbours -- the nodes immediately adjacent to it in every dimension of a grid. The node *is* the router.
 
 <TorusEvolutionViz />
 
-Start with the simplest case: a **1D ring**. Eight nodes in a circle, each connected to the node on its left and the node on its right. Maximum path length from any node to any other node is N/2 hops — in an 8-node ring, that's 4 hops.
+Start with the simplest case: a **1D ring**. Eight nodes in a circle, each connected to the node on its left and the node on its right. Maximum path length from any node to any other node is N/2 hops -- in an 8-node ring, that's 4 hops.
 
-Extend to two dimensions: a **2D torus**. Now each node has four neighbours — north, south, east, west — and the edges wrap around (the rightmost column connects back to the leftmost, the top row connects back to the bottom). An 8×8 grid of nodes has 64 nodes, and the maximum path between any two is 4+4 = 8 hops in the worst case, but typical shortest paths are much shorter.
+Extend to two dimensions: a **2D torus**. Now each node has four neighbours -- north, south, east, west -- and the edges wrap around (the rightmost column connects back to the leftmost, the top row connects back to the bottom). An 8x8 grid of nodes has 64 nodes, and the maximum path between any two is 4+4 = 8 hops in the worst case, but typical shortest paths are much shorter.
 
-The topology scales by adding dimensions. A **3D torus** (as used in IBM Blue Gene /L and /P, and Cray XT3) adds a Z axis. A **5D torus** was used in Blue Gene/Q. Fujitsu's K computer — which was the world's fastest in 2011 — used a **6D torus** called Tofu.
+The topology scales by adding dimensions. A **3D torus** (as used in IBM Blue Gene /L and /P, and Cray XT3) adds a Z axis. A **5D torus** was used in Blue Gene/Q. Fujitsu's K computer -- which was the world's fastest in 2011 -- used a **6D torus** called Tofu.
 
 Three properties made this compelling:
 
 1. **No switch cost.** The network silicon is integrated into the node or the CPU package. At petascale, eliminating switch ASICs from 100,000+ nodes is a meaningful budget difference.
 
-2. **Predictable hop count.** In an N-dimensional torus with K nodes per dimension, the worst-case hop count is N × (K/2). For a problem that fits the geometry, the path length is bounded and deterministic.
+2. **Predictable hop count.** In an N-dimensional torus with K nodes per dimension, the worst-case hop count is N x (K/2). For a problem that fits the geometry, the path length is bounded and deterministic.
 
-3. **Locality awareness.** Scientific codes that use stencil computation — iterative solvers, fluid dynamics, weather modelling — communicate almost entirely with nearest neighbours. A torus maps this perfectly: the application's communication pattern matches the hardware topology exactly.
+3. **Locality awareness.** Scientific codes that use stencil computation -- iterative solvers, fluid dynamics, weather modelling -- communicate almost entirely with nearest neighbours. A torus maps this perfectly: the application's communication pattern matches the hardware topology exactly.
 
-## Act 2 — The historical record: from Blue Gene to K
+## Act 2 -- The historical record: from Blue Gene to K
 
 The torus topology produced the fastest computers in the world for the better part of a decade.
 
-**IBM Blue Gene /L** (2004, LLNL): 3D torus, 65,536 compute cards, each with 2 PowerPC 440 cores, 16 GB/s torus bandwidth. First machine to reach 100 TFLOPS sustained. The network was the differentiator — the processors were modest.
+**IBM Blue Gene /L** (2004, LLNL): 3D torus, 65,536 compute cards, each with 2 PowerPC 440 cores, 16 GB/s torus bandwidth. First machine to reach 100 TFLOPS sustained. The network was the differentiator -- the processors were modest.
 
 **IBM Blue Gene /P** (2007): 3D torus, up to 884,736 cores. Same principle, more nodes.
 
 **IBM Blue Gene /Q** (2011, Argonne/LLNL): 5D torus, each node connecting to 10 neighbours (2 per dimension). 1,638,400 cores in the largest deployments.
 
-**Cray XT3 → XT5 → XE6** (2004–2012): 3D torus built from SeaStar / Gemini interconnect chips. Cray's later XC series (Aries interconnect, 2012) evolved toward dragonfly.
+**Cray XT3 -> XT5 -> XE6** (2004-2012): 3D torus built from SeaStar / Gemini interconnect chips. Cray's later XC series (Aries interconnect, 2012) evolved toward dragonfly.
 
 **Fujitsu K computer** (2011): 6D Tofu torus, 88,128 nodes, 10 petaflops peak. Each node had 10 torus links (2 per dimension). Tofu's full name is 6-dimensional mesh/torus.
 
-The pattern is consistent: dimension count climbed as vendors tried to reduce average hop count while maintaining locality for scientific codes. More dimensions mean more links per node — higher cost, higher bandwidth, shorter paths.
+The pattern is consistent: dimension count climbed as vendors tried to reduce average hop count while maintaining locality for scientific codes. More dimensions mean more links per node -- higher cost, higher bandwidth, shorter paths.
 
-## Act 3 — The folded torus: solving the long-wire problem
+## Act 3 -- The folded torus: solving the long-wire problem
 
 A flat 2D torus has a physical problem. Nodes at opposite ends of a dimension are logically adjacent (the edges wrap), but physically they may be metres apart in a rack. The wrap-around links are long, expensive, and lossy.
 
@@ -62,31 +62,31 @@ Blue Gene /Q used folding extensively in its rack layout. The Tofu interconnect 
 
 This matters because latency variance is performance variance. If some node pairs communicate in 2 hops with short links and other pairs communicate in 2 hops with long cables, the training step time is set by the slowest pair. Folding keeps the worst case tightly bounded.
 
-## Act 4 — Why the torus fails AI training
+## Act 4 -- Why the torus fails AI training
 
 <AllReduceOnTorusViz />
 
 The scientific codes that made torus topology successful share a structural property: they communicate *locally*. A node needs data from its immediate neighbours in the simulation mesh, and those neighbours map directly onto the torus neighbours. Hop count is low because the communication pattern has locality.
 
-AllReduce — the operation that sits at the heart of every distributed training step — has no locality at all.
+AllReduce -- the operation that sits at the heart of every distributed training step -- has no locality at all.
 
 In a ring-AllReduce over N GPUs, every GPU must communicate with every other GPU, and the result must be consistent across all of them before the next forward pass can begin. It is not stencil communication. It is a global synchronisation barrier that touches every participant.
 
-On a torus, this has a specific and painful consequence: **distant nodes have high hop count**. If you have a 16×16 2D torus (256 GPUs), the worst-case hop count between any two nodes is 8+8 = 16 hops. On a fat-tree BasePOD with 256 GPUs, the worst case is 4 hops (leaf → spine → spine → leaf in a 3-stage tree).
+On a torus, this has a specific and painful consequence: **distant nodes have high hop count**. If you have a 16x16 2D torus (256 GPUs), the worst-case hop count between any two nodes is 8+8 = 16 hops. On a fat-tree BasePOD with 256 GPUs, the worst case is 4 hops (leaf -> spine -> spine -> leaf in a 3-stage tree).
 
 More hops means more latency. More latency in a barrier operation means longer step time. In a 256-GPU training run doing AllReduce 100 times per second, the extra latency compounds rapidly.
 
 But hop count is only the first problem. The second is **bisection bandwidth**.
 
-A torus has a bisection cut equal to 2 × K^(d-1) × bandwidth-per-link, where K is the nodes per dimension and d is the number of dimensions. In a 16×16 2D torus with 8 GB/s per link, the bisection bandwidth is 2 × 16 × 8 = 256 GB/s for the entire 256-node cluster.
+A torus has a bisection cut equal to 2 x K^(d-1) x bandwidth-per-link, where K is the nodes per dimension and d is the number of dimensions. In a 16x16 2D torus with 8 GB/s per link, the bisection bandwidth is 2 x 16 x 8 = 256 GB/s for the entire 256-node cluster.
 
 A fat-tree with full bisection provides bisection bandwidth equal to half the total compute bandwidth. For 256 DGX H100 nodes each with 3.2 Tbps of compute fabric bandwidth, a full-bisection fat-tree provides approximately 409 Tbps across the bisection.
 
 The torus bisection and the fat-tree bisection are not even the same order of magnitude. For an all-to-all workload, this is the whole game.
 
-The third problem is **fault tolerance and routing**. Torus routing is deterministic: given source and destination, there are a small number of shortest paths, and they all pass through the same intermediate nodes. A single failed link in the wrong place can strand a subset of nodes with no alternate route. Fat-tree's ECMP and adaptive routing find alternate paths through any leaf or spine switch — the topology is designed for redundancy.
+The third problem is **fault tolerance and routing**. Torus routing is deterministic: given source and destination, there are a small number of shortest paths, and they all pass through the same intermediate nodes. A single failed link in the wrong place can strand a subset of nodes with no alternate route. Fat-tree's ECMP and adaptive routing find alternate paths through any leaf or spine switch -- the topology is designed for redundancy.
 
-## Act 5 — Fat-tree's bisection bandwidth guarantee
+## Act 5 -- Fat-tree's bisection bandwidth guarantee
 
 The property that makes fat-tree the right answer for AI training is not path count, switch cost, or even average latency. It is this: **a fat-tree with full oversubscription ratio of 1:1 provides the same aggregate bandwidth for any traffic matrix**.
 
@@ -96,13 +96,13 @@ This property is called *non-blocking*, or more precisely *rearrangeably non-blo
 
 The practical consequence for the BasePOD architecture from Chapter 7: rail-optimised design routes all AllReduce traffic for GPU-N on every DGX node through a single leaf switch. Each leaf switch's uplinks to spine provide full bisection bandwidth for that rail's AllReduce traffic. The spine provides bisection between rails for point-to-point and pipeline traffic. The fat-tree structure guarantees the bandwidth is there regardless of which GPUs are talking to which.
 
-## Act 6 — Dragonfly: fewer cables, more global links
+## Act 6 -- Dragonfly: fewer cables, more global links
 
 <DragonFlyTopologyViz />
 
-Dragonfly is the third topology family worth understanding. It is used in Cray Slingshot (HPE), which powers Frontier at Oak Ridge National Laboratory — the first exascale computer — and Perlmutter at NERSC. It is not used in NVIDIA DGX deployments, but it dominates the scientific HPC market that runs alongside the AI infrastructure world.
+Dragonfly is the third topology family worth understanding. It is used in Cray Slingshot (HPE), which powers Frontier at Oak Ridge National Laboratory -- the first exascale computer -- and Perlmutter at NERSC. It is not used in NVIDIA DGX deployments, but it dominates the scientific HPC market that runs alongside the AI infrastructure world.
 
-The key insight behind dragonfly is that long-distance links are expensive and cable-limited. At very large scale — tens of thousands of nodes — a fat-tree requires huge numbers of inter-switch links, and the inter-group links become cable-routing nightmares in a physical facility.
+The key insight behind dragonfly is that long-distance links are expensive and cable-limited. At very large scale -- tens of thousands of nodes -- a fat-tree requires huge numbers of inter-switch links, and the inter-group links become cable-routing nightmares in a physical facility.
 
 Dragonfly restructures the hierarchy:
 
@@ -110,35 +110,35 @@ Dragonfly restructures the hierarchy:
 
 **Global links**: each switch in a group connects to exactly one switch in each other group via a single long-distance link. There is only *one* inter-group link between any pair of groups, rather than the multiple parallel paths that fat-tree provides between levels.
 
-**Result**: a 3-level hierarchy (host → local switch → global link → local switch → host) with dramatically fewer long cables and total links than fat-tree at the same node count.
+**Result**: a 3-level hierarchy (host -> local switch -> global link -> local switch -> host) with dramatically fewer long cables and total links than fat-tree at the same node count.
 
-The tradeoff is that the single global link between groups becomes a critical bottleneck. All traffic between two groups must share that one link. This is manageable when traffic has locality, but for random all-to-all communication — the worst case for AllReduce — it creates congestion at the global links.
+The tradeoff is that the single global link between groups becomes a critical bottleneck. All traffic between two groups must share that one link. This is manageable when traffic has locality, but for random all-to-all communication -- the worst case for AllReduce -- it creates congestion at the global links.
 
-Dragonfly systems address this with **adaptive routing**: traffic is dynamically rerouted through intermediate groups rather than taking the direct path if the direct global link is congested. A two-hop global route (source group → intermediate group → destination group) uses different global links, spreading the load.
+Dragonfly systems address this with **adaptive routing**: traffic is dynamically rerouted through intermediate groups rather than taking the direct path if the direct global link is congested. A two-hop global route (source group -> intermediate group -> destination group) uses different global links, spreading the load.
 
 **Why dragonfly works for scientific HPC but not AI training**: scientific codes with spatial locality run near-neighbour communication predominantly within local groups, where performance is excellent. AllReduce for transformer training generates maximum cross-group traffic, which hits the global link bottleneck hard. Adaptive routing helps but cannot fully compensate. Fat-tree's bisection bandwidth guarantee, which dragonfly cannot match for random traffic, is the decisive advantage.
 
-Frontier runs very large-scale scientific simulations — climate, fusion energy, physics — that tolerate the dragonfly traffic pattern well. When these machines run AI training, they run it with careful awareness that the interconnect is not optimised for it.
+Frontier runs very large-scale scientific simulations -- climate, fusion energy, physics -- that tolerate the dragonfly traffic pattern well. When these machines run AI training, they run it with careful awareness that the interconnect is not optimised for it.
 
-## Act 7 — Google TPU Pod: 3D torus done right for convolution
+## Act 7 -- Google TPU Pod: 3D torus done right for convolution
 
 <TPUPodViz />
 
 Google's TPU Pod is the most sophisticated deployment of torus topology for machine learning workloads. It shows both the ceiling of what torus can achieve *and* why transformer workloads push past that ceiling.
 
-A TPU v3 Pod connects 2,048 TPUs in a **3D torus** using a dedicated inter-chip interconnect (ICI) running at 656 GB/s per chip in each direction. The torus has dimensions of roughly 16×16×8 depending on pod size. Links are short (chips are physically adjacent in 3D); the folded torus ensures no cable is long. Latency is extremely low.
+A TPU v3 Pod connects 2,048 TPUs in a **3D torus** using a dedicated inter-chip interconnect (ICI) running at 656 GB/s per chip in each direction. The torus has dimensions of roughly 16x16x8 depending on pod size. Links are short (chips are physically adjacent in 3D); the folded torus ensures no cable is long. Latency is extremely low.
 
 The workload optimisation is explicit: TPUs were designed for matrix multiplication in convolutional neural networks. Convolution has strong **spatial locality** in the tensor parallelism pattern Google uses. The convolution computation is partitioned across the torus so that each TPU primarily communicates with its immediate neighbours in the 3D mesh. This matches the torus perfectly.
 
-Google's mesh tensor parallelism strategy — XLA SPMD partitioning — explicitly arranges the model tensor dimensions onto torus axes so that the communication during each layer is local. A convolutional layer with spatial height and width can be partitioned along those spatial axes, which map directly to torus axes.
+Google's mesh tensor parallelism strategy -- XLA SPMD partitioning -- explicitly arranges the model tensor dimensions onto torus axes so that the communication during each layer is local. A convolutional layer with spatial height and width can be partitioned along those spatial axes, which map directly to torus axes.
 
 **The transformer problem**: transformer self-attention is not spatially local. The attention operation requires every token to attend to every other token. In tensor parallelism across a transformer, the AllGather and ReduceScatter operations that synchronise activations across devices are inherently all-to-all. There is no partition of the computation that keeps communication local.
 
-Google has invested heavily in optimising TPUs for transformer workloads — their later TPU generations use wider per-chip bandwidth, better collective operation primitives, and more sophisticated SPMD partitioning strategies. But the fundamental tension between torus topology and all-to-all communication patterns remains. NVIDIA's choice of fat-tree for DGX deployments reflects a different set of workload assumptions: the world of AI training was dominated by transformer-based models, where all-to-all AllReduce is the bottleneck.
+Google has invested heavily in optimising TPUs for transformer workloads -- their later TPU generations use wider per-chip bandwidth, better collective operation primitives, and more sophisticated SPMD partitioning strategies. But the fundamental tension between torus topology and all-to-all communication patterns remains. NVIDIA's choice of fat-tree for DGX deployments reflects a different set of workload assumptions: the world of AI training was dominated by transformer-based models, where all-to-all AllReduce is the bottleneck.
 
 Both choices are defensible. They reflect honest disagreement about which bottleneck matters more: the bisection bandwidth that fat-tree provides vs. the lower latency and hardware simplicity that torus provides.
 
-## Act 8 — Choosing a topology: the workload test
+## Act 8 -- Choosing a topology: the workload test
 
 <TopologyDecisionViz />
 
@@ -150,7 +150,7 @@ Nearest-neighbour stencil computation (CFD, climate, FEA, molecular dynamics) fa
 
 **2. What is the scale, and what is the budget for interconnect hardware?**
 
-At petascale (100,000+ nodes), the switch cost of fat-tree becomes enormous. Torus and dragonfly both reduce link count significantly. This was the primary reason torus dominated 2004–2015 scientific HPC. At DGX cluster scale (32–2048 nodes), fat-tree switch cost is trivial relative to GPU cost, and the bisection bandwidth advantage dominates.
+At petascale (100,000+ nodes), the switch cost of fat-tree becomes enormous. Torus and dragonfly both reduce link count significantly. This was the primary reason torus dominated 2004-2015 scientific HPC. At DGX cluster scale (32-2048 nodes), fat-tree switch cost is trivial relative to GPU cost, and the bisection bandwidth advantage dominates.
 
 **3. How important is fault tolerance and redundancy?**
 
@@ -168,10 +168,10 @@ What you should carry forward: when you read about a new interconnect and someon
 
 ## What you now know
 
-Chapter 13 filled in the context that fat-tree exists to solve. The torus topology — which powered the fastest supercomputers in the world from 2004 to 2015 — optimises for nearest-neighbour communication and eliminates switch cost. Its three failure modes for AI training are high hop count for distant nodes, low bisection bandwidth for all-to-all traffic, and limited fault-tolerant routing.
+Chapter 13 filled in the context that fat-tree exists to solve. The torus topology -- which powered the fastest supercomputers in the world from 2004 to 2015 -- optimises for nearest-neighbour communication and eliminates switch cost. Its three failure modes for AI training are high hop count for distant nodes, low bisection bandwidth for all-to-all traffic, and limited fault-tolerant routing.
 
-Dragonfly reduces cable complexity at petascale by using local all-to-all cliques connected by single global links, at the cost of global link bottlenecks under random traffic. Google's TPU Pod shows torus at its best — a carefully folded 3D mesh with enormous per-chip bandwidth optimised for the spatial locality of convolutional workloads — and illustrates where the workload mismatch with transformer all-to-all operations begins.
+Dragonfly reduces cable complexity at petascale by using local all-to-all cliques connected by single global links, at the cost of global link bottlenecks under random traffic. Google's TPU Pod shows torus at its best -- a carefully folded 3D mesh with enormous per-chip bandwidth optimised for the spatial locality of convolutional workloads -- and illustrates where the workload mismatch with transformer all-to-all operations begins.
 
-Fat-tree's bisection bandwidth guarantee — non-blocking for any traffic matrix at 1:1 oversubscription — is the property that wins for AllReduce-heavy training. Every architectural choice in the DGX fabric is downstream of that guarantee.
+Fat-tree's bisection bandwidth guarantee -- non-blocking for any traffic matrix at 1:1 oversubscription -- is the property that wins for AllReduce-heavy training. Every architectural choice in the DGX fabric is downstream of that guarantee.
 
-[Continue to Chapter 14 →](/learn/ch14-gpu-hardware-generations)
+[Continue to Chapter 14 ->](/learn/ch14-gpu-hardware-generations)

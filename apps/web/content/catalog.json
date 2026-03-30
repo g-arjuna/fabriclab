@@ -454,6 +454,32 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch17-storage-network-packet-path"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch18-oob-management-network",
+      "number": 18,
+      "title": "OOB and Management Network",
+      "href": "/learn/ch18-oob-management-network",
+      "durationMinutes": 60,
+      "durationLabel": "60 min",
+      "partKey": "scale-architecture",
+      "partTitle": "Part 4 - Scale and Architecture",
+      "partDescription": "Requires Part 3 - Ch 12-16",
+      "tags": [
+        "OOB",
+        "BMC",
+        "IPMI",
+        "Redfish",
+        "UFM",
+        "Management network"
+      ],
+      "description": "The out-of-band management fabric: BMC architecture, IPMI and Redfish internals, OOB topology, switch management isolation, UFM communication paths, BlueField-3 management architecture, and hardening guidance.",
+      "previewSummary": "Complete the three-fabric model by understanding the separate control-plane network that keeps clusters recoverable when the data paths fail.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch18-oob-management-network"
     }
   ],
   "labs": [
