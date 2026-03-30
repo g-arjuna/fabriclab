@@ -1,7 +1,7 @@
 # Engineering Sync
 
 Last updated: 2026-03-30
-Current baseline commit: `d60faa7`
+Current baseline commit: `34dae2d`
 Primary branch: `main`
 
 This file is the shared engineering source of truth for FabricLab when work is split across
@@ -294,30 +294,20 @@ Required token shape:
   - passed:
     - first sign-in preference popup + persistence
     - discussion reply-notification checkboxes
-  - blocked:
-    - general forum thread creation / GitHub mirroring verification
-    - reason: production still appears to be missing the community forum tables/migration
+    - general forum thread creation
+    - GitHub issue mirroring status surfacing
+- Fixed first-party auth migration fallout on community write routes by moving signed-in writes to
+  the admin client after FabricLab session validation:
+  - `apps/web/app/api/community/comments/route.ts`
+  - `apps/web/app/api/community/threads/route.ts`
+  - `apps/web/app/api/community/threads/[threadId]/posts/route.ts`
+- Tightened missing-table detection so forum/schema errors are no longer conflated with any error
+  message that merely mentions the community tables:
+  - `apps/web/lib/community/forum.ts`
 
 ## Open Items
 
-### 1. Community forum migration on production
-
-Status:
-
-- code complete
-- production database/config incomplete
-
-Needed:
-
-- verify/apply the general forum schema on the production Supabase project
-- specifically confirm:
-  - `community_threads`
-  - `community_posts`
-  - associated RLS policies from `20260329_003_community_forum_threads.sql`
-- re-run:
-  - `npm run test:browser:notifications`
-
-### 2. GitHub issue mirroring token fix
+### 1. GitHub issue mirroring token fix
 
 Status:
 
@@ -331,7 +321,7 @@ Needed:
 - redeploy
 - re-run live thread mirror test
 
-### 3. Decide whether to require sign-in for community reading
+### 2. Decide whether to require sign-in for community reading
 
 Current state:
 
@@ -343,7 +333,7 @@ Decision still open:
 - keep public-read / signed-in-write
 - or require sign-in for full community participation and reading
 
-### 4. First-party auth cleanup
+### 3. First-party auth cleanup
 
 Status:
 
@@ -356,7 +346,7 @@ Needed:
 - keep Supabase for data only (profiles/progress/community/release metadata)
 - define migration for `auth.users` foreign-key dependency in Supabase schema
 
-### 5. Email notification provider configuration
+### 4. Email notification provider configuration
 
 Status:
 
@@ -372,9 +362,9 @@ Needed:
 ## Immediate Next Steps
 
 1. Confirm/apply the production community forum migration (`20260329_003_community_forum_threads.sql`).
-2. Fix the GitHub issue mirror token and verify a real issue gets created from `/community`.
-3. Run a real publish notification and a real thread-activity notification end to end.
-4. If desired, keep the smoke-session route and `test:browser:notifications` as the standard prod verification path.
+1. Fix the GitHub issue mirror token and verify a real issue gets created from `/community`.
+2. Run a real publish notification and a real thread-activity notification end to end.
+3. Decide whether to keep the smoke-session route and `test:browser:notifications` as the standard prod verification path.
 
 ## Working Rules For Future Codex Sessions
 
