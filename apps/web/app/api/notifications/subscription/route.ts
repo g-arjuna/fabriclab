@@ -17,7 +17,7 @@ export async function GET() {
 
   const { data, error } = await adminDb
     .from("email_subscriptions")
-    .select("notify_new_content, notify_thread_activity, email")
+    .select("notify_new_content, notify_thread_activity, email, preferences_confirmed")
     .eq("user_id", viewer.user.id)
     .maybeSingle();
 
@@ -27,7 +27,7 @@ export async function GET() {
 
   return NextResponse.json({
     subscribed: true,
-    hasSavedPreferences: Boolean(data),
+    hasSavedPreferences: Boolean(data?.preferences_confirmed),
     email: data?.email ?? viewer.email,
     notifyNewContent: data?.notify_new_content ?? true,
     notifyThreadActivity: data?.notify_thread_activity ?? true,
@@ -47,7 +47,7 @@ export async function PUT(request: Request) {
   const adminDb = admin as any;
   const { data: existing, error: existingError } = await adminDb
     .from("email_subscriptions")
-    .select("notify_new_content, notify_thread_activity")
+    .select("notify_new_content, notify_thread_activity, preferences_confirmed")
     .eq("user_id", viewer.user.id)
     .maybeSingle();
 
@@ -73,6 +73,7 @@ export async function PUT(request: Request) {
       display_name: viewer.user.user_metadata?.full_name ?? viewer.user.user_metadata?.name ?? null,
       notify_new_content: notifyNewContent,
       notify_thread_activity: notifyThreadActivity,
+      preferences_confirmed: true,
     },
     {
       onConflict: "user_id",
