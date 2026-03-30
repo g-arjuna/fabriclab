@@ -1,7 +1,7 @@
 # Engineering Sync
 
 Last updated: 2026-03-30
-Current baseline commit: `563794d`
+Current baseline commit: `d60faa7`
 Primary branch: `main`
 
 This file is the shared engineering source of truth for FabricLab when work is split across
@@ -138,18 +138,13 @@ Required token shape:
 
 ### Domain
 
-Not yet integrated.
-
-Planned direction:
-
-- `fabriclab.dev` on Vercel
-- Cloudflare Free for DNS/CDN/TLS
-- optional later `www.fabriclab.dev`
-
-Important caveat:
-
-- removing `*.supabase.co` from hosted auth/OAuth flows requires Supabase custom auth domain support,
-  which is a paid add-on
+- `fabriclab.dev` is now the canonical production domain.
+- `www.fabriclab.dev` redirects to apex.
+- `auth.fabriclab.dev` redirects to the branded login flow.
+- Production auth was verified live on the real domain for:
+  - Google OAuth
+  - GitHub OAuth
+  - signed FabricLab session cookie creation
 
 ## What Changed Recently
 
@@ -277,24 +272,50 @@ Important caveat:
   - validation completed locally:
     - `apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json`
     - `npm run build`
+- Fixed first-run notification onboarding to distinguish auto-created subscription rows from
+  explicit user confirmation:
+  - added `preferences_confirmed` to `email_subscriptions`
+  - migration:
+    - `supabase/migrations/20260330_005_notification_preferences_confirmed.sql`
+  - updated:
+    - `apps/web/app/api/notifications/subscription/route.ts`
+- Verified live notification plumbing:
+  - first-run popup now appears when preferences are not yet confirmed
+  - `/account` preference panel and discussion reply opt-ins were exercised against production
+  - Mailgun direct-send test succeeded on production
+- Added an admin-only smoke-session route so production browser tests no longer require local access
+  to `AUTH_SESSION_SECRET`:
+  - `apps/web/app/api/admin/testing/session/route.ts`
+  - gated by `SMOKE_TEST_AUTH_TOKEN`
+- Added production notification smoke coverage:
+  - `apps/web/tests/notifications.smoke.spec.ts`
+  - `npm run test:browser:notifications`
+- Live notification smoke result:
+  - passed:
+    - first sign-in preference popup + persistence
+    - discussion reply-notification checkboxes
+  - blocked:
+    - general forum thread creation / GitHub mirroring verification
+    - reason: production still appears to be missing the community forum tables/migration
 
 ## Open Items
 
-### 1. Domain integration
+### 1. Community forum migration on production
 
 Status:
 
-- in progress
-- configuration task, not code task
+- code complete
+- production database/config incomplete
 
 Needed:
 
-- ensure `fabriclab.dev` and `www.fabriclab.dev` are both added and verified in Vercel
-- complete Cloudflare DNS by adding `www` CNAME target to Vercel DNS endpoint
-- set environment-specific `NEXT_PUBLIC_APP_URL` values in Vercel (Preview vs Production)
-- update OAuth provider callback URLs for both preview and production public URLs
-- update Supabase Site URL + redirect URLs
-- redeploy and test auth end-to-end
+- verify/apply the general forum schema on the production Supabase project
+- specifically confirm:
+  - `community_threads`
+  - `community_posts`
+  - associated RLS policies from `20260329_003_community_forum_threads.sql`
+- re-run:
+  - `npm run test:browser:notifications`
 
 ### 2. GitHub issue mirroring token fix
 
@@ -334,28 +355,26 @@ Needed:
 - stabilize OAuth callback and provider edge cases (state expiry, denied consent handling)
 - keep Supabase for data only (profiles/progress/community/release metadata)
 - define migration for `auth.users` foreign-key dependency in Supabase schema
-- add GitHub OAuth credentials and enable the GitHub button on production
 
-### 6. Email notification provider configuration
+### 5. Email notification provider configuration
 
 Status:
 
 - live provider path verified
-- preferences UI work in progress locally
+- preferences UI now deployed
 
 Needed:
 
-- finish and deploy the first-run notification prompt + `/account` preferences UI
 - test real publish notifications on a content release
-- test real thread activity notifications on thread create/reply flows
+- test real thread activity notifications on thread create/reply flows once forum tables are confirmed live
 - decide whether to keep the admin notification test tool permanently or remove it after launch hardening
 
 ## Immediate Next Steps
 
-1. Deploy the notification-preference UX changes currently in the worktree.
-2. Test the first-run prompt, `/account` preference saves, and thread-create opt-in on the live site.
-3. Fix the GitHub issue mirror token and verify a real issue gets created.
-4. Run a real publish notification and a real thread-activity notification end to end.
+1. Confirm/apply the production community forum migration (`20260329_003_community_forum_threads.sql`).
+2. Fix the GitHub issue mirror token and verify a real issue gets created from `/community`.
+3. Run a real publish notification and a real thread-activity notification end to end.
+4. If desired, keep the smoke-session route and `test:browser:notifications` as the standard prod verification path.
 
 ## Working Rules For Future Codex Sessions
 
