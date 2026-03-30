@@ -36,6 +36,7 @@ export const learnerEmail =
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+const smokeAuthToken = process.env.SMOKE_TEST_AUTH_TOKEN?.trim() ?? "";
 
 export const appUrl = (
   process.env.PLAYWRIGHT_BASE_URL ??
@@ -105,13 +106,23 @@ export function trackErrors(page: Page): BrowserErrorTracker {
       failure === "net::ERR_ABORTED" &&
       url.startsWith(appUrl) &&
       /\/api\/auth\/session(?:\?|$)/.test(url);
+    const isAbortedInternalProgressProbe =
+      failure === "net::ERR_ABORTED" &&
+      url.startsWith(appUrl) &&
+      /\/api\/progress(?:\/|(?:\?|$))/.test(url);
+    const isAbortedNotificationPreferenceProbe =
+      failure === "net::ERR_ABORTED" &&
+      url.startsWith(appUrl) &&
+      /\/api\/notifications\/subscription(?:\?|$)/.test(url);
 
     if (
       isAbortedRscRequest ||
       isAbortedStaticChunkRequest ||
       isAbortedSupabaseUserProbe ||
       isAbortedSupabaseProgressWrite ||
-      isAbortedAuthSessionProbe
+      isAbortedAuthSessionProbe ||
+      isAbortedInternalProgressProbe ||
+      isAbortedNotificationPreferenceProbe
     ) {
       return;
     }
@@ -173,29 +184,48 @@ export async function findUserIdByEmail(email = smokeEmail) {
 }
 
 export async function signInWithSession(page: Page, email = smokeEmail) {
-  const userId = await findUserIdByEmail(email);
-  await ensurePaidEntitlement(email);
-  const session = await createSessionCookie({
-    id: userId,
-    email,
-    user_metadata: {
-      full_name: null,
-      name: null,
-    },
-  });
+  if (smokeAuthToken) {
+    const response = await page.request.post(`${appUrl}/api/admin/testing/session`, {
+      headers: {
+        "Content-Type": "application/json",
+        "x-fabriclab-smoke-token": smokeAuthToken,
+      },
+      data: {
+        email,
+        ensurePaid: true,
+      },
+    });
 
-  expect(session, "Failed to mint a FabricLab session cookie").toBeTruthy();
-  await page.context().addCookies([
-    {
-      name: getSessionCookieName(),
-      value: session!,
-      domain: new URL(appUrl).hostname,
-      path: "/",
-      httpOnly: true,
-      sameSite: "Lax",
-      secure: appUrl.startsWith("https://"),
-    },
-  ]);
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    expect(
+      response.ok(),
+      payload?.error ?? `Failed to establish smoke session via ${appUrl}/api/admin/testing/session`,
+    ).toBe(true);
+  } else {
+    const userId = await findUserIdByEmail(email);
+    await ensurePaidEntitlement(email);
+    const session = await createSessionCookie({
+      id: userId,
+      email,
+      user_metadata: {
+        full_name: null,
+        name: null,
+      },
+    });
+
+    expect(session, "Failed to mint a FabricLab session cookie").toBeTruthy();
+    await page.context().addCookies([
+      {
+        name: getSessionCookieName(),
+        value: session!,
+        domain: new URL(appUrl).hostname,
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax",
+        secure: appUrl.startsWith("https://"),
+      },
+    ]);
+  }
 
   await expect
     .poll(
