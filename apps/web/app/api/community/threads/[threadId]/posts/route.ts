@@ -34,6 +34,11 @@ export async function POST(request: Request, { params }: RouteContext) {
   if (!supabase) {
     return NextResponse.json({ error: "Supabase is not configured." }, { status: 500 });
   }
+  const admin = getAdminSupabaseClient();
+  if (!admin) {
+    return NextResponse.json({ error: "Supabase admin is not configured." }, { status: 500 });
+  }
+  const adminDb = admin as any;
 
   const [{ data: thread, error: threadError }, { data: profile }] = await Promise.all([
     supabase
@@ -42,7 +47,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       .eq("id", threadId)
       .eq("status", "published")
       .maybeSingle(),
-    supabase.from("profiles").select("display_name").eq("user_id", viewer.user.id).maybeSingle(),
+    adminDb.from("profiles").select("display_name").eq("user_id", viewer.user.id).maybeSingle(),
   ]);
 
   if (isMissingCommunityTables(threadError)) {
@@ -70,7 +75,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     displayName: profile?.display_name ?? null,
   });
 
-  const { data, error } = await supabase
+  const { data, error } = await adminDb
     .from("community_posts")
     .insert({
       thread_id: threadId,
@@ -97,18 +102,15 @@ export async function POST(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const admin = getAdminSupabaseClient();
-  if (admin) {
-    await ensureViewerNotificationSubscription(admin, {
-      user: viewer.user,
-      email: viewer.email,
-    }).catch(() => undefined);
-  }
+  await ensureViewerNotificationSubscription(adminDb, {
+    user: viewer.user,
+    email: viewer.email,
+  }).catch(() => undefined);
 
   const appEnv = getPublicSupabaseEnv();
-  if (appEnv && admin) {
+  if (appEnv) {
     await notifyThreadActivity({
-      admin,
+      admin: adminDb,
       threadId,
       actorUserId: viewer.user.id,
       actorName: authorName,

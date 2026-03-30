@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getServerViewer } from "@/lib/auth/server";
 import { getSourceCatalogItem, type CatalogKind } from "@/lib/catalog/source";
+import { getAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
 
 const COMMENT_TYPES = ["feedback", "correction", "issue", "question"] as const;
@@ -144,8 +145,13 @@ export async function POST(request: Request) {
   if (!supabase) {
     return NextResponse.json({ error: "Supabase is not configured." }, { status: 500 });
   }
+  const admin = getAdminSupabaseClient();
+  if (!admin) {
+    return NextResponse.json({ error: "Supabase admin is not configured." }, { status: 500 });
+  }
+  const adminDb = admin as any;
 
-  const { data: profile } = await supabase
+  const { data: profile } = await adminDb
     .from("profiles")
     .select("display_name")
     .eq("user_id", viewer.user.id)
@@ -158,7 +164,7 @@ export async function POST(request: Request) {
     displayName: profile?.display_name ?? null,
   });
 
-  const { data, error } = await supabase
+  const { data, error } = await adminDb
     .from("community_comments")
     .insert({
       content_kind: kind,
@@ -192,4 +198,3 @@ export async function POST(request: Request) {
     comment: data as CommentRow,
   });
 }
-

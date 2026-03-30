@@ -40,8 +40,8 @@ export function isMissingCommunityTables(error: { code?: string; message?: strin
 
   return (
     error.code === "42P01" ||
-    /community_threads/i.test(error.message ?? "") ||
-    /community_posts/i.test(error.message ?? "")
+    /relation .*community_threads.* does not exist/i.test(error.message ?? "") ||
+    /relation .*community_posts.* does not exist/i.test(error.message ?? "")
   );
 }
 

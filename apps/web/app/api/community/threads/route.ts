@@ -137,8 +137,13 @@ export async function POST(request: Request) {
   if (!supabase) {
     return NextResponse.json({ error: "Supabase is not configured." }, { status: 500 });
   }
+  const admin = getAdminSupabaseClient();
+  if (!admin) {
+    return NextResponse.json({ error: "Supabase admin is not configured." }, { status: 500 });
+  }
+  const adminDb = admin as any;
 
-  const { data: profile } = await supabase
+  const { data: profile } = await adminDb
     .from("profiles")
     .select("display_name")
     .eq("user_id", viewer.user.id)
@@ -151,7 +156,7 @@ export async function POST(request: Request) {
     displayName: profile?.display_name ?? null,
   });
 
-  const { data, error } = await supabase
+  const { data, error } = await adminDb
     .from("community_threads")
     .insert({
       thread_type: threadType,
@@ -185,14 +190,10 @@ export async function POST(request: Request) {
   let githubIssueUrl: string | null = (data as { github_issue_url: string | null }).github_issue_url;
   const appEnv = getPublicSupabaseEnv();
   const threadId = (data as { id: string }).id;
-  const admin = getAdminSupabaseClient();
-
-  if (admin) {
-    await ensureViewerNotificationSubscription(admin, {
-      user: viewer.user,
-      email: viewer.email,
-    }).catch(() => undefined);
-  }
+  await ensureViewerNotificationSubscription(adminDb, {
+    user: viewer.user,
+    email: viewer.email,
+  }).catch(() => undefined);
 
   if (openGitHubIssue && appEnv) {
     const threadUrl = `${appEnv.appUrl}/community/${threadId}`;
@@ -205,7 +206,7 @@ export async function POST(request: Request) {
 
     if (issueResult.ok) {
       githubIssueUrl = issueResult.issueUrl;
-      await supabase
+      await adminDb
         .from("community_threads")
         .update({
           github_issue_url: issueResult.issueUrl,
@@ -218,9 +219,9 @@ export async function POST(request: Request) {
     }
   }
 
-  if (appEnv && admin) {
+  if (appEnv) {
     await notifyThreadActivity({
-      admin,
+      admin: adminDb,
       threadId,
       actorUserId: viewer.user.id,
       actorName: authorName,
