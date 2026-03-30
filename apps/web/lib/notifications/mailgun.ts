@@ -6,6 +6,16 @@ export type NotificationEmail = {
   text: string;
 };
 
+export type NotificationEmailResult = {
+  ok: boolean;
+  status: number | null;
+  reason:
+    | "ok"
+    | "missing_config"
+    | "request_failed";
+  message: string;
+};
+
 function getMailgunConfig() {
   const apiKey = process.env.MAILGUN_API_KEY?.trim();
   const domain = process.env.MAILGUN_DOMAIN?.trim();
@@ -27,10 +37,18 @@ export function isNotificationEmailConfigured() {
   return getMailgunConfig() !== null;
 }
 
-export async function sendNotificationEmail(email: NotificationEmail): Promise<boolean> {
+export async function sendNotificationEmailDetailed(
+  email: NotificationEmail,
+): Promise<NotificationEmailResult> {
   const config = getMailgunConfig();
   if (!config) {
-    return false;
+    return {
+      ok: false,
+      status: null,
+      reason: "missing_config",
+      message:
+        "Mailgun is not configured. Set MAILGUN_API_KEY, MAILGUN_DOMAIN, and MAIL_FROM_EMAIL.",
+    };
   }
 
   const body = new URLSearchParams({
@@ -50,5 +68,17 @@ export async function sendNotificationEmail(email: NotificationEmail): Promise<b
     cache: "no-store",
   });
 
-  return response.ok;
+  const message = (await response.text().catch(() => "")) || response.statusText || "Mailgun request completed.";
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    reason: response.ok ? "ok" : "request_failed",
+    message,
+  };
+}
+
+export async function sendNotificationEmail(email: NotificationEmail): Promise<boolean> {
+  const result = await sendNotificationEmailDetailed(email);
+  return result.ok;
 }

@@ -27,6 +27,7 @@ export async function GET() {
 
   return NextResponse.json({
     subscribed: true,
+    hasSavedPreferences: Boolean(data),
     email: data?.email ?? viewer.email,
     notifyNewContent: data?.notify_new_content ?? true,
     notifyThreadActivity: data?.notify_thread_activity ?? true,
@@ -44,13 +45,22 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Supabase admin is not configured." }, { status: 500 });
   }
   const adminDb = admin as any;
+  const { data: existing, error: existingError } = await adminDb
+    .from("email_subscriptions")
+    .select("notify_new_content, notify_thread_activity")
+    .eq("user_id", viewer.user.id)
+    .maybeSingle();
+
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 500 });
+  }
 
   const body = (await request.json().catch(() => null)) as
     | { notifyNewContent?: boolean; notifyThreadActivity?: boolean }
     | null;
 
-  const notifyNewContent = body?.notifyNewContent ?? true;
-  const notifyThreadActivity = body?.notifyThreadActivity ?? true;
+  const notifyNewContent = body?.notifyNewContent ?? existing?.notify_new_content ?? true;
+  const notifyThreadActivity = body?.notifyThreadActivity ?? existing?.notify_thread_activity ?? true;
   const email = viewer.email?.trim().toLowerCase();
   if (!email) {
     return NextResponse.json({ error: "A verified account email is required for notifications." }, { status: 400 });
@@ -76,6 +86,7 @@ export async function PUT(request: Request) {
 
   return NextResponse.json({
     ok: true,
+    hasSavedPreferences: true,
     notifyNewContent,
     notifyThreadActivity,
   });

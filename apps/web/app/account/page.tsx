@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { NotificationPreferencesPanel } from "@/components/notifications/NotificationPreferencesPanel";
 import { getServerViewer } from "@/lib/auth/server";
 
 export default async function AccountPage() {
@@ -62,6 +63,8 @@ export default async function AccountPage() {
                 </Link>
               </div>
             ) : null}
+
+            <NotificationPreferencesPanel />
           </div>
         )}
       </div>

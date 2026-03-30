@@ -28,6 +28,9 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
   const [message, setMessage] = useState<string | null>(null);
   const [entitlementEmail, setEntitlementEmail] = useState("");
   const [entitlementPending, setEntitlementPending] = useState<"grant" | "revoke" | null>(null);
+  const [notificationTestEmail, setNotificationTestEmail] = useState("");
+  const [notificationTestPending, setNotificationTestPending] = useState(false);
+  const [notificationTestResult, setNotificationTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     itemsRef.current = items;
@@ -99,6 +102,53 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
     const payload = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
     setEntitlementPending(null);
     setMessage(payload?.message ?? payload?.error ?? "Entitlement update completed.");
+  }
+
+  async function sendNotificationTest() {
+    setNotificationTestPending(true);
+    setNotificationTestResult(null);
+
+    const response = await fetch("/api/admin/notifications/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: notificationTestEmail.trim() || undefined,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          error?: string;
+          configured?: boolean;
+          to?: string;
+          subject?: string;
+          ok?: boolean;
+          status?: number | null;
+          reason?: string;
+          message?: string;
+        }
+      | null;
+
+    setNotificationTestPending(false);
+
+    if (!response.ok) {
+      setNotificationTestResult(payload?.error ?? "Notification test failed.");
+      return;
+    }
+
+    const lines = [
+      `Configured: ${payload?.configured ? "yes" : "no"}`,
+      payload?.to ? `To: ${payload.to}` : null,
+      payload?.subject ? `Subject: ${payload.subject}` : null,
+      payload?.reason ? `Reason: ${payload.reason}` : null,
+      payload?.status != null ? `HTTP status: ${payload.status}` : null,
+      payload?.message ? `Provider response: ${payload.message}` : null,
+      payload?.ok ? "Result: success" : "Result: failed",
+    ].filter(Boolean);
+
+    setNotificationTestResult(lines.join("\n"));
   }
 
   function updateItem(slug: string, patch: Partial<AdminCatalogItem>) {
@@ -291,6 +341,37 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
           <div className="mt-4 rounded-2xl border border-white/8 bg-[#020b16] px-4 py-3 text-sm text-slate-300">
             {message}
           </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Notification testing</p>
+        <h2 className="mt-3 text-2xl font-semibold text-white">Send a Mailgun test email</h2>
+        <p className="mt-3 text-sm leading-7 text-slate-400">
+          Trigger the production notification path directly and inspect the exact provider response.
+          Leave the address blank to send to your signed-in admin email.
+        </p>
+        <div className="mt-5 flex flex-col gap-3 md:flex-row">
+          <input
+            type="email"
+            value={notificationTestEmail}
+            onChange={(event) => setNotificationTestEmail(event.target.value)}
+            placeholder="admin@fabriclab.dev"
+            className="flex-1 rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-cyan-500/40"
+          />
+          <button
+            type="button"
+            onClick={() => void sendNotificationTest()}
+            disabled={notificationTestPending}
+            className="rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {notificationTestPending ? "Sending..." : "Send test email"}
+          </button>
+        </div>
+        {notificationTestResult ? (
+          <pre className="mt-4 whitespace-pre-wrap rounded-2xl border border-white/8 bg-[#020b16] px-4 py-3 text-sm text-slate-300">
+            {notificationTestResult}
+          </pre>
         ) : null}
       </section>
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useNotificationPreferences } from "@/components/notifications/useNotificationPreferences";
 import type { CommunityForumThread } from "@/lib/community/forum";
 
 function formatDate(value: string) {
@@ -62,10 +63,12 @@ function ThreadCard({ thread }: { thread: CommunityForumThread }) {
 
 export function CommunityForum() {
   const { user, loading } = useAuth();
+  const { preferences, savePreferences } = useNotificationPreferences(Boolean(user));
   const [threads, setThreads] = useState<CommunityForumThread[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [openGitHubIssue, setOpenGitHubIssue] = useState(false);
+  const [notifyThreadActivity, setNotifyThreadActivity] = useState(true);
   const [fetching, setFetching] = useState(true);
   const [setupPending, setSetupPending] = useState(false);
   const [githubIssueMirrorAvailable, setGitHubIssueMirrorAvailable] = useState(false);
@@ -118,6 +121,14 @@ export function CommunityForum() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!preferences) {
+      return;
+    }
+
+    setNotifyThreadActivity(preferences.notifyThreadActivity);
+  }, [preferences]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -134,6 +145,22 @@ export function CommunityForum() {
     setPosting(true);
     setError(null);
     setMessage(null);
+
+    if (
+      user &&
+      preferences &&
+      (!preferences.hasSavedPreferences || preferences.notifyThreadActivity !== notifyThreadActivity)
+    ) {
+      const updatedPreferences = await savePreferences({
+        notifyThreadActivity,
+      });
+
+      if (!updatedPreferences) {
+        setPosting(false);
+        setError("Could not save your reply-notification preference before creating the discussion.");
+        return;
+      }
+    }
 
     const response = await fetch("/api/community/threads", {
       method: "POST",
@@ -269,6 +296,20 @@ export function CommunityForum() {
                     {githubIssueMirrorAvailable
                       ? "If enabled, FabricLab will mirror this discussion into the GitHub issue tracker for easier maintainer follow-up."
                       : "The issue tracker is linked publicly, but automatic GitHub issue mirroring is not configured on the server yet."}
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-2xl border border-white/8 bg-slate-950/80 px-4 py-3 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={notifyThreadActivity}
+                  onChange={(event) => setNotifyThreadActivity(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-cyan-400 focus:ring-cyan-400"
+                />
+                <span>
+                  <span className="block font-medium text-slate-200">Email me about replies to this discussion</span>
+                  <span className="mt-1 block text-xs leading-6 text-slate-500">
+                    This updates your FabricLab discussion-reply notification preference for future threads too.
                   </span>
                 </span>
               </label>

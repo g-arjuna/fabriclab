@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useNotificationPreferences } from "@/components/notifications/useNotificationPreferences";
 import type { CommunityForumThread } from "@/lib/community/forum";
 
 type ContentKind = "chapter" | "lab";
@@ -62,12 +63,14 @@ export function CommunityThread({
   compact = false,
 }: CommunityThreadProps) {
   const { user, loading } = useAuth();
+  const { preferences, savePreferences } = useNotificationPreferences(Boolean(user));
   const [comments, setComments] = useState<CommunityComment[]>([]);
   const [threads, setThreads] = useState<CommunityForumThread[]>([]);
   const [commentType, setCommentType] = useState<CommentType>("feedback");
   const [threadTitle, setThreadTitle] = useState("");
   const [threadBody, setThreadBody] = useState("");
   const [openGitHubIssue, setOpenGitHubIssue] = useState(false);
+  const [notifyThreadActivity, setNotifyThreadActivity] = useState(true);
   const [body, setBody] = useState("");
   const [fetching, setFetching] = useState(true);
   const [threadsFetching, setThreadsFetching] = useState(true);
@@ -175,6 +178,14 @@ export function CommunityThread({
     };
   }, [contentKind, contentSlug, error]);
 
+  useEffect(() => {
+    if (!preferences) {
+      return;
+    }
+
+    setNotifyThreadActivity(preferences.notifyThreadActivity);
+  }, [preferences]);
+
   const introCopy = useMemo(
     () =>
       contentKind === "chapter"
@@ -250,6 +261,22 @@ export function CommunityThread({
     setPostingThread(true);
     setError(null);
     setThreadMessage(null);
+
+    if (
+      user &&
+      preferences &&
+      (!preferences.hasSavedPreferences || preferences.notifyThreadActivity !== notifyThreadActivity)
+    ) {
+      const updatedPreferences = await savePreferences({
+        notifyThreadActivity,
+      });
+
+      if (!updatedPreferences) {
+        setPostingThread(false);
+        setError("Could not save your reply-notification preference before creating the discussion.");
+        return;
+      }
+    }
 
     const response = await fetch("/api/community/threads", {
       method: "POST",
@@ -480,6 +507,20 @@ export function CommunityThread({
                     {githubIssueMirrorAvailable
                       ? "Mirror this tracked discussion into the GitHub issue tracker for maintainer follow-up."
                       : "GitHub mirroring is not configured on the server yet, but the thread will still be created here."}
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-2xl border border-white/8 bg-[#020b16] px-4 py-3 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={notifyThreadActivity}
+                  onChange={(event) => setNotifyThreadActivity(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-cyan-400 focus:ring-cyan-400"
+                />
+                <span>
+                  <span className="block font-medium text-slate-200">Email me about replies to this discussion</span>
+                  <span className="mt-1 block text-xs leading-6 text-slate-500">
+                    This keeps your reply-notification preference explicit instead of silently auto-subscribing you.
                   </span>
                 </span>
               </label>

@@ -1,7 +1,7 @@
 # Engineering Sync
 
 Last updated: 2026-03-30
-Current baseline commit: `37cdab0`
+Current baseline commit: `563794d`
 Primary branch: `main`
 
 This file is the shared engineering source of truth for FabricLab when work is split across
@@ -104,6 +104,12 @@ Platform engineering, auth, release control, community plumbing, and deployment 
 - Thread activity notifications can be sent on thread creation and replies for subscribed users.
 - Subscription preferences are now persisted in Supabase (`email_subscriptions`) via
   `/api/notifications/subscription`.
+- Mailgun delivery is now verified live through the admin notification test tool on
+  `fabriclab.dev/admin/releases`.
+- Notification preferences still need UX polish, but the active worktree now includes:
+  - a first-run signed-in notification prompt
+  - a dedicated `/account` notification preferences panel
+  - explicit discussion-reply opt-in checkboxes when creating forum or tracked discussion threads
 
 ### GitHub Issue Mirroring
 
@@ -199,6 +205,24 @@ Important caveat:
 
 ### 2026-03-30
 
+- Verified real-domain auth stack end to end:
+  - `fabriclab.dev` canonical
+  - `www.fabriclab.dev` redirects to apex
+  - `auth.fabriclab.dev` redirects to `/login`
+  - Google OAuth works on the real domain
+  - GitHub OAuth works on the real domain
+- Replaced the GitHub OAuth app owner branding with an org-owned app so the consent screen no
+  longer shows the personal owner name.
+- Added production `AUTH_SESSION_SECRET` and confirmed FabricLab session cookie minting works for
+  both Google and GitHub OAuth callbacks.
+- Added admin notification test tooling and verified Mailgun accepts production sends:
+  - `apps/web/app/api/admin/notifications/test/route.ts`
+  - `apps/web/components/admin/ReleaseControlsClient.tsx`
+  - `apps/web/lib/notifications/mailgun.ts`
+- Production Mailgun test result:
+  - configured: yes
+  - status: `200`
+  - provider response: `Queued. Thank you.`
 - Pulled the Codex web auth/notification branch into desktop for local review and fix-up:
   - remote branch: `origin/codex/read-agents.md,-plan.md,-engineering_sync.md`
   - local tracking branch: `codex/read-agents-md-plan-md-engineering-sync-md`
@@ -236,6 +260,23 @@ Important caveat:
   - the web branch builds cleanly
   - local regression coverage is green again
   - main remaining risk is rollout/config migration, not a compile-time issue
+- Added notification preference UX in the active worktree:
+  - onboarding modal for first signed-in session:
+    - `apps/web/components/notifications/NotificationOnboardingPrompt.tsx`
+  - reusable notification preferences client hook:
+    - `apps/web/components/notifications/useNotificationPreferences.ts`
+  - `/account` preferences panel:
+    - `apps/web/components/notifications/NotificationPreferencesPanel.tsx`
+    - `apps/web/app/account/page.tsx`
+  - explicit reply-notification opt-in on discussion creation:
+    - `apps/web/components/community/CommunityForum.tsx`
+    - `apps/web/components/community/CommunityThread.tsx`
+  - subscription API now exposes whether preferences were ever explicitly saved and supports
+    partial updates:
+    - `apps/web/app/api/notifications/subscription/route.ts`
+  - validation completed locally:
+    - `apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json`
+    - `npm run build`
 
 ## Open Items
 
@@ -299,23 +340,22 @@ Needed:
 
 Status:
 
-- code path implemented
-- provider/domain configuration pending
+- live provider path verified
+- preferences UI work in progress locally
 
 Needed:
 
-- create/verify Mailgun sending domain and API key
-- configure sender identity (Zoho-managed mailbox or alias) for `MAIL_FROM_EMAIL`
-- set `MAILGUN_*` / `MAIL_FROM_*` env vars in Vercel Preview + Production
-- apply `20260329_004_email_notifications.sql` migration in Supabase
-- verify end-to-end sends on publish and thread reply flows
+- finish and deploy the first-run notification prompt + `/account` preferences UI
+- test real publish notifications on a content release
+- test real thread activity notifications on thread create/reply flows
+- decide whether to keep the admin notification test tool permanently or remove it after launch hardening
 
 ## Immediate Next Steps
 
-1. Add GitHub OAuth credentials and enable the GitHub button on production.
-2. Re-run browser smoke suites against the cleaned first-party auth path.
+1. Deploy the notification-preference UX changes currently in the worktree.
+2. Test the first-run prompt, `/account` preference saves, and thread-create opt-in on the live site.
 3. Fix the GitHub issue mirror token and verify a real issue gets created.
-4. Configure Mailgun + sender identity env vars and run an end-to-end notification send validation.
+4. Run a real publish notification and a real thread-activity notification end to end.
 
 ## Working Rules For Future Codex Sessions
 
