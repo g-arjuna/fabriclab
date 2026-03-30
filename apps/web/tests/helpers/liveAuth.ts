@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { createSessionCookie, getSessionCookieName } from "@/lib/auth/session";
 
 export type BrowserErrorTracker = {
   consoleErrors: string[];
@@ -171,28 +172,31 @@ export async function findUserIdByEmail(email = smokeEmail) {
   return createdUser.user!.id;
 }
 
-export async function generateMagicCallbackUrl(email = smokeEmail) {
-  const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.generateLink({
-    type: "magiclink",
+export async function signInWithSession(page: Page, email = smokeEmail) {
+  const userId = await findUserIdByEmail(email);
+  await ensurePaidEntitlement(email);
+  const session = await createSessionCookie({
+    id: userId,
     email,
-    options: {
-      redirectTo: `${appUrl}/auth/callback`,
+    user_metadata: {
+      full_name: null,
+      name: null,
     },
   });
 
-  expect(error, error?.message ?? "Failed to generate magic link").toBeNull();
-  const tokenHash = data?.properties?.hashed_token;
-  expect(tokenHash, "Magic link did not include a hashed token").toBeTruthy();
+  expect(session, "Failed to mint a FabricLab session cookie").toBeTruthy();
+  await page.context().addCookies([
+    {
+      name: getSessionCookieName(),
+      value: session!,
+      domain: new URL(appUrl).hostname,
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: appUrl.startsWith("https://"),
+    },
+  ]);
 
-  return `${appUrl}/auth/callback?token_hash=${encodeURIComponent(tokenHash ?? "")}&type=magiclink&next=%2Faccount`;
-}
-
-export async function signInWithMagicLink(page: Page, email = smokeEmail) {
-  await ensurePaidEntitlement(email);
-  const callbackUrl = await generateMagicCallbackUrl(email);
-
-  await page.goto(callbackUrl, { waitUntil: "domcontentloaded" });
   await expect
     .poll(
       async () => {

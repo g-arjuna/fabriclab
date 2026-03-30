@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { assertNoBrowserErrors, smokeEmail, signInWithMagicLink, trackErrors } from "./helpers/liveAuth";
+import { assertNoBrowserErrors, smokeEmail, signInWithSession, trackErrors } from "./helpers/liveAuth";
 
 test.describe.serial("Deployed auth and sign-in gating smoke", () => {
   test("guest can browse the catalog but must sign in for chapters and labs", async ({ page }) => {
@@ -25,7 +25,7 @@ test.describe.serial("Deployed auth and sign-in gating smoke", () => {
   test("signed-in users can open chapters and labs plus account features", async ({ page }) => {
     const tracker = trackErrors(page);
 
-    await signInWithMagicLink(page);
+    await signInWithSession(page);
 
     await page.goto("/account", { waitUntil: "domcontentloaded" });
     await expect(page.getByText(smokeEmail)).toBeVisible();

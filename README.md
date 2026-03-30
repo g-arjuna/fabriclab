@@ -7,7 +7,7 @@ The repo now combines:
 
 - repo-backed chapter content and visualisations
 - a state-driven lab simulator
-- Supabase-backed auth, release metadata, synced progress, community comments, and forum threads
+- Supabase-backed learner data, release metadata, synced progress, community comments, and forum threads
 - a Vercel-ready Next.js app in `apps/web`
 
 ## Repo status
@@ -24,7 +24,8 @@ Current defaults:
 
 - every published chapter is open
 - every published lab is open
-- sign-in is optional and used for synced progress plus admin workflows
+- sign-in is required for chapters and labs
+- signed-in learners get synced progress plus community/admin features
 - release controls still exist so unfinished content can stay unpublished
 
 ## Chapter status
@@ -102,7 +103,13 @@ Defined in `apps/web/.env.example`:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_ADMIN_EMAILS`
-- `NEXT_PUBLIC_SOCIAL_AUTH_PROVIDERS` (optional, for example `google,github`)
+- `AUTH_SESSION_SECRET`
+- `NEXT_PUBLIC_OAUTH_PROVIDERS` (optional, for example `google,github`)
+- `GOOGLE_OAUTH_CLIENT_ID` (optional)
+- `GOOGLE_OAUTH_CLIENT_SECRET` (optional)
+- `GITHUB_OAUTH_CLIENT_ID` (optional)
+- `GITHUB_OAUTH_CLIENT_SECRET` (optional)
+- `AUTH_ENTRY_HOSTS` (optional, for example `auth.fabriclab.dev`)
 - `NEXT_PUBLIC_COMMUNITY_REPO_URL` (optional)
 - `NEXT_PUBLIC_COMMUNITY_ISSUES_URL` (optional)
 - `NEXT_PUBLIC_COMMUNITY_DISCUSSIONS_URL` (optional)
@@ -113,14 +120,12 @@ Defined in `apps/web/.env.example`:
 ## Supabase setup
 
 1. Create a Supabase dev project.
-2. Enable email magic-link auth.
-3. If you want social sign-in, enable Google and/or GitHub in Supabase Auth providers.
-4. Set site URL to `http://localhost:3000`.
-5. Add `http://localhost:3000/auth/callback` as a redirect URL.
-6. Apply the SQL in `supabase/migrations/20260328_001_auth_access_release_control.sql`.
-7. Apply the SQL in `supabase/migrations/20260329_002_community_comments.sql`.
-8. Apply the SQL in `supabase/migrations/20260329_003_community_forum_threads.sql`.
-9. Run `npm run catalog:sync` from `apps/web`.
+2. Set site URL to `http://localhost:3000`.
+3. Apply the SQL in `supabase/migrations/20260328_001_auth_access_release_control.sql`.
+4. Apply the SQL in `supabase/migrations/20260329_002_community_comments.sql`.
+5. Apply the SQL in `supabase/migrations/20260329_003_community_forum_threads.sql`.
+6. Run `npm run catalog:sync` from `apps/web`.
+7. Configure Google and/or GitHub OAuth clients for the FabricLab-owned callback routes if you want live sign-in.
 
 ## Community setup
 
@@ -144,7 +149,7 @@ fine-grained personal access token, grant repository access to `g-arjuna/fabricl
 If you want to expose public community destinations, set the optional `NEXT_PUBLIC_COMMUNITY_*`
 and `NEXT_PUBLIC_SUPPORT_URL` variables in `apps/web/.env.local` and in Vercel.
 
-If you enable social sign-in providers in Supabase, set `NEXT_PUBLIC_SOCIAL_AUTH_PROVIDERS`
+If you enable first-party OAuth providers, set `NEXT_PUBLIC_OAUTH_PROVIDERS`
 to a comma-separated list such as `google,github` so the login page can show the corresponding buttons.
 
 ## Project structure

@@ -1,7 +1,7 @@
 # Engineering Sync
 
 Last updated: 2026-03-30
-Current baseline commit: `9d0ad78`
+Current baseline commit: `37cdab0`
 Primary branch: `main`
 
 This file is the shared engineering source of truth for FabricLab when work is split across
@@ -202,16 +202,21 @@ Important caveat:
 - Pulled the Codex web auth/notification branch into desktop for local review and fix-up:
   - remote branch: `origin/codex/read-agents.md,-plan.md,-engineering_sync.md`
   - local tracking branch: `codex/read-agents-md-plan-md-engineering-sync-md`
-- Fixed the legacy standalone auth callback so Supabase code and magic-link callbacks can still mint
-  FabricLab session cookies:
-  - `apps/web/app/auth/callback/route.ts`
-- Restored the branded magic-link fallback on the login page while keeping the new first-party OAuth
-  entry points:
-  - `apps/web/app/login/page.tsx`
-- Added migration compatibility for auth env handling:
-  - `apps/web/lib/auth/env.ts`
-  - `NEXT_PUBLIC_OAUTH_PROVIDERS` now falls back to `NEXT_PUBLIC_SOCIAL_AUTH_PROVIDERS`
-  - `AUTH_SESSION_SECRET` now falls back to `SUPABASE_SERVICE_ROLE_KEY` during migration
+- Merged the auth-domain migration branch into `main`
+- Made `fabriclab.dev` the canonical production domain
+- Added `auth.fabriclab.dev` as a branded auth-entry host redirecting to `/login`
+- Switched `www.fabriclab.dev` to redirect back to the apex domain
+- Verified live Google OAuth on the real domain returns to FabricLab and establishes a valid session
+- Removed the legacy Supabase fallback path from the app runtime:
+  - `apps/web/app/auth/callback/route.ts` now redirects old links back to `/login`
+  - `apps/web/app/login/page.tsx` is now first-party OAuth only
+  - `apps/web/components/catalog/AuthRequiredContentShell.tsx` now points learners to Google/GitHub sign-in only
+- Removed temporary auth env migration compatibility:
+  - `apps/web/lib/auth/env.ts` now requires `NEXT_PUBLIC_OAUTH_PROVIDERS`
+  - `apps/web/lib/auth/env.ts` now requires `AUTH_SESSION_SECRET`
+- Updated browser auth helper to mint FabricLab session cookies directly instead of generating
+  legacy Supabase auth links:
+  - `apps/web/tests/helpers/liveAuth.ts`
 - Verified branch-level auth behavior locally:
   - `apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json`
   - `npm run build`
@@ -276,19 +281,7 @@ Decision still open:
 - keep public-read / signed-in-write
 - or require sign-in for full community participation and reading
 
-### 4. Magic-link and auth-branding polish
-
-Current state:
-
-- login page branding improved
-- Supabase magic-link email content branded
-- Google consent still shows Supabase-hosted auth identity
-
-Blocked by:
-
-- Supabase custom auth domain is paid
-
-### 5. Replace Supabase Auth with first-party domain auth (in progress)
+### 4. First-party auth cleanup
 
 Status:
 
@@ -298,11 +291,9 @@ Status:
 Needed:
 
 - stabilize OAuth callback and provider edge cases (state expiry, denied consent handling)
-- update Playwright smoke helpers/fixtures to use new auth flow
 - keep Supabase for data only (profiles/progress/community/release metadata)
 - define migration for `auth.users` foreign-key dependency in Supabase schema
-- remove temporary migration fallback from `getAuthSessionSecret()` once `AUTH_SESSION_SECRET` is set
-  in all environments
+- add GitHub OAuth credentials and enable the GitHub button on production
 
 ### 6. Email notification provider configuration
 
@@ -321,12 +312,10 @@ Needed:
 
 ## Immediate Next Steps
 
-1. Complete remaining DNS/domain steps (`www` CNAME + Vercel verification) and set canonical public host.
-2. Configure Preview vs Production Vercel env URLs and align OAuth callback URLs for Google/GitHub.
-3. Validate first-party OAuth flows end-to-end on Vercel preview with real Google/GitHub creds.
-4. Update and pass browser smoke suites against the new session model.
-5. Fix the GitHub issue mirror token and verify a real issue gets created.
-6. Configure Mailgun + sender identity env vars and run an end-to-end notification send validation.
+1. Add GitHub OAuth credentials and enable the GitHub button on production.
+2. Re-run browser smoke suites against the cleaned first-party auth path.
+3. Fix the GitHub issue mirror token and verify a real issue gets created.
+4. Configure Mailgun + sender identity env vars and run an end-to-end notification send validation.
 
 ## Working Rules For Future Codex Sessions
 

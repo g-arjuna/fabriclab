@@ -101,8 +101,8 @@ export function AuthRequiredContentShell({
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Continue</p>
             <h2 className="mt-4 text-2xl font-semibold text-white">Use your FabricLab account</h2>
             <p className="mt-4 text-sm leading-7 text-slate-400">
-              Sign in with Google, GitHub, or a FabricLab magic link. We&apos;ll send you back to
-              this exact {kind === "chapter" ? "chapter page" : "lab"} after authentication.
+              Sign in with Google or GitHub. We&apos;ll send you back to this exact{" "}
+              {kind === "chapter" ? "chapter page" : "lab"} after authentication.
             </p>
             <div className="mt-8 flex flex-col gap-3">
               <Link

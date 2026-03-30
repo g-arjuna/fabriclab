@@ -4,7 +4,7 @@ import {
   appUrl,
   assertNoBrowserErrors,
   readCatalogState,
-  signInWithMagicLink,
+  signInWithSession,
   trackErrors,
   updateCatalogState,
 } from "./helpers/liveAuth";
@@ -24,7 +24,7 @@ test.describe.serial("Lab release controls smoke", () => {
     const guestPage = await guestContext.newPage();
 
     try {
-      await signInWithMagicLink(page);
+      await signInWithSession(page);
 
       await page.goto("/admin/releases", { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle");

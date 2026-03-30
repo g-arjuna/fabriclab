@@ -158,7 +158,7 @@ Current product shape:
 
 - all published chapters are open
 - all published labs are open
-- email magic-link auth is optional and mainly used for synced progress
+- FabricLab-owned Google/GitHub OAuth is the preferred sign-in path
 - community comments can live alongside chapters and labs once the migration is applied
 - minimal protected admin UI remains for release flags and internal tooling
 - entitlement plumbing may remain in the schema for future experimentation, but it is not part of the public learner journey

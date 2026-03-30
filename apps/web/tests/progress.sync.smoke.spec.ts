@@ -6,7 +6,7 @@ import {
   clearChapterProgress,
   findUserIdByEmail,
   readChapterProgress,
-  signInWithMagicLink,
+  signInWithSession,
   trackErrors,
 } from "./helpers/liveAuth";
 
@@ -34,7 +34,7 @@ test.describe.serial("Progress sync smoke", () => {
     const userId = await findUserIdByEmail();
     await clearChapterProgress(userId, targetChapter);
 
-    await signInWithMagicLink(page);
+    await signInWithSession(page);
     await page.goto(`${appUrl}/learn/${targetChapter}?page=0`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /The Hardware Story/i })).toBeVisible();
     await expect

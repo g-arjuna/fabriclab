@@ -7,7 +7,7 @@ import {
   hasPaidEntitlement,
   learnerEmail,
   revokePaidEntitlement,
-  signInWithMagicLink,
+  signInWithSession,
   trackErrors,
 } from "./helpers/liveAuth";
 
@@ -22,7 +22,7 @@ test.describe.serial("Legacy entitlement revoke smoke", () => {
     try {
       await ensurePaidEntitlement(learnerEmail);
 
-      await signInWithMagicLink(learnerPage, learnerEmail);
+      await signInWithSession(learnerPage, learnerEmail);
       await learnerPage.goto(`${appUrl}/account`, { waitUntil: "domcontentloaded" });
       await expect(learnerPage.getByText(learnerEmail)).toBeVisible();
       await expect(learnerPage.getByText(/Standard learner account\./i)).toBeVisible();
@@ -40,7 +40,7 @@ test.describe.serial("Legacy entitlement revoke smoke", () => {
       await expect(learnerPage.getByRole("heading", { name: /Diagnose fabric congestion/i })).toBeVisible();
       await expect(learnerPage.getByText(/GPU training throughput has dropped 40%/i)).toBeVisible();
 
-      await signInWithMagicLink(page);
+      await signInWithSession(page);
       await page.goto(`${appUrl}/admin/releases`, { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle");
       await page.waitForTimeout(1500);

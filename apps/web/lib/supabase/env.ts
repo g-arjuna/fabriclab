@@ -4,8 +4,6 @@ type PublicSupabaseEnv = {
   appUrl: string;
 };
 
-export type SocialAuthProvider = "google" | "github";
-
 type AdminSupabaseEnv = PublicSupabaseEnv & {
   serviceRoleKey: string;
   adminEmails: string[];
@@ -40,18 +38,6 @@ export function getPublicSupabaseEnv(): PublicSupabaseEnv | null {
     anonKey,
     appUrl: normaliseAppUrl(process.env.NEXT_PUBLIC_APP_URL),
   };
-}
-
-export function getEnabledSocialAuthProviders(): SocialAuthProvider[] {
-  const raw = (process.env.NEXT_PUBLIC_SOCIAL_AUTH_PROVIDERS ?? "").trim();
-  if (!raw) {
-    return [];
-  }
-
-  return raw
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter((value): value is SocialAuthProvider => value === "google" || value === "github");
 }
 
 export function getAdminSupabaseEnv(): AdminSupabaseEnv | null {

@@ -19,11 +19,13 @@ Platform engineering is Codex-owned.
 
 ## V1 product shape
 
-- Free anonymous access to all published chapters and labs
-- Sign-in is optional and used for:
+- Free anonymous access to public catalog, curriculum, and community reading
+- Sign-in is required to open published chapters and labs
+- Signed-in access enables:
   - synced progress
+  - community participation
   - admin workflows
-- Email magic-link auth only
+- First-party Google/GitHub OAuth with a FabricLab session cookie
 - Minimal admin dashboard for:
   - `is_published`
   - optional future `access_tier`
@@ -81,9 +83,8 @@ npm install
 In Supabase:
 
 1. create a new project for FabricLab dev
-2. enable email auth / magic links
-3. set site URL to `http://localhost:3000`
-4. add redirect URLs for:
+2. set site URL to `http://localhost:3000`
+3. add redirect URLs for:
    - `http://localhost:3000/auth/callback`
    - your Vercel preview callback URLs later
 
@@ -124,6 +125,13 @@ Fill in:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_ADMIN_EMAILS`
+- `AUTH_SESSION_SECRET`
+- `NEXT_PUBLIC_OAUTH_PROVIDERS` (optional)
+- `GOOGLE_OAUTH_CLIENT_ID` (optional)
+- `GOOGLE_OAUTH_CLIENT_SECRET` (optional)
+- `GITHUB_OAUTH_CLIENT_ID` (optional)
+- `GITHUB_OAUTH_CLIENT_SECRET` (optional)
+- `AUTH_ENTRY_HOSTS` (optional)
 - `NEXT_PUBLIC_COMMUNITY_REPO_URL` (optional)
 - `NEXT_PUBLIC_COMMUNITY_ISSUES_URL` (optional)
 - `NEXT_PUBLIC_COMMUNITY_DISCUSSIONS_URL` (optional)
@@ -166,7 +174,7 @@ Useful routes:
 1. create the Vercel project for `apps/web`
 2. add the same Supabase env vars to Vercel
 3. add preview deployment callback URLs to Supabase auth settings
-4. test magic-link flows on preview URLs
+4. test Google/GitHub OAuth flows on preview URLs
 
 ### Production
 
@@ -247,7 +255,7 @@ apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json
 
 ### Auth
 
-- sign in with magic link
+- sign in with Google or GitHub
 - session survives refresh
 - sign out returns to guest mode
 

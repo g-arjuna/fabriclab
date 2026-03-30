@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { assertNoBrowserErrors, signInWithMagicLink, trackErrors } from "./helpers/liveAuth";
+import { assertNoBrowserErrors, signInWithSession, trackErrors } from "./helpers/liveAuth";
 
 test.describe.serial("Homepage and curriculum catalog smoke", () => {
   test("guest sees the latest public catalog surface", async ({ page }) => {
@@ -37,7 +37,7 @@ test.describe.serial("Homepage and curriculum catalog smoke", () => {
   test("signed-in users see the same catalog unlocked for learning", async ({ page }) => {
     const tracker = trackErrors(page);
 
-    await signInWithMagicLink(page);
+    await signInWithSession(page);
     await page.goto("/curriculum", { waitUntil: "domcontentloaded" });
 
     await expect(
