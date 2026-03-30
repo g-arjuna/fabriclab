@@ -131,6 +131,13 @@ import { WiresharkCaptureViz } from "@/components/visualisations/WiresharkCaptur
 import { DGXNetworkInterfacesViz } from "@/components/visualisations/DGXNetworkInterfacesViz"
 import { QueuePairMechanicsViz } from "@/components/visualisations/QueuePairMechanicsViz"
 import { ConnectX7PipelineViz } from "@/components/visualisations/ConnectX7PipelineViz"
+import { NVMeOFCapsuleViz } from "@/components/visualisations/NVMeOFCapsuleViz"
+import { StorageDMAPathViz } from "@/components/visualisations/StorageDMAPathViz"
+import { StorageFabricTopologyViz } from "@/components/visualisations/StorageFabricTopologyViz"
+import { StorageFrameAnatomyViz } from "@/components/visualisations/StorageFrameAnatomyViz"
+import { GDSPathViz } from "@/components/visualisations/GDSPathViz"
+import { StorageDiagnosticsViz } from "@/components/visualisations/StorageDiagnosticsViz"
+import { ComputeVsStorageFabricViz } from "@/components/visualisations/ComputeVsStorageFabricViz"
 import {
   LeafSwitchProcessingViz,
   SpineForwardingViz,
@@ -264,6 +271,13 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   DGXNetworkInterfacesViz,
   QueuePairMechanicsViz,
   ConnectX7PipelineViz,
+  NVMeOFCapsuleViz,
+  StorageDMAPathViz,
+  StorageFabricTopologyViz,
+  StorageFrameAnatomyViz,
+  GDSPathViz,
+  StorageDiagnosticsViz,
+  ComputeVsStorageFabricViz,
   LeafSwitchProcessingViz,
   SpineForwardingViz,
   DestinationNICDeliveryViz,

@@ -161,3 +161,6 @@ repo-context.txt
 /apps/web/.codex-checks/
 /apps/web/test-results/
 /apps/web/.vercel/
+
+.vercel
+.env*.local

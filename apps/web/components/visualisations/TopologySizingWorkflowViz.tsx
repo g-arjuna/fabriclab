@@ -4,14 +4,14 @@ import { useState } from "react"
 const steps = [
   {
     id: 1, label: "NIC bandwidth",
-    formula: "nodes × NICs/node × NIC speed",
-    example: "128 × 8 × 400G = 409.6 Tb/s",
+    formula: "nodes x NICs/node x NIC speed",
+    example: "128 x 8 x 400G = 409.6 Tb/s",
     question: "How much total NIC bandwidth does the cluster generate?",
     color: "#1e3a5f", border: "#60a5fa"
   },
   {
     id: 2, label: "Oversubscription target",
-    formula: "AI training → 1:1 | Mixed → up to 2:1",
+    formula: "AI training -> 1:1 | Mixed -> up to 2:1",
     example: "Target: 1:1 (non-blocking)",
     question: "What oversubscription ratio is acceptable for this workload?",
     color: "#14532d", border: "#22c55e"
@@ -26,21 +26,21 @@ const steps = [
   {
     id: 4, label: "Stage count",
     formula: "Leaf count = total NICs / downlinks per leaf",
-    example: "1024 NICs / 32 downlinks = 32 leaf switches → 2-stage fits",
+    example: "1024 NICs / 32 downlinks = 32 leaf switches -> 2-stage fits",
     question: "How many leaf switches are needed? Does a 2-stage design work?",
     color: "#78350f", border: "#f59e0b"
   },
   {
     id: 5, label: "Non-blocking check",
     formula: "Total downlinks = Total uplinks at each layer",
-    example: "32 leaf × 32 uplinks = 1024 = 32 spine × 32 ports âœ“",
+    example: "32 leaf x 32 uplinks = 1024 = 32 spine x 32 ports -- non-blocking",
     question: "Does the uplink count at each layer match downlink bandwidth?",
     color: "#14532d", border: "#22c55e"
   },
   {
     id: 6, label: "Buffer depth check",
-    formula: "nodes × 400G × sync_window â‰¤ switch buffer",
-    example: "32 nodes × 400G × 1ms = 200MB needed → SN5600 64MB → OK with RSHP",
+    formula: "nodes x 400G x sync_window <= switch buffer",
+    example: "32 nodes x 400G x 1ms = 200MB needed -> SN5600 64MB -> OK with RSHP",
     question: "Can the selected switch buffer absorb AllReduce burst traffic?",
     color: "#7f1d1d", border: "#ef4444"
   },
@@ -52,7 +52,7 @@ export function TopologySizingWorkflowViz() {
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">
-        Topology sizing workflow — 6 steps
+        Topology sizing workflow -- 6 steps
       </p>
       <div className="space-y-2">
         {steps.map((step, idx) => {
@@ -69,13 +69,13 @@ export function TopologySizingWorkflowViz() {
               <div className="flex items-center gap-4 px-4 py-3">
                 <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                   style={{ backgroundColor: isActive || isDone ? step.border : "#1e293b", color: "#fff" }}>
-                  {isDone ? "âœ“" : step.id}
+                  {isDone ? "OK" : step.id}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-white">{step.label}</div>
                   <div className="text-[10px] text-slate-500 mt-0.5 font-mono">{step.formula}</div>
                 </div>
-                <span className="text-slate-600 text-xs flex-shrink-0">{isActive ? "â–²" : "â–¼"}</span>
+                <span className="text-slate-600 text-xs flex-shrink-0">{isActive ? "v" : ">"}</span>
               </div>
               {isActive && (
                 <div className="px-4 pb-4 space-y-2">
@@ -88,7 +88,7 @@ export function TopologySizingWorkflowViz() {
                     <button
                       onClick={e => { e.stopPropagation(); setActive(step.id + 1) }}
                       className="text-[10px] text-slate-600 hover:text-slate-400 transition-colors">
-                      Next step →
+                      {"Next step ->"}
                     </button>
                   )}
                 </div>

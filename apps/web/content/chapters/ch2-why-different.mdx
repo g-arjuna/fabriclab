@@ -8,30 +8,30 @@ labLink: "/lab?lab=lab1-pfc-fix"
 
 You have spent years mastering TCP/IP, BGP, spanning tree, and QoS. You can troubleshoot a flapping OSPF adjacency without looking at documentation. But when you walk into an AI data centre for the first time, the familiar mental models stop working.
 
-This chapter explains why — and builds the conceptual foundation that makes everything in the rest of the curriculum make sense.
+This chapter explains why -- and builds the conceptual foundation that makes everything in the rest of the curriculum make sense.
 
 ---
 
-## Act 1 — The mental model shift
+## Act 1 -- The mental model shift
 
-In enterprise networking, a 1ms latency spike is a footnote in a monitoring dashboard. In an AI training cluster running a large language model across 256 GPUs, that same 1ms spike causes every GPU in the job to sit idle — waiting for one straggler. The network is not just moving data. It is the synchronisation mechanism for a massively parallel computation.
+In enterprise networking, a 1ms latency spike is a footnote in a monitoring dashboard. In an AI training cluster running a large language model across 256 GPUs, that same 1ms spike causes every GPU in the job to sit idle -- waiting for one straggler. The network is not just moving data. It is the synchronisation mechanism for a massively parallel computation.
 
 Here is how the requirements compare side by side:
 
 | Dimension | Enterprise networking | HPC / AI networking |
 |-----------|----------------------|---------------------|
-| Latency target | 1–10ms acceptable | Sub-2 microseconds required |
-| Packet loss | Rare, recoverable via TCP retransmit | Zero tolerance — stalls entire job |
+| Latency target | 1-10ms acceptable | Sub-2 microseconds required |
+| Packet loss | Rare, recoverable via TCP retransmit | Zero tolerance -- stalls entire job |
 | Bandwidth | Shared, oversubscribed | Dedicated, non-blocking |
 | Congestion handling | QoS queuing and selective drop | Prevented with lossless fabric |
 | Switch role | Pure forwarding plane | Active compute participant (SHARP) |
 | NIC role | Commodity, kernel-attached | RDMA co-processor, kernel-bypassed |
 
-The right-hand column is not aspirational — it is a hard requirement imposed by the way AI training works mathematically. The next two sections explain the math.
+The right-hand column is not aspirational -- it is a hard requirement imposed by the way AI training works mathematically. The next two sections explain the math.
 
 ---
 
-## Act 2 — The AllReduce barrier
+## Act 2 -- The AllReduce barrier
 
 AI model training splits computation across many GPUs simultaneously. After each training step, all GPUs must agree on updated model parameters. This requires an operation called **AllReduce**: every GPU sends its gradient updates, they are aggregated, and the result is distributed back to all GPUs before the next step can begin.
 
@@ -39,38 +39,38 @@ That synchronisation point is a **barrier**. No GPU can proceed to the next step
 
 <AllReduceBarrierViz />
 
-The simulation above makes the consequence concrete. GPU 5 is slightly slower — a single marginal switch port, a single congested link. The result is not that GPU 5 runs at 80% efficiency while the others run at 100%. The result is that all eight GPUs run at GPU 5's speed. The barrier enforces this.
+The simulation above makes the consequence concrete. GPU 5 is slightly slower -- a single marginal switch port, a single congested link. The result is not that GPU 5 runs at 80% efficiency while the others run at 100%. The result is that all eight GPUs run at GPU 5's speed. The barrier enforces this.
 
-At 1,000 training steps per hour on a 256-GPU cluster, one degraded switch port can idle 255 GPUs for hours. The GPU-hour cost accumulates at whatever your cluster's hourly rate is — typically hundreds of dollars per hour for an H100 cluster.
+At 1,000 training steps per hour on a 256-GPU cluster, one degraded switch port can idle 255 GPUs for hours. The GPU-hour cost accumulates at whatever your cluster's hourly rate is -- typically hundreds of dollars per hour for an H100 cluster.
 
-This is why **Job Completion Time (JCT)** — the elapsed time from when a training job starts to when it finishes — is the primary KPI for AI infrastructure. Every conversation about network design, topology, congestion control, and cabling eventually comes back to: *what does this do to JCT?*
+This is why **Job Completion Time (JCT)** -- the elapsed time from when a training job starts to when it finishes -- is the primary KPI for AI infrastructure. Every conversation about network design, topology, congestion control, and cabling eventually comes back to: *what does this do to JCT?*
 
 **JCT = f(slowest thread) = f(worst network path in the cluster)**
 
 ---
 
-## Act 3 — Tail latency: why scale makes the math brutal
+## Act 3 -- Tail latency: why scale makes the math brutal
 
-**Tail latency** is the formal term for the straggler problem. It refers to the high-percentile latency responses — the slow outliers that dominate worst-case system performance.
+**Tail latency** is the formal term for the straggler problem. It refers to the high-percentile latency responses -- the slow outliers that dominate worst-case system performance.
 
 In a single-server application, p99 latency is a useful metric. If 99% of requests complete in under 10ms, the experience is generally acceptable. The 1% that take longer are a manageable trade-off.
 
 In distributed AI training, the math inverts completely.
 
-Consider a fabric that loses 1 in 1,000 packets — excellent performance by most enterprise networking standards. A single training step across 256 GPUs involves thousands of RDMA operations. The probability that *at least one* hits the bad case is:
+Consider a fabric that loses 1 in 1,000 packets -- excellent performance by most enterprise networking standards. A single training step across 256 GPUs involves thousands of RDMA operations. The probability that *at least one* hits the bad case is:
 
 ```
-P(at least one failure) = 1 − (999/1000)^N
+P(at least one failure) = 1 - (999/1000)^N
 ```
 
-For N = 1,000 operations: **≈ 63% chance of a stall per step**.
-At 256 GPUs × 1,000 ops each: the stall is near-certain on every step.
+For N = 1,000 operations: **~= 63% chance of a stall per step**.
+At 256 GPUs x 1,000 ops each: the stall is near-certain on every step.
 
 <TailLatencyViz />
 
-The calculator above makes this concrete. Try setting GPU count to 256 and failure rate to 0.1% — the default. Then reduce the failure rate toward 0.01% and watch the stall probability drop. The required target is not "low loss". It is zero loss, sustained, at every hop, across every link the job touches simultaneously.
+The calculator above makes this concrete. Try setting GPU count to 256 and failure rate to 0.1% -- the default. Then reduce the failure rate toward 0.01% and watch the stall probability drop. The required target is not "low loss". It is zero loss, sustained, at every hop, across every link the job touches simultaneously.
 
-This is the mathematical reason that TCP — which tolerates packet loss and recovers via retransmission — cannot be the transport protocol for AI training at scale. Every retransmit is a stall event. The transport must deliver without loss, which requires the fabric beneath it to be lossless. That is what Priority Flow Control (PFC) and ECN are for — covered in Chapter 5.
+This is the mathematical reason that TCP -- which tolerates packet loss and recovers via retransmission -- cannot be the transport protocol for AI training at scale. Every retransmit is a stall event. The transport must deliver without loss, which requires the fabric beneath it to be lossless. That is what Priority Flow Control (PFC) and ECN are for -- covered in Chapter 5.
 
 ### Training vs inference
 
@@ -84,19 +84,19 @@ This is the mathematical reason that TCP — which tolerates packet loss and rec
 
 *Figure: Training and inference react differently to the same slow event. In training, one lagging path can hold the whole synchronized step at the barrier; in inference, one slow request usually degrades only that request's latency.*
 
-Training and inference have different relationships with tail latency. In **training**, tail latency extends JCT — the whole job takes longer due to AllReduce stalls. In **inference** (where a deployed model serves live user queries), there is no AllReduce barrier. Each request is independent. The networking concern shifts to per-request p99 latency — how long does one user's query take? Inference values consistent low latency per request rather than aggregate throughput across a synchronised computation. This curriculum focuses on training infrastructure, where JCT and the barrier define the requirements.
+Training and inference have different relationships with tail latency. In **training**, tail latency extends JCT -- the whole job takes longer due to AllReduce stalls. In **inference** (where a deployed model serves live user queries), there is no AllReduce barrier. Each request is independent. The networking concern shifts to per-request p99 latency -- how long does one user's query take? Inference values consistent low latency per request rather than aggregate throughput across a synchronised computation. This curriculum focuses on training infrastructure, where JCT and the barrier define the requirements.
 
 ---
 
-## Act 4 — Why TCP fails and what replaces it
+## Act 4 -- Why TCP fails and what replaces it
 
-TCP was designed for reliability in the presence of packet loss — its congestion window backs off when it detects a drop, retransmits the lost packet, and resumes. This is exactly what you need for a file transfer or a web request. It is exactly the wrong behaviour for AllReduce.
+TCP was designed for reliability in the presence of packet loss -- its congestion window backs off when it detects a drop, retransmits the lost packet, and resumes. This is exactly what you need for a file transfer or a web request. It is exactly the wrong behaviour for AllReduce.
 
-When TCP backs off, the GPU waits. When the GPU waits, the barrier stalls. The retransmit latency — typically milliseconds — is enormous relative to the sub-microsecond timing that AI fabrics require.
+When TCP backs off, the GPU waits. When the GPU waits, the barrier stalls. The retransmit latency -- typically milliseconds -- is enormous relative to the sub-microsecond timing that AI fabrics require.
 
 The replacement is **RDMA (Remote Direct Memory Access)** with **RoCEv2** transport (RDMA over Converged Ethernet version 2). RDMA bypasses the CPU and kernel stack entirely: the NIC reads directly from GPU memory and writes directly into the remote GPU's memory with no CPU involvement and no kernel copies. The latency is measured in microseconds, not milliseconds.
 
-But RDMA is brittle in one important way: it has no loss recovery mechanism. A dropped packet does not trigger a retransmit — it triggers a queue pair error that requires application-level intervention to recover. This means RDMA requires the fabric beneath it to deliver every packet without loss. Which returns us to the same requirement: the fabric must be lossless.
+But RDMA is brittle in one important way: it has no loss recovery mechanism. A dropped packet does not trigger a retransmit -- it triggers a queue pair error that requires application-level intervention to recover. This means RDMA requires the fabric beneath it to deliver every packet without loss. Which returns us to the same requirement: the fabric must be lossless.
 
 The protocol stack for this chapter's context:
 
@@ -126,10 +126,12 @@ The right column is what this curriculum builds toward. You now know *why* each 
 
 This chapter owns three concepts that every later chapter builds on:
 
-**The AllReduce barrier** — the synchronisation point that makes every GPU dependent on the worst network path in the cluster. JCT = slowest participant, not the average. This is why a single bad switch port can cost hundreds of GPU-hours per day.
+**The AllReduce barrier** -- the synchronisation point that makes every GPU dependent on the worst network path in the cluster. JCT = slowest participant, not the average. This is why a single bad switch port can cost hundreds of GPU-hours per day.
 
-**Tail latency at scale** — a per-operation failure rate that is acceptable in a single-server context becomes a near-certain stall at cluster scale. The math requires zero packet loss, not low packet loss.
+**Tail latency at scale** -- a per-operation failure rate that is acceptable in a single-server context becomes a near-certain stall at cluster scale. The math requires zero packet loss, not low packet loss.
 
-**Why TCP fails** — TCP's loss recovery mechanism (congestion window backoff + retransmit) introduces milliseconds of latency per event. AllReduce barriers cannot tolerate this. RDMA with RoCEv2 replaces TCP, but requires the fabric to be lossless. Achieving lossless Ethernet is the subject of Chapters 5–6.
+**Why TCP fails** -- TCP's loss recovery mechanism (congestion window backoff + retransmit) introduces milliseconds of latency per event. AllReduce barriers cannot tolerate this. RDMA with RoCEv2 replaces TCP, but requires the fabric to be lossless. Achieving lossless Ethernet is the subject of Chapters 5-6.
 
-[Continue to Chapter 3 →](/learn/ch3-the-cli)
+[Continue to Chapter 3 ->](/learn/ch3-the-cli)
+</file>
+

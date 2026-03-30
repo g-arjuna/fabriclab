@@ -1,5 +1,5 @@
-﻿---
-title: "Chapter 0: How We Got Here — The Hardware Story"
+---
+title: "Chapter 0: How We Got Here -- The Hardware Story"
 module: "RoCEv2 + Lossless Ethernet"
 level: "Beginner"
 estimatedMinutes: 40
@@ -8,15 +8,15 @@ labLink: "/lab?lab=lab0-failed-rail"
 
 ## Start from what you know
 
-You have spent years managing networks built around servers that look roughly the same. A 1U or 2U chassis. Two CPUs. Some RAM. A handful of drives. One or two NICs running at 10GbE or 25GbE. The NIC is an afterthought — a commodity part you order in bulk and never think about again.
+You have spent years managing networks built around servers that look roughly the same. A 1U or 2U chassis. Two CPUs. Some RAM. A handful of drives. One or two NICs running at 10GbE or 25GbE. The NIC is an afterthought -- a commodity part you order in bulk and never think about again.
 
 The switch it connects to is familiar too. You understand spanning tree, ECMP, QoS queues. You can troubleshoot a flapping link without looking at the documentation.
 
-This chapter is about how that familiar world collided with a fundamentally different problem — and what the industry had to build from scratch to solve it.
+This chapter is about how that familiar world collided with a fundamentally different problem -- and what the industry had to build from scratch to solve it.
 
 ---
 
-## Act 1 — The normal server
+## Act 1 -- The normal server
 
 Before we go anywhere, let us establish the baseline. This is what normal enterprise infrastructure looks like:
 
@@ -30,11 +30,11 @@ This is about to stop being true.
 
 ---
 
-## Act 2 — What AI training actually requires
+## Act 2 -- What AI training actually requires
 
 Training a large AI model is a different class of problem. To understand why, you need to understand what the computation actually looks like.
 
-A neural network is a mathematical function with billions of parameters — numbers that get tuned during training. The training process works like this:
+A neural network is a mathematical function with billions of parameters -- numbers that get tuned during training. The training process works like this:
 
 1. Feed the model a batch of data
 2. The model makes predictions
@@ -43,76 +43,76 @@ A neural network is a mathematical function with billions of parameters — numb
 5. Nudge every parameter slightly in the direction that reduces the error
 6. Repeat millions of times
 
-The problem is step 4. Calculating gradients for a model with 70 billion parameters requires enormous memory and compute. A single GPU — even an H100 with 80 GB of memory — cannot hold the entire model. It must be split.
+The problem is step 4. Calculating gradients for a model with 70 billion parameters requires enormous memory and compute. A single GPU -- even an H100 with 80 GB of memory -- cannot hold the entire model. It must be split.
 
 <TrainingParallelismViz />
 
-When you split training across many GPUs, those GPUs must communicate constantly. After every training step, every GPU's gradient updates must be combined and shared back — this operation is called **AllReduce**. It is a synchronisation barrier: no GPU can start the next step until all GPUs have finished exchanging gradients.
+When you split training across many GPUs, those GPUs must communicate constantly. After every training step, every GPU's gradient updates must be combined and shared back -- this operation is called **AllReduce**. It is a synchronisation barrier: no GPU can start the next step until all GPUs have finished exchanging gradients.
 
 The communication requirement scales with the number of GPUs. More GPUs means more parallelism, but also more data that must cross the network on every single step. This is the root of everything that follows.
 
-This synchronisation pattern creates a distinctive traffic shape called **burstiness**. Between synchronisation points, traffic is moderate — GPUs are computing, doing forward and backward passes. At the synchronisation point, every GPU sends its gradients simultaneously — traffic spikes sharply, then returns to baseline when synchronisation completes. The fabric must absorb these spikes without dropping a single packet.
+This synchronisation pattern creates a distinctive traffic shape called **burstiness**. Between synchronisation points, traffic is moderate -- GPUs are computing, doing forward and backward passes. At the synchronisation point, every GPU sends its gradients simultaneously -- traffic spikes sharply, then returns to baseline when synchronisation completes. The fabric must absorb these spikes without dropping a single packet.
 
 Buffer depth, ECN threshold placement, and PFC headroom are all sized around this burst pattern.
 
-**Four types of parallelism — four different network traffic patterns**
+**Four types of parallelism -- four different network traffic patterns**
 
 Training is accelerated by splitting the work across GPUs. There are four distinct approaches, and each one produces a different pattern of inter-GPU communication. As a network engineer, understanding which type dominates a given training run tells you what traffic pattern to expect on the fabric.
 
-**Data parallelism** — All GPUs run the same complete model but on different batches of data. After each training step, every GPU must share its gradient updates with every other GPU and receive all their updates in return. This is the AllReduce operation. The communication pattern is all-to-all: every GPU talks to every other GPU simultaneously. This is the highest-demand pattern for the external fabric — it generates a traffic matrix where every node is both a sender and receiver to all other nodes at the same time. Rail-optimised topology and non-blocking switches exist specifically to handle this pattern efficiently.
+**Data parallelism** -- All GPUs run the same complete model but on different batches of data. After each training step, every GPU must share its gradient updates with every other GPU and receive all their updates in return. This is the AllReduce operation. The communication pattern is all-to-all: every GPU talks to every other GPU simultaneously. This is the highest-demand pattern for the external fabric -- it generates a traffic matrix where every node is both a sender and receiver to all other nodes at the same time. Rail-optimised topology and non-blocking switches exist specifically to handle this pattern efficiently.
 
-**Tensor parallelism** — A single model layer (for example, a large matrix multiplication) is split across multiple GPUs within a single node. Each GPU handles a shard of the computation and they exchange partial results continuously. Because this communication is so frequent and the data volumes are large, it runs over NVLink — the 900 GB/s intra-node interconnect. Tensor parallelism almost never crosses the external fabric. If it does, the fabric cannot keep up. This is why tensor parallelism is deliberately kept intra-node.
+**Tensor parallelism** -- A single model layer (for example, a large matrix multiplication) is split across multiple GPUs within a single node. Each GPU handles a shard of the computation and they exchange partial results continuously. Because this communication is so frequent and the data volumes are large, it runs over NVLink -- the 900 GB/s intra-node interconnect. Tensor parallelism almost never crosses the external fabric. If it does, the fabric cannot keep up. This is why tensor parallelism is deliberately kept intra-node.
 
-**Pipeline parallelism** — A model is split by layers. GPU 1 handles layers 1–10, GPU 2 handles layers 11–20, and so on. Data flows sequentially through the pipeline — GPU 1 sends its output to GPU 2, which processes it and sends its output to GPU 3. The external network traffic is sequential point-to-point rather than all-to-all. Traffic volumes are lower than data parallelism but the latency of each hop in the chain matters — a slow link between GPU 2 and GPU 3 stalls the entire pipeline.
+**Pipeline parallelism** -- A model is split by layers. GPU 1 handles layers 1-10, GPU 2 handles layers 11-20, and so on. Data flows sequentially through the pipeline -- GPU 1 sends its output to GPU 2, which processes it and sends its output to GPU 3. The external network traffic is sequential point-to-point rather than all-to-all. Traffic volumes are lower than data parallelism but the latency of each hop in the chain matters -- a slow link between GPU 2 and GPU 3 stalls the entire pipeline.
 
-**Model parallelism (general)** — A term sometimes used to mean pipeline parallelism, or a combination of pipeline and tensor parallelism. Large-scale training jobs like GPT-4 or Llama 3 typically combine all four approaches simultaneously: tensor parallelism within a node (NVLink), data parallelism across nodes (external fabric, AllReduce), and pipeline parallelism across groups of nodes (external fabric, point-to-point). The fabric must handle all these traffic patterns simultaneously.
+**Model parallelism (general)** -- A term sometimes used to mean pipeline parallelism, or a combination of pipeline and tensor parallelism. Large-scale training jobs like GPT-4 or Llama 3 typically combine all four approaches simultaneously: tensor parallelism within a node (NVLink), data parallelism across nodes (external fabric, AllReduce), and pipeline parallelism across groups of nodes (external fabric, point-to-point). The fabric must handle all these traffic patterns simultaneously.
 
-**What this means for the external network**: The external compute fabric primarily carries data parallelism AllReduce traffic and pipeline parallelism point-to-point traffic. Tensor parallelism stays on NVLink. A congestion event on the external fabric during AllReduce is more damaging than during pipeline communication — AllReduce is a synchronisation barrier, so any stall holds every GPU in the job. A pipeline stall holds the pipeline stage but downstream GPUs can continue processing their current micro-batch.
+**What this means for the external network**: The external compute fabric primarily carries data parallelism AllReduce traffic and pipeline parallelism point-to-point traffic. Tensor parallelism stays on NVLink. A congestion event on the external fabric during AllReduce is more damaging than during pipeline communication -- AllReduce is a synchronisation barrier, so any stall holds every GPU in the job. A pipeline stall holds the pipeline stage but downstream GPUs can continue processing their current micro-batch.
 
 ---
 
-## Act 3 — Inside one server first — NVLink
+## Act 3 -- Inside one server first -- NVLink
 
 Before we reach the external network, there is a problem to solve within a single server: how do multiple GPUs talk to each other efficiently?
 
-The answer NVIDIA built is **NVLink** — a proprietary high-speed interconnect that directly connects GPUs to each other, bypassing the CPU and PCIe bus entirely.
+The answer NVIDIA built is **NVLink** -- a proprietary high-speed interconnect that directly connects GPUs to each other, bypassing the CPU and PCIe bus entirely.
 
 <NVLinkViz />
 
-The DGX H100 uses **4th-generation NVLink**, connected through **4 × 3rd-generation NVSwitch chips** inside the chassis. This gives each GPU **900 GB/s** of bidirectional bandwidth to communicate with all other GPUs in the same node — roughly 18 times faster than the external fabric connections we will see shortly.
+The DGX H100 uses **4th-generation NVLink**, connected through **4 x 3rd-generation NVSwitch chips** inside the chassis. This gives each GPU **900 GB/s** of bidirectional bandwidth to communicate with all other GPUs in the same node -- roughly 18 times faster than the external fabric connections we will see shortly.
 
-The naming is a common source of confusion: NVLink and NVSwitch use separate generation counters. The H100 has 4th-gen NVLink but 3rd-gen NVSwitch. For reference: the DGX A100 used 3rd-gen NVLink (600 GB/s) with 2nd-gen NVSwitch. The Blackwell B200 uses 5th-gen NVLink (1.8 TB/s). This course focuses on H100 — 4th-gen NVLink, 3rd-gen NVSwitch, 900 GB/s.
+The naming is a common source of confusion: NVLink and NVSwitch use separate generation counters. The H100 has 4th-gen NVLink but 3rd-gen NVSwitch. For reference: the DGX A100 used 3rd-gen NVLink (600 GB/s) with 2nd-gen NVSwitch. The Blackwell B200 uses 5th-gen NVLink (1.8 TB/s). This course focuses on H100 -- 4th-gen NVLink, 3rd-gen NVSwitch, 900 GB/s.
 
 **3rd-generation NVSwitch: more than a crossbar**
 
-The 3rd-generation NVSwitch in the DGX H100 is not just a high-speed crossbar switch. It adds hardware acceleration for collective operations — specifically multicast and in-network reduction. During an intra-node AllReduce, the NVSwitch can aggregate gradient data as it flows through the chip, rather than requiring all 8 GPUs to exchange data pairwise. This reduces the work that the intra-node AllReduce requires and lowers the latency of gradient synchronisation within the chassis.
+The 3rd-generation NVSwitch in the DGX H100 is not just a high-speed crossbar switch. It adds hardware acceleration for collective operations -- specifically multicast and in-network reduction. During an intra-node AllReduce, the NVSwitch can aggregate gradient data as it flows through the chip, rather than requiring all 8 GPUs to exchange data pairwise. This reduces the work that the intra-node AllReduce requires and lowers the latency of gradient synchronisation within the chassis.
 
-This is the NVSwitch equivalent of what SHARP does on InfiniBand switches — in-network compute that reduces communication volume by doing part of the mathematical work inside the switch fabric itself. The difference: NVSwitch SHARP applies to intra-node AllReduce (the 900 GB/s NVLink domain). IB SHARP applies to inter-node AllReduce (the external fabric). Chapter 0 Act 6 covers IB SHARP. Chapter 11 covers the NVLink Switch System, which extends this capability across nodes.
+This is the NVSwitch equivalent of what SHARP does on InfiniBand switches -- in-network compute that reduces communication volume by doing part of the mathematical work inside the switch fabric itself. The difference: NVSwitch SHARP applies to intra-node AllReduce (the 900 GB/s NVLink domain). IB SHARP applies to inter-node AllReduce (the external fabric). Chapter 0 Act 6 covers IB SHARP. Chapter 11 covers the NVLink Switch System, which extends this capability across nodes.
 
-The aggregate NVSwitch throughput for the DGX H100 is **13.6 Tb/s** (compared to 7.2 Tb/s in the A100's 2nd-generation NVSwitch), matching the bandwidth increase from NVLink 3 → NVLink 4.
+The aggregate NVSwitch throughput for the DGX H100 is **13.6 Tb/s** (compared to 7.2 Tb/s in the A100's 2nd-generation NVSwitch), matching the bandwidth increase from NVLink 3 -> NVLink 4.
 
-This bandwidth ratio is the reason that **tensor parallelism** — splitting a single model layer across multiple GPUs — runs within a single DGX node. You use the fast path for the most communication-intensive operations.
+This bandwidth ratio is the reason that **tensor parallelism** -- splitting a single model layer across multiple GPUs -- runs within a single DGX node. You use the fast path for the most communication-intensive operations.
 
-But NVLink only works within one chassis. The moment you need more than one server — which happens quickly when you are training a 70B parameter model — you need an external network. And that is where the real engineering challenge begins.
+But NVLink only works within one chassis. The moment you need more than one server -- which happens quickly when you are training a 70B parameter model -- you need an external network. And that is where the real engineering challenge begins.
 
 ---
 
-## Act 4 — Why standard Ethernet breaks down
+## Act 4 -- Why standard Ethernet breaks down
 
 Your first instinct might be: just use fast Ethernet. We have 400GbE. That should be enough.
 
 The bandwidth is not the problem. The problem is **how TCP/IP handles failure**.
 
-When a packet is dropped on a TCP connection, TCP detects the loss after a timeout, retransmits the packet, and continues. For a web server or a database, this is acceptable — the user notices a slight slowdown at most.
+When a packet is dropped on a TCP connection, TCP detects the loss after a timeout, retransmits the packet, and continues. For a web server or a database, this is acceptable -- the user notices a slight slowdown at most.
 
 For an AllReduce operation across 256 GPUs:
 - One packet drop causes a GPU's RDMA queue pair to enter an error state
-- The RDMA QP enters error state and must retransmit all unacknowledged packets from the point of the drop (Go-Back-N from the dropped sequence number onwards) — which, for a large in-flight tensor, means retransmitting the vast majority of the transfer
+- The RDMA QP enters error state and must retransmit all unacknowledged packets from the point of the drop (Go-Back-N from the dropped sequence number onwards) -- which, for a large in-flight tensor, means retransmitting the vast majority of the transfer
 - Every other GPU is sitting idle at the synchronisation barrier waiting
 - At 400 Gb/s, "a tensor" might mean several gigabytes
-- This happens thousands of times per hour during training. Optical transceivers — the pluggable modules that terminate every 400G fibre run — are the single most frequent hardware failure point in production AI clusters. A marginal transceiver can cause intermittent packet drops without fully going down, making it far harder to diagnose than a clean link failure.
+- This happens thousands of times per hour during training. Optical transceivers -- the pluggable modules that terminate every 400G fibre run -- are the single most frequent hardware failure point in production AI clusters. A marginal transceiver can cause intermittent packet drops without fully going down, making it far harder to diagnose than a clean link failure.
 
-**A single packet drop can stall a 256-GPU job for hundreds of milliseconds.** At the scale of a large training run — weeks of continuous GPU time — even a 1% slowdown from network issues costs millions of dollars.
+**A single packet drop can stall a 256-GPU job for hundreds of milliseconds.** At the scale of a large training run -- weeks of continuous GPU time -- even a 1% slowdown from network issues costs millions of dollars.
 
 This is why AI clusters need **lossless networking**. Not low-loss. Zero loss.
 
@@ -120,122 +120,122 @@ This is why AI clusters need **lossless networking**. Not low-loss. Zero loss.
 
 Packet loss was not the only reason vanilla Ethernet struggled. Even when packets were delivered correctly, the load balancing mechanism itself caused congestion.
 
-Standard Ethernet uses ECMP (Equal-Cost Multi-Path) routing: all packets in a flow follow the same path, chosen by hashing the 5-tuple (source IP, destination IP, protocol, source port, destination port). For ECMP to distribute traffic well, flows need to produce different hash values — in other words, flows need **entropy**.
+Standard Ethernet uses ECMP (Equal-Cost Multi-Path) routing: all packets in a flow follow the same path, chosen by hashing the 5-tuple (source IP, destination IP, protocol, source port, destination port). For ECMP to distribute traffic well, flows need to produce different hash values -- in other words, flows need **entropy**.
 
 RoCEv2 traffic is structurally low-entropy. Consider what the 5-tuple looks like for two DGX nodes communicating during AllReduce:
 - Source IP: always one of eight DGX node addresses
 - Destination IP: always one of eight DGX node addresses
 - Protocol: always UDP
-- Destination port: always 4791 (the RoCEv2 port — unchangeable)
+- Destination port: always 4791 (the RoCEv2 port -- unchangeable)
 - Source port: derived from the queue pair number (a small range)
 
-Unlike web traffic — where thousands of different clients connecting to thousands of different services produce richly varied 5-tuples — AI training traffic between a small number of GPU servers producing a fixed destination port produces headers that are nearly identical. The ECMP hash function sees the same input and produces the same output: every packet from the same GPU pair takes the same path.
+Unlike web traffic -- where thousands of different clients connecting to thousands of different services produce richly varied 5-tuples -- AI training traffic between a small number of GPU servers producing a fixed destination port produces headers that are nearly identical. The ECMP hash function sees the same input and produces the same output: every packet from the same GPU pair takes the same path.
 
 This becomes a **flowlet** problem. A flowlet is an individual low-entropy flow that a switch treats as part of a larger flow because it cannot distinguish them at the header level. Two types of flowlets cause specific problems in AI fabrics:
 
-**Simultaneous flowlets**: Multiple GPU pairs communicating at the same moment during AllReduce. From the switch's perspective, packets from GPU 0 on Node A to GPU 0 on Node B, and packets from GPU 0 on Node C to GPU 0 on Node B, may look identical at the IP/UDP header level. The switch hashes them to the same path. One link is overloaded while others sit idle — even though the cluster has enough aggregate bandwidth for all flows.
+**Simultaneous flowlets**: Multiple GPU pairs communicating at the same moment during AllReduce. From the switch's perspective, packets from GPU 0 on Node A to GPU 0 on Node B, and packets from GPU 0 on Node C to GPU 0 on Node B, may look identical at the IP/UDP header level. The switch hashes them to the same path. One link is overloaded while others sit idle -- even though the cluster has enough aggregate bandwidth for all flows.
 
-**Sequential flowlets**: Job 1 completes between GPU A and GPU B. Job 2 starts between the same pair. The headers are identical. The switch treats Job 2's traffic as a continuation of Job 1's flow and keeps it pinned to the same path — even if that path is now congested. From the switch's perspective, this looks like one long-lived elephant flow. The path rebalancing that might help never triggers because the switch never detects a new flow.
+**Sequential flowlets**: Job 1 completes between GPU A and GPU B. Job 2 starts between the same pair. The headers are identical. The switch treats Job 2's traffic as a continuation of Job 1's flow and keeps it pinned to the same path -- even if that path is now congested. From the switch's perspective, this looks like one long-lived elephant flow. The path rebalancing that might help never triggers because the switch never detects a new flow.
 
-The cluster has plenty of bandwidth in aggregate — it is just distributed incorrectly, and ECMP has no mechanism to detect or fix this mid-flight.
+The cluster has plenty of bandwidth in aggregate -- it is just distributed incorrectly, and ECMP has no mechanism to detect or fix this mid-flight.
 
 <LowEntropyFlowletsViz />
 
-**Why this matters for your diagnostic work**: When you see uneven link utilisation on spine switches — some links at 90% while adjacent links are at 10% — during an AllReduce workload, the cause is almost always the flowlet problem. The fix is not more bandwidth on the hot links. The fix is per-packet load balancing (Spectrum-X RSHP or InfiniBand adaptive routing) so the switch distributes individual packets across all paths rather than pinning flows.
+**Why this matters for your diagnostic work**: When you see uneven link utilisation on spine switches -- some links at 90% while adjacent links are at 10% -- during an AllReduce workload, the cause is almost always the flowlet problem. The fix is not more bandwidth on the hot links. The fix is per-packet load balancing (Spectrum-X RSHP or InfiniBand adaptive routing) so the switch distributes individual packets across all paths rather than pinning flows.
 
-This is addressed in Act 6 below. For now, the point is: **Ethernet had two independent problems** — packet loss under congestion, and inefficient load balancing under high fan-out traffic. AI training exposed both simultaneously. The combination is particularly damaging because low-entropy traffic makes the load balancing problem worse at exactly the moment congestion is most likely — when all GPUs are synchronising gradients.
+This is addressed in Act 6 below. For now, the point is: **Ethernet had two independent problems** -- packet loss under congestion, and inefficient load balancing under high fan-out traffic. AI training exposed both simultaneously. The combination is particularly damaging because low-entropy traffic makes the load balancing problem worse at exactly the moment congestion is most likely -- when all GPUs are synchronising gradients.
 
 ---
 
-## Act 5 — What the industry tried, and what won
+## Act 5 -- What the industry tried, and what won
 
 The journey to today's AI networking infrastructure went through several stages.
 
 <IndustryEvolutionViz />
 
-**2010–2015: Early deep learning clusters**
+**2010-2015: Early deep learning clusters**
 Researchers used standard Ethernet with TCP/IP. Training was slow but the models were small. The network was not yet the bottleneck.
 
-**2016–2018: The GPU cluster era begins**
-Models got larger. Multi-GPU training became necessary. Teams started using InfiniBand — a technology that already existed in supercomputing — for GPU-to-GPU communication. InfiniBand was designed from the start to be lossless, with credit-based flow control built into the protocol.
+**2016-2018: The GPU cluster era begins**
+Models got larger. Multi-GPU training became necessary. Teams started using InfiniBand -- a technology that already existed in supercomputing -- for GPU-to-GPU communication. InfiniBand was designed from the start to be lossless, with credit-based flow control built into the protocol.
 
-**2019–2020: NVIDIA acquires Mellanox**
-In March 2020, NVIDIA completed its $6.9 billion acquisition of Mellanox Technologies — the dominant maker of InfiniBand switches and NICs. This was a strategic move: NVIDIA controlled the GPU, and now it controlled the network that connected GPUs. The DGX reference architecture became an integrated product.
+**2019-2020: NVIDIA acquires Mellanox**
+In March 2020, NVIDIA completed its $6.9 billion acquisition of Mellanox Technologies -- the dominant maker of InfiniBand switches and NICs. This was a strategic move: NVIDIA controlled the GPU, and now it controlled the network that connected GPUs. The DGX reference architecture became an integrated product.
 
-**2021–2023: RoCEv2 emerges as an alternative**
-RoCEv2 (RDMA over Converged Ethernet v2) lets you run RDMA — the same kernel-bypass technology as InfiniBand — over standard Ethernet. For enterprises that already had Ethernet infrastructure, this was attractive. But it required making Ethernet lossless using PFC and ECN — which is exactly what this course teaches.
+**2021-2023: RoCEv2 emerges as an alternative**
+RoCEv2 (RDMA over Converged Ethernet v2) lets you run RDMA -- the same kernel-bypass technology as InfiniBand -- over standard Ethernet. For enterprises that already had Ethernet infrastructure, this was attractive. But it required making Ethernet lossless using PFC and ECN -- which is exactly what this course teaches.
 
-**2024–present: Two camps**
+**2024-present: Two camps**
 Today the industry has effectively split:
-- **InfiniBand** (Quantum-2 NDR, Quantum-X800 XDR) — used for hyperscale AI training clusters, cloud providers building dedicated AI infrastructure, and any deployment where absolute maximum performance matters
-- **Spectrum-X (RoCEv2 over Ethernet)** — used where Ethernet infrastructure already exists, for enterprises wanting multi-tenant GPU clusters, or where the operational simplicity of Ethernet outweighs the raw performance of InfiniBand
+- **InfiniBand** (Quantum-2 NDR, Quantum-X800 XDR) -- used for hyperscale AI training clusters, cloud providers building dedicated AI infrastructure, and any deployment where absolute maximum performance matters
+- **Spectrum-X (RoCEv2 over Ethernet)** -- used where Ethernet infrastructure already exists, for enterprises wanting multi-tenant GPU clusters, or where the operational simplicity of Ethernet outweighs the raw performance of InfiniBand
 
 Neither is "wrong." The choice depends on workload, budget, and existing infrastructure.
 
 ---
 
-## Act 6 — Why InfiniBand is still chosen
+## Act 6 -- Why InfiniBand is still chosen
 
 Given that RoCEv2 over Ethernet achieves similar bandwidth numbers in benchmarks, why does InfiniBand still dominate large-scale AI training clusters?
 
 Three reasons:
 
 **1. Lossless by design, not by configuration**
-InfiniBand uses credit-based flow control built into the protocol. Packets are only sent when the receiver has confirmed it has buffer space. Drops are architecturally impossible. RoCEv2 achieves losslessness through PFC (Priority Flow Control) and ECN — mechanisms that work well but require careful configuration and can fail in complex ways (PFC deadlocks, ECN misconfiguration). InfiniBand simply cannot lose packets.
+InfiniBand uses credit-based flow control built into the protocol. Packets are only sent when the receiver has confirmed it has buffer space. Drops are architecturally impossible. RoCEv2 achieves losslessness through PFC (Priority Flow Control) and ECN -- mechanisms that work well but require careful configuration and can fail in complex ways (PFC deadlocks, ECN misconfiguration). InfiniBand simply cannot lose packets.
 
-**2. SHARP — in-network compute**
-InfiniBand switches can participate in the AllReduce computation itself. Rather than all gradients travelling to GPUs and back, the switch performs the summation as data flows through it. SHARP (Scalable Hierarchical Aggregation and Reduction Protocol) can reduce AllReduce communication time by up to 50% at scale. Ethernet switches cannot do this — but there is an important nuance: the 3rd-generation NVSwitch inside each DGX H100 node supports SHARP-equivalent in-network reduction for **intra-node** AllReduce over NVLink. The IB SHARP advantage described here applies to **inter-node** AllReduce across the external fabric, which NVSwitch cannot reach. For training runs that span multiple nodes — which is most large-scale training — IB SHARP remains a meaningful advantage.
+**2. SHARP -- in-network compute**
+InfiniBand switches can participate in the AllReduce computation itself. Rather than all gradients travelling to GPUs and back, the switch performs the summation as data flows through it. SHARP (Scalable Hierarchical Aggregation and Reduction Protocol) can reduce AllReduce communication time by up to 50% at scale. Ethernet switches cannot do this -- but there is an important nuance: the 3rd-generation NVSwitch inside each DGX H100 node supports SHARP-equivalent in-network reduction for **intra-node** AllReduce over NVLink. The IB SHARP advantage described here applies to **inter-node** AllReduce across the external fabric, which NVSwitch cannot reach. For training runs that span multiple nodes -- which is most large-scale training -- IB SHARP remains a meaningful advantage.
 
 **3. The subnet manager**
 InfiniBand has a centralised subnet manager that knows the complete topology, computes optimal paths, and reroutes traffic in microseconds when a link fails. Ethernet relies on distributed protocols (BGP, OSPF) that converge over seconds to minutes. For a training job that cannot tolerate even brief interruptions, the InfiniBand model is superior.
 
 **4. Adaptive routing vs ECMP**
 
-Standard Ethernet routes entire flows per-path using ECMP hash. InfiniBand makes routing decisions per-packet, measuring actual congestion on each output port and forwarding each packet on whichever path is least loaded at that instant. When multiple large AllReduce operations run simultaneously — which is constant in a training cluster — InfiniBand distributes them evenly across all available paths. ECMP creates hot links and idle links simultaneously.
+Standard Ethernet routes entire flows per-path using ECMP hash. InfiniBand makes routing decisions per-packet, measuring actual congestion on each output port and forwarding each packet on whichever path is least loaded at that instant. When multiple large AllReduce operations run simultaneously -- which is constant in a training cluster -- InfiniBand distributes them evenly across all available paths. ECMP creates hot links and idle links simultaneously.
 
 <ECMPViz />
 
-This load balancing gap was one of the primary reasons Ethernet was inadequate for AI training at scale. NVIDIA's Spectrum-X closed this gap by introducing RSHP (Resilient Hashing and Per-packet reordering) — per-packet routing on Ethernet with NIC-side reorder buffering. Traditional Ethernet switches without RSHP still have the ECMP problem.
+This load balancing gap was one of the primary reasons Ethernet was inadequate for AI training at scale. NVIDIA's Spectrum-X closed this gap by introducing RSHP (Resilient Hashing and Per-packet reordering) -- per-packet routing on Ethernet with NIC-side reorder buffering. Traditional Ethernet switches without RSHP still have the ECMP problem.
 
-The counterarguments for RoCEv2 are equally real: lower cost, operational familiarity, existing tooling, multi-tenancy support. There is no universal answer — which is why you need to understand both, which is what this course teaches.
+The counterarguments for RoCEv2 are equally real: lower cost, operational familiarity, existing tooling, multi-tenancy support. There is no universal answer -- which is why you need to understand both, which is what this course teaches.
 
 ---
 
-## Act 7 — The NIC that stopped being a NIC
+## Act 7 -- The NIC that stopped being a NIC
 
 As the demands on networking grew, the NIC itself had to evolve. This evolution happened in three stages:
 
 <NICEvolutionViz />
 
-**Stage 1 — The classic NIC**
+**Stage 1 -- The classic NIC**
 Moves packets between the kernel's network stack and the wire. The CPU processes every packet. Fine for 1GbE or 10GbE. Becomes a bottleneck at 100GbE because the CPU simply cannot process packets fast enough.
 
-**What RDMA actually does — the queue model**
+**What RDMA actually does -- the queue model**
 
 To understand why the HCA exists, you need to understand what RDMA asks the network to do. In a standard TCP socket application, the CPU calls `send()`, the kernel copies data into a socket buffer, the kernel's network stack builds packets, and the NIC transmits them. The CPU is involved at every stage.
 
-RDMA replaces this with a queue-based model. An application registers a memory buffer with the RDMA driver. It then posts a **Work Queue Element (WQE)** — a descriptor saying "send the data at this memory address to that remote host's memory at that address." The CPU's job ends here. It has posted a work request and returned to other work.
+RDMA replaces this with a queue-based model. An application registers a memory buffer with the RDMA driver. It then posts a **Work Queue Element (WQE)** -- a descriptor saying "send the data at this memory address to that remote host's memory at that address." The CPU's job ends here. It has posted a work request and returned to other work.
 
-The NIC processes the WQE directly. It reads from the registered memory buffer, builds the RDMA packets, transmits them, handles acknowledgements, retransmits if needed, and writes a completion entry when done. The CPU checks the **Completion Queue** periodically — not to process packets, but to confirm the transfer finished.
+The NIC processes the WQE directly. It reads from the registered memory buffer, builds the RDMA packets, transmits them, handles acknowledgements, retransmits if needed, and writes a completion entry when done. The CPU checks the **Completion Queue** periodically -- not to process packets, but to confirm the transfer finished.
 
 This model creates three queues per connection:
-- **Send Queue** — WQEs for outbound transfers (send, write, read)
-- **Receive Queue** — buffers posted for inbound transfers
-- **Completion Queue** — completed WQEs posted by the NIC when done
+- **Send Queue** -- WQEs for outbound transfers (send, write, read)
+- **Receive Queue** -- buffers posted for inbound transfers
+- **Completion Queue** -- completed WQEs posted by the NIC when done
 
-A **Queue Pair (QP)** is a send queue plus a receive queue. Each RDMA connection between two endpoints uses a QP. A single DGX node running AllReduce across 255 peers maintains 255 active QPs simultaneously. The QP number appears in `ibstat` output and in RDMA diagnostic logs. When a packet is dropped and the RDMA transport cannot recover, the QP enters an error state — which is what `State: Error` in `ibstat` means. The GPU on that QP is effectively disconnected from the AllReduce until the QP is reset.
+A **Queue Pair (QP)** is a send queue plus a receive queue. Each RDMA connection between two endpoints uses a QP. A single DGX node running AllReduce across 255 peers maintains 255 active QPs simultaneously. The QP number appears in `ibstat` output and in RDMA diagnostic logs. When a packet is dropped and the RDMA transport cannot recover, the QP enters an error state -- which is what `State: Error` in `ibstat` means. The GPU on that QP is effectively disconnected from the AllReduce until the QP is reset.
 
 **Why this matters for diagnostics**: The Verbs API is the programming interface that applications use to post WQEs and check completion queues. NCCL uses Verbs internally. When NCCL logs "QP transition to error state" or "SRQ limit reached," it is reporting RDMA layer events. Understanding the queue model makes these messages interpretable rather than opaque.
 
-**Stage 2 — The HCA (Host Channel Adapter)**
-RDMA moves packet processing entirely into the NIC hardware. The CPU posts a Work Request and checks for completion — it never touches the actual data. The HCA has its own processor, its own memory, and handles all transport protocol processing in silicon. This is what a ConnectX-7 is when configured for InfiniBand: an HCA.
+**Stage 2 -- The HCA (Host Channel Adapter)**
+RDMA moves packet processing entirely into the NIC hardware. The CPU posts a Work Request and checks for completion -- it never touches the actual data. The HCA has its own processor, its own memory, and handles all transport protocol processing in silicon. This is what a ConnectX-7 is when configured for InfiniBand: an HCA.
 
-**Stage 3 — The DPU (Data Processing Unit)**
+**Stage 3 -- The DPU (Data Processing Unit)**
 The BlueField series goes further. A DPU is a fully programmable SmartNIC with an embedded Arm CPU complex (16 cores in BlueField-3), running a full Linux OS independently of the host. It can offload not just RDMA transport but also:
-- OVS (Open vSwitch) — replacing CPU-based virtual switching
-- NVMe-oF (storage protocol) — presenting remote NVMe as local drives
-- TLS/IPsec termination — encrypting all traffic without host CPU involvement
-- Firewall and security policy — enforced in hardware
+- OVS (Open vSwitch) -- replacing CPU-based virtual switching
+- NVMe-oF (storage protocol) -- presenting remote NVMe as local drives
+- TLS/IPsec termination -- encrypting all traffic without host CPU involvement
+- Firewall and security policy -- enforced in hardware
 
 <DPUExplainerViz />
 
@@ -248,11 +248,11 @@ The BlueField series goes further. A DPU is a fully programmable SmartNIC with a
 
 *Figure: Official NVIDIA BlueField-3 DPU image. This gives a concrete physical anchor for the exact DPU generation referenced in this section.*
 
-In a DGX H200, there are 2 BlueField-3 DPUs per node alongside 8 ConnectX-7 HCAs. The HCAs handle compute fabric RDMA. The DPUs handle storage and security — freeing the host CPUs to focus on managing the GPUs.
+In a DGX H100 or H200, there are 10 ConnectX-7 adapters per node: 8 single-port HCAs for the compute fabric, and 2 dual-port CX7 cards (Slot1 and Slot2) for the storage and in-band management fabric. All 10 are ConnectX-7. The DPU architecture -- where a BlueField card runs its own independent ARM Linux OS and handles storage offload on the card itself -- appears in the DGX B200, not the H100 or H200. The distinction matters operationally: on an H100/H200 node, the NVMe-oF initiator stack runs on the host CPU using the Slot1/Slot2 CX7 ports as standard NICs. On a B200 node, the BlueField-3 HCAs run the initiator on their own ARM cores independently of the host.
 
 ---
 
-## Act 8 — The server that emerged: DGX H100 anatomy
+## Act 8 -- The server that emerged: DGX H100 anatomy
 
 Now that you understand why the hardware evolved this way, you can look at the DGX H100 and understand every design decision:
 
@@ -273,22 +273,22 @@ Every choice in the DGX design is an answer to a specific constraint:
 |----------------|-----|
 | 8 GPUs per chassis | Maximum NVLink bandwidth per GPU within practical power and thermal limits |
 | 4 NVSwitch chips | Non-blocking all-to-all between 8 GPUs at 900 GB/s per GPU |
-| 1 ConnectX-7 per GPU | No shared uplinks — each GPU gets its own 400G path to the fabric |
-| 8 NICs on 8 different switches | Rail topology — fault isolation and maximum AllReduce performance |
-| 2 Intel Xeon CPUs | Management only — training is GPU + NIC, CPUs are mostly idle |
-| 8× 3.84 TB NVMe U.2 (~30 TB) | Local OS, checkpointing — training data lives on shared parallel storage (BeeGFS, WEKA) |
+| 1 ConnectX-7 per GPU | No shared uplinks -- each GPU gets its own 400G path to the fabric |
+| 8 NICs on 8 different switches | Rail topology -- fault isolation and maximum AllReduce performance |
+| 2 Intel Xeon CPUs | Management only -- training is GPU + NIC, CPUs are mostly idle |
+| 8x 3.84 TB NVMe U.2 (~30 TB) | Local OS, checkpointing -- training data lives on shared parallel storage (BeeGFS, WEKA) |
 
 ## Checkpointing and the cost of failure
 
 The NVMe SSDs and the separate storage fabric exist for a reason that is easy to overlook: **at cluster scale, hardware failure is not an edge case. It is a scheduled event.**
 
-Consider the math. A DGX SuperPOD has 32 nodes × 8 GPUs = 256 GPUs. A large training cluster might have 4,000 nodes × 8 GPUs = 32,000 GPUs. If each GPU has a mean time between failure (MTBF) of 10,000 hours — optimistic for a system under constant maximum load — then a cluster of 32,000 GPUs experiences a GPU failure every 18 minutes on average.
+Consider the math. A DGX SuperPOD has 32 nodes x 8 GPUs = 256 GPUs. A large training cluster might have 4,000 nodes x 8 GPUs = 32,000 GPUs. If each GPU has a mean time between failure (MTBF) of 10,000 hours -- optimistic for a system under constant maximum load -- then a cluster of 32,000 GPUs experiences a GPU failure every 18 minutes on average.
 
 When a GPU fails, the training job crashes. Every other GPU in the job stops. The cluster rolls back to the last saved checkpoint and resumes from there. The time between the last checkpoint and the failure is wasted compute.
 
 **Checkpoint time = (checkpoint size) / (storage fabric bandwidth)**
 
-For a 70B parameter model, a full checkpoint is roughly 140 GB. At 800 Gb/s storage fabric bandwidth per node (2× BlueField-3 DPUs at 400G each), writing a checkpoint takes approximately 1.4 seconds. Teams typically checkpoint every 10–30 minutes. When a failure occurs, you lose at most 30 minutes of GPU time — on a cluster that costs $500 per GPU-hour, that is $250,000 of wasted compute per failure on a 32,000-GPU job.
+For a 70B parameter model, a full checkpoint is roughly 140 GB. At 800 Gb/s storage fabric bandwidth per node (2x dual-port ConnectX-7 cards at 400G each, used for the storage and in-band management fabric), writing a checkpoint takes approximately 1.4 seconds. Teams typically checkpoint every 10-30 minutes. When a failure occurs, you lose at most 30 minutes of GPU time -- on a cluster that costs $500 per GPU-hour, that is $250,000 of wasted compute per failure on a 32,000-GPU job.
 
 This is why the storage fabric is fast, why it is separate from the compute fabric, and why GPUDirect Storage (which allows GPUs to write directly to NVMe-oF targets without CPU involvement) matters. Every second of checkpoint time is multiplied by thousands of GPUs sitting idle.
 
@@ -296,12 +296,12 @@ The storage bandwidth available to the cluster determines how quickly those seco
 
 | Storage bandwidth per node | Time to write 140 GB checkpoint | Notes |
 |---|---|---|
-| 100 Gbps (12.5 GB/s) | ~11.2 seconds | Single-NIC storage — common in legacy HPC |
-| 200 Gbps (25 GB/s) | ~5.6 seconds | Single BlueField-3 DPU |
-| 800 Gbps (100 GB/s) | **~1.4 seconds** | DGX H100 target — 2× BlueField-3 DPUs |
+| 100 Gbps (12.5 GB/s) | ~11.2 seconds | Single-NIC storage -- common in legacy HPC |
+| 200 Gbps (25 GB/s) | ~5.6 seconds | Single dual-port CX7 storage card |
+| 800 Gbps (100 GB/s) | **~1.4 seconds** | DGX H100 target -- 2x dual-port ConnectX-7 storage cards |
 | 3.2 Tbps (400 GB/s) | ~0.35 seconds | Full DGX node aggregate (theoretical) |
 
-At 32,000 GPUs and a 30-minute checkpoint interval, reducing checkpoint time from 11 seconds to 1.4 seconds saves approximately 3.1 GPU-hours per checkpoint — roughly $1,500 at $500/GPU-hour. Across 48 checkpoints per day, the storage fabric investment pays for itself in wasted-compute terms within weeks.
+At 32,000 GPUs and a 30-minute checkpoint interval, reducing checkpoint time from 11 seconds to 1.4 seconds saves approximately 3.1 GPU-hours per checkpoint -- roughly $1,500 at $500/GPU-hour. Across 48 checkpoints per day, the storage fabric investment pays for itself in wasted-compute terms within weeks.
 
 **Why DGX and not something else?**
 
@@ -313,7 +313,7 @@ There are alternatives. HPE Cray supercomputer nodes, AMD Instinct MI300X server
 
 ---
 
-## Act 9 — How it all wires together
+## Act 9 -- How it all wires together
 
 Now you can see how a full deployment connects. This is the complete picture:
 
@@ -330,7 +330,7 @@ Now you can see how a full deployment connects. This is the complete picture:
 
 ## Why the wiring is rigid by design
 
-The phrase "rail-optimised topology" sounds like a software choice. It is actually a physical wiring constraint — and that constraint is deliberate.
+The phrase "rail-optimised topology" sounds like a software choice. It is actually a physical wiring constraint -- and that constraint is deliberate.
 
 In a DGX SuperPOD, every GPU 0 across every node connects to Leaf Switch 0. Every GPU 1 across every node connects to Leaf Switch 1. And so on for all 8 rails. The cables are physically run this way from day one and never changed.
 
@@ -344,13 +344,13 @@ Compare this to a conventional fat-tree where GPUs connect to whichever leaf swi
 
 **Oversubscription and why AI fabrics cannot tolerate it**
 
-Oversubscription ratio is the ratio of potential total server bandwidth to available fabric bandwidth. In a conventional enterprise data center, 4:1 or even 8:1 oversubscription is common — network architects assume that not all servers will send at full rate simultaneously. The oversubscription ratio is an intentional cost optimisation.
+Oversubscription ratio is the ratio of potential total server bandwidth to available fabric bandwidth. In a conventional enterprise data center, 4:1 or even 8:1 oversubscription is common -- network architects assume that not all servers will send at full rate simultaneously. The oversubscription ratio is an intentional cost optimisation.
 
-AI training breaks this assumption completely. During AllReduce, every GPU on every node sends at full line rate simultaneously. There is no statistical multiplexing. The "not everyone sends at once" assumption — the entire justification for oversubscription — is false for AI training traffic.
+AI training breaks this assumption completely. During AllReduce, every GPU on every node sends at full line rate simultaneously. There is no statistical multiplexing. The "not everyone sends at once" assumption -- the entire justification for oversubscription -- is false for AI training traffic.
 
 A 2:1 oversubscribed fabric in an AI training cluster does not give you 50% of potential throughput. It creates a congestion event on every single synchronisation barrier, causing drops or PFC stalls that compound across thousands of training steps. This is why AI fabric designs target 1:1 (non-blocking) from leaf to spine. Some aggressive designs even use undersubscription (more uplinks than server-facing ports) to ensure each leaf port has dedicated egress buffer capacity during peak burst.
 
-The tradeoff: cabling a rail-optimised SuperPOD is complex and rigid. You cannot repatch cables without redesigning the fabric. But at 400G per port, you want every advantage you can get — and a single additional spine hop adds microseconds that compound across millions of training steps.
+The tradeoff: cabling a rail-optimised SuperPOD is complex and rigid. You cannot repatch cables without redesigning the fabric. But at 400G per port, you want every advantage you can get -- and a single additional spine hop adds microseconds that compound across millions of training steps.
 
 Three physically separate networks, each with different requirements:
 
@@ -358,18 +358,18 @@ Three physically separate networks, each with different requirements:
 The GPU training network. Every DGX node has 8 ConnectX-7 NICs, each connecting to a different leaf switch. This is the rail-optimised topology. The leaf switches connect to spine switches to form a fat-tree fabric. This network must be lossless and run at full bandwidth to all nodes simultaneously.
 
 **Storage fabric (Ethernet)**
-A separate Ethernet network connecting DGX nodes to parallel storage systems. Uses 400GbE Spectrum switches. GPUDirect Storage (GDS) allows GPUs to read training data directly from NVMe storage systems — bypassing the host CPU and system RAM entirely. Separate from the compute fabric so storage traffic cannot interfere with training communication.
+A separate Ethernet network connecting DGX nodes to parallel storage systems. Uses 400GbE Spectrum switches. GPUDirect Storage (GDS) allows GPUs to read training data directly from NVMe storage systems -- bypassing the host CPU and system RAM entirely. Separate from the compute fabric so storage traffic cannot interfere with training communication.
 
 **Management network (1GbE / 10GbE)**
 Out-of-band management. BMC access, OS provisioning, NVIDIA UFM (Unified Fabric Manager), Base Command Manager. Standard enterprise Ethernet switches. Completely separate from compute and storage. This is the network you use when the other two networks are misbehaving.
 
 ---
 
-## Act 10 — One card, two worlds
+## Act 10 -- One card, two worlds
 Everything in Acts 1 through 9 described a DGX node and its fabric without answering one foundational question: when you look at the compute fabric section of the wiring diagram, it says "InfiniBand NDR or RoCEv2." What determines which one you deploy? What is the actual difference, and where does that difference live in the hardware?
 The answer is simpler and more surprising than most engineers expect.
 **The ConnectX-7 does not care which protocol it runs.**
-The same physical PCIe card — the same silicon, the same optical connector, the same cable — can operate as a native InfiniBand HCA or as a 400GbE Ethernet NIC. This is not a software emulation. The ConnectX-7 ASIC was designed from the ground up to support both transport layers natively. You change the operating mode through a firmware configuration utility (`mlxconfig`), and after a reboot the card presents a completely different personality to the operating system.
+The same physical PCIe card -- the same silicon, the same optical connector, the same cable -- can operate as a native InfiniBand HCA or as a 400GbE Ethernet NIC. This is not a software emulation. The ConnectX-7 ASIC was designed from the ground up to support both transport layers natively. You change the operating mode through a firmware configuration utility (`mlxconfig`), and after a reboot the card presents a completely different personality to the operating system.
 <ConnectX7ModesViz />
 
 <Image
@@ -382,8 +382,8 @@ The same physical PCIe card — the same silicon, the same optical connector, th
 *Figure: Official NVIDIA ConnectX-7 image. This is the physical card the chapter is referring to when it explains that the external fabric personality can change even when the hardware form factor does not.*
 
 **What "mode" actually means at the port level:**
-In **InfiniBand mode**, the ConnectX-7 speaks the InfiniBand protocol natively. It uses credit-based flow control — packets are only transmitted when the receiver has confirmed it has buffer space. There is no concept of packet loss at the link layer. The port is addressed by a LID assigned by the Subnet Manager, not by a MAC or IP address.
-In **Ethernet mode** (RoCEv2), the ConnectX-7 presents as a standard 400GbE network interface. It has a MAC address. It can be assigned an IP address. RDMA still works — through a protocol called RoCEv2 that encapsulates RDMA verbs in UDP/IP packets — but losslessness is no longer built-in. You achieve it through configuration: Priority Flow Control (PFC) and Explicit Congestion Notification (ECN). Misconfigure either and you lose the lossless guarantee.
+In **InfiniBand mode**, the ConnectX-7 speaks the InfiniBand protocol natively. It uses credit-based flow control -- packets are only transmitted when the receiver has confirmed it has buffer space. There is no concept of packet loss at the link layer. The port is addressed by a LID assigned by the Subnet Manager, not by a MAC or IP address.
+In **Ethernet mode** (RoCEv2), the ConnectX-7 presents as a standard 400GbE network interface. It has a MAC address. It can be assigned an IP address. RDMA still works -- through a protocol called RoCEv2 that encapsulates RDMA verbs in UDP/IP packets -- but losslessness is no longer built-in. You achieve it through configuration: Priority Flow Control (PFC) and Explicit Congestion Notification (ECN). Misconfigure either and you lose the lossless guarantee.
 The mode is set using `mlxconfig` on the DGX host:
 ```bash
 # Check current mode of all ConnectX-7 NICs
@@ -395,7 +395,7 @@ LINK_TYPE_P1     ETH(2)
 # Change to Ethernet mode (requires reboot)
 mlxconfig -d /dev/mst/mt4129_pciconf0 set LINK_TYPE_P1=2
 ```
-This single configuration parameter — `LINK_TYPE` — is the fork in the road that determines what your entire external infrastructure looks like.
+This single configuration parameter -- `LINK_TYPE` -- is the fork in the road that determines what your entire external infrastructure looks like.
 
 **What a RoCEv2 packet looks like on the wire**
 
@@ -405,52 +405,52 @@ When a ConnectX-7 in Ethernet mode sends an RDMA transfer, the resulting packet 
 Outer Ethernet header   (src MAC, dst MAC)
 IP header               (src IP, dst IP, DSCP = 26 for RoCEv2 traffic)
 UDP header              (dst port = 4791, src port = derived from QP number)
-InfiniBand BTH          (Base Transport Header — opcode, QP number, PSN)
+InfiniBand BTH          (Base Transport Header -- opcode, QP number, PSN)
 InfiniBand payload      (data or AETH for acknowledgements)
 ```
 
 Several fields in this header explain things you will see in diagnostic output:
 
-**UDP destination port 4791** — This is the IANA-assigned port for RoCEv2. Every RDMA packet has dst port 4791. When you configure PFC on CoS 3 (DSCP 26 → CoS 3 via the DSCP trust map), you are protecting all traffic with this destination port. `show roce` confirming `DSCP marking: 26` tells you RDMA packets are being correctly classified.
+**UDP destination port 4791** -- This is the IANA-assigned port for RoCEv2. Every RDMA packet has dst port 4791. When you configure PFC on CoS 3 (DSCP 26 -> CoS 3 via the DSCP trust map), you are protecting all traffic with this destination port. `show roce` confirming `DSCP marking: 26` tells you RDMA packets are being correctly classified.
 
-**UDP source port derived from the QP number** — Each Queue Pair gets a unique UDP source port. This means each QP is a distinct UDP flow. ECMP hashing (which uses the 5-tuple including src port) treats each QP as a separate flow and can distribute QPs across different paths. This is the mechanism by which a DGX node with 255 active QPs can distribute AllReduce traffic across all available switch paths — each QP potentially takes a different ECMP path.
+**UDP source port derived from the QP number** -- Each Queue Pair gets a unique UDP source port. This means each QP is a distinct UDP flow. ECMP hashing (which uses the 5-tuple including src port) treats each QP as a separate flow and can distribute QPs across different paths. This is the mechanism by which a DGX node with 255 active QPs can distribute AllReduce traffic across all available switch paths -- each QP potentially takes a different ECMP path.
 
-**InfiniBand BTH — opcode, QP number, PSN** — The Base Transport Header carries:
+**InfiniBand BTH -- opcode, QP number, PSN** -- The Base Transport Header carries:
 - The opcode (RDMA Write, RDMA Read, Send, Acknowledge)
 - The destination QP number (identifies which queue pair receives this packet)
-- The Packet Sequence Number (PSN) — a monotonically increasing counter per QP
+- The Packet Sequence Number (PSN) -- a monotonically increasing counter per QP
 
-The PSN is critical for reliability. The receiver expects PSNs in order. If a packet is dropped and the PSN sequence has a gap, the receiver sends a NACK. The sender retransmits from the missing PSN. If the retransmission fails or the gap is too large, the QP enters error state — which is the root cause of `ibstat` showing `State: Init` or `State: Error` on a rail after a link flap.
+The PSN is critical for reliability. The receiver expects PSNs in order. If a packet is dropped and the PSN sequence has a gap, the receiver sends a NACK. The sender retransmits from the missing PSN. If the retransmission fails or the gap is too large, the QP enters error state -- which is the root cause of `ibstat` showing `State: Init` or `State: Error` on a rail after a link flap.
 
-**DSCP 26** — RoCEv2 traffic is conventionally marked DSCP 26 (binary 011010) by the ConnectX-7 NIC. DSCP 26 maps to CoS 3 on the switch. CoS 3 is where PFC and ECN are configured. This chain — DSCP 26 → CoS 3 → PFC protection — is the mechanism that makes RoCEv2 lossless. A break anywhere in the chain (wrong DSCP marking, wrong DSCP-to-CoS map, PFC on wrong CoS) silently defeats the lossless mechanism. Chapter 5 covers exactly how to verify each link in this chain.
+**DSCP 26** -- RoCEv2 traffic is conventionally marked DSCP 26 (binary 011010) by the ConnectX-7 NIC. DSCP 26 maps to CoS 3 on the switch. CoS 3 is where PFC and ECN are configured. This chain -- DSCP 26 -> CoS 3 -> PFC protection -- is the mechanism that makes RoCEv2 lossless. A break anywhere in the chain (wrong DSCP marking, wrong DSCP-to-CoS map, PFC on wrong CoS) silently defeats the lossless mechanism. Chapter 5 covers exactly how to verify each link in this chain.
 
 ---
 ### What changes when you choose
-The ConnectX-7 mode selection cascades through every layer of the external infrastructure. The DGX node itself — GPUs, NVLink, NVSwitch, CPUs, RAM, storage — is completely unchanged. NVLink does not care what protocol the external NICs are running. CUDA does not care. The training job does not care, as long as NCCL can initialise the communication.
+The ConnectX-7 mode selection cascades through every layer of the external infrastructure. The DGX node itself -- GPUs, NVLink, NVSwitch, CPUs, RAM, storage -- is completely unchanged. NVLink does not care what protocol the external NICs are running. CUDA does not care. The training job does not care, as long as NCCL can initialise the communication.
 What changes is everything outside the DGX chassis:
 <IBvsRoCEInfraViz />
 **The switches change entirely.**
-InfiniBand NICs must connect to InfiniBand switches. You cannot plug an IB-mode ConnectX-7 into a standard Ethernet switch and expect it to work — the electrical signalling is compatible (both use the same QSFP56/OSFP cables) but the protocol is incompatible. You need QM9700 leaf switches and Q3400 spine switches running NVIDIA ONYX.
+InfiniBand NICs must connect to InfiniBand switches. You cannot plug an IB-mode ConnectX-7 into a standard Ethernet switch and expect it to work -- the electrical signalling is compatible (both use the same QSFP56/OSFP cables) but the protocol is incompatible. You need QM9700 leaf switches and Q3400 spine switches running NVIDIA ONYX.
 RoCEv2 NICs connect to Ethernet switches. You need SN5600 leaf switches running Cumulus Linux or SONiC, and standard Ethernet spine switches.
 **The switch operating system changes.**
 ONYX for InfiniBand. Cumulus Linux or SONiC for Ethernet. These are fundamentally different operating systems with different CLI commands, different configuration paradigms, and different diagnostic tools. Chapter 4 covers ONYX. Chapters 3 and 5 cover Cumulus/Spectrum-X.
 **The management philosophy changes.**
-InfiniBand requires a Subnet Manager (UFM) that centrally manages the entire fabric — assigns addresses, computes routing, programs every switch. This was covered in Chapter 1 and Chapter 4. You do not configure InfiniBand switches individually.
-Ethernet is distributed — each switch is configured independently using standard networking principles. PFC and ECN must be configured consistently across every switch and every port that carries RoCEv2 traffic.
+InfiniBand requires a Subnet Manager (UFM) that centrally manages the entire fabric -- assigns addresses, computes routing, programs every switch. This was covered in Chapter 1 and Chapter 4. You do not configure InfiniBand switches individually.
+Ethernet is distributed -- each switch is configured independently using standard networking principles. PFC and ECN must be configured consistently across every switch and every port that carries RoCEv2 traffic.
 **The losslessness mechanism changes.**
 InfiniBand: credit-based, built into the protocol, cannot be misconfigured away.
 RoCEv2: requires PFC (pauses the sender before buffers overflow) and ECN (marks packets to signal congestion before pausing is needed). Both must be correctly configured on every switch port. A single misconfigured port can cause packet drops that stall an entire training job. This is what Labs 1 and 2 diagnose and fix.
 **What stays exactly the same:**
 - The DGX node hardware (GPUs, NVLink, NVSwitch, CPUs, storage)
-- DGX OS — it runs the same regardless of NIC mode
+- DGX OS -- it runs the same regardless of NIC mode
 - CUDA and the training framework
 - The physical cables (both modes use the same QSFP56/OSFP optical cables)
-- The rail-optimised wiring topology — 1 NIC per GPU, each on a different switch
+- The rail-optimised wiring topology -- 1 NIC per GPU, each on a different switch
 - NVLink intra-node communication
 - The storage fabric (always Ethernet, always separate from the compute fabric)
 - The management network
-- `ibstat` — it works in both modes because it probes the RDMA layer, not the transport
-That last point is worth dwelling on. `ibstat` is part of the MLNX-OFED driver stack, installed on every DGX node regardless of mode. It can interrogate a ConnectX-7 in either mode. In Ethernet/RoCEv2 mode, `ibstat` output shows `Link layer: Ethernet` and the LID-related fields (`Base lid`, `SM lid`) will show `0` — there is no InfiniBand Subnet Manager assigning LIDs, because LIDs do not exist in Ethernet mode. If you see non-zero LID values, the NIC is actually in InfiniBand mode, not Ethernet mode.
+- `ibstat` -- it works in both modes because it probes the RDMA layer, not the transport
+That last point is worth dwelling on. `ibstat` is part of the MLNX-OFED driver stack, installed on every DGX node regardless of mode. It can interrogate a ConnectX-7 in either mode. In Ethernet/RoCEv2 mode, `ibstat` output shows `Link layer: Ethernet` and the LID-related fields (`Base lid`, `SM lid`) will show `0` -- there is no InfiniBand Subnet Manager assigning LIDs, because LIDs do not exist in Ethernet mode. If you see non-zero LID values, the NIC is actually in InfiniBand mode, not Ethernet mode.
 ---
 ### The practical decision framework
 Neither choice is universally better. The decision depends on what you are building and what you already have.
@@ -461,12 +461,12 @@ Neither choice is universally better. The decision depends on what you are build
 - You want losslessness guaranteed by the protocol, not by configuration
 **Choose RoCEv2 when:**
 - You already have Ethernet infrastructure and want to reuse it
-- You need multi-tenancy — Ethernet is easier to segment and isolate for multiple users
+- You need multi-tenancy -- Ethernet is easier to segment and isolate for multiple users
 - Your operational team knows Ethernet and the additional complexity of InfiniBand is a risk
 - You are building a smaller cluster where the performance gap is acceptable
-- Cost is a constraint — Ethernet switches are generally cheaper than equivalent InfiniBand switches
+- Cost is a constraint -- Ethernet switches are generally cheaper than equivalent InfiniBand switches
 **The honest performance gap:**
-In controlled benchmarks on identical hardware, a well-configured RoCEv2 deployment on Spectrum-X with RSHP adaptive routing comes within 5–10% of InfiniBand performance on most training workloads. At hyperscale (thousands of nodes), InfiniBand's advantage widens. At the scale of a typical enterprise AI cluster (16–128 DGX nodes), the difference is often acceptable.
+In controlled benchmarks on identical hardware, a well-configured RoCEv2 deployment on Spectrum-X with RSHP adaptive routing comes within 5-10% of InfiniBand performance on most training workloads. At hyperscale (thousands of nodes), InfiniBand's advantage widens. At the scale of a typical enterprise AI cluster (16-128 DGX nodes), the difference is often acceptable.
 This is why the industry has genuinely split into two camps rather than one winning. It is not marketing. It is a real tradeoff between protocol simplicity and operational familiarity.
 ---
 
@@ -479,12 +479,13 @@ You started this chapter knowing enterprise servers and switches. You now know:
 - The four parallelism types and which ones generate external network traffic vs intra-node NVLink traffic
 - Why RoCEv2 traffic is structurally low-entropy, what flowlets are, and why this makes ECMP fail for AI fabrics
 - Why InfiniBand was adopted from supercomputing, and why RoCEv2 emerged as an alternative
-- The evolution from NIC → HCA → DPU and what each adds
+- The evolution from NIC -> HCA -> DPU and what each adds
 - The complete anatomy of a DGX H100 and why each component exists
 - How the three networks of a DGX deployment connect and why they are separate
-- Why the same ConnectX-7 NIC can connect to an InfiniBand fabric or an Ethernet fabric — and what changes across the entire infrastructure when you make that choice
+- Why the same ConnectX-7 NIC can connect to an InfiniBand fabric or an Ethernet fabric -- and what changes across the entire infrastructure when you make that choice
 
-Everything that follows in this course — PFC, ECN, congestion control, CLI diagnostics — is about making the compute fabric work correctly. You now understand what you are protecting and why it matters.
+Everything that follows in this course -- PFC, ECN, congestion control, CLI diagnostics -- is about making the compute fabric work correctly. You now understand what you are protecting and why it matters.
 
-[Continue to Chapter 1 →](/learn/ch1-os-platforms)
+[Continue to Chapter 1 ->](/learn/ch1-os-platforms)
+</file>
 

@@ -1,5 +1,5 @@
 ---
-title: "Chapter 5: PFC, ECN, and Congestion Control — How Losslessness Actually Works"
+title: "Chapter 5: PFC, ECN, and Congestion Control -- How Losslessness Actually Works"
 module: "HPC Networking Foundations"
 level: "Intermediate"
 estimatedMinutes: 55
@@ -8,37 +8,37 @@ labLink: "/lab?lab=lab2-congestion"
 
 ## Before the mechanisms
 
-Chapter 3 taught you to read `show dcb pfc` and `show dcb ets`. You can look at those outputs and tell whether PFC is enabled and whether ECN is active. That is diagnostic reading — recognising a healthy state from a broken one.
+Chapter 3 taught you to read `show dcb pfc` and `show dcb ets`. You can look at those outputs and tell whether PFC is enabled and whether ECN is active. That is diagnostic reading -- recognising a healthy state from a broken one.
 
-This chapter goes one layer deeper. It explains what PFC and ECN are actually doing at the wire level, why they are designed the way they are, how they interact with each other, and crucially — how they fail. By the end, you will not just be able to read the output. You will understand why the output looks the way it does, which is the only foundation from which you can tune and debug these mechanisms under production pressure.
+This chapter goes one layer deeper. It explains what PFC and ECN are actually doing at the wire level, why they are designed the way they are, how they interact with each other, and crucially -- how they fail. By the end, you will not just be able to read the output. You will understand why the output looks the way it does, which is the only foundation from which you can tune and debug these mechanisms under production pressure.
 
 The story starts with a simple question: what actually happens when a 400G port receives more traffic than it can send?
 
 ---
 
-## Act 1 — The congestion problem, stated precisely
+## Act 1 -- The congestion problem, stated precisely
 
 A Spectrum-X leaf switch has a 400G port connected to a DGX NIC. During AllReduce, multiple DGX nodes simultaneously send gradient tensors through this port to the same destination. For a brief moment, the input rate exceeds the output rate. Traffic is arriving faster than it can leave.
 
-The port has a hardware buffer — a block of SRAM in the switch ASIC. When output is slower than input, packets queue in the buffer. The buffer fills. What happens next defines the difference between a lossless fabric and a best-effort one.
+The port has a hardware buffer -- a block of SRAM in the switch ASIC. When output is slower than input, packets queue in the buffer. The buffer fills. What happens next defines the difference between a lossless fabric and a best-effort one.
 
 <CongestionMechanicsViz />
 
 **Without any mechanism: tail drop**
 
-When the buffer is full, the next arriving packet is discarded. This is called tail drop — the packet at the tail of the queue is thrown away. The sender does not know the packet was dropped until a timeout fires (typically hundreds of milliseconds to seconds). The RDMA queue pair enters an error state. The entire tensor must be retransmitted. Every GPU in the AllReduce is stalled at the synchronisation barrier waiting.
+When the buffer is full, the next arriving packet is discarded. This is called tail drop -- the packet at the tail of the queue is thrown away. The sender does not know the packet was dropped until a timeout fires (typically hundreds of milliseconds to seconds). The RDMA queue pair enters an error state. The entire tensor must be retransmitted. Every GPU in the AllReduce is stalled at the synchronisation barrier waiting.
 
 At 400 Gb/s, a 9 KB jumbo frame takes 180 nanoseconds to transmit. A congestion event lasting 10 milliseconds means tens of thousands of packets have arrived while the buffer filled. The retransmission stall compounds across the entire cluster.
 
 **With PFC only: pauses instead of drops**
 
-PFC (Priority Flow Control) is a backpressure mechanism. When the switch buffer reaches a threshold, the switch sends a PAUSE frame upstream — telling the sender to stop transmitting. The sender freezes its output queue for the duration specified in the PAUSE frame. No packets are dropped. The network is lossless.
+PFC (Priority Flow Control) is a backpressure mechanism. When the switch buffer reaches a threshold, the switch sends a PAUSE frame upstream -- telling the sender to stop transmitting. The sender freezes its output queue for the duration specified in the PAUSE frame. No packets are dropped. The network is lossless.
 
-But pauses propagate. The paused sender's own upstream switch now has traffic queuing because its downstream is paused. It sends its own PAUSE frames upstream. The pause propagates hop by hop through the fabric. In a worst case, the pause reaches a node that is also in a circular dependency — and the fabric deadlocks. Nothing moves.
+But pauses propagate. The paused sender's own upstream switch now has traffic queuing because its downstream is paused. It sends its own PAUSE frames upstream. The pause propagates hop by hop through the fabric. In a worst case, the pause reaches a node that is also in a circular dependency -- and the fabric deadlocks. Nothing moves.
 
 **With PFC and ECN: early warning prevents the cliff**
 
-ECN (Explicit Congestion Notification) is a marking mechanism. Before buffers reach the drop threshold, the switch marks packets with a signal — "congestion experienced here." The receiver sees the mark and sends a notification back to the sender. The sender reduces its injection rate. Traffic slows before buffers fill. PFC pauses become rare rather than constant. Deadlocks become nearly impossible.
+ECN (Explicit Congestion Notification) is a marking mechanism. Before buffers reach the drop threshold, the switch marks packets with a signal -- "congestion experienced here." The receiver sees the mark and sends a notification back to the sender. The sender reduces its injection rate. Traffic slows before buffers fill. PFC pauses become rare rather than constant. Deadlocks become nearly impossible.
 
 This is the correct architecture for a lossless RDMA fabric: **ECN handles normal congestion proactively, PFC is the emergency backstop for bursts that ECN could not catch in time.**
 
@@ -46,69 +46,69 @@ Understanding this interaction is the key to everything that follows.
 
 **But there is a layer before both: proactive congestion prevention**
 
-PFC and ECN are both **reactive** mechanisms — they respond after congestion has begun. ECN marks packets when buffers start to fill. PFC pauses senders when buffers approach overflow. Both are essential, but they are last resorts.
+PFC and ECN are both **reactive** mechanisms -- they respond after congestion has begun. ECN marks packets when buffers start to fill. PFC pauses senders when buffers approach overflow. Both are essential, but they are last resorts.
 
-**Load balancing is proactive** — it distributes traffic across available paths before buffers fill, preventing congestion from forming in the first place. When the fabric correctly spreads AllReduce flows across all spine links, no single link becomes a bottleneck. ECN thresholds are never crossed. PFC frames are never sent. Training proceeds without interruption.
+**Load balancing is proactive** -- it distributes traffic across available paths before buffers fill, preventing congestion from forming in the first place. When the fabric correctly spreads AllReduce flows across all spine links, no single link becomes a bottleneck. ECN thresholds are never crossed. PFC frames are never sent. Training proceeds without interruption.
 
 <ProactiveReactiveViz />
 
 This layering defines how you diagnose problems in production:
 
-**If you see PFC pause frames growing constantly** — the reactive layer is working (PFC is preventing drops) but congestion is sustained. Ask why load balancing is not preventing the congestion from forming. Check spine link utilisation: are some links at 90% while others are at 10%? If yes, the load balancing layer has a problem, and tuning PFC thresholds will not fix it.
+**If you see PFC pause frames growing constantly** -- the reactive layer is working (PFC is preventing drops) but congestion is sustained. Ask why load balancing is not preventing the congestion from forming. Check spine link utilisation: are some links at 90% while others are at 10%? If yes, the load balancing layer has a problem, and tuning PFC thresholds will not fix it.
 
-**If you see PFC pause frames occasionally during burst periods** — this is expected and healthy. AllReduce bursts can briefly overwhelm any load balancer. PFC is providing the safety net it was designed for. No action needed unless pauses become sustained.
+**If you see PFC pause frames occasionally during burst periods** -- this is expected and healthy. AllReduce bursts can briefly overwhelm any load balancer. PFC is providing the safety net it was designed for. No action needed unless pauses become sustained.
 
-**If you see drops despite PFC being configured** — either ECN is not configured (so rate reduction never happened before PFC was needed) or the oversubscription ratio is too high for the traffic volume. PFC alone cannot save an oversubscribed fabric.
+**If you see drops despite PFC being configured** -- either ECN is not configured (so rate reduction never happened before PFC was needed) or the oversubscription ratio is too high for the traffic volume. PFC alone cannot save an oversubscribed fabric.
 
 The complete congestion management stack has three layers: proactive load balancing (distributes before buffers fill), ECN (signals senders to slow down as buffers start filling), PFC (pauses senders when buffers approach overflow). Chapters 5 and the upcoming Chapter 6 on load balancing cover each layer. Understanding the stack as a whole is what separates an engineer who can diagnose production congestion from one who just runs the same commands repeatedly.
 
 ---
 
-## Act 2 — PFC mechanics: the pause frame exchange
+## Act 2 -- PFC mechanics: the pause frame exchange
 
 ### What PFC actually is
 
-Classic Ethernet pause (IEEE 802.3x) was designed in 1997 for full-duplex links. When a receiver's buffer fills, it sends a 64-byte PAUSE frame to the sender. The sender stops transmitting for the duration specified — measured in pause quanta, where one pause quanta equals 512 bit-times.
+Classic Ethernet pause (IEEE 802.3x) was designed in 1997 for full-duplex links. When a receiver's buffer fills, it sends a 64-byte PAUSE frame to the sender. The sender stops transmitting for the duration specified -- measured in pause quanta, where one pause quanta equals 512 bit-times.
 
 Classic pause has one fatal flaw for HPC: it pauses all traffic on the link. Management traffic, storage traffic, and training traffic all stop simultaneously. In a modern cluster running multiple traffic classes, pausing everything to protect one class is unacceptable.
 
-**Priority Flow Control (IEEE 802.1Qbb)** solves this. Instead of one pause frame for the entire link, PFC defines up to eight independent pause frames — one per CoS (Class of Service) priority. A PAUSE frame for priority 3 pauses only priority 3 traffic. Priorities 0, 1, 2, 4, 5, 6, and 7 continue flowing unaffected.
+**Priority Flow Control (IEEE 802.1Qbb)** solves this. Instead of one pause frame for the entire link, PFC defines up to eight independent pause frames -- one per CoS (Class of Service) priority. A PAUSE frame for priority 3 pauses only priority 3 traffic. Priorities 0, 1, 2, 4, 5, 6, and 7 continue flowing unaffected.
 
-This is why RoCEv2 traffic is placed on a specific priority — CoS 3 in standard deployments. PFC can protect the RDMA traffic class while allowing management and storage traffic to pass unimpeded.
+This is why RoCEv2 traffic is placed on a specific priority -- CoS 3 in standard deployments. PFC can protect the RDMA traffic class while allowing management and storage traffic to pass unimpeded.
 
 <PFCMechanicsViz />
 
 ### The pause frame anatomy
 
 A PFC PAUSE frame is a 64-byte Ethernet frame with:
-- Destination MAC: `01:80:C2:00:00:01` (reserved multicast — link-local, never forwarded)
+- Destination MAC: `01:80:C2:00:00:01` (reserved multicast -- link-local, never forwarded)
 - EtherType: `0x8808` (MAC Control)
 - Opcode: `0x0101` (Priority Pause)
-- Enable vector: 8 bits, one per priority — which priorities are being paused
-- Pause quanta: 8 × 16-bit values — pause duration for each priority
+- Enable vector: 8 bits, one per priority -- which priorities are being paused
+- Pause quanta: 8 x 16-bit values -- pause duration for each priority
 
 **Pause quanta** is the key parameter. One pause quanta = 512 bit-times. At 400 Gb/s:
 
 ```
-512 bits ÷ 400,000,000,000 bits/second = 1.28 nanoseconds per quanta
+512 bits / 400,000,000,000 bits/second = 1.28 nanoseconds per quanta
 
 Maximum quanta value: 0xFFFF = 65,535 quanta
-Maximum pause duration at 400G: 65,535 × 1.28ns ≈ 83.9 microseconds
+Maximum pause duration at 400G: 65,535 x 1.28ns ~= 83.9 microseconds
 ```
 
-So when you see `Pause quanta: 0xffff` in `show dcb pfc`, you are seeing the maximum possible pause duration — approximately 84 microseconds at 400G. This is intentionally set to maximum because in RDMA workloads, you want the sender to stop completely and stay stopped until the congestion clears, not resume prematurely.
+So when you see `Pause quanta: 0xffff` in `show dcb pfc`, you are seeing the maximum possible pause duration -- approximately 84 microseconds at 400G. This is intentionally set to maximum because in RDMA workloads, you want the sender to stop completely and stay stopped until the congestion clears, not resume prematurely.
 
 ### The PFC buffer threshold
 
-The switch does not wait until its buffer is full before sending a PAUSE frame. It sends the PAUSE frame when the buffer reaches a **headroom threshold** — typically 60–80% full. Why? Because it takes time for the PAUSE frame to travel to the sender, and it takes time for the sender to stop. During that propagation delay and reaction time, packets keep arriving. The headroom ensures there is still buffer space available to absorb in-flight packets before the sender actually stops.
+The switch does not wait until its buffer is full before sending a PAUSE frame. It sends the PAUSE frame when the buffer reaches a **headroom threshold** -- typically 60-80% full. Why? Because it takes time for the PAUSE frame to travel to the sender, and it takes time for the sender to stop. During that propagation delay and reaction time, packets keep arriving. The headroom ensures there is still buffer space available to absorb in-flight packets before the sender actually stops.
 
 At 400G with a 200ns round-trip propagation delay:
 ```
 Packets arriving during 200ns pause propagation:
-  400 Gb/s × 200ns = 80,000 bits = 10,000 bytes ≈ 1 maximum-size jumbo frame
+  400 Gb/s x 200ns = 80,000 bits = 10,000 bytes ~= 1 maximum-size jumbo frame
 ```
 
-The headroom must be at least 10 KB to absorb packets in flight during pause propagation. Production deployments typically configure 64–128 KB of headroom to account for variable latency.
+The headroom must be at least 10 KB to absorb packets in flight during pause propagation. Production deployments typically configure 64-128 KB of headroom to account for variable latency.
 
 ### The three ways PFC misconfiguration shows up
 
@@ -118,7 +118,7 @@ Effect: Any congestion causes tail drop. RDMA queue pairs error. AllReduce stall
 
 **Misconfiguration 2: PFC on wrong priority**
 Output: `Priority Flow Control: enabled`, `PFC enabled priorities: 0 (cos0)`
-Effect: PFC is protecting best-effort traffic (CoS 0). RoCEv2 traffic on CoS 3 gets no protection — drops occur under congestion exactly as if PFC were disabled. This is the most deceptive misconfiguration because `show dcb pfc` shows "enabled."
+Effect: PFC is protecting best-effort traffic (CoS 0). RoCEv2 traffic on CoS 3 gets no protection -- drops occur under congestion exactly as if PFC were disabled. This is the most deceptive misconfiguration because `show dcb pfc` shows "enabled."
 
 **Misconfiguration 3: PFC watchdog disabled**
 Output: `Watchdog: disabled`
@@ -129,14 +129,20 @@ Effect: If a pause storm develops (pause frames propagating in a loop), nothing 
 **On the switch (Cumulus Linux / NVUE):**
 ```bash
 # Leaf switch terminal (blue prompt)
+# Note: Spectrum-X switch ports use swp* naming (swp1-swp32 for front-panel)
+# not eth* -- eth* names are the DGX host-side NIC interfaces
 
-# Enable PFC on priority 3 for a specific port
-nv set interface eth0 qos pfc enable on
-nv set interface eth0 qos pfc priority 3
+# Enable PFC on priority 3 for a specific switch port
+nv set interface swp1 qos pfc enable on
+nv set interface swp1 qos pfc priority 3
 
 # Set PFC watchdog
-nv set interface eth0 qos pfc watchdog action drop
-nv set interface eth0 qos pfc watchdog interval 200
+nv set interface swp1 qos pfc watchdog action drop
+nv set interface swp1 qos pfc watchdog interval 200
+
+# Apply to all server-facing ports at once (swp1-swp32 typical)
+nv set interface swp1-32 qos pfc enable on
+nv set interface swp1-32 qos pfc priority 3
 
 nv config apply
 ```
@@ -144,6 +150,7 @@ nv config apply
 **On the DGX host (mlnx_qos):**
 ```bash
 # DGX host terminal (green prompt)
+# eth0 here is the DGX NIC netdev name -- different from the switch's swp1
 
 # Enable PFC on priority 3 for the RDMA interface
 mlnx_qos -i eth0 --pfc 0,0,0,1,0,0,0,0
@@ -154,21 +161,21 @@ mlnx_qos -i eth0 --pfc 0,0,0,1,0,0,0,0
 mlnx_qos -i eth0
 ```
 
-The NIC side and switch side must agree — both must have PFC enabled on the same priority. A mismatch (PFC enabled on priority 3 on the switch but priority 0 on the NIC) means pause frames are sent on one priority but the NIC is not watching for pauses on that priority.
+The NIC side and switch side must agree -- both must have PFC enabled on the same priority. A mismatch (PFC enabled on priority 3 on the switch but priority 0 on the NIC) means pause frames are sent on one priority but the NIC is not watching for pauses on that priority. Also verify that the DSCP-to-priority mapping is consistent: the RoCEv2 DSCP value (commonly 26 or 46 depending on your deployment's QoS policy) must map to the same priority on both the NIC and the switch.
 
 ---
 
-## Act 3 — Pause storms: how deadlocks form
+## Act 3 -- Pause storms: how deadlocks form
 
 ### The hop-by-hop propagation
 
 PFC was designed to stop a single sender from overrunning a single buffer. It works well in that scenario. The problem emerges in multi-hop fabrics where the paused sender is itself a switch with multiple upstream connections.
 
-Consider this path: `DGX Node A → Leaf Switch 1 → Spine Switch → Leaf Switch 2 → DGX Node B`
+Consider this path: `DGX Node A -> Leaf Switch 1 -> Spine Switch -> Leaf Switch 2 -> DGX Node B`
 
 Node B's port is congested. Leaf Switch 2 sends a PAUSE frame to Spine Switch. Spine Switch pauses its output toward Leaf Switch 2. But Spine Switch is still receiving traffic from Leaf Switch 1. Spine Switch's buffer fills. Spine Switch sends a PAUSE frame to Leaf Switch 1. Leaf Switch 1 pauses its output toward Spine Switch. Leaf Switch 1's buffer fills. Leaf Switch 1 sends a PAUSE frame to DGX Node A. Node A stops sending.
 
-This is the intended behaviour — backpressure propagating to the source. But in a mesh fabric with multiple flows, the pause can propagate to flows that have nothing to do with the original congestion event. A pause originating from one congested destination can pause traffic destined for an entirely different, uncongested destination if that traffic shares a switch buffer with the paused flow.
+This is the intended behaviour -- backpressure propagating to the source. But in a mesh fabric with multiple flows, the pause can propagate to flows that have nothing to do with the original congestion event. A pause originating from one congested destination can pause traffic destined for an entirely different, uncongested destination if that traffic shares a switch buffer with the paused flow.
 
 <PauseStormViz />
 
@@ -186,34 +193,34 @@ This is the intended behaviour — backpressure propagating to the source. But i
 The truly dangerous scenario is a **circular pause dependency**. Imagine a simplified fabric:
 
 ```
-Node A → Switch X → Node B
-Node B → Switch Y → Node A
+Node A -> Switch X -> Node B
+Node B -> Switch Y -> Node A
 ```
 
 Node A is sending to Node B (through Switch X). Node B is simultaneously sending to Node A (through Switch Y). Both paths are congested. Switch X sends PAUSE to Node A. Switch Y sends PAUSE to Node B. Node A is paused, so its buffer fills with traffic it cannot send. Node B is paused, so its buffer fills. Both switches are waiting for the nodes to drain their buffers. Neither node can drain because both are paused. The fabric is deadlocked.
 
-In a real training cluster with hundreds of nodes doing simultaneous AllReduce, creating a circular pause dependency requires an unfortunate combination of traffic patterns and switch buffer pressure. It is rare under normal operation — but it happens. The signature: multiple ports on multiple switches showing sustained `PFC pause frames` counters growing indefinitely, with zero drops but near-zero throughput.
+In a real training cluster with hundreds of nodes doing simultaneous AllReduce, creating a circular pause dependency requires an unfortunate combination of traffic patterns and switch buffer pressure. It is rare under normal operation -- but it happens. The signature: multiple ports on multiple switches showing sustained `PFC pause frames` counters growing indefinitely, with zero drops but near-zero throughput.
 
 ### The watchdog: the circuit breaker
 
 The PFC watchdog is the mechanism that breaks deadlocks. It monitors each port's pause state. If a port has been continuously paused for longer than the watchdog interval (typically 200ms), the watchdog takes action:
 
-- **Action: drop** — The watchdog breaks the pause by dropping packets from the paused queue. Throughput recovers at the cost of some packet loss and RDMA retransmissions. The training job experiences a brief stall but resumes.
-- **Action: warn** — The watchdog logs the event but does not break the pause. Used for debugging, not production.
+- **Action: drop** -- The watchdog breaks the pause by dropping packets from the paused queue. Throughput recovers at the cost of some packet loss and RDMA retransmissions. The training job experiences a brief stall but resumes.
+- **Action: warn** -- The watchdog logs the event but does not break the pause. Used for debugging, not production.
 
-**Always configure watchdog: action drop in production.** A 200ms pause is not a problem — it is an expected brief backpressure event. A sustained pause is a deadlock, and the only recovery is to break it. The watchdog does this automatically. Without it, a deadlock requires manual intervention — SSHing into switches and disabling PFC while the training job is hanging, then re-enabling after draining the buffers.
+**Always configure watchdog: action drop in production.** A 200ms pause is not a problem -- it is an expected brief backpressure event. A sustained pause is a deadlock, and the only recovery is to break it. The watchdog does this automatically. Without it, a deadlock requires manual intervention -- SSHing into switches and disabling PFC while the training job is hanging, then re-enabling after draining the buffers.
 
-The watchdog timer should be longer than the maximum expected legitimate pause duration. At 400G with `pause quanta: 0xffff`, the maximum legitimate pause is approximately 84 microseconds. A 200ms watchdog timer gives 2,380× headroom for legitimate pauses before declaring a deadlock. This is deliberate — brief bursts can generate rapid sequences of pause frames that look like a sustained pause to a naive detector.
+The watchdog timer should be longer than the maximum expected legitimate pause duration. At 400G with `pause quanta: 0xffff`, the maximum legitimate pause is approximately 84 microseconds. A 200ms watchdog timer gives 2,380x headroom for legitimate pauses before declaring a deadlock. This is deliberate -- brief bursts can generate rapid sequences of pause frames that look like a sustained pause to a naive detector.
 
 ---
 
-## Act 4 — ECN mechanics: congestion signalling before the cliff
+## Act 4 -- ECN mechanics: congestion signalling before the cliff
 
 ### What ECN is, and is not
 
 ECN is commonly misunderstood as a replacement for PFC. It is not. ECN does not prevent packet loss. It does not pause senders. It does not provide losslessness guarantees. What ECN does is signal congestion **before** the buffer reaches the drop threshold, giving senders time to reduce their rate **before** PFC pausing is needed.
 
-Think of it this way: PFC is the emergency brake. ECN is the warning light on the dashboard. In a well-configured fabric, the warning light fires early enough that you slow down before you need the emergency brake. The emergency brake is still there — you just rarely need it.
+Think of it this way: PFC is the emergency brake. ECN is the warning light on the dashboard. In a well-configured fabric, the warning light fires early enough that you slow down before you need the emergency brake. The emergency brake is still there -- you just rarely need it.
 
 <ECNMechanicsViz />
 
@@ -223,17 +230,17 @@ ECN is defined in RFC 3168. It uses two bits in the IP header's Differentiated S
 
 ```
 IP Header DSCP byte (8 bits):
-  Bits 7-2: DSCP marking (6 bits) — QoS class, e.g. DSCP 26 for RoCEv2
+  Bits 7-2: DSCP marking (6 bits) -- QoS class, e.g. DSCP 26 for RoCEv2
   Bit 1-0:  ECN field (2 bits)
 
 ECN codepoints:
-  00 — Not-ECT: sender does not support ECN
-  01 — ECT(1): ECN-capable transport (variant 1)
-  10 — ECT(0): ECN-capable transport (variant 0, more common)
-  11 — CE: Congestion Experienced — set by switch to signal congestion
+  00 -- Not-ECT: sender does not support ECN
+  01 -- ECT(1): ECN-capable transport (variant 1)
+  10 -- ECT(0): ECN-capable transport (variant 0, more common)
+  11 -- CE: Congestion Experienced -- set by switch to signal congestion
 ```
 
-When a RoCEv2 packet is sent, the ConnectX-7 NIC sets the ECN field to `ECT(0)` — indicating "I support ECN, please mark me instead of dropping me." When the packet passes through a congested switch, the switch changes the ECN field to `CE` — "I have experienced congestion."
+When a RoCEv2 packet is sent, the ConnectX-7 NIC sets the ECN field to `ECT(0)` -- indicating "I support ECN, please mark me instead of dropping me." When the packet passes through a congested switch, the switch changes the ECN field to `CE` -- "I have experienced congestion."
 
 The receiver sees the CE-marked packet and sends a **CNP (Congestion Notification Packet)** back to the sender. The sender's NIC firmware receives the CNP and reduces its injection rate. This rate reduction is the DCQCN algorithm.
 
@@ -243,24 +250,24 @@ The switch uses a marking algorithm to decide which packets to mark with CE. The
 
 ```
 If buffer depth < min_threshold:
-    → Do not mark. Traffic is flowing freely.
+    -> Do not mark. Traffic is flowing freely.
 
-If min_threshold ≤ buffer depth ≤ max_threshold:
-    → Mark with probability P, where P increases linearly
+If min_threshold <= buffer depth <= max_threshold:
+    -> Mark with probability P, where P increases linearly
       from 0 at min_threshold to max_probability at max_threshold
 
 If buffer depth > max_threshold:
-    → Mark all packets
+    -> Mark all packets
     (or drop, depending on configuration)
 ```
 
 The key parameters:
 
-`min_threshold` — Buffer depth below which no marking occurs. Should be set well below the PFC headroom threshold so ECN starts working before PFC is needed.
+`min_threshold` -- Buffer depth below which no marking occurs. Should be set well below the PFC headroom threshold so ECN starts working before PFC is needed.
 
-`max_threshold` — Buffer depth at which maximum marking probability is applied. Should be below the PFC pause threshold.
+`max_threshold` -- Buffer depth at which maximum marking probability is applied. Should be below the PFC pause threshold.
 
-`max_probability` — The maximum fraction of packets marked at max_threshold. Typically 0.1 to 0.5 (10%–50%).
+`max_probability` -- The maximum fraction of packets marked at max_threshold. Typically 0.1 to 0.5 (10%-50%).
 
 In practice on Spectrum-X switches, these thresholds are configured in bytes:
 
@@ -280,7 +287,7 @@ The relationship between ECN thresholds, PFC headroom, and maximum buffer depth 
 ECN min-threshold < ECN max-threshold < PFC headroom threshold < Buffer maximum
 ```
 
-If this ordering is violated — for example, if ECN marks at max_threshold but PFC pauses at a lower threshold — ECN marks will trigger pauses rather than rate reductions, defeating the purpose.
+If this ordering is violated -- for example, if ECN marks at max_threshold but PFC pauses at a lower threshold -- ECN marks will trigger pauses rather than rate reductions, defeating the purpose.
 
 ---
 
@@ -293,22 +300,22 @@ If this ordering is violated — for example, if ECN marks at max_threshold but 
 />
 *Figure: The ordering matters more than the absolute values. ECN has to start early enough that DCQCN can reduce the sender before PFC headroom is consumed.*
 
-## Act 5 — DCQCN: the rate control algorithm
+## Act 5 -- DCQCN: the rate control algorithm
 
 ### What happens when the NIC receives a CNP
 
-DCQCN (Data Center Quantized Congestion Notification) is the rate control algorithm implemented in ConnectX-7 NIC firmware. It runs entirely in the NIC — no kernel involvement, no CPU cycles. When a CNP arrives at the NIC:
+DCQCN (Data Center Quantized Congestion Notification) is the rate control algorithm implemented in ConnectX-7 NIC firmware. It runs entirely in the NIC -- no kernel involvement, no CPU cycles. When a CNP arrives at the NIC:
 
-**Phase 1 — Rate decrease**
-The NIC immediately reduces the current rate of the congested RDMA flow by a factor `alpha`. Alpha is maintained as a running average of how often CNPs are received — frequent CNPs → higher alpha → more aggressive rate reduction.
+**Phase 1 -- Rate decrease**
+The NIC immediately reduces the current rate of the congested RDMA flow by a factor `alpha`. Alpha is maintained as a running average of how often CNPs are received -- frequent CNPs -> higher alpha -> more aggressive rate reduction.
 
 ```
-New rate = Current rate × (1 - alpha/2)
+New rate = Current rate x (1 - alpha/2)
 ```
 
-The minimum rate is bounded — the NIC will not reduce below a configured floor to prevent complete starvation.
+The minimum rate is bounded -- the NIC will not reduce below a configured floor to prevent complete starvation.
 
-**Phase 2 — Recovery**
+**Phase 2 -- Recovery**
 After a timer expires with no new CNPs (no congestion signal), the NIC begins recovering rate:
 - For the first few recovery stages: rate increases by a fixed additive increment (fast recovery)
 - After sufficient recovery stages: rate increases multiplicatively up to the target rate (hyper-active increase)
@@ -344,20 +351,20 @@ mlnx_qos -i eth0 --dcqcn-params
 
 show dcb ets
 
-Interface eth0 -- ETS Configuration
+Interface swp1 -- ETS Configuration
   Traffic class  Priority  Bandwidth  Algorithm
   TC0            0,1,2     30%        ETS
   TC3 (RoCE)     3         50%        Strict Priority
   TC7 (mgmt)     7         20%        ETS
 
-  ECN marking:    enabled (DSCP 26)
+  ECN marking:    enabled (DSCP 26 in this deployment)
   ECN min-thresh: 150000 bytes
   ECN max-thresh: 1500000 bytes
   ECN probability: 100%
   DCQCN:          active
 ```
 
-The `ECN min-thresh` and `ECN max-thresh` values are the parameters you are reading in this output. A common mistake is deploying a fabric with the default ECN thresholds from a different product — Spectrum-X defaults differ from older Spectrum switches, and using wrong thresholds can cause either too-early marking (constant CNPs, senders spending all their time in rate-reduction mode) or too-late marking (ECN fires too close to the PFC threshold, giving no time for rate reduction to work).
+The `ECN min-thresh` and `ECN max-thresh` values are the parameters you are reading in this output. A common mistake is deploying a fabric with the default ECN thresholds from a different product -- Spectrum-X defaults differ from older Spectrum switches, and using wrong thresholds can cause either too-early marking (constant CNPs, senders spending all their time in rate-reduction mode) or too-late marking (ECN fires too close to the PFC threshold, giving no time for rate reduction to work).
 
 ### How to verify DCQCN is working
 
@@ -366,15 +373,15 @@ The `rx_ecn_marked` counter in `ethtool -S eth0` shows how many packets the NIC 
 ```bash
 # DGX host terminal
 ethtool -S eth0 | grep ecn
-  rx_ecn_marked:  2947   ← CNPs received, DCQCN is reacting
-  tx_ecn_marked:  0      ← NIC is not itself congested
+  rx_ecn_marked:  2947   <- CNPs received, DCQCN is reacting
+  tx_ecn_marked:  0      <- NIC is not itself congested
 ```
 
-If congestion is present (buffer utilisation elevated on the switch) but `rx_ecn_marked` is zero, ECN marking is not configured on the switch side — this is the Lab 2 fault scenario. The fabric is running on PFC alone, which means every congestion event triggers pauses rather than rate reductions.
+If congestion is present (buffer utilisation elevated on the switch) but `rx_ecn_marked` is zero, ECN marking is not configured on the switch side -- this is the Lab 2 fault scenario. The fabric is running on PFC alone, which means every congestion event triggers pauses rather than rate reductions.
 
 ---
 
-## Act 6 — PFC and ECN working together
+## Act 6 -- PFC and ECN working together
 
 ### The congestion timeline
 
@@ -392,7 +399,7 @@ Buffer depth crosses `ECN min-threshold` (150 KB in our example). The switch beg
 Senders have reduced their injection rates. Input traffic drops toward 400G. Buffer depth stabilises and begins decreasing. ECN marking frequency decreases. DCQCN enters recovery phase.
 
 **T=2ms: Congestion resolved by ECN alone**
-Buffer drains below `ECN min-threshold`. No PFC frames were ever sent. No traffic was paused. From the application's perspective, AllReduce completed with slightly reduced throughput for 2ms — completely invisible at the training step level.
+Buffer drains below `ECN min-threshold`. No PFC frames were ever sent. No traffic was paused. From the application's perspective, AllReduce completed with slightly reduced throughput for 2ms -- completely invisible at the training step level.
 
 **Alternative: ECN insufficient (burst too large)**
 
@@ -401,7 +408,7 @@ Buffer drains below `ECN min-threshold`. No PFC frames were ever sent. No traffi
 The burst is too large and too sudden for DCQCN rate reduction to drain the buffer fast enough. Buffer depth crosses the PFC headroom threshold. The switch sends a PAUSE frame for CoS 3. Senders freeze immediately.
 
 **T=0.35ms: Pause propagates**
-In-flight packets continue arriving for approximately 200ns (propagation delay). Buffer absorbs them — the headroom was sized for exactly this.
+In-flight packets continue arriving for approximately 200ns (propagation delay). Buffer absorbs them -- the headroom was sized for exactly this.
 
 **T=0.4ms: Buffer stabilises**
 No new packets arriving. Buffer begins draining as the output port continues forwarding.
@@ -410,38 +417,29 @@ No new packets arriving. Buffer begins draining as the output port continues for
 Switch sends a RESUME frame (or simply stops sending PAUSE renewals). Senders resume at the DCQCN-reduced rate, not the original full rate.
 
 **T=3ms: Congestion resolved**
-AllReduce completes. The whole event took 3ms with one 800μs pause — well within acceptable limits for a training cluster.
-
-<Image
-  src="/images/ch5-pfc-ecn-congestion/rate-control-vs-pause-thrash.svg"
-  alt="Comparison diagram showing the same burst handled in two ways: ECN plus DCQCN bends sender rate before the queue lives in the PFC zone, while missing ECN produces stop-start pause thrash."
-  width={1600}
-  height={1100}
-  style={{ objectFit: "contain" }}
-/>
-*Figure: The same burst can feel almost invisible when ECN shapes senders early, or painfully jagged when PAUSE becomes the primary control loop.*
+AllReduce completes. The whole event took 3ms with one 800us pause -- well within acceptable limits for a training cluster.
 
 ### When both mechanisms fail
 
-Both PFC and ECN fail when congestion is **sustained** and **severe** — when multiple flows are simultaneously sending at maximum rate and the aggregate input rate persistently exceeds the output rate by a large margin.
+Both PFC and ECN fail when congestion is **sustained** and **severe** -- when multiple flows are simultaneously sending at maximum rate and the aggregate input rate persistently exceeds the output rate by a large margin.
 
 In this scenario:
 - ECN marks packets continuously, but senders cannot reduce rate fast enough to drain the buffer
 - PFC pauses senders, but new flows from other nodes fill the buffer immediately
-- Buffer reaches maximum depth — drops occur despite PFC
+- Buffer reaches maximum depth -- drops occur despite PFC
 
-This is not a configuration failure — it is a fabric capacity failure. The solution is more bandwidth (higher-speed links, more parallel paths), better traffic engineering (spreading flows across more paths), or reducing the all-to-all communication volume (model architecture changes, gradient compression).
+This is not a configuration failure -- it is a fabric capacity failure. The solution is more bandwidth (higher-speed links, more parallel paths), better traffic engineering (spreading flows across more paths), or reducing the all-to-all communication volume (model architecture changes, gradient compression).
 
-A third failure mode exists: both PFC and ECN are configured correctly, but load balancing is placing too much traffic on one path. This looks like a capacity failure but the fix is not more bandwidth — it is better path distribution. The diagnostic signature: drops and pauses on specific ports while adjacent ports with the same hardware have low utilisation.
+A third failure mode exists: both PFC and ECN are configured correctly, but load balancing is placing too much traffic on one path. This looks like a capacity failure but the fix is not more bandwidth -- it is better path distribution. The diagnostic signature: drops and pauses on specific ports while adjacent ports with the same hardware have low utilisation.
 
 The counters you look for to distinguish a configuration failure from a capacity failure:
-- Configuration failure: drops with ECN marking zero → ECN not configured
-- Configuration failure: sustained pause storms → PFC priority mismatch or missing ECN
-- Capacity failure: drops despite active ECN marking and valid PFC → fabric is undersized for the traffic volume
+- Configuration failure: drops with ECN marking zero -> ECN not configured
+- Configuration failure: sustained pause storms -> PFC priority mismatch or missing ECN
+- Capacity failure: drops despite active ECN marking and valid PFC -> fabric is undersized for the traffic volume
 
 ---
 
-## Act 7 — Configuring a clean RoCEv2 port from scratch
+## Act 7 -- Configuring a clean RoCEv2 port from scratch
 
 This is the checklist an engineer works through when bringing up a new DGX node on a Spectrum-X fabric. Every item must be correct before RDMA traffic will be lossless.
 
@@ -464,51 +462,54 @@ If the switch port MTU is 1500 (default) and the NIC sends 9000-byte frames, the
 
 ### Step 2: DSCP trust mode
 
-The switch must be configured to trust the DSCP marking sent by the DGX NIC. If the switch is in "trust CoS" mode instead of "trust DSCP" mode, it will ignore the NIC's DSCP 26 marking and put RoCEv2 traffic in the wrong queue — CoS 0 by default, which has no PFC protection.
+The switch must be configured to trust the DSCP marking sent by the DGX NIC. If the switch is in "trust CoS" mode instead of "trust DSCP" mode, it will ignore the NIC's DSCP marking and put RoCEv2 traffic in the wrong queue -- the default queue, which has no PFC protection.
 
 ```bash
 # Leaf switch terminal
 # Verify trust mode
 show dcb ets
 
-# If trust mode is wrong, configure it
-nv set interface eth0 qos trust dscp
+# If trust mode is wrong, configure it (swp1-32 = server-facing ports)
+nv set interface swp1-32 qos trust dscp
 nv config apply
 ```
 
 ### Step 3: DSCP-to-CoS mapping
 
-DSCP 26 must map to CoS 3 on the switch. This is standard in most Spectrum-X deployments but should be verified:
+The RoCEv2 DSCP value (DSCP 26 in this deployment's QoS policy -- your deployment may use DSCP 46 or another value) must map to the lossless PFC-protected priority. Verify this and set it if wrong:
 
 ```bash
 # Leaf switch terminal
 nv show qos mapping
 
-# Expected: DSCP 26 → CoS 3
+# In this deployment: DSCP 26 -> CoS 3
 # If wrong, configure:
 nv set qos mapping traffic-class 3 dscp 26
 nv config apply
+
+# Also verify on the NIC side -- must match the switch:
+mlnx_qos -i eth0 --dscp
 ```
 
 ### Step 4: ETS traffic class configuration
 
-CoS 3 must be in a Strict Priority (SP) queue — not a weighted queue. RoCEv2 traffic requires deterministic latency, which SP provides. Weighted queuing introduces variable latency as the queue depth changes.
+CoS 3 must be in a Strict Priority (SP) queue -- not a weighted queue. RoCEv2 traffic requires deterministic latency, which SP provides. Weighted queuing introduces variable latency as the queue depth changes.
 
 ```bash
 # Leaf switch terminal
 show dcb ets
 
-TC3 (RoCE)  3  50%  Strict Priority   ← correct
+TC3 (RoCE)  3  50%  Strict Priority   <- correct
 ```
 
-### Step 5: PFC on CoS 3
+### Step 5: PFC on the lossless priority
 
 ```bash
-# Leaf switch terminal
-nv set interface eth0 qos pfc enable on
-nv set interface eth0 qos pfc priority 3
-nv set interface eth0 qos pfc watchdog action drop
-nv set interface eth0 qos pfc watchdog interval 200
+# Leaf switch terminal (apply to all server-facing ports)
+nv set interface swp1-32 qos pfc enable on
+nv set interface swp1-32 qos pfc priority 3
+nv set interface swp1-32 qos pfc watchdog action drop
+nv set interface swp1-32 qos pfc watchdog interval 200
 nv config apply
 
 # DGX host terminal
@@ -537,18 +538,18 @@ show roce
 RoCE Configuration -- eth0
   RoCE version:   RoCEv2
   State:          active
-  PFC:            enabled (priority 3)    ← must be priority 3
-  ECN:            enabled -- DCQCN active ← must be active
-  DSCP marking:   26 (RoCE traffic)       ← must be 26
-  MTU:            9000                    ← must be 9000
-  GID:            fe80::506b:4b03:00a1:b200 ← must be non-zero
+  PFC:            enabled (priority 3)    <- must be priority 3
+  ECN:            enabled -- DCQCN active <- must be active
+  DSCP marking:   26 (RoCE traffic)       <- must be 26
+  MTU:            9000                    <- must be 9000
+  GID:            fe80::506b:4b03:00a1:b200 <- must be non-zero
 ```
 
-All six fields must show the correct values. A single misconfiguration breaks losslessness — usually silently, until a training job fails under load.
+All six fields must show the correct values. A single misconfiguration breaks losslessness -- usually silently, until a training job fails under load.
 
 ---
 
-## Act 8 — Lab 2 preparation: diagnosing silent congestion
+## Act 8 -- Lab 2 preparation: diagnosing silent congestion
 
 Lab 2 presents a specific scenario: training throughput has dropped 40%, but `show interface counters` shows zero drops. The buffer utilisation is elevated (87%). The engineer must identify the root cause and fix it.
 
@@ -556,7 +557,7 @@ Lab 2 presents a specific scenario: training throughput has dropped 40%, but `sh
 
 Silent congestion is the most operationally difficult failure mode because the fabric looks healthy from casual inspection. No drops. PFC pauses are present but small. Buffer utilisation is elevated but below the drop threshold. The monitoring dashboard does not alarm.
 
-What is actually happening: without ECN, the only congestion mechanism is PFC. The switch is sending PAUSE frames to manage the congested port. The NIC is alternating between paused and transmitting. Effective throughput is a fraction of line rate even though no packets are being dropped. The RDMA queue pairs are not in error state. The training job continues — just slowly.
+What is actually happening: without ECN, the only congestion mechanism is PFC. The switch is sending PAUSE frames to manage the congested port. The NIC is alternating between paused and transmitting. Effective throughput is a fraction of line rate even though no packets are being dropped. The RDMA queue pairs are not in error state. The training job continues -- just slowly.
 
 <Image
   src="/images/ch5-pfc-ecn-congestion/silent-congestion-diagnostic-triad.svg"
@@ -567,15 +568,6 @@ What is actually happening: without ECN, the only congestion mechanism is PFC. T
 />
 *Figure: This is the diagnostic pattern Lab 2 is built around. The fabric is protecting itself from drops, but because ECN is absent the only control loop left is stop-start pausing.*
 
-<Image
-  src="/images/ch5-pfc-ecn-congestion/cross-layer-congestion-signatures.svg"
-  alt="Comparison matrix showing how healthy bursts, silent congestion, and capacity failure look across application behavior, switch counters, NIC counters, and operator interpretation."
-  width={1600}
-  height={1200}
-  style={{ objectFit: "contain" }}
-/>
-*Figure: This is the cross-check that keeps you from chasing the wrong fix. Similar slowdowns mean different things depending on whether ECN marks are present on the NIC and whether drops appear on the switch.*
-
 ### The diagnostic path for Lab 2
 
 **Step 1: Check buffer utilisation on the switch**
@@ -584,10 +576,10 @@ What is actually happening: without ECN, the only congestion mechanism is PFC. T
 # Leaf switch terminal (blue prompt)
 show interface counters
 
-Interface eth0
-  Output drops:      0         ← zero drops — looks healthy
-  PFC pause frames:  4,823     ← pauses present but modest
-  Buffer util:       87%       ← THIS is the problem signal
+Interface swp1
+  Output drops:      0         <- zero drops -- looks healthy
+  PFC pause frames:  4,823     <- pauses present but modest
+  Buffer util:       87%       <- THIS is the problem signal
 ```
 
 High buffer utilisation with zero drops tells you: congestion is present, PFC is preventing drops, but the congestion is not being managed proactively. ECN would have reduced injection rates before the buffer got this full.
@@ -598,8 +590,8 @@ High buffer utilisation with zero drops tells you: congestion is present, PFC is
 # Leaf switch terminal
 show dcb ets
 
-Interface eth0 -- ETS Configuration
-  ECN marking:  disabled        ← confirmed: ECN not configured
+Interface swp1 -- ETS Configuration
+  ECN marking:  disabled        <- confirmed: ECN not configured
   DCQCN:        inactive
 ```
 
@@ -608,14 +600,14 @@ Interface eth0 -- ETS Configuration
 ```bash
 # DGX host terminal (green prompt)
 ethtool -S eth0 | grep ecn
-  rx_ecn_marked:  0   ← no ECN marks received, DCQCN not firing
+  rx_ecn_marked:  0   <- no ECN marks received, DCQCN not firing
 ```
 
 **Step 4: Fix**
 
 ```bash
 # Leaf switch terminal
-enable ecn    ← FabricLab simulator command
+enable ecn    <- FabricLab simulator command
 ```
 
 In production:
@@ -631,21 +623,21 @@ nv config apply
 # Leaf switch terminal
 show dcb ets
 
-Interface eth0 -- ETS Configuration
-  ECN marking:  enabled (DSCP 26)  ← ECN now active
+Interface swp1 -- ETS Configuration
+  ECN marking:  enabled  <- ECN now active
   DCQCN:        active
 
 show interface counters
 
-Interface eth0
-  Buffer util:       31%   ← dropped significantly — DCQCN is working
-  PFC pause frames:  4,823 ← historical, no longer growing rapidly
+Interface swp1
+  Buffer util:       31%   <- dropped significantly -- DCQCN is working
+  PFC pause frames:  4,823 <- historical, no longer growing rapidly
 ```
 
 ```bash
 # DGX host terminal
 ethtool -S eth0 | grep ecn
-  rx_ecn_marked:  847   ← ECN marks being received, DCQCN reacting
+  rx_ecn_marked:  847   <- ECN marks being received, DCQCN reacting
 ```
 
 Training throughput recovers because senders are now rate-limited by DCQCN rather than being intermittently paused by PFC. The AllReduce operations complete faster because the injection rate is managed smoothly rather than in stop-start bursts.
@@ -656,9 +648,9 @@ Training throughput recovers because senders are now rate-limited by DCQCN rathe
 
 PFC and ECN are not configuration checkboxes. They are active mechanisms with specific timing, thresholds, and interactions that can fail in subtle ways.
 
-You know how PFC works at the wire level — the pause frame anatomy, pause quanta timing at 400G, the headroom calculation, and the three misconfiguration patterns. You know how pause storms form, why circular pause dependencies are possible in mesh fabrics, and why the watchdog is not optional.
+You know how PFC works at the wire level -- the pause frame anatomy, pause quanta timing at 400G, the headroom calculation, and the three misconfiguration patterns. You know how pause storms form, why circular pause dependencies are possible in mesh fabrics, and why the watchdog is not optional.
 
-You know what ECN actually does — CE bit marking, the RED algorithm, ECN thresholds and their relationship to PFC headroom. You know DCQCN as the NIC-firmware rate control algorithm that responds to ECN marks, and the counters that tell you whether it is working.
+You know what ECN actually does -- CE bit marking, the RED algorithm, ECN thresholds and their relationship to PFC headroom. You know DCQCN as the NIC-firmware rate control algorithm that responds to ECN marks, and the counters that tell you whether it is working.
 
 You know the congestion timeline showing how ECN handles mild congestion before PFC is needed, and how to distinguish a configuration failure from a capacity failure.
 
@@ -667,4 +659,5 @@ You know the complete RoCEv2 port configuration checklist: MTU 9000, DSCP trust,
 Lab 2 is waiting. The buffer utilisation is at 87%. There are no drops. ECN is not configured. You know exactly what to look for.
 
 [Continue to Chapter 6 ?](/learn/ch6-efficient-load-balancing)
+</file>
 

@@ -14,7 +14,7 @@ export function FatTreeViz() {
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">
-        k-ary fat-tree — interactive topology calculator
+        k-ary fat-tree -- interactive topology calculator
       </p>
       <p className="mb-4 text-xs text-slate-600">k = switch radix (ports per switch)</p>
 
@@ -37,8 +37,8 @@ export function FatTreeViz() {
         {[
           { label: "Pods", formula: "k", value: pods, color: "#f59e0b" },
           { label: "Edge switches/pod", formula: "k/2", value: edgePerPod, color: "#60a5fa" },
-          { label: "Core switches", formula: "(k/2)Â²", value: coreCount, color: "#ef4444" },
-          { label: "Max servers", formula: "kÂ³/4", value: servers, color: "#4ade80" },
+          { label: "Core switches", formula: "(k/2)^2", value: coreCount, color: "#ef4444" },
+          { label: "Max servers", formula: "k^3/4", value: servers, color: "#4ade80" },
         ].map(item => (
           <div key={item.label} className="rounded-xl bg-slate-800/50 p-3 text-center">
             <div className="text-[9px] text-slate-500 mb-0.5">{item.label}</div>
@@ -57,7 +57,7 @@ export function FatTreeViz() {
           }}>
           <div className="font-semibold text-amber-300 mb-1">Bisection bandwidth</div>
           <div className="text-slate-400 leading-5">
-            At the bisection cut, (k/2)Â² core switches × k/2 links each = {coreCount * (k/2)} total links × 400G = {((coreCount * (k/2) * 400) / 1000).toFixed(1)} Tb/s
+            At the bisection cut, (k/2)^2 core switches x k/2 links each = {coreCount * (k/2)} total links x 400G = {((coreCount * (k/2) * 400) / 1000).toFixed(1)} Tb/s
           </div>
         </button>
         <button onClick={() => setHighlight(highlight === "path" ? null : "path")}
@@ -68,7 +68,7 @@ export function FatTreeViz() {
           }}>
           <div className="font-semibold text-green-300 mb-1">AllReduce hop count</div>
           <div className="text-slate-400 leading-5">
-            Server → Edge → Agg → Core → Agg → Edge → Server = 6 hops between servers in different pods (3 up, 3 down)
+            {"Server -> Edge -> Agg -> Core -> Agg -> Edge -> Server = 6 hops between servers in different pods (3 up, 3 down)"}
           </div>
         </button>
       </div>

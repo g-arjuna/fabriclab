@@ -6,17 +6,17 @@ estimatedMinutes: 55
 labLink: ""
 ---
 
-Every GPU generation changes the fabric. Not because the GPU compute architecture changes — that's CUDA engineering territory — but because each new generation ships with different interconnect speeds, different form factors, different constraints on how many GPUs you can network together and at what bandwidth. The engineers who built the DGX H100 fabric we've been studying throughout this course made specific choices *because* of H100's NVLink 4 and SXM5 form factor. Those choices would be different for A100, and they'll be different again for B200.
+Every GPU generation changes the fabric. Not because the GPU compute architecture changes -- that's CUDA engineering territory -- but because each new generation ships with different interconnect speeds, different form factors, different constraints on how many GPUs you can network together and at what bandwidth. The engineers who built the DGX H100 fabric we've been studying throughout this course made specific choices *because* of H100's NVLink 4 and SXM5 form factor. Those choices would be different for A100, and they'll be different again for B200.
 
-This chapter is the network-relevant guide to GPU hardware generations. It covers what changes between generations from the fabric engineer's perspective: the NVLink and NVSwitch generation table, SXM vs PCIe form factor implications, the PCIe bandwidth ceiling that limits non-SXM deployments, the Grace Hopper Superchip and what it changes about CPU-GPU communication, the H100 CNX converged accelerator, Multi-Instance GPU partitioning and its SR-IOV network implications, and Confidential Computing — which introduces a new kind of diagnostic opacity that directly affects how you operate an AI fabric.
+This chapter is the network-relevant guide to GPU hardware generations. It covers what changes between generations from the fabric engineer's perspective: the NVLink and NVSwitch generation table, SXM vs PCIe form factor implications, the PCIe bandwidth ceiling that limits non-SXM deployments, the Grace Hopper Superchip and what it changes about CPU-GPU communication, the H100 CNX converged accelerator, Multi-Instance GPU partitioning and its SR-IOV network implications, and Confidential Computing -- which introduces a new kind of diagnostic opacity that directly affects how you operate an AI fabric.
 
-## Act 1 — Why GPU generations drive fabric decisions
+## Act 1 -- Why GPU generations drive fabric decisions
 
 The standard framing of GPU generations focuses on compute: TFLOPS, tensor core counts, HBM capacity. None of that determines fabric architecture. What determines fabric architecture is the interconnect stack that ships with the GPU.
 
 Three parameters change with every generation and cascade into infrastructure decisions:
 
-**Intra-node bandwidth**: how fast can a GPU communicate with its siblings inside the same DGX node? This is NVLink territory. Higher NVLink bandwidth means larger batch sizes can be processed with tensor parallelism inside a single node, reducing the amount of inter-node AllReduce traffic that has to cross the fabric. The network engineer's job gets easier as NVLink bandwidth grows — fewer jobs need inter-node scale-out for a given model size.
+**Intra-node bandwidth**: how fast can a GPU communicate with its siblings inside the same DGX node? This is NVLink territory. Higher NVLink bandwidth means larger batch sizes can be processed with tensor parallelism inside a single node, reducing the amount of inter-node AllReduce traffic that has to cross the fabric. The network engineer's job gets easier as NVLink bandwidth grows -- fewer jobs need inter-node scale-out for a given model size.
 
 **PCIe interface bandwidth**: how fast can the GPU talk to the host CPU and to PCIe-attached NICs? This is the binding constraint for any GPU that isn't in an SXM form factor. A 400 Gbps ConnectX-7 in PCIe Gen 4 is already close to the one-directional PCIe ceiling. Gen 5 doubles the ceiling, but the ceiling still exists and still matters.
 
@@ -24,57 +24,57 @@ Three parameters change with every generation and cascade into infrastructure de
 
 <NVLinkGenerationViz />
 
-## Act 2 — NVLink generations: the full table
+## Act 2 -- NVLink generations: the full table
 
 NVLink has gone through five generations as of the B200. Two separate version counters run in parallel and cause persistent confusion in vendor documentation: the NVLink *protocol* generation (what generation of NVLink each GPU implements) and the NVSwitch *silicon* generation (what chip sits inside the switch or the DGX node's onboard NVSwitch modules). These are different counters.
 
 **NVLink protocol generations:**
 
-NVLink 2 (Volta / V100, 2017): 300 GB/s total bidirectional per GPU, 6 links × 25 GB/s each. First generation that supported NVSwitch as an external switching element for all-to-all.
+NVLink 2 (Volta / V100, 2017): 300 GB/s total bidirectional per GPU, 6 links x 25 GB/s each. First generation that supported NVSwitch as an external switching element for all-to-all.
 
-NVLink 3 (Ampere / A100, 2020): 600 GB/s total bidirectional per GPU, 12 links × 25 GB/s each. Doubled link count vs NVLink 2. DGX A100 shipped with 2nd-generation NVSwitch silicon at 7.2 Tb/s aggregate switch bandwidth.
+NVLink 3 (Ampere / A100, 2020): 600 GB/s total bidirectional per GPU, 12 links x 25 GB/s each. Doubled link count vs NVLink 2. DGX A100 shipped with 2nd-generation NVSwitch silicon at 7.2 Tb/s aggregate switch bandwidth.
 
-NVLink 4 (Hopper / H100, 2022): 900 GB/s total bidirectional per GPU, 18 links × 25 GB/s each. 50% increase over NVLink 3. DGX H100 ships with 3rd-generation NVSwitch silicon at 13.6 Tb/s aggregate switch bandwidth — covered in detail in Chapter 0 and revisited in Chapter 12.
+NVLink 4 (Hopper / H100, 2022): 900 GB/s total bidirectional per GPU, 18 links x 25 GB/s each. 50% increase over NVLink 3. DGX H100 ships with 3rd-generation NVSwitch silicon at 13.6 Tb/s aggregate switch bandwidth -- covered in detail in Chapter 0 and revisited in Chapter 12.
 
-NVLink 5 (Blackwell / B200, 2024): 1.8 TB/s total bidirectional per GPU — double NVLink 4. 4th-generation NVSwitch silicon. The full DGX B200 configuration supports up to 72 GPUs in a single NVLink domain (up from 8 per DGX node in H100 architecture), connected by NVLink Switch modules.
+NVLink 5 (Blackwell / B200, 2024): 1.8 TB/s total bidirectional per GPU -- double NVLink 4. 4th-generation NVSwitch silicon. The full DGX B200 configuration supports up to 72 GPUs in a single NVLink domain (up from 8 per DGX node in H100 architecture), connected by NVLink Switch modules.
 
-**The NVLink-C2C variant** (used in GH200, covered in Act 6): NVLink Chip-to-Chip is a die-to-die interconnect variant running at 900 GB/s between the Grace CPU and the H100 GPU on the same package. It is not the same as the GPU-to-GPU NVLink — it is a different electrical implementation optimised for short die-to-die distances with coherent memory access semantics.
+**The NVLink-C2C variant** (used in GH200, covered in Act 6): NVLink Chip-to-Chip is a die-to-die interconnect variant running at 900 GB/s between the Grace CPU and the H100 GPU on the same package. It is not the same as the GPU-to-GPU NVLink -- it is a different electrical implementation optimised for short die-to-die distances with coherent memory access semantics.
 
-The pattern across generations: each NVLink generation roughly doubles bandwidth, adding more links per GPU. The NVSwitch generation counter tracks the switch silicon and always lags one step behind the GPU — the NVSwitch that ships inside a DGX node for a given GPU generation is the switch designed to aggregate that generation's link count.
+The pattern across generations: each NVLink generation roughly doubles bandwidth, adding more links per GPU. The NVSwitch generation counter tracks the switch silicon and always lags one step behind the GPU -- the NVSwitch that ships inside a DGX node for a given GPU generation is the switch designed to aggregate that generation's link count.
 
-## Act 3 — NVSwitch generations: the switching fabric inside the node
+## Act 3 -- NVSwitch generations: the switching fabric inside the node
 
-The NVSwitch chip sits inside the DGX node (on the NVLink Switch Board, or NSB) and provides full all-to-all connectivity between all GPUs in the node. It is not the same as the external NVLink Switch System covered in Chapter 12 — the onboard NVSwitch handles intra-node GPU-to-GPU traffic, while external NVLink Switch modules extend the NVLink domain across multiple nodes.
+The NVSwitch chip sits inside the DGX node (on the NVLink Switch Board, or NSB) and provides full all-to-all connectivity between all GPUs in the node. It is not the same as the external NVLink Switch System covered in Chapter 12 -- the onboard NVSwitch handles intra-node GPU-to-GPU traffic, while external NVLink Switch modules extend the NVLink domain across multiple nodes.
 
 **NVSwitch 1st generation** (Volta / V100 DGX, 2018): 900 GB/s aggregate switch bandwidth. 6 DGX V100 nodes used this.
 
-**NVSwitch 2nd generation** (Ampere / A100 DGX, 2020): 7.2 Tb/s aggregate switch bandwidth. 6 NVSwitch chips per DGX A100 node, each handling 12 NVLink 3 ports. 8 GPUs × 600 GB/s = 4.8 Tb/s total GPU bandwidth, 7.2 Tb/s switch headroom for full any-to-any.
+**NVSwitch 2nd generation** (Ampere / A100 DGX, 2020): 7.2 Tb/s aggregate switch bandwidth. 6 NVSwitch chips per DGX A100 node, each handling 12 NVLink 3 ports. 8 GPUs x 600 GB/s = 4.8 Tb/s total GPU bandwidth, 7.2 Tb/s switch headroom for full any-to-any.
 
 **NVSwitch 3rd generation** (Hopper / H100 DGX, 2022): 13.6 Tb/s aggregate switch bandwidth across 4 NVSwitch chips in the DGX H100. Each GPU connects with 18 NVLink 4 links, providing 900 GB/s. This is the system we've been working with throughout the course. Also supports in-network SHARP-equivalent reduction.
 
 **NVSwitch 4th generation** (Blackwell / B200, 2024): Higher aggregate bandwidth to match NVLink 5. The architectural change in Blackwell is the scale: external NVLink Switch modules now allow up to 72 GPUs (a full DGX B200 "NVL72" rack) to share a single NVLink address space, extending what was previously an 8-GPU intra-node fabric into a 72-GPU rack-scale fabric.
 
-For the network engineer, the key implication of each NVSwitch generation: as intra-node bandwidth grows, the ratio of intra-node to inter-node bandwidth widens. More computation fits inside the NVLink domain without crossing the Ethernet or InfiniBand fabric. Your scale-out fabric carries a smaller fraction of total training traffic per generation — but the jobs that do cross it are often larger models that need even more inter-node bandwidth.
+For the network engineer, the key implication of each NVSwitch generation: as intra-node bandwidth grows, the ratio of intra-node to inter-node bandwidth widens. More computation fits inside the NVLink domain without crossing the Ethernet or InfiniBand fabric. Your scale-out fabric carries a smaller fraction of total training traffic per generation -- but the jobs that do cross it are often larger models that need even more inter-node bandwidth.
 
-## Act 4 — SXM vs PCIe: the form factor choice
+## Act 4 -- SXM vs PCIe: the form factor choice
 
 <GPUFormFactorViz />
 
-Every NVIDIA data centre GPU generation ships in at least two form factors: SXM and PCIe. The choice between them is not primarily about raw compute — both ship the same GPU die — it is about interconnect capability.
+Every NVIDIA data centre GPU generation ships in at least two form factors: SXM and PCIe. The choice between them is not primarily about raw compute -- both ship the same GPU die -- it is about interconnect capability.
 
-**SXM (Server PCI Express Module)**: a proprietary NVIDIA board form factor that connects the GPU to the motherboard via a high-density Land Grid Array (LGA) socket on the DGX node's baseboard. The key property: the SXM socket exposes the full NVLink port count and high-power delivery (up to 700W for H100 SXM5). SXM GPUs in a DGX node connect to each other via the onboard NVSwitch fabric — no PCIe bus involved in GPU-to-GPU communication. The CPU still communicates with each GPU via PCIe, but that path is only used for host-initiated operations (DMA, kernel launch, UVM faults), not for the high-bandwidth GPU-to-GPU traffic.
+**SXM (Server PCI Express Module)**: a proprietary NVIDIA board form factor that connects the GPU to the motherboard via a high-density Land Grid Array (LGA) socket on the DGX node's baseboard. The key property: the SXM socket exposes the full NVLink port count and high-power delivery (up to 700W for H100 SXM5). SXM GPUs in a DGX node connect to each other via the onboard NVSwitch fabric -- no PCIe bus involved in GPU-to-GPU communication. The CPU still communicates with each GPU via PCIe, but that path is only used for host-initiated operations (DMA, kernel launch, UVM faults), not for the high-bandwidth GPU-to-GPU traffic.
 
-**PCIe form factor**: standard PCIe add-in card. The GPU connects to the system via PCIe x16. NVLink is either absent (PCIe H100 has no NVLink) or present in reduced form (some Ampere OEM cards have 2 NVLink ports for 2-GPU peer connections). The critical constraint: all GPU-to-GPU communication across any distance must traverse the PCIe bus. For AI training with multiple PCIe GPUs, the collective communication library (NCCL) uses the PCIe or NVLink-peer path within a node and the NIC for inter-node traffic — but the NIC itself is PCIe-attached, so NIC-to-GPU DMA also goes over PCIe.
+**PCIe form factor**: standard PCIe add-in card. The GPU connects to the system via PCIe x16. NVLink is either absent (PCIe H100 has no NVLink) or present in reduced form (some Ampere OEM cards have 2 NVLink ports for 2-GPU peer connections). The critical constraint: all GPU-to-GPU communication across any distance must traverse the PCIe bus. For AI training with multiple PCIe GPUs, the collective communication library (NCCL) uses the PCIe or NVLink-peer path within a node and the NIC for inter-node traffic -- but the NIC itself is PCIe-attached, so NIC-to-GPU DMA also goes over PCIe.
 
 **The practical consequences for fabric design:**
 
-A DGX H100 with 8 SXM5 GPUs: GPU-to-GPU AllReduce within the node uses NVLink 4 at 900 GB/s per GPU — the ConnectX-7 NICs are not involved for intra-node traffic. The 8 ConnectX-7s (400G each, 3.2 Tbps total) carry only inter-node traffic.
+A DGX H100 with 8 SXM5 GPUs: GPU-to-GPU AllReduce within the node uses NVLink 4 at 900 GB/s per GPU -- the ConnectX-7 NICs are not involved for intra-node traffic. The 8 ConnectX-7s (400G each, 3.2 Tbps total) carry only inter-node traffic.
 
 A server with 8 PCIe H100 GPUs (OEM configuration): every GPU communicates via PCIe. A typical 2-socket server has two PCIe root complexes (one per CPU), each handling 4 GPUs. GPUs on different root complexes must communicate CPU-to-CPU via UPI or QPI before reaching the NIC. Effective GPU-to-GPU bandwidth is 31.5 GB/s (PCIe Gen 4 x16 one-directional) versus 900 GB/s for SXM. For large-scale training, PCIe GPU servers require more nodes and more inter-node bandwidth to achieve equivalent performance to a smaller SXM cluster.
 
 **When PCIe makes sense**: inference serving at small batch size (bandwidth-limited less critical, latency to CPU matters more), cloud multi-tenant workloads where the host OS needs fine-grained PCIe device assignment per VM, and budget-constrained deployments where SXM platform cost is prohibitive. OEM PCIe GPU servers from Dell, Supermicro, and others serve these use cases. For distributed training at scale, SXM is always preferred.
 
-## Act 5 — The PCIe bandwidth ceiling
+## Act 5 -- The PCIe bandwidth ceiling
 
 <PCIeBandwidthViz />
 
@@ -88,47 +88,47 @@ PCIe bandwidth is the hidden bottleneck in non-SXM GPU deployments. Understandin
 
 The ceiling manifests in production in three ways:
 
-First, **NIC-to-GPU DMA without GDS**: if GPUDirect Storage or GPUDirect RDMA is not enabled, every packet received by the NIC must traverse PCIe from the NIC to host RAM and then again from host RAM to GPU HBM. A 400G link generates 50 GB/s of inbound data — that is 100 GB/s of PCIe traffic (NIC→RAM + RAM→GPU), more than Gen 4 can handle. This is why GDS (covered in Chapter 10) is not optional for high-throughput storage or network workloads with PCIe GPUs.
+First, **NIC-to-GPU DMA without GDS**: if GPUDirect Storage or GPUDirect RDMA is not enabled, every packet received by the NIC must traverse PCIe from the NIC to host RAM and then again from host RAM to GPU HBM. A 400G link generates 50 GB/s of inbound data -- that is 100 GB/s of PCIe traffic (NIC->RAM + RAM->GPU), more than Gen 4 can handle. This is why GDS (covered in Chapter 10) is not optional for high-throughput storage or network workloads with PCIe GPUs.
 
 Second, **concurrent CPU and GPU memory access**: in PCIe GPU servers, the CPU and GPU share the PCIe bandwidth to DRAM. If the CPU is running a data preprocessing pipeline while the GPU is performing DMA, they compete on the same PCIe lanes.
 
 Third, **p2p GPU communication within a server**: NCCL's p2p transport between PCIe GPUs without NVLink must use the PCIe bus. For an AllReduce across 8 PCIe GPUs in one server, traffic bottlenecks at the PCIe root complex even if each GPU-to-GPU path is only x16.
 
-None of these constraints exist in SXM deployments because the NVLink fabric is entirely off-PCIe for GPU-to-GPU traffic. The PCIe bus in a DGX H100 is used only for CPU-to-GPU control traffic and BlueField-3 DPU storage operations — neither of which is on the critical path for training throughput.
+None of these constraints exist in SXM deployments because the NVLink fabric is entirely off-PCIe for GPU-to-GPU traffic. The PCIe bus in a DGX H100 is used only for CPU-to-GPU control traffic and NVMe-oF storage operations via the Slot1/Slot2 dual-port ConnectX-7 cards -- neither of which is on the critical path for training throughput.
 
-## Act 6 — GH200: the Grace Hopper Superchip
+## Act 6 -- GH200: the Grace Hopper Superchip
 
 <GH200ArchViz />
 
-The GH200 Grace Hopper Superchip is NVIDIA's most significant departure from the conventional CPU-GPU architecture in the DGX H100 generation. It is not a replacement for DGX H100 in scale-out training — it is a different product targeting a different bottleneck.
+The GH200 Grace Hopper Superchip is NVIDIA's most significant departure from the conventional CPU-GPU architecture in the DGX H100 generation. It is not a replacement for DGX H100 in scale-out training -- it is a different product targeting a different bottleneck.
 
-The conventional DGX architecture (Ch0 Act 8) has a clear split: 2 Intel Xeon CPUs connected to 8 H100 GPUs via PCIe. The CPUs have access to ~2 TB of DDR5 DRAM; the GPUs each have 80 GB of HBM3. Memory cannot be directly shared — data must be explicitly transferred via DMA. For workloads that keep large models in GPU HBM this works perfectly. For workloads that need to move data between CPU memory and GPU HBM repeatedly — large batch inference with huge model state, recommendation systems, or models that exceed GPU HBM capacity — the PCIe transfer bandwidth (31.5 GB/s per direction) becomes the bottleneck.
+The conventional DGX architecture (Ch0 Act 8) has a clear split: 2 Intel Xeon CPUs connected to 8 H100 GPUs via PCIe. The CPUs have access to ~2 TB of DDR5 DRAM; the GPUs each have 80 GB of HBM3. Memory cannot be directly shared -- data must be explicitly transferred via DMA. For workloads that keep large models in GPU HBM this works perfectly. For workloads that need to move data between CPU memory and GPU HBM repeatedly -- large batch inference with huge model state, recommendation systems, or models that exceed GPU HBM capacity -- the PCIe transfer bandwidth (31.5 GB/s per direction) becomes the bottleneck.
 
-**The GH200 superchip**: a single package containing the Grace CPU (ARM Neoverse V2, 72 cores) and an H100 GPU, connected by **NVLink-C2C** (Chip-to-Chip) running at 900 GB/s — the same bandwidth as a full GPU-to-GPU NVLink 4 link, but over a die-to-die connection that is 30× shorter than a PCIe link and supports cache-coherent memory access.
+**The GH200 superchip**: a single package containing the Grace CPU (ARM Neoverse V2, 72 cores) and an H100 GPU, connected by **NVLink-C2C** (Chip-to-Chip) running at 900 GB/s -- the same bandwidth as a full GPU-to-GPU NVLink 4 link, but over a die-to-die connection that is 30x shorter than a PCIe link and supports cache-coherent memory access.
 
 The coherence property is the key difference: the Grace CPU and the H100 GPU share a unified memory address space. The GPU can read CPU DRAM directly at 900 GB/s without an explicit DMA. The CPU can read GPU HBM without an explicit DMA. No `cudaMemcpy` required for host-device transfers. This is called Unified Memory with cache coherence, enabled by the NVLink-C2C interconnect.
 
 **Memory configuration**: Grace has 480 GB of LPDDR5X memory (the CPU's DRAM) connected at 500 GB/s aggregate, plus the H100's 96 GB of HBM3. The combined address space is ~576 GB, accessible from either die.
 
-**DGX GH200**: NVIDIA's rack-scale GH200 system — 256 GH200 superchips connected by a 3rd-gen NVSwitch fabric and NVLink Switch modules. Total: 256 H100 GPUs + 256 Grace CPUs, 144 TB of combined LPDDR5X + HBM, connected by an NVLink-based all-to-all fabric. This targets very large model inference (models too large for HBM alone) and recommendation systems where CPU memory access patterns matter.
+**DGX GH200**: NVIDIA's rack-scale GH200 system -- 256 GH200 superchips connected by a 3rd-gen NVSwitch fabric and NVLink Switch modules. Total: 256 H100 GPUs + 256 Grace CPUs, 144 TB of combined LPDDR5X + HBM, connected by an NVLink-based all-to-all fabric. This targets very large model inference (models too large for HBM alone) and recommendation systems where CPU memory access patterns matter.
 
 **Network implications of GH200 for the fabric engineer**:
 
-The GH200 does not change the scale-out fabric fundamentally. Each DGX GH200 node still connects to the spine via ConnectX-7 or equivalent NICs. What changes is the CPU-GPU interface: the 900 GB/s NVLink-C2C replaces the PCIe bus for CPU-to-GPU traffic. The host-side bottleneck (PCIe Gen 4 at 31.5 GB/s) essentially disappears. GPUDirect Storage via the DPU can now move data from NVMe into HBM without the PCIe ceiling on the GPU side.
+The GH200 does not change the scale-out fabric fundamentally. Each DGX GH200 node still connects to the spine via ConnectX-7 or equivalent NICs. What changes is the CPU-GPU interface: the 900 GB/s NVLink-C2C replaces the PCIe bus for CPU-to-GPU traffic. The host-side bottleneck (PCIe Gen 4 at 31.5 GB/s) essentially disappears. GPUDirect Storage can now move data from NVMe into HBM without the PCIe ceiling on the GPU side -- the storage ConnectX-7 DMA engine writes directly to the Grace CPU's unified memory space.
 
-The practical impact: for inference serving where the bottleneck was CPU-to-GPU model weight loading, GH200 dramatically reduces that bottleneck. For AllReduce in distributed training, the bottleneck remains the scale-out fabric bandwidth — GH200's NVLink-C2C does not affect inter-node communication speed.
+The practical impact: for inference serving where the bottleneck was CPU-to-GPU model weight loading, GH200 dramatically reduces that bottleneck. For AllReduce in distributed training, the bottleneck remains the scale-out fabric bandwidth -- GH200's NVLink-C2C does not affect inter-node communication speed.
 
-## Act 7 — H100 CNX: the converged accelerator
+## Act 7 -- H100 CNX: the converged accelerator
 
-The H100 CNX is a product that only makes sense once you understand both the GPU and the NIC sides of this course. It co-packages an H100 SXM GPU and a ConnectX-7 HCA on a single module, connected by PCIe Gen 5 — not by NVLink.
+The H100 CNX is a product that only makes sense once you understand both the GPU and the NIC sides of this course. It co-packages an H100 SXM GPU and a ConnectX-7 HCA on a single module, connected by PCIe Gen 5 -- not by NVLink.
 
-The design target is **InfiniBand-only smart endpoint** deployments where the goal is to minimise the PCIe hops between GPU and NIC. In a standard DGX H100, the path from GPU HBM to NIC is: GPU HBM → NVLink → CPU PCIe root complex → PCIe → ConnectX-7. In an H100 CNX, the GPU and the ConnectX-7 are on the same module, and the NIC connects directly to the GPU's PCIe interface without traversing the CPU PCIe root complex. This reduces the RDMA write path from 4 hops to 2 hops.
+The design target is **InfiniBand-only smart endpoint** deployments where the goal is to minimise the PCIe hops between GPU and NIC. In a standard DGX H100, the path from GPU HBM to NIC is: GPU HBM -> NVLink -> CPU PCIe root complex -> PCIe -> ConnectX-7. In an H100 CNX, the GPU and the ConnectX-7 are on the same module, and the NIC connects directly to the GPU's PCIe interface without traversing the CPU PCIe root complex. This reduces the RDMA write path from 4 hops to 2 hops.
 
-H100 CNX is an InfiniBand-only product — it only supports IB mode, not Ethernet. It is targeted at very large-scale HPC deployments where the NIC-GPU path efficiency matters more than Ethernet/RoCE compatibility.
+H100 CNX is an InfiniBand-only product -- it only supports IB mode, not Ethernet. It is targeted at very large-scale HPC deployments where the NIC-GPU path efficiency matters more than Ethernet/RoCE compatibility.
 
-For most practitioners designing DGX-based clusters, H100 CNX is not the relevant product — the standard DGX H100 with separate ConnectX-7 and BlueField-3 DPU is the correct reference architecture. H100 CNX is mentioned here because it appears in NVIDIA's product literature and represents a specific architectural bet (PCIe over NVLink-C2C for GPU-NIC coupling, IB-only) that differs from the DGX approach.
+For most practitioners designing DGX-based clusters, H100 CNX is not the relevant product -- the standard DGX H100 with 8 single-port compute ConnectX-7s plus 2 dual-port Slot1/Slot2 ConnectX-7s for storage/management is the correct reference architecture. H100 CNX is mentioned here because it appears in NVIDIA's product literature and represents a specific architectural bet (PCIe over NVLink-C2C for GPU-NIC coupling, IB-only) that differs from the DGX approach.
 
-## Act 8 — MIG and SR-IOV: multi-tenant network implications
+## Act 8 -- MIG and SR-IOV: multi-tenant network implications
 
 <MIGNetworkViz />
 
@@ -142,17 +142,17 @@ Each MIG instance needs its own network identity if it is serving independent te
 
 **MIG + SR-IOV configuration in practice:**
 
-Each MIG instance runs its own CUDA context. GDS (GPUDirect Storage) from a MIG instance requires the DPU to be configured to route NVMe-oF traffic to that specific MIG instance's HBM slice — this requires recent firmware that maps DPU virtual functions to MIG geometry.
+Each MIG instance runs its own CUDA context. GDS (GPUDirect Storage) from a MIG instance requires the NVMe-oF initiator to route storage traffic to that specific MIG instance's HBM slice -- this requires firmware and driver configuration that maps NVMe-oF queue pairs to MIG geometry. On DGX H100/H200 (where storage uses standard CX7 NICs), this is handled through the host NVMe-oF stack. On DGX B200 (where BlueField-3 DPUs handle storage), the DPU virtual functions must be mapped to MIG instances.
 
-RDMA from a MIG instance to a remote host requires the SR-IOV VF assigned to that instance to have its own queue pairs configured in the firmware. ConnectX-7 supports this natively — each VF can be allocated a subset of the NIC's QP space.
+RDMA from a MIG instance to a remote host requires the SR-IOV VF assigned to that instance to have its own queue pairs configured in the firmware. ConnectX-7 supports this natively -- each VF can be allocated a subset of the NIC's QP space.
 
 **Bandwidth isolation**: without rate limiting on SR-IOV VFs, a single MIG instance running a high-throughput workload can consume the entire physical NIC bandwidth, starving other MIG instances of network access. ConnectX-7 supports per-VF bandwidth limits via MLNX_OFED configuration, allowing operators to guarantee each MIG instance a minimum and maximum network bandwidth allocation.
 
-**Monitoring implications** (connecting back to Ch11): when MIG is enabled, DCGM metrics are reported per MIG instance, not per physical GPU. The `nvidia-smi` output shows separate entries for each instance. UFM sees the NIC-level RoCEv2 counters on each SR-IOV VF separately. Alert thresholds calibrated for whole-GPU workloads need to be rescaled for per-instance reporting — a 7-instance MIG partition where each instance is fully loaded will show 1/7 the GPU utilisation per instance compared to a single-tenant full-GPU job.
+**Monitoring implications** (connecting back to Ch11): when MIG is enabled, DCGM metrics are reported per MIG instance, not per physical GPU. The `nvidia-smi` output shows separate entries for each instance. UFM sees the NIC-level RoCEv2 counters on each SR-IOV VF separately. Alert thresholds calibrated for whole-GPU workloads need to be rescaled for per-instance reporting -- a 7-instance MIG partition where each instance is fully loaded will show 1/7 the GPU utilisation per instance compared to a single-tenant full-GPU job.
 
 **SR-IOV without MIG**: you can also deploy SR-IOV on ConnectX-7 without MIG, for VM-based multi-tenant inference. Each VM gets an SR-IOV VF and sees a dedicated portion of NIC bandwidth and QP space. This is the standard vGPU + SR-IOV pattern for cloud GPU instances.
 
-## Act 9 — Confidential Computing: diagnostic opacity
+## Act 9 -- Confidential Computing: diagnostic opacity
 
 Confidential Computing (CC) on the H100 introduces a TEE (Trusted Execution Environment) inside the GPU. When CC mode is enabled, the GPU firmware establishes a secure enclave: all GPU memory is encrypted, the CPU cannot read GPU HBM contents even with physical DMA access, and the host driver cannot inspect model weights, gradients, or intermediate activations. The GPU attestation mechanism allows the tenant to verify that the correct GPU firmware is running before loading secrets into the enclave.
 
@@ -171,22 +171,24 @@ The same isolation that prevents weight leakage also prevents observability. Whe
 
 Network-level counters on the ConnectX-7 and switch are unaffected by GPU CC mode. PFC pause rates, ECN marks, symbol errors, and link state are visible to the fabric operator regardless of CC mode. The opacity is at the GPU-memory boundary, not at the network boundary.
 
-DCGM can still collect power, temperature, and SM utilisation counters from CC-mode GPUs — these are register-level reads that don't cross the memory encryption boundary.
+DCGM can still collect power, temperature, and SM utilisation counters from CC-mode GPUs -- these are register-level reads that don't cross the memory encryption boundary.
 
 **The operational implication:**
 
 For a cluster operator running multi-tenant workloads where some tenants enable CC mode, your monitoring strategy must account for degraded visibility into GPU internals. Alert rules that depend on ECC error rate or NVLink BW counters may not fire for CC-enabled GPUs. You should monitor the network-side indicators (NVLink Switch counters via DCGM, scale-out fabric counters via UFM) and combine them with tenant-visible CC attestation logs to correlate GPU-internal events with network-observable symptoms.
 
-For training cluster operators running their own workloads (single-tenant), CC mode is typically not enabled — the observability loss outweighs the isolation benefit when the operator is also the tenant. CC mode is primarily a cloud provider feature for multi-tenant inference.
+For training cluster operators running their own workloads (single-tenant), CC mode is typically not enabled -- the observability loss outweighs the isolation benefit when the operator is also the tenant. CC mode is primarily a cloud provider feature for multi-tenant inference.
 
 ## What you now know
 
-Chapter 14 completed the hardware context for the entire course. Each GPU generation ships with a different NVLink bandwidth, a different NVSwitch generation inside the node, and the same PCIe constraint for non-SXM form factors — these three parameters determine the fabric decisions upstream of everything you've learned in Chapters 0 through 13.
+Chapter 14 completed the hardware context for the entire course. Each GPU generation ships with a different NVLink bandwidth, a different NVSwitch generation inside the node, and the same PCIe constraint for non-SXM form factors -- these three parameters determine the fabric decisions upstream of everything you've learned in Chapters 0 through 13.
 
 NVLink bandwidth has grown from 300 GB/s per GPU (NVLink 2 / V100) to 1.8 TB/s (NVLink 5 / B200), doubling roughly every two years. NVSwitch silicon has tracked one generation behind, providing enough aggregate switch bandwidth to saturate all GPUs in the node simultaneously. SXM form factor is the prerequisite for full NVLink participation; PCIe form factor GPUs face a hard bandwidth ceiling that only grows with PCIe generation.
 
-GH200's NVLink-C2C eliminates the CPU-GPU PCIe bottleneck by placing both dies on a single package with coherent memory access at 900 GB/s — a different solution to the memory bandwidth problem than adding more DDR channels. H100 CNX takes the opposite approach, co-packaging GPU and NIC on one module to reduce PCIe hops for InfiniBand-only workloads.
+GH200's NVLink-C2C eliminates the CPU-GPU PCIe bottleneck by placing both dies on a single package with coherent memory access at 900 GB/s -- a different solution to the memory bandwidth problem than adding more DDR channels. H100 CNX takes the opposite approach, co-packaging GPU and NIC on one module to reduce PCIe hops for InfiniBand-only workloads.
 
-MIG partitions a single GPU into up to 7 isolated instances, with SR-IOV providing the corresponding network isolation via VFs on the ConnectX-7. Confidential Computing adds hardware-enforced memory encryption that improves tenant isolation at the cost of host observability — a tradeoff you'll encounter in cloud GPU deployments.
+MIG partitions a single GPU into up to 7 isolated instances, with SR-IOV providing the corresponding network isolation via VFs on the ConnectX-7. Confidential Computing adds hardware-enforced memory encryption that improves tenant isolation at the cost of host observability -- a tradeoff you'll encounter in cloud GPU deployments.
 
-[Continue to Chapter 15 →](/learn/ch15-ip-routing-ai-fabrics)
+[Continue to Chapter 15 ->](/learn/ch15-ultra-ethernet-consortium)
+</file>
+

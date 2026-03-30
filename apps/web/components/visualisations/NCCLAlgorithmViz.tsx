@@ -21,31 +21,31 @@ const algoData: Record<
     label: "Ring AllReduce",
     stepCount: (n) => 2 * (n - 1),
     bwEfficiency: "~100% (every GPU always active)",
-    bestFor: "Small clusters (â‰¤32 nodes), low-latency balanced fabrics",
-    worstFor: "Large clusters — step count grows linearly with N",
+    bestFor: "Small clusters (<=32 nodes), low-latency balanced fabrics",
+    worstFor: "Large clusters -- step count grows linearly with N",
     color: "#14532d",
     border: "#22c55e",
     phases: ["Reduce-scatter: share + sum shards around ring", "AllGather: broadcast reduced shards"],
     description:
-      "Each GPU sends one shard to the next GPU and receives one from the previous. After Nâˆ’1 steps every GPU holds one reduced shard. Then Nâˆ’1 more steps distribute all shards to all GPUs.",
+      "Each GPU sends one shard to the next GPU and receives one from the previous. After N-1 steps every GPU holds one reduced shard. Then N-1 more steps distribute all shards to all GPUs.",
   },
   tree: {
     label: "Binary Tree AllReduce",
     stepCount: (n) => Math.ceil(Math.log2(n)) * 2,
     bwEfficiency: "~50% (half of GPUs idle at each level)",
     bestFor: "Latency-constrained small messages where step count dominates",
-    worstFor: "Large messages on large clusters — idle GPUs waste bandwidth",
+    worstFor: "Large messages on large clusters -- idle GPUs waste bandwidth",
     color: "#4c1d95",
     border: "#a78bfa",
     phases: ["Reduce: each leaf sends to parent, sum upward to root", "Broadcast: root sends complete result down to all leaves"],
     description:
-      "logâ‚‚(N) steps to reduce, logâ‚‚(N) steps to broadcast. Dramatic reduction in step count vs ring. But at each level, half the GPUs are waiting — effective bandwidth is ~50% of ring.",
+      "log2(N) steps to reduce, log2(N) steps to broadcast. Dramatic reduction in step count vs ring. But at each level, half the GPUs are waiting -- effective bandwidth is ~50% of ring.",
   },
   dbt: {
     label: "Double Binary Tree (DBT)",
     stepCount: (n) => Math.ceil(Math.log2(n)) * 2,
     bwEfficiency: "~95% (two trees, each GPU active in at least one)",
-    bestFor: "Large clusters (>32 nodes) — NCCL default for large AllReduce",
+    bestFor: "Large clusters (>32 nodes) -- NCCL default for large AllReduce",
     worstFor: "Very small clusters where ring's simplicity wins",
     color: "#78350f",
     border: "#f59e0b",
@@ -54,7 +54,7 @@ const algoData: Record<
       "Tree 2: Broadcast down right-rooted tree + Tree 1 simultaneously",
     ],
     description:
-      "Two binary trees with roots at different GPU positions. GPUs idle in Tree 1 are active in Tree 2. Every GPU is always doing useful work. Achieves logâ‚‚(N) steps AND near-100% bandwidth — NCCL's default for large operations.",
+      "Two binary trees with roots at different GPU positions. GPUs idle in Tree 1 are active in Tree 2. Every GPU is always doing useful work. Achieves log2(N) steps AND near-100% bandwidth -- NCCL's default for large operations.",
   },
 }
 
@@ -84,7 +84,7 @@ export function NCCLAlgorithmViz() {
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">
-        NCCL AllReduce algorithms — interactive comparison
+        NCCL AllReduce algorithms -- interactive comparison
       </p>
 
       {/* Algorithm selector */}
@@ -118,13 +118,13 @@ export function NCCLAlgorithmViz() {
                 className="text-[10px] rounded px-2 py-1"
                 style={{ backgroundColor: d.color + "44", color: d.border }}
               >
-                â–¶ Play
+                Play
               </button>
               <button
                 onClick={() => { setPlaying(false); setAnimStep(0) }}
                 className="text-[10px] rounded px-2 py-1 bg-slate-800 text-slate-400"
               >
-                â†º Reset
+                Reset
               </button>
             </div>
           </div>
@@ -209,13 +209,13 @@ export function NCCLAlgorithmViz() {
                   )
                 })}
                 <text x={140} y={205} textAnchor="middle" fill="#64748b" fontSize="8">
-                  Step {animStep}/{maxSteps} — {animStep <= 2 ? "Reduce ↑ to root" : "Broadcast ↓ from root"}
+                  Step {animStep}/{maxSteps} -- {animStep <= 2 ? "Reduce up to root" : "Broadcast down from root"}
                 </text>
               </>
             )}
             {algo === "dbt" && (
               <>
-                {/* DBT — show two overlapping trees */}
+                {/* DBT -- show two overlapping trees */}
                 {Array.from({ length: 8 }, (_, i) => {
                   const x = 25 + i * 30
                   const y = 160
@@ -250,7 +250,7 @@ export function NCCLAlgorithmViz() {
                 <text x={140} y={40} textAnchor="middle" fill="#22c55e" fontSize="8">Tree 1 (even GPUs)</text>
                 <text x={140} y={55} textAnchor="middle" fill="#f59e0b" fontSize="8">Tree 2 (odd GPUs)</text>
                 <text x={140} y={205} textAnchor="middle" fill="#64748b" fontSize="8">
-                  Both trees run simultaneously — every GPU always active
+                  Both trees run simultaneously -- every GPU always active
                 </text>
               </>
             )}
@@ -322,7 +322,7 @@ export function NCCLAlgorithmViz() {
         <code className="text-cyan-300 font-mono">
           NCCL_ALGO={algo === "ring" ? "RING" : algo === "tree" ? "TREE" : "COLLNET_RING"}
         </code>
-        <span className="text-slate-600 ml-2">(leave unset in production — NCCL auto-selects)</span>
+        <span className="text-slate-600 ml-2">(leave unset in production -- NCCL auto-selects)</span>
       </div>
     </div>
   )

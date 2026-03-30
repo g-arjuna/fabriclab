@@ -15,17 +15,17 @@ manageable.
 
 Here is what Chapter 0 did not tell you.
 
-When 32 DGX nodes each attempt a checkpoint simultaneously — which is
-exactly what happens at a synchronised save point in distributed training —
-those 32 nodes produce 32 × 140 GB = 4.5 TB of write traffic in the same
+When 32 DGX nodes each attempt a checkpoint simultaneously -- which is
+exactly what happens at a synchronised save point in distributed training --
+those 32 nodes produce 32 x 140 GB = 4.5 TB of write traffic in the same
 1.4-second window. That traffic hits the storage fabric all at once.
 If the storage fabric cannot sustain 32 parallel writes at full speed,
 checkpoint time extends. Every second of extension is 32,000 GPU-hours
 sitting idle on a 4,000-node cluster at $500 per GPU-hour.
 
 At $133 per second of cluster idle, a storage bottleneck that adds
-ten seconds to every checkpoint — and checkpoints happen every ten to
-thirty minutes — costs between $25,000 and $75,000 per day in wasted
+ten seconds to every checkpoint -- and checkpoints happen every ten to
+thirty minutes -- costs between $25,000 and $75,000 per day in wasted
 compute. Silently. With no error messages visible on the compute fabric.
 
 The storage fabric is the network you cannot see failing from the
@@ -36,7 +36,7 @@ and what to look for when it goes wrong.
 
 ---
 
-## Act 1 — Why isolation is not optional
+## Act 1 -- Why isolation is not optional
 
 Chapter 0 Act 9 states that storage traffic is kept separate from
 compute traffic "so storage traffic cannot interfere with training
@@ -47,16 +47,16 @@ behind it.
 
 During an AllReduce on a non-blocking compute fabric, all 256 GPUs in a
 BasePOD transmit simultaneously at full line rate. Each of the 8 leaf
-switches is carrying approximately 16 × 400 Gbps = 6.4 Tbps of inbound
+switches is carrying approximately 16 x 400 Gbps = 6.4 Tbps of inbound
 AllReduce traffic, simultaneously forwarding it to 16 other GPU nodes.
 The compute fabric is running at or near saturation for the duration of
 every AllReduce barrier.
 
 **What happens if storage traffic enters this fabric at the wrong moment:**
 
-AllReduce traffic is bursty — it spikes during synchronisation, then
+AllReduce traffic is bursty -- it spikes during synchronisation, then
 drops to near-zero during the forward and backward passes. Storage traffic
-is sustained — a checkpoint write is a continuous 140 GB stream that takes
+is sustained -- a checkpoint write is a continuous 140 GB stream that takes
 the full 1.4 seconds from first byte to last. If these two traffic types
 share a switch, the storage write arrives at the switch's egress buffer
 while AllReduce traffic is also arriving.
@@ -64,11 +64,11 @@ while AllReduce traffic is also arriving.
 The switch buffer fills. One of three things happens, all of them bad:
 
 The switch drops packets. For storage TCP traffic, TCP detects the loss
-and retransmits — the write takes longer. For compute RDMA traffic, a
+and retransmits -- the write takes longer. For compute RDMA traffic, a
 dropped packet sends a QP into error state and stalls the AllReduce.
 
 The switch sends PFC PAUSE frames. The NIC upstream from the congested
-port pauses all traffic on that priority class — including the AllReduce
+port pauses all traffic on that priority class -- including the AllReduce
 traffic that has nothing to do with the storage write. Every GPU on that
 rail stalls, waiting for a pause that was caused by a storage read
 happening in another job entirely.
@@ -76,13 +76,13 @@ happening in another job entirely.
 The switch applies DCQCN rate limiting. NCCL sees degraded busbw on
 the affected rails. The ML engineer sends a Slack message asking why
 training throughput dropped by 30%. You spend three hours running
-nccl-tests before realising the compute fabric is fine — there was a
+nccl-tests before realising the compute fabric is fine -- there was a
 large storage checkpoint running on a shared switch during the benchmark.
 
 Physical separation prevents all three scenarios. The compute fabric
 switches carry only compute traffic. The storage fabric switches carry
 only storage traffic. The two fabrics can only interact at the DGX node
-itself, where the DPU (storage) and ConnectX-7 NICs (compute) are on
+itself, where the storage CX7 ports and compute CX7 NICs are on
 separate PCIe devices with separate queues, separate physical ports, and
 separate network paths.
 
@@ -100,12 +100,12 @@ Ethernet topology.
 
 Putting these two on the same fabric requires the fabric to be
 simultaneously optimised for both. That is not achievable. The correct
-engineering decision — confirmed by every major AI infrastructure
-deployment — is to separate them physically.
+engineering decision -- confirmed by every major AI infrastructure
+deployment -- is to separate them physically.
 
 ---
 
-## Act 2 — GPUDirect Storage: removing the CPU from the data path
+## Act 2 -- GPUDirect Storage: removing the CPU from the data path
 
 Before GPUDirect Storage existed, loading a training batch into GPU
 memory required five distinct operations involving the host CPU.
@@ -121,60 +121,64 @@ system RAM. The CPU copies it from kernel-space RAM to a user-space
 application buffer. The application then calls `cudaMemcpy` to move the
 data from the CPU-side application buffer into GPU HBM across PCIe.
 
-Count the hops: storage → NIC → system RAM (kernel buffer) → system RAM
-(user buffer) → PCIe → GPU HBM. Five hops. Two CPU memory copies. Every
+Count the hops: storage -> NIC -> system RAM (kernel buffer) -> system RAM
+(user buffer) -> PCIe -> GPU HBM. Five hops. Two CPU memory copies. Every
 byte of training data touches CPU RAM twice before the GPU sees it.
 
 On a DGX H100 with 80 GB of HBM per GPU and 8 GPUs, the node needs to
 fill 640 GB of HBM at the start of training. Pre-GDS, that requires
-moving 640 GB through CPU RAM twice — 1.28 TB of CPU memory bandwidth
+moving 640 GB through CPU RAM twice -- 1.28 TB of CPU memory bandwidth
 consumed for data that the CPU never uses. The 2 Intel Xeon CPUs in a
 DGX H100 have approximately 400 GB/s of combined memory bandwidth. At
 full theoretical throughput, pre-loading 640 GB of training data would
-take at minimum 3.2 seconds — and that assumes the CPUs are doing
+take at minimum 3.2 seconds -- and that assumes the CPUs are doing
 nothing else.
 
 **The GDS path:**
 
-With GPUDirect Storage, the DPU establishes a direct DMA channel between
+With GPUDirect Storage, a direct DMA channel is established between
 the NVMe-oF storage target and GPU HBM, bypassing system RAM entirely.
-The GPU registers a memory buffer and posts a read request. The DPU
-translates this into an NVMe-oF command over the storage fabric. The
-storage appliance transmits the data. The DPU's DMA engine writes it
-directly into GPU HBM across PCIe — without the data ever appearing in
-system RAM, without a CPU copy, without a `cudaMemcpy`.
+The GPU registers a memory buffer and posts a read request. The host
+NVMe-oF initiator stack (running on the host CPU, using the dual-port
+ConnectX-7 cards in Slot1/Slot2 as its network interface) translates
+this into an NVMe-oF command over the storage fabric. The storage
+appliance transmits the data. The storage ConnectX-7's DMA engine writes
+it directly into GPU HBM across PCIe -- without the data ever appearing
+in system RAM, without a CPU memory copy, without a `cudaMemcpy`.
 
-The path collapses to: storage appliance → DPU DMA engine → PCIe →
-GPU HBM. Three hops instead of five. Zero CPU copies instead of two.
+The path collapses to: storage appliance -> storage CX7 DMA -> PCIe ->
+GPU HBM. Three hops instead of five. The CPU manages the NVMe-oF command
+queuing but does not touch the data itself.
 
 **Why this matters for checkpoint write speed:**
 
 The same mechanism runs in reverse for checkpoint writes. The GPU has
 computed and accumulated gradients in HBM. The checkpoint must be written
-to durable storage. With GDS, the DPU DMA engine reads from GPU HBM
-directly and streams the data to the NVMe-oF target. The 140 GB
-checkpoint flows from GPU memory to storage without the CPU touching it.
+to durable storage. With GDS, the storage CX7's DMA engine reads from GPU
+HBM directly and streams the data to the NVMe-oF target. The 140 GB
+checkpoint flows from GPU memory to storage with the CPU managing commands
+but never copying data.
 
-The 800 Gb/s figure from Chapter 0 — 2 BlueField-3 DPUs at 400G each —
-is the raw theoretical bandwidth of this path. Real-world checkpoint
-throughput is typically 60–80% of theoretical, constrained by PCIe
-bandwidth, storage appliance write throughput, and the parallel file
-system's write striping efficiency.
+The 800 Gb/s figure from Chapter 0 -- 2x dual-port ConnectX-7 storage
+cards at 400G each -- is the raw theoretical bandwidth of this path.
+Real-world checkpoint throughput is typically 60-80% of theoretical,
+constrained by PCIe bandwidth, storage appliance write throughput, and
+the parallel file system's write striping efficiency.
 
 ---
 
-## Act 3 — NVMe-oF: the protocol that bridges GPU and storage
+## Act 3 -- NVMe-oF: the protocol that bridges GPU and storage
 
 NVMe-oF is the protocol that makes the GDS path possible. To understand
 why it matters, you need to understand what NVMe is and what "over
 Fabrics" adds.
 
-**NVMe — the protocol underneath**
+**NVMe -- the protocol underneath**
 
 NVMe (Non-Volatile Memory Express) is a command queue protocol designed
 for SSDs attached directly to a CPU via PCIe. NVMe replaced SATA and SAS
 for high-performance storage because it was built from the ground up for
-flash — not adapted from spinning disk protocols. An NVMe device presents
+flash -- not adapted from spinning disk protocols. An NVMe device presents
 a set of I/O queues. The host posts commands (read, write) to these
 queues and the SSD executes them asynchronously.
 
@@ -182,13 +186,13 @@ The key property for GPU workloads: NVMe commands are posted by the
 initiator (the host side) and executed by the target (the SSD side)
 without round-trip acknowledgement for each byte. The host posts a
 write command and the SSD handles the DMA transfer. This is structurally
-identical to the RDMA queue model — which is exactly why GDS can bridge
+identical to the RDMA queue model -- which is exactly why GDS can bridge
 them.
 
-**NVMe-oF — the same protocol over a network**
+**NVMe-oF -- the same protocol over a network**
 
 NVMe-oF takes the NVMe command queue protocol and routes it over a
-network fabric instead of a PCIe bus. The DPU presents a virtual NVMe
+network fabric instead of a PCIe bus. The host NVMe-oF initiator presents a virtual NVMe
 device to the GPU. From the GPU's perspective, this looks like a local
 PCIe NVMe SSD. Underneath, every NVMe command the GPU issues travels
 over the storage fabric to a remote storage appliance that executes it
@@ -198,34 +202,34 @@ and returns the result.
 
 Three transport options exist:
 
-**NVMe-oF/TCP** — NVMe commands encapsulated in TCP packets. Runs on
+**NVMe-oF/TCP** -- NVMe commands encapsulated in TCP packets. Runs on
 any standard Ethernet switch. Highest compatibility, lowest performance.
 Each NVMe command requires TCP ACKs, kernel socket processing, and CPU
 involvement at both ends. Appropriate for backup storage, cold data
 tiers, or environments where the storage fabric is shared with general
 workloads.
 
-**NVMe-oF/RDMA (RoCEv2)** — NVMe commands transmitted using RDMA
-semantics over RoCEv2. The DPU issues NVMe commands as RDMA write
+**NVMe-oF/RDMA (RoCEv2)** -- NVMe commands transmitted using RDMA
+semantics over RoCEv2. The host NVMe-oF initiator issues NVMe commands as RDMA write
 operations. No TCP overhead. No CPU involvement on the data path at
 either end. The combination of RDMA transport and GDS completes the
 zero-CPU-copy path described in Act 2. This is the standard for AI
 cluster storage fabrics.
 
-**NVMe-oF/FC** — NVMe commands over Fibre Channel. Legacy enterprise
+**NVMe-oF/FC** -- NVMe commands over Fibre Channel. Legacy enterprise
 storage environments. Not used in AI cluster deployments.
 
 **Why RDMA transport matters for the checkpoint write path:**
 
-When the DPU writes a checkpoint using NVMe-oF/RDMA, the transaction
-flow is: GPU HBM → PCIe → DPU DMA engine → RDMA write over storage
-fabric → NVMe target's DMA engine → storage appliance NVMe SSD. The
-DPU and the storage appliance both use RDMA queue semantics. No system
+When a checkpoint is written using NVMe-oF/RDMA via GDS, the transaction
+flow is: GPU HBM -> PCIe -> storage CX7 DMA engine -> RDMA write over storage
+fabric -> NVMe target's DMA engine -> storage appliance NVMe SSD. The
+The storage CX7 and the storage appliance both use RDMA queue semantics. No system
 RAM. No CPU copies on either end. The storage appliance's NVMe-oF
 target processes the write in hardware.
 
 A single RDMA write for a 140 GB checkpoint is actually many RDMA
-operations — the DPU chunks the transfer into RDMA Write operations
+operations -- the NVMe-oF stack chunks the transfer into RDMA Write operations
 that fit within the storage appliance's maximum transfer unit. Each
 chunk is DMA'd, transmitted, and acknowledged independently. The
 checkpoint completes when all chunks are acknowledged. The GPU sees
@@ -233,12 +237,12 @@ the operation as a single NVMe write command completion.
 
 ---
 
-## Act 4 — Why the DPU handles storage and the ConnectX-7 does not
+## Act 4 -- Why dedicated storage ports are separate from compute NICs
 
-Chapter 0 Act 7 established that a DGX H100 has 8 ConnectX-7 HCAs and
-2 BlueField-3 DPUs, with the HCAs handling compute RDMA and the DPUs
-handling storage. This act explains why that boundary exists where it
-does — and why blurring it would break the compute fabric.
+The DGX H100 has 8 single-port ConnectX-7 HCAs for compute and 2 dual-port
+ConnectX-7 cards (Slot1/Slot2) for storage and in-band management. This act
+explains why that boundary exists where it does -- and why blurring it would
+break the compute fabric.
 
 **The ConnectX-7 is fully occupied**
 
@@ -253,7 +257,7 @@ available RDMA queue, every send buffer, and every completion queue on
 all 8 ConnectX-7 NICs is consumed by the in-flight AllReduce transfers.
 
 Adding NVMe-oF storage traffic to a ConnectX-7 during AllReduce would
-require one of the following — all unacceptable:
+require one of the following -- all unacceptable:
 
 Sharing RDMA queue resources with storage. The NVMe-oF initiator would
 consume QPs and completion queues that AllReduce needs. QP exhaustion
@@ -267,32 +271,42 @@ Adding a ninth ConnectX-7 per node for storage. Doubles the NIC cost.
 Changes the chassis layout. Changes the switch port count. The DGX
 H100 was designed around 8 compute NICs.
 
-**The DPU's dedicated bandwidth**
+**The storage CX7's dedicated bandwidth**
 
-The BlueField-3 has 2 × 400G ports, giving 800 Gbps of dedicated
-storage bandwidth per node. These ports connect to storage fabric
-Ethernet switches — physically separate from the compute fabric.
-The 800 Gbps storage bandwidth is entirely independent of the compute
-fabric bandwidth. A checkpoint write consuming the full 800 Gbps of
-storage bandwidth has zero impact on the 8 ConnectX-7 NICs transmitting
-AllReduce traffic on the compute fabric simultaneously.
+The two dual-port ConnectX-7 cards in Slot1/Slot2 provide 800 Gbps of
+dedicated storage bandwidth per node (2 cards x 2 ports x 200G, or
+2 cards x 1 port active at 400G each, depending on bonding config).
+These ports connect to storage fabric Ethernet switches -- physically
+separate from the compute fabric. The 800 Gbps storage bandwidth is
+entirely independent of the compute fabric bandwidth. A checkpoint write
+consuming the full 800 Gbps of storage bandwidth has zero impact on the
+8 compute ConnectX-7 NICs transmitting AllReduce traffic simultaneously.
 
-**The DPU's independent CPU for NVMe-oF**
+**The host CPU and NVMe-oF command processing**
 
-The DPU runs the NVMe-oF initiator stack on its embedded 16-core Arm
-CPU. This CPU handles NVMe command queuing, RDMA verb posting for the
-storage transfers, and completion processing. The host CPU (2 × Intel
-Xeon in the DGX H100) never processes a storage I/O. During a checkpoint
-write, the host CPUs are free to continue managing the GPUs, running
-health monitoring, and handling the next training batch preparation.
+On the DGX H100/H200, the NVMe-oF initiator stack runs on the host CPU
+(2x Intel Xeon), using the storage ConnectX-7 ports as its network
+interface. The host CPU handles NVMe command queuing and RDMA verb
+posting for the storage transfers. With GDS, the actual data movement
+(GPU HBM to storage) is handled by the ConnectX-7 DMA engine and does
+not pass through CPU memory -- but the CPU does process the NVMe
+command and completion queues. During a checkpoint write, the host CPU
+spends a small fraction of its capacity managing storage I/O commands,
+while the GPUs and compute NICs continue unaffected.
 
-The partition is clean: host CPU manages GPUs, ConnectX-7 handles
-compute RDMA, DPU handles storage I/O, and the three paths never share
-resources.
+Note: the DGX B200 uses a different model. Its BlueField-3 HCAs (in NIC
+mode) run the NVMe-oF initiator on their embedded ARM cores, offloading
+that work entirely from the host CPU. This is an architectural difference
+between the B200 and the H100/H200 -- not a difference in the data path
+(which is CX7 DMA -> PCIe -> GPU HBM in both cases).
+
+The partition is clean: compute ConnectX-7 NICs handle AllReduce RDMA,
+storage ConnectX-7 cards carry NVMe-oF traffic, and the two paths never
+share switch ports or fabric resources.
 
 ---
 
-## Act 5 — Parallel file systems: BeeGFS and WEKA
+## Act 5 -- Parallel file systems: BeeGFS and WEKA
 
 Chapter 0 mentions BeeGFS and WEKA in a single line. They are not
 interchangeable with a standard NAS. Understanding what a parallel file
@@ -305,12 +319,12 @@ storage fabric.
 
 A high-end NVMe SSD achieves approximately 7 GB/s sequential read
 bandwidth. A single enterprise storage server with 24 NVMe SSDs achieves
-roughly 80–100 GB/s of aggregate read bandwidth.
+roughly 80-100 GB/s of aggregate read bandwidth.
 
 Now consider the read pattern during distributed training. At the start
 of each training step, 32 DGX nodes each need to pre-fetch their next
 batch of training data from shared storage. If those batches are 10 GB
-each — typical for large language model training — 32 nodes × 10 GB =
+each -- typical for large language model training -- 32 nodes x 10 GB =
 320 GB must be delivered from storage within the training step window.
 
 With a single storage server at 100 GB/s, delivering 320 GB takes 3.2
@@ -325,30 +339,30 @@ model training. The solution is parallel file systems.
 
 A parallel file system like BeeGFS or WEKA distributes file data across
 many storage nodes. When a 140 GB checkpoint is written, the file system
-divides it into chunks — typically 1 MB to 256 MB — and writes each
+divides it into chunks -- typically 1 MB to 256 MB -- and writes each
 chunk to a different storage node. If there are 16 storage nodes, the
 140 GB checkpoint is split into 8.75 GB per node, written in parallel.
 
 From the cluster's perspective, the write bandwidth of the storage tier
-is the aggregate bandwidth of all storage nodes: 16 nodes × 100 GB/s =
+is the aggregate bandwidth of all storage nodes: 16 nodes x 100 GB/s =
 1.6 TB/s theoretical peak. The checkpoint write that takes 1.4 seconds
-at 800 Gbps DPU bandwidth is now constrained by the storage fabric
-bandwidth and the storage nodes' aggregate write speed — not by any
+at 800 Gbps storage CX7 bandwidth is now constrained by the storage fabric
+bandwidth and the storage nodes' aggregate write speed -- not by any
 single node.
 
 For reads, the same striping applies. Each DGX node's batch read request
 is served by multiple storage nodes simultaneously. 32 DGX nodes reading
-10 GB batches do not all read from the same storage server — each node's
+10 GB batches do not all read from the same storage server -- each node's
 data is striped across many servers, so the reads naturally parallelise.
 
-**BeeGFS vs WEKA — the practical difference**
+**BeeGFS vs WEKA -- the practical difference**
 
 BeeGFS is open-source, originally developed at Fraunhofer Gesellschaft
 for HPC clusters. It runs on commodity x86 servers. The storage fabric
 administrators manage the metadata and storage servers directly using
 standard Linux tooling. BeeGFS is widely deployed in academic and
 government HPC clusters and is increasingly used in enterprise AI.
-The operational model is hands-on — you manage the servers, the
+The operational model is hands-on -- you manage the servers, the
 disks, the network paths.
 
 WEKA is a commercial parallel file system designed specifically for
@@ -356,7 +370,7 @@ GPU-intensive AI workloads. It runs on NVMe-based servers and is
 optimised for the sustained write patterns of checkpoint operations
 and the random read patterns of dataset pre-fetching. WEKA's storage
 protocol is purpose-built for low-latency, high-throughput flash
-access. The operational model is appliance-like — WEKA manages its
+access. The operational model is appliance-like -- WEKA manages its
 own cluster, exposes a POSIX file system interface, and provides
 dashboards and alerts.
 
@@ -374,18 +388,18 @@ requests to the storage fabric at the same moment, causing simultaneous
 traffic from 32 sources converging toward the storage tier.
 
 This is the same in-cast congestion covered in Chapter 6 for compute
-traffic — but on the storage fabric switches instead of the compute
+traffic -- but on the storage fabric switches instead of the compute
 fabric switches. Standard ECN and PFC configuration on the storage
 fabric switches handles this, same as on the compute fabric. The key
 difference: storage TCP traffic tolerates brief congestion and
-retransmits without stalling the entire cluster — unlike compute RDMA
+retransmits without stalling the entire cluster -- unlike compute RDMA
 traffic, which stalls all GPUs at the barrier. In-cast congestion on
 the storage fabric slows checkpoint writes or batch reads; it does not
 immediately stop training.
 
 ---
 
-## Act 6 — Checkpoint strategy: the optimisation no one taught you
+## Act 6 -- Checkpoint strategy: the optimisation no one taught you
 
 Chapter 0 gives the basic formula. This act goes deeper into what
 practitioners actually have to decide.
@@ -401,15 +415,15 @@ checkpoint, multiplied by the number of GPUs sitting idle during
 that write. At 1.4 seconds per checkpoint on a 32,000-GPU cluster
 at $500/GPU-hour, each checkpoint costs:
 
-32,000 GPUs × 1.4 seconds × ($500 / 3600 seconds) = $6,222 per checkpoint.
+32,000 GPUs x 1.4 seconds x ($500 / 3600 seconds) = $6,222 per checkpoint.
 
 If you checkpoint every 10 minutes, that is 6 checkpoints per hour
-× $6,222 = $37,333 per hour in checkpoint overhead.
+x $6,222 = $37,333 per hour in checkpoint overhead.
 
 Recovery cost: when a failure occurs and the cluster rolls back to
 the last checkpoint, all GPU-hours since that checkpoint are wasted.
 If you checkpoint every 30 minutes and a failure occurs 29 minutes
-after the last checkpoint, you waste 29 minutes × 32,000 GPUs × $8.33
+after the last checkpoint, you waste 29 minutes x 32,000 GPUs x $8.33
 per GPU-minute = $7.7 million in wasted compute on that one failure.
 
 **The MTBF-driven optimisation**
@@ -432,23 +446,23 @@ Checkpoint frequency faster than MTBF is counterproductive: you
 spend more time checkpointing than you recover from failure
 avoidance. The practical target is checkpoint frequency between
 MTBF/4 and MTBF/2. For an 18-minute MTBF, that suggests
-checkpointing every 5–10 minutes.
+checkpointing every 5-10 minutes.
 
 **What determines checkpoint size**
 
 For a model with P parameters, where each parameter is stored as
 a 16-bit (BF16) float:
 
-Checkpoint size = P × 2 bytes (parameters)
-                + P × 2 bytes (gradients, if saved)
-                + P × 4 bytes (optimiser states — Adam stores
+Checkpoint size = P x 2 bytes (parameters)
+                + P x 2 bytes (gradients, if saved)
+                + P x 4 bytes (optimiser states -- Adam stores
                                momentum and variance, both float32)
-                = P × 8 bytes for a full Adam checkpoint.
+                = P x 8 bytes for a full Adam checkpoint.
 
-For a 70B parameter model: 70 × 10⁹ × 8 = 560 GB for a full
-Adam checkpoint. Teams often save partial checkpoints — parameters
-only, not gradients or optimiser states — for resumption from
-epoch boundaries, at 140 GB (70B × 2 bytes). The 140 GB number
+For a 70B parameter model: 70 x 10^9 x 8 = 560 GB for a full
+Adam checkpoint. Teams often save partial checkpoints -- parameters
+only, not gradients or optimiser states -- for resumption from
+epoch boundaries, at 140 GB (70B x 2 bytes). The 140 GB number
 from Chapter 0 is the parameter-only checkpoint.
 
 Mixed-precision training further complicates this: the model
@@ -465,18 +479,18 @@ before synchronising. This reduces AllReduce frequency, which
 reduces compute fabric load. But it also means the model's
 in-progress gradient state is larger and more complex to checkpoint
 correctly. A checkpoint taken mid-accumulation must save the
-accumulated gradients in addition to the model weights — or restart
+accumulated gradients in addition to the model weights -- or restart
 from the beginning of the current accumulation window after recovery.
 Frameworks handle this differently; it is a source of subtle
 correctness bugs after failure recovery.
 
 ---
 
-## Act 7 — Storage fabric topology: why standard Ethernet works here
+## Act 7 -- Storage fabric topology: why standard Ethernet works here
 
-Every design decision in the compute fabric — InfiniBand's credit-based
+Every design decision in the compute fabric -- InfiniBand's credit-based
 flow control, SHARP in-network compute, per-packet adaptive routing,
-non-blocking fat-tree topology — exists because of the specific demands
+non-blocking fat-tree topology -- exists because of the specific demands
 of synchronised all-to-all AllReduce traffic at microsecond timescales.
 
 None of those demands apply to the storage fabric. This is the one part
@@ -488,15 +502,15 @@ principles are completely correct.
 **Traffic pattern analysis**
 
 Storage traffic is large sequential transfers: one writer (a DGX node's
-DPU) streaming bytes to one or more targets (storage appliance nodes),
+storage CX7) streaming bytes to one or more targets (storage appliance nodes),
 or one reader streaming bytes from one or more sources. The flow has a
-fixed source and destination for its entire duration — seconds, not
+fixed source and destination for its entire duration -- seconds, not
 microseconds.
 
 ECMP works correctly for this pattern. Once a flow is hashed to a path,
 it stays on that path for the duration of the transfer. A 140 GB
 checkpoint that takes 1.4 seconds generates a single sustained flow
-from DPU to storage appliance. Standard Ethernet ECMP distributes
+from the storage CX7 to storage appliance. Standard Ethernet ECMP distributes
 these flows across available paths without hot-spotting as long as the
 number of active flows is large relative to the number of paths.
 
@@ -504,8 +518,8 @@ number of active flows is large relative to the number of paths.
 
 The compute fabric targets 1:1 non-blocking topology because any
 congestion event during AllReduce stalls every GPU at the barrier.
-The storage fabric can tolerate oversubscription — typically 2:1 to
-4:1 — because:
+The storage fabric can tolerate oversubscription -- typically 2:1 to
+4:1 -- because:
 
 Storage traffic is not a synchronisation barrier. A checkpoint write
 that takes 2 seconds instead of 1.4 seconds due to storage fabric
@@ -544,22 +558,22 @@ deployment.
 
 **Sizing the storage fabric**
 
-Each DGX node contributes 2 × 400G = 800 Gbps of storage bandwidth from
-its BlueField-3 DPUs. For a 32-node BasePOD, the storage fabric must
-support 32 × 800 Gbps = 25.6 Tbps of aggregate storage bandwidth in the
+Each DGX node contributes 2 x 400G = 800 Gbps of storage bandwidth from
+its dual-port storage CX7 cards. For a 32-node BasePOD, the storage fabric must
+support 32 x 800 Gbps = 25.6 Tbps of aggregate storage bandwidth in the
 worst case (all nodes checkpointing simultaneously).
 
 Storage fabric switches are typically sized at 400G or 800G per port,
-with a 32-node BasePOD requiring a leaf layer with at least 32 × 2 = 64
-downlinks to the DPU ports, plus uplinks to spine switches or directly
+with a 32-node BasePOD requiring a leaf layer with at least 32 x 2 = 64
+downlinks to the storage CX7 ports, plus uplinks to spine switches or directly
 to the storage appliance tier. At 2:1 oversubscription, 32 uplinks of
-400G provide 12.8 Tbps of aggregate storage fabric bandwidth — sufficient
+400G provide 12.8 Tbps of aggregate storage fabric bandwidth -- sufficient
 for typical storage traffic patterns where simultaneous checkpoint writes
 are the worst-case event.
 
 ---
 
-## Act 8 — What storage failure looks like on the network
+## Act 8 -- What storage failure looks like on the network
 
 Storage fabric failures present differently from compute fabric failures.
 The compute fabric has ibstat, rdma link show, show interface counters,
@@ -580,7 +594,7 @@ engineer reports the training run is taking longer than expected.
 
 Checkpoint writes are timing out or taking significantly longer than the
 expected 1.4 seconds. The framework logs show checkpoint save times of
-10–20 seconds instead of 1–2 seconds.
+10-20 seconds instead of 1-2 seconds.
 
 CPU and GPU utilisation on the DGX nodes shows alternating idle periods
 aligned with checkpoint timing. The GPUs are computing normally, then
@@ -588,17 +602,18 @@ stalling for extended periods during checkpoint writes.
 
 **The diagnostic path**
 
-Start at the DPU, not the ConnectX-7.
+Start at the storage NIC ports, not the compute ConnectX-7s.
 
 ```bash
-# On the DGX node — check BlueField-3 DPU interface state
-# The DPU presents as a network device on the host: typically enp1s0 or similar
+# On the DGX node -- check storage CX7 interface state
+# Slot1/Slot2 dual-port CX7 appear as mlx5_7/mlx5_8 and mlx5_1/mlx5_2 (RDMA)
+# or as enp170s0f0/f1 and enp41s0f0/f1 (Ethernet) -- check ip link show
 ip link show
-# Look for DPU storage interface — typically named ens* or enp*
-# Compare to the ConnectX-7 compute interfaces (eth0 through eth7 / mlx5_0 through mlx5_7)
+# Look for storage interfaces -- typically Slot1/Slot2 bonded as a single interface
+# for in-band management and storage (check your deployment's bonding config)
 
-# Check DPU storage interface counters
-ethtool -S enp1s0
+# Check storage interface counters
+ethtool -S enp170s0f1  # Slot1 port2 -- bonded storage/mgmt port
 # Key counters: rx_dropped, tx_dropped, rx_errors
 # Non-zero drops indicate storage fabric congestion
 ```
@@ -607,15 +622,15 @@ On the storage fabric Ethernet switch (separate switch, not the compute
 leaf switches):
 
 ```bash
-# Spectrum switch — Cumulus Linux
+# Spectrum switch -- Cumulus Linux
 show interface counters
 # Look for: output drops on uplink ports to storage appliances
 # A growing output_drops counter on the storage-facing ports indicates
-# the storage appliance cannot absorb writes at the rate the DPUs are sending
+# the storage appliance cannot absorb writes at the rate the storage NICs are sending
 
 # Check for ECN marking (if configured)
 show interface counters detailed
-# rx_ecn_marked growing → switch is signalling congestion on storage fabric
+# rx_ecn_marked growing -> switch is signalling congestion on storage fabric
 ```
 
 On the storage appliance or parallel file system:
@@ -627,23 +642,23 @@ a saturated uplink, or a failing storage node.
 
 For WEKA: the WEKA management console provides per-node throughput
 histograms. A storage node at 100% utilisation while others are at 40%
-indicates uneven striping — often caused by a hot dataset segment landing
+indicates uneven striping -- often caused by a hot dataset segment landing
 disproportionately on one storage node.
 
 **The most common storage fabric failures**
 
 A storage appliance NVMe drive degrading: one storage node's throughput
 drops while others remain healthy. BeeGFS redistributes data from failed
-targets but only for new writes — existing data on the degraded node is
+targets but only for new writes -- existing data on the degraded node is
 slow to read. WEKA handles this more transparently through its
 distributed block protocol.
 
-A DPU link failure: the DPU presents as down to the storage fabric
-switch. Checkpoint writes from that node fail. The training framework
-typically catches this as a checkpoint timeout and retries. A persistent
-DPU link failure requires the storage switch port to be checked — the
-DPU does not show in ibstat (that is the compute NIC). Check
-`ip link show` on the DGX host and the storage switch port state.
+A storage CX7 link failure: the storage interface presents as down to
+the storage fabric switch. Checkpoint writes from that node fail. The
+training framework typically catches this as a checkpoint timeout and
+retries. Check `ip link show` on the DGX host for the Slot1/Slot2
+interface state, and check the storage switch port state. Note that
+`ibstat` shows compute CX7 state (mlx5_0-7), not the storage CX7 ports.
 
 Storage fabric switch buffer overflow: all nodes checkpointing
 simultaneously saturates the switch uplinks to the storage appliance
@@ -659,29 +674,32 @@ capacity.
 Chapter 0 gave you the storage fabric in three sentences. This chapter
 gave you the engineering underneath those sentences.
 
-You understand why the storage fabric is physically separate — not as a
+You understand why the storage fabric is physically separate -- not as a
 best practice, but because mixing storage and compute traffic on the same
 switches creates PFC interactions and buffer contention that degrades both.
 The traffic pattern mismatch between sustained sequential storage transfers
 and bursty synchronised AllReduce traffic is fundamental, not incidental.
 
 You understand GPUDirect Storage: the five-hop pre-GDS path collapses
-to three hops by having the DPU DMA engine write directly from GPU HBM
-to the NVMe-oF target, eliminating every CPU copy. At 640 GB of GPU HBM
-per DGX node, eliminating the CPU copies is not a minor optimisation —
-it is the difference between loading data in 3 seconds and loading data
-in 1.4 seconds.
+to three hops by having the storage ConnectX-7 DMA engine write directly
+from GPU HBM to the NVMe-oF target, eliminating CPU memory copies. At
+640 GB of GPU HBM per DGX node, eliminating the CPU copies is not a
+minor optimisation -- it is the difference between loading data in 3
+seconds and loading data in 1.4 seconds.
 
 You understand NVMe-oF: NVMe command queues routed over RDMA instead of
-PCIe, with the DPU acting as the initiator and the storage appliance as
-the target. RDMA transport eliminates CPU processing on both ends and
-completes the zero-copy path that GDS enables.
+PCIe, with the host NVMe-oF initiator (using the storage CX7 ports)
+acting as the initiator and the storage appliance as the target. RDMA
+transport handles the data movement without CPU copies; GDS extends this
+so the data flows directly between GPU HBM and storage without touching
+system RAM.
 
-You understand why the DPU handles storage — not because the ConnectX-7
-cannot support NVMe-oF, but because the ConnectX-7 is fully occupied
-with compute RDMA and sharing it with storage traffic would degrade both.
-The DPU's 800 Gbps of dedicated storage bandwidth is completely
-independent of the compute fabric.
+You understand why dedicated storage ports are separate from compute NICs
+-- not because ConnectX-7 cannot support NVMe-oF (it can), but because
+the 8 compute NICs are fully occupied with AllReduce RDMA and sharing
+them with storage traffic would degrade both. The 2 dedicated storage
+CX7 cards provide 800 Gbps of storage bandwidth completely independent
+of the compute fabric.
 
 You understand parallel file systems: data striped across many storage
 nodes so that many DGX nodes reading simultaneously do not bottleneck on
@@ -690,12 +708,14 @@ open-source control; WEKA for managed performance and AI-optimised I/O.
 
 You understand checkpoint strategy: the MTBF-driven optimisation that
 determines the right checkpoint frequency, the real cost of a full Adam
-checkpoint (P × 8 bytes, not P × 2), and why gradient accumulation
+checkpoint (P x 8 bytes, not P x 2), and why gradient accumulation
 complicates checkpoint correctness.
 
 And you understand what storage fabric failure looks like from the
-network side — different tools, different devices, different diagnostic
-path — so that the next time training stalls without any compute fabric
+network side -- different tools, different devices, different diagnostic
+path -- so that the next time training stalls without any compute fabric
 errors, you know where to look first.
 
-[Continue to Chapter 11 →](/learn/ch11-monitoring-telemetry)
+[Continue to Chapter 11 ->](/learn/ch11-monitoring-telemetry)
+</file>
+

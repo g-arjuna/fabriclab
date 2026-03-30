@@ -429,6 +429,31 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch16-gpu-compute-network-packet-anatomy"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch17-storage-network-packet-path",
+      "number": 17,
+      "title": "Storage Network Packet Path",
+      "href": "/learn/ch17-storage-network-packet-path",
+      "durationMinutes": 55,
+      "durationLabel": "55 min",
+      "partKey": "scale-architecture",
+      "partTitle": "Part 4 - Scale and Architecture",
+      "partDescription": "Requires Part 3 - Ch 12-16",
+      "tags": [
+        "NVMe-oF",
+        "GDS",
+        "Packet anatomy",
+        "Storage fabric",
+        "Checkpointing"
+      ],
+      "description": "A packet-level walkthrough of a checkpoint write from GPU HBM to storage appliance: NVMe-oF capsules, DMA paths, storage-fabric behavior, frame anatomy, and diagnostics.",
+      "previewSummary": "Trace a storage checkpoint write byte by byte and see how the storage network differs from the compute fabric.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch17-storage-network-packet-path"
     }
   ],
   "labs": [

@@ -197,18 +197,18 @@ On a Spectrum-X deployment you use `show interface counters`. On an ONYX InfiniB
 ```
 leaf-switch # show interface counters
 
-Interface eth0        <- the switch port connected to DGX mlx5_0
+Interface swp1        <- the switch port connected to DGX mlx5_0
   Admin state:   Up
   Oper state:    Up
   Link speed:    400G
 
-Interface eth3        <- the switch port connected to DGX mlx5_3
+Interface swp4        <- the switch port connected to DGX mlx5_3
   Admin state:   Up
   Oper state:    Up
   Link speed:    400G
 ```
 
-The switch port names (`eth0`, `eth3`) correspond to the DGX NIC names (`eth0`, `eth3`). The naming is consistent end-to-end on a correctly wired and labelled deployment.
+Note the naming convention: Cumulus Linux and NVUE on Spectrum-X switches use `swp` (switchport) names -- `swp1`, `swp2`, ... `swp32` for front-panel ports. The DGX NIC side uses `eth0`/`mlx5_0`, `eth3`/`mlx5_3` etc. These are different names for each end of the same cable. When reading diagnostics, `swp1` on the switch and `eth0` (or `mlx5_0`) on the DGX refer to the two ends of the same physical link.
 
 **For InfiniBand / ONYX -- `show interfaces ib status`:**
 
@@ -272,7 +272,7 @@ You need both perspectives because they can tell different stories -- and the di
 ```
 leaf-switch # show interface counters
 
-Interface eth0
+Interface swp1
   Input packets:     1,847,293,441
   Output drops:      47,291          <- non-zero drops: problem
   PFC pause frames:  12,847          <- non-zero pauses: PFC active
@@ -343,7 +343,7 @@ PFC (Priority Flow Control) is the lossless mechanism. `show dcb pfc` shows whet
 ```
 $ show dcb pfc
 
-Interface eth0
+Interface swp1
   Priority Flow Control:  enabled
   PFC enabled priorities: 3 (cos3)
   Pause quanta:           0xffff
@@ -355,7 +355,7 @@ Interface eth0
 
 `Priority Flow Control: enabled` -- PFC is active on this interface. When disabled, any congestion will result in drops rather than pauses.
 
-`PFC enabled priorities: 3 (cos3)` -- PFC is applied to traffic class 3. This is the standard DSCP marking for RoCEv2 traffic (priority 3, cos3). If your RoCEv2 traffic is marked differently, PFC will not apply to it -- you will get drops even with PFC enabled.
+`PFC enabled priorities: 3 (cos3)` -- PFC is applied to traffic class 3. In this deployment, RoCEv2 traffic is marked to land on priority 3. The exact priority used for RoCEv2 is a site configuration decision -- common values are 3 and 5 depending on the deployment guide followed. What matters is that the PFC-enabled priority here matches the CoS marking your RoCEv2 traffic actually carries. If your traffic lands on priority 5 but PFC is only enabled on priority 3, you get no protection.
 
 `Pause quanta: 0xffff` -- The duration of each PAUSE frame, measured in pause quanta (512-bit times). 0xffff is the maximum value -- the receiver should stop sending for the maximum possible duration. This is standard for storage and HPC traffic.
 
@@ -368,7 +368,7 @@ Interface eth0
 ```
 $ show dcb pfc
 
-Interface eth0
+Interface swp1
   Priority Flow Control:  disabled
   PFC enabled priorities: none
   Pause quanta:           N/A
@@ -379,7 +379,7 @@ This is the fault state in Lab 1. Disabled PFC on a RoCEv2 port means any conges
 
 **The PFC priority mismatch trap:**
 
-One of the most common PFC misconfigurations is enabling PFC on the wrong priority. If your RoCEv2 traffic is marked DSCP 26 (CoS 3) but PFC is configured for priority 0, PFC provides no protection to your training traffic. This does not show up as "PFC disabled" -- PFC reports as enabled. You need to verify that `PFC enabled priorities` matches the CoS marking of your actual RoCEv2 traffic.
+One of the most common PFC misconfigurations is enabling PFC on the wrong priority. If your RoCEv2 traffic is marked DSCP 26 (landing on CoS 3 in this deployment) but PFC is configured for priority 0, PFC provides no protection to your training traffic. This does not show up as "PFC disabled" -- PFC reports as enabled. You need to verify that `PFC enabled priorities` matches the actual CoS priority your RoCEv2 traffic uses. Verify the DSCP-to-priority mapping on both the NIC (`mlnx_qos -i eth0 --dscp`) and the switch (`show qos dscp-map`) -- they must agree.
 
 ### show dcb ets -- reading ETS and ECN configuration
 
@@ -388,7 +388,7 @@ ETS (Enhanced Transmission Selection) controls how bandwidth is allocated betwee
 ```
 $ show dcb ets
 
-Interface eth0 -- ETS Configuration
+Interface swp1 -- ETS Configuration
   Traffic class  Priority  Bandwidth  Algorithm
   TC0            0,1,2     30%        ETS
   TC3 (RoCE)     3         50%        Strict Priority
@@ -690,3 +690,622 @@ And you know how the simulator works: one terminal tab per device, device-specif
 The labs are waiting. In Lab 0, a GPU rail has gone dark. Click the DGX node in the topology to open your first session. You have everything you need to find the problem.
 
 [Go to Lab 0: Identify the failed rail ->](/lab?lab=lab0-failed-rail)
+</file>
+
+<file path="apps/web/content/chapters/ch8-nccl-performance.mdx">
+---
+title: "Chapter 8: NCCL -- The Application Layer of AI Networking"
+module: "HPC Networking Foundations"
+level: "Intermediate"
+estimatedMinutes: 55
+labLink: "/lab?lab=lab5-nccl-diagnosis"
+---
+
+## The symptom that starts every real incident
+
+Seven chapters in, you can read a counter, diagnose a pause storm, spot an oversubscribed spine, calculate whether a topology supports AllReduce at line rate. Every tool is in place.
+
+Then an ML engineer sends you a Slack message: *"Training is stuck at 60% expected throughput. NCCL logs are spamming timeouts. No idea what the network is doing."*
+
+This is where the last seven chapters have to become a single coherent diagnostic story -- because the ML engineer cannot read `ethtool -S eth0`, and you cannot read a training loss curve. The translation layer between those two worlds is NCCL: the library that converts "AllReduce these gradient tensors" into actual RDMA operations on actual NICs, and the library that reports back when the fabric fails to support those operations.
+
+After this chapter, when an ML engineer shows you a NCCL log with timeout errors and degraded busbw, you will know exactly which CLI commands to run, in what order, and how to connect what you find to what the training job experienced.
+
+---
+
+## Act 1 -- What NCCL is and what it owns
+
+**NCCL** (NVIDIA Collective Communications Library, pronounced "nickel") is the software layer between the training framework and the network hardware. When PyTorch executes an `AllReduce`, it calls NCCL. NCCL decides which NICs to use, which algorithm to run, how to manage the Queue Pairs, and what to do when something goes wrong.
+
+<NCCLLayerViz />
+
+### The ownership boundary
+
+NCCL owns:
+- Detecting which GPUs are present and how they are connected (NVLink intra-node vs external fabric inter-node)
+- Selecting the AllReduce algorithm based on detected topology and message size
+- Managing Queue Pairs -- the RDMA connection objects -- between all participating GPUs
+- Error detection: QP failures, packet loss detection, timeout thresholds
+- Reporting: the `busbw` metric that tells you how efficiently the collective operation ran
+
+NCCL does **not** own:
+- PFC configuration -- that is the switch and the ConnectX-7 driver
+- ECN thresholds and DCQCN -- that is the switch ASIC and NIC firmware
+- Load balancing -- that is the switch forwarding plane
+- Physical link state -- that is ibstat and the RDMA driver
+
+This boundary is the most important thing to understand when debugging. NCCL is sensitive to fabric quality but cannot fix fabric problems. When NCCL shows degraded performance, the cause is almost always in the layers NCCL does not control -- and the diagnostic commands from Chapters 3 through 7 are what you use to find it.
+
+### NCCL initialisation -- what happens before the first gradient
+
+Before any gradient tensor moves, NCCL runs an initialisation sequence when the training job starts:
+
+1. **GPU detection**: Probes all available GPUs and their NVLink connectivity
+2. **NIC probing**: Scans for RDMA-capable network interfaces (looks for `mlx5_*` devices via the RDMA verbs API)
+3. **QP establishment**: Creates Queue Pairs between every GPU pair that will communicate across the external fabric -- on a 32-node cluster this means creating QPs between 256 GPUs x 255 peers = 65,280 connections
+4. **Algorithm negotiation**: Based on detected topology, selects the optimal AllReduce algorithm
+5. **Validation test**: Runs a small collective to verify all paths work before training begins
+
+If NIC probing in step 2 finds no RDMA devices, NCCL does not fail -- it falls back to socket-based TCP transport. This is the most common cause of "NCCL is using 2 GB/s instead of 400 GB/s" and it produces no error, just a warning in the debug log that most engineers miss.
+
+---
+
+## Act 2 -- AllReduce algorithms: ring, tree, and double-binary tree
+
+NCCL implements three collective algorithms. Understanding which one NCCL chooses -- and why -- connects the topology knowledge from Chapter 7 directly to the performance numbers you see in nccl-tests.
+
+<NCCLAlgorithmViz />
+
+### Ring AllReduce
+
+Arranges all N GPUs in a virtual ring. The AllReduce proceeds in two phases:
+
+**Reduce-scatter phase**: Each GPU sends a shard of its gradient tensor to the next GPU in the ring, receiving a shard from the previous GPU and adding it to its own. After N-1 steps, each GPU holds one reduced shard -- the complete sum of all GPUs' contributions to that slice.
+
+**AllGather phase**: Each GPU sends its reduced shard to the next GPU in the ring, forwarding what it receives. After N-1 more steps, every GPU holds the complete reduced tensor.
+
+**Communication volume**: Each GPU sends and receives exactly `2 x (N-1)/N x tensor_size` bytes. For large N this approaches `2 x tensor_size` -- essentially constant regardless of GPU count. Every GPU is always sending and receiving simultaneously -- near-perfect bandwidth utilisation.
+
+**When ring is optimal**: Small clusters (<= 32 nodes) with balanced, low-latency fabrics. BasePOD topology (2-stage, 4 hops) with ring AllReduce achieves near-line-rate busbw because the ring's N-1 steps all have the same hop count.
+
+**When ring degrades**: Large clusters. At 256 GPUs, ring requires 255 steps. The tail latency of those steps compounds -- the last GPU in the ring sees the full accumulated latency of all preceding steps. A single slow NIC or congested link stalls the entire ring at every step.
+
+### Tree AllReduce (Binary Tree)
+
+Arranges GPUs in a binary tree hierarchy. Reduction happens in log2(N) steps -- dramatically fewer than ring's N-1.
+
+For 256 GPUs: 8 steps instead of 255. Each step cuts the number of active senders in half. At the root, one GPU holds the complete sum and broadcasts it back down the tree in another log2(N) steps.
+
+**The problem**: At each tree level, half the GPUs are idle -- waiting for the other half to finish. Bandwidth utilisation is approximately 50% of ring's efficiency. The root GPU is a bottleneck -- all traffic must flow through it.
+
+### Double-Binary Tree (DBT)
+
+Runs two binary trees simultaneously, with roots at different GPU positions. The key insight: the GPUs that are idle in Tree 1 (waiting at each level) are active in Tree 2 (contributing at those same levels). Every GPU is active in at least one tree at every step.
+
+Result: logarithmic step count (log2(N) steps, like tree) AND near-optimal bandwidth utilisation (like ring). DBT is NCCL's default for large AllReduce operations and is the algorithm that makes SuperPOD-scale training practical.
+
+**The topology connection from Chapter 7**: NCCL does not know your switch topology -- it only knows which NICs are available and the latency it measures to each peer. But understanding hop count from Chapter 7 tells you *which algorithm NCCL should prefer*:
+
+| Cluster | Stage count | Hop count | Optimal algorithm |
+|---|---|---|---|
+| 8 nodes, single node | 0 (NVLink) | 0 | NVLink (automatic) |
+| 32 nodes, BasePOD | 2-stage | 4 hops | Ring (low step count dominates) |
+| 256 nodes, SuperPOD | 3-stage | 8 hops | DBT (log steps dominate) |
+| 2048 nodes | 5-stage | 16+ hops | DBT + SHARP in-network reduction |
+
+When `NCCL_ALGO` is not set, NCCL auto-selects based on measured latency and message size. You can force a specific algorithm: `NCCL_ALGO=RING` for benchmarking ring performance, `NCCL_ALGO=TREE` or `NCCL_ALGO=COLLNET_RING` for SHARP-aware collectives.
+
+---
+
+## Act 3 -- Environment variables: the configuration NCCL hides
+
+NCCL has no configuration file. Everything is controlled via environment variables set in the job launcher before the training process starts. A single wrong variable -- or a missing one -- is the most common cause of "NCCL is running at 1% of expected bandwidth" and produces no obvious error.
+
+<NCCLEnvVarViz />
+
+### The variables that matter for network engineers
+
+**`NCCL_IB_HCA`** -- which RDMA HCA devices NCCL should use.
+
+If not set, NCCL scans all available devices. On a DGX H100 with 8 ConnectX-7 NICs in Ethernet/RoCEv2 mode, those NICs present as `mlx5_0` through `mlx5_7` at the RDMA layer. NCCL should find all 8.
+
+The failure mode: if `NCCL_IB_HCA` is set to an IB device name like `mlx5_bond_0` (a bonded InfiniBand interface name used on some systems) but your NICs are in Ethernet mode presenting as `mlx5_0`, NCCL finds nothing and falls back to TCP socket transport. Training continues -- at 2-4 GB/s instead of 400 GB/s. No error. The only sign is `NCCL_DEBUG=INFO` output showing `transport selected: socket`.
+
+```bash
+# Correct for a DGX H100 in RoCEv2 mode -- specify all 8 NICs explicitly
+export NCCL_IB_HCA=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1
+
+# The :1 suffix specifies port 1 of that HCA (ConnectX-7 is single-port per NIC)
+
+# Verify what NCCL sees by checking RDMA device names on the DGX:
+rdma link show
+# Each line shows: link mlx5_N/1 state ACTIVE ...
+# The mlx5_N names are what NCCL_IB_HCA should reference
+```
+
+**`NCCL_SOCKET_IFNAME`** -- which network interface to use for control messages (not data).
+
+NCCL uses a TCP socket for out-of-band coordination between processes -- exchanging QP information during initialisation, synchronising barriers. This must point to a management interface (typically the DGX management ethernet, `eno1` or similar), not to the RDMA training interfaces.
+
+If this points to an RDMA interface, control messages compete with data traffic and QP establishment can fail unpredictably.
+
+```bash
+export NCCL_SOCKET_IFNAME=eno1     # management ethernet
+# Do NOT set to eth0 (RDMA interface)
+```
+
+**`NCCL_DEBUG`** -- the most important troubleshooting variable.
+
+```bash
+export NCCL_DEBUG=INFO    # Shows transport selected, NIC count, algorithm, QP establishment
+export NCCL_DEBUG=WARN    # Default -- only shows warnings and errors
+export NCCL_DEBUG=TRACE   # Shows every message -- extremely verbose, for deep bugs only
+```
+
+`INFO` level is what you always enable when diagnosing NCCL performance issues. The key lines to look for:
+
+```
+[0] NCCL INFO transport selected: SHM    <- using shared memory (intra-node only)
+[0] NCCL INFO transport selected: NET    <- using network (this is what you want)
+[0] NCCL INFO Channel 00: 0 [mlx5_0]    <- NIC mlx5_0 assigned to channel 0
+[0] NCCL INFO Using 8 channels, Ring    <- 8 NICs active, ring algorithm
+```
+
+```
+[0] NCCL INFO transport selected: socket <- FALLBACK -- no RDMA found
+```
+If you see `socket` transport, NCCL found no RDMA devices. Fix `NCCL_IB_HCA`.
+
+**`NCCL_IB_QPS_PER_CONNECTION`** -- Queue Pairs per GPU-to-GPU connection.
+
+Default 1. Each QP creates one RDMA flow. With RoCEv2 and per-packet load balancing (RSHP), more QPs means more flows, which means better ECMP distribution across spine links. On Spectrum-X fabrics with RSHP enabled:
+
+```bash
+export NCCL_IB_QPS_PER_CONNECTION=4
+# Creates 4 QPs per GPU pair = 4 distinct ECMP flows per pair
+# On a 32-node cluster: 32 x 31 x 4 = 3,968 active flows across 8 rails
+# Dramatically better path diversity than the default 1 QP per connection
+```
+
+**`NCCL_IB_GID_INDEX`** -- which Global Interface Identifier to use for RoCEv2.
+
+On a ConnectX-7 in Ethernet mode, multiple GIDs exist (one per IP configuration). The RoCEv2 GID is typically at index 3. If the wrong GID index is selected, NCCL may attempt to use an IPv4-mapped IPv6 address (::ffff:x.x.x.x) that is not routable on your fabric.
+
+```bash
+export NCCL_IB_GID_INDEX=3    # Standard for RoCEv2 on Ethernet-mode ConnectX-7
+# Verify with: ibv_devinfo -d mlx5_0 | grep GID
+```
+
+**`NCCL_P2P_DISABLE=1`** -- disables NVLink peer-to-peer.
+
+Forces all GPU-to-GPU communication through the host. Use only for debugging when NVLink is suspected faulty. Never set in production -- it reduces intra-node bandwidth from 900 GB/s to ~30 GB/s.
+
+**`NCCL_ALGO` and `NCCL_PROTO`** -- algorithm and protocol override.
+
+```bash
+export NCCL_ALGO=RING      # Force ring algorithm
+export NCCL_ALGO=TREE      # Force tree algorithm
+export NCCL_PROTO=LL       # Low Latency -- best for small tensors
+export NCCL_PROTO=LL128    # Default -- optimised for most tensor sizes
+export NCCL_PROTO=SIMPLE   # Lowest overhead -- best for very large tensors
+```
+
+---
+
+## Act 4 -- nccl-tests: the fabric validation benchmark
+
+Every AI cluster commissioning process runs `nccl-tests` before handover to production. It is the standard benchmark suite that validates the full stack: NCCL configuration, NIC drivers, RDMA transport, switch fabric, and topology -- simultaneously.
+
+<NCCLTestOutputViz />
+
+### Running allreduce_perf
+
+```bash
+# On DGX node A -- run across all nodes in the cluster
+mpirun --hostfile /etc/mpi/hostfile \
+  -np 256 \
+  --map-by ppr:8:node \
+  -x NCCL_IB_HCA=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1 \
+  -x NCCL_DEBUG=INFO \
+  -x NCCL_IB_GID_INDEX=3 \
+  ./build/all_reduce_perf \
+    -b 8 \           # Start at 8 bytes
+    -e 8G \          # End at 8 GB
+    -f 2 \           # Double message size each step
+    -g 1 \           # 1 GPU per process
+    -c 1             # Check results for correctness
+```
+
+**Flags explained**:
+- `-b 8 -e 8G -f 2`: Sweeps from 8 bytes to 8 GB, doubling each step -- reveals performance across all tensor sizes
+- `-g 1`: Each MPI process owns 1 GPU
+- `-c 1`: Enables the `#wrong` correctness check -- critical, must be zero
+
+### Reading the output table -- field by field
+
+```
+#                                                              out-of-place
+#       size         count    type    redop    root     time   algbw   busbw  #wrong
+      8388608       2097152   float     sum      -1    412.5    20.3    38.1      0
+     16777216       4194304   float     sum      -1    743.7    22.6    42.4      0
+    134217728      33554432   float     sum      -1   4891.2    27.4    51.4      0
+    536870912     134217728   float     sum      -1   9814.2    54.7   102.6      0
+   1073741824     268435456   float     sum      -1  17234.8    62.3   116.8      0
+   8589934592    2147483648   float     sum      -1 109842.1    78.2   146.6      0
+```
+
+**`size`**: Message size in bytes (this is what one GPU is contributing -- the total AllReduce processes N x this).
+
+**`time`**: Elapsed microseconds for the operation. Includes all N GPUs completing the full AllReduce.
+
+**`algbw`** (algorithm bandwidth): `size / time`. Raw throughput -- bytes moved per second per GPU.
+
+**`busbw`** (bus bandwidth): `algbw x 2(N-1)/N`. This is the number that matters. It corrects algbw by the mathematical efficiency of the ring algorithm, giving you the effective utilisation of the NIC bandwidth. At large N, busbw ~= 2 x algbw. This is what you compare against line rate.
+
+**`#wrong`**: The number of gradient values that did not match after the AllReduce. **This must always be zero.** A non-zero value means data corruption -- training would produce silently wrong results. Causes: ECC error, RDMA memory corruption, fabric bit-flip. Any non-zero value requires immediate investigation before the cluster is used for training.
+
+### What "expected busbw" means for different scales
+
+The theoretical maximum busbw equals the NIC line rate (400 Gb/s = 50 GB/s per NIC). In practice, protocol overhead, algorithm efficiency, and multiple NICs sharing a path reduce this. Healthy targets:
+
+| Cluster size | Topology | Expected busbw (large tensors) | Alarm threshold |
+|---|---|---|---|
+| 8 GPUs, 1 node | NVLink only | 800-880 GB/s (NVLink) | < 600 GB/s |
+| 32 GPUs, BasePOD | 2-stage leaf-spine | 350-390 GB/s | < 280 GB/s |
+| 256 GPUs, SuperPOD | 3-stage | 280-340 GB/s | < 200 GB/s |
+| 2048 GPUs, large cluster | 5-stage | 200-280 GB/s | < 150 GB/s |
+
+> **Why busbw decreases with cluster size**: More GPUs means more hops, more protocol overhead, and more QP management. A 256-GPU SuperPOD will always show lower busbw than a 32-GPU BasePOD -- this is expected and does not indicate a problem.
+
+### The small-message / large-message distinction
+
+The output table covers 8 bytes through 8 GB. These are not equivalent:
+
+- **Small tensors (< 1 MB)**: NCCL uses LL (Low Latency) protocol. Latency dominates. busbw is low -- not because the fabric is slow, but because the per-message overhead is large relative to the message. This is normal.
+- **Large tensors (> 128 MB)**: NCCL uses SIMPLE protocol. Bandwidth dominates. This is where you compare against line rate expectations.
+
+When an ML engineer says "training is slow," first ask: what size are the gradient tensors? If the model produces many small gradients (small layer sizes), you may be in the latency-dominated regime and load balancing / hop count improvements will not help as much as algorithmic changes.
+
+---
+
+## Act 5 -- The correlation workflow: connecting NCCL output to fabric diagnostics
+
+This is the act that connects the previous seven chapters to the application layer. A specific NCCL symptom maps to a specific diagnostic path in the fabric.
+
+<NCCLCorrelationViz />
+
+### Decision tree: from NCCL symptom to fabric command
+
+**Symptom A: busbw is < 5% of expected (e.g., 2 GB/s on a 400G fabric)**
+
+Root cause: NCCL selected socket transport (TCP fallback). RDMA was not found.
+
+```bash
+# Step 1: Confirm transport selection
+NCCL_DEBUG=INFO mpirun ... ./all_reduce_perf ...
+# Look for: "transport selected: socket"
+
+# Step 2: Check RDMA device names on DGX
+rdma link show
+# Expected: link mlx5_0/1 state ACTIVE ... type RoCE
+
+# Step 3: Verify NCCL_IB_HCA matches what rdma link show shows
+echo $NCCL_IB_HCA
+# If unset or wrong -> fix it
+
+# Step 4: Confirm NICs are in the correct mode
+ibstat | grep "Link layer"
+# Must show: Link layer: Ethernet (for RoCEv2) or InfiniBand (for IB)
+```
+
+Fix: Set `NCCL_IB_HCA` to the correct device names from `rdma link show`. Re-run nccl-tests.
+
+---
+
+**Symptom B: busbw is 40-70% of expected, NCCL using NET transport (RDMA active)**
+
+Root cause: Fabric congestion or load balancing failure. RDMA is working but something is slowing it down.
+
+```bash
+# Step 1: Check spine link utilisation (fabric-level check first)
+# On spine switch terminal:
+show interface counters
+# Compare link utilisation: is it even across all ports?
+# If some spine links at 85% and others at 5% -> load balancing problem (Ch6 diagnosis)
+# If spine links are even -> congestion problem (Ch5 diagnosis)
+
+# Step 2: Check for drops or sustained pauses
+# On leaf switch terminal:
+show interface counters
+# Output drops: 0? If non-zero -> PFC or ECN misconfiguration
+# PFC pause frames: growing rapidly? -> sustained congestion
+
+# Step 3: Verify PFC and ECN are correctly configured
+show dcb pfc
+# PFC enabled priorities: 3 (must match DSCP marking)
+
+show dcb ets
+# ECN marking: enabled? DCQCN: active?
+
+# Step 4: Check NIC-level experience
+# On DGX terminal:
+ethtool -S eth0
+# rx_pfc_pause_frames growing constantly -> sustained PFC storm
+# rx_ecn_marked: 0 despite congestion -> ECN not configured
+# tx_dropped: non-zero -> drops occurring despite PFC
+
+# Step 5: Verify DCQCN is not over-reacting
+show roce
+# Check DCQCN state and DSCP marking
+```
+
+Fix: Based on which step reveals the issue -- apply the Chapter 5, 6, or 7 fix. Re-run nccl-tests after each fix.
+
+---
+
+**Symptom C: busbw is 80-95% of expected (small degradation)**
+
+Root cause: Normal for large clusters. Protocol overhead and DBT algorithm efficiency.
+
+```bash
+# Confirm this is expected, not a problem
+# Check cluster size and topology match the expected busbw table above
+# Verify #wrong is 0 (no corruption)
+
+# If you want to improve:
+# Try forcing RING algorithm for comparison (valid only for small clusters)
+NCCL_ALGO=RING mpirun ... ./all_reduce_perf -b 512M -e 8G ...
+# If RING gives higher busbw -> cluster is small enough that ring is more efficient
+# Set NCCL_ALGO=RING in production job launcher
+
+# Check QPS_PER_CONNECTION
+echo $NCCL_IB_QPS_PER_CONNECTION
+# If 1 (default) -> try 4 with RSHP-enabled Spectrum-X fabric
+NCCL_IB_QPS_PER_CONNECTION=4 mpirun ... ./all_reduce_perf ...
+# More QPs = more ECMP flows = better path diversity
+```
+
+---
+
+**Symptom D: NCCL timeout errors mid-training (QP error state)**
+
+Root cause: A packet was dropped, causing a PSN gap, causing a QP to enter error state. As established in Chapter 3: a dropped packet causes a PSN gap, the QP enters error state, and the GPU on that rail cannot participate in AllReduce until the QP is reset.
+
+```bash
+# Step 1: Check for QP errors
+ibstat | grep -A 5 "State:"
+# Look for: State: Error -- the rail that suffered the packet drop
+
+# Step 2: Find the root cause of the packet drop
+# On DGX terminal:
+ethtool -S eth0
+# tx_dropped: non-zero? -> drops are occurring
+# rx_pfc_pause_frames: 0 despite drops -> PFC is not configured or on wrong priority
+
+# Step 3: Check switch logs for the time of the timeout
+# On UFM server:
+show ufm events --severity ERROR --since "2025-03-23 14:00"
+# Look for: link flap, symbol error spike, or port error-disabled events
+
+# Step 4: Correlate timing
+# QP timeout at 14:23:15 in NCCL log?
+# UFM shows link flap on Leaf-Switch-3 port 18 at 14:23:14?
+# These are the same event seen from different layers.
+
+# Step 5: Check symbol errors
+show ib counters
+# SymbolErrors > 0 and growing -> physical layer issue (cable, transceiver, SFP)
+```
+
+Fix: Replace the faulty cable or transceiver on the identified rail. If software-caused (PFC misconfiguration causing drops), fix PFC. Reset the QP by restarting NCCL (restart the training job).
+
+---
+
+**Symptom E: busbw good on nccl-tests, degraded during actual training**
+
+Root cause: nccl-tests uses controlled message sizes and clean traffic. Real training has mixed tensor sizes, concurrent pipeline parallelism traffic, and variable timing.
+
+```bash
+# Step 1: Profile tensor sizes during actual training
+NCCL_DEBUG=INFO training_script.py 2>&1 | grep "AllReduce size"
+# What sizes are actually being transferred?
+
+# Step 2: Run nccl-tests at the actual tensor sizes your training uses
+./all_reduce_perf -b <actual_min_size> -e <actual_max_size> -f 1
+# Does the degradation reproduce here?
+
+# Step 3: Check DCQCN rate control
+mlnx_qos -i eth0
+# Is the NIC injecting at full rate? Or has DCQCN throttled it?
+# rp_rate: should be near 400G during AllReduce
+# If significantly below -> DCQCN is over-reacting
+
+# Step 4: Check concurrent traffic
+# Is pipeline parallelism traffic competing with AllReduce on the same links?
+show interface counters  # on leaf switch, compare uplink utilisation during training
+# AllReduce is bursty; pipeline is steady. If both peak simultaneously,
+# the fabric may be temporarily overloaded even though nccl-tests (which only runs
+# AllReduce) looks clean.
+```
+
+---
+
+## Act 6 -- DCQCN parameter tuning for NCCL workloads
+
+Chapter 5 taught DCQCN mechanics. This act connects that theory to what the knobs actually do when NCCL is running AllReduce.
+
+<DCQCNTuningViz />
+
+### When DCQCN is your problem
+
+DCQCN is working correctly if:
+- `ethtool -S eth0` shows `rx_ecn_marked` growing (switch is signalling congestion)
+- `ethtool -S eth0` shows `tx_dropped: 0` (DCQCN is preventing drops)
+- busbw is within 85-100% of expected
+
+DCQCN may be over-reacting if:
+- `rx_ecn_marked` is growing rapidly
+- busbw is below 70% of expected
+- `show interface counters` shows no drops and no congestion
+- The NICs are being told to slow down even though the fabric is not congested
+
+The DCQCN over-reaction pattern: a brief AllReduce burst triggers ECN marks, the NIC reduces its injection rate, the burst passes, but the NIC stays at reduced rate for `rp_time_reset` milliseconds. If the next AllReduce burst begins before the NIC recovers, it starts already rate-limited. Over many training steps this compounds into sustained underutilisation.
+
+### The two parameters that matter
+
+**`rp_time_reset`** -- time at reduced rate before beginning recovery. Default 300ms.
+
+For AllReduce workloads with a burst every 5-50ms (typical for large models), a 300ms recovery window means the NIC may never fully recover between barriers. Reducing to 50-100ms allows the NIC to recover fully between AllReduce steps.
+
+```bash
+# Check current value
+mlxconfig -d /dev/mst/mt4129_pciconf0 q | grep RP_TIME_RESET
+# Output: RP_TIME_RESET  300
+
+# Reduce for AllReduce workloads
+mlxconfig -d /dev/mst/mt4129_pciconf0 set RP_TIME_RESET=100
+# Apply to all 8 NICs on the DGX
+```
+
+**`rp_byte_reset`** -- bytes transmitted at reduced rate before beginning recovery.
+
+Works alongside `rp_time_reset` -- whichever triggers first initiates recovery. For AllReduce tensors in the 1-8 GB range, the default byte reset value may allow the NIC to recover mid-transfer rather than waiting for the time threshold. Tuning this to match your typical tensor size can help.
+
+```bash
+mlxconfig -d /dev/mst/mt4129_pciconf0 q | grep RP_BYTE_RESET
+mlxconfig -d /dev/mst/mt4129_pciconf0 set RP_BYTE_RESET=131072  # 128 KB
+```
+
+### When NOT to tune
+
+If:
+- `ethtool -S eth0` shows `rx_ecn_marked` is low (switch is not signalling congestion frequently)
+- Spine links show even utilisation with `show interface counters`
+- busbw is within 85% of expected
+
+Then DCQCN is not your problem. Do not tune. The degradation is elsewhere -- check topology, check algorithm selection, check NCCL_IB_HCA.
+
+---
+
+## Act 7 -- Lab 5 preparation: NCCL transport diagnosis
+
+Lab 5 models the most common real-world NCCL failure: the cluster passes all hardware checks, fabric is correctly configured, but nccl-tests shows 3 GB/s busbw instead of 380 GB/s. The ML team is blocked. Training has not started.
+
+### The scenario
+
+A 16-node DGX H100 cluster has just been handed over by the infrastructure team. They confirm:
+- All links active (`ibstat` shows all 8 rails ACTIVE on all nodes)
+- PFC and ECN configured (`show dcb pfc` and `show dcb ets` both green)
+- Spine utilisation even during test traffic
+- `#wrong: 0` in the nccl-tests output
+
+But busbw for 1GB tensors is **3.1 GB/s** -- roughly 1% of the 380 GB/s expected for a 16-node cluster.
+
+Your task: diagnose why NCCL is achieving 1% of expected bandwidth despite all hardware appearing healthy. Fix the configuration. Re-run and verify.
+
+### The diagnostic path
+
+**Step 1: Check NCCL transport selection**
+
+```bash
+# On DGX terminal (green prompt)
+nccl-debug --transport    <- FabricLab simulator command
+                          # Real equivalent: NCCL_DEBUG=INFO ./all_reduce_perf ... 2>&1 | grep "transport selected"
+```
+
+Output shows:
+```
+[0] NCCL INFO Channel 00: transport selected: socket
+[0] NCCL INFO No IB devices found matching NCCL_IB_HCA
+[0] NCCL INFO Falling back to socket transport
+```
+
+NCCL found no RDMA devices. It is using TCP socket transport -- hence 3 GB/s.
+
+**Step 2: Check what RDMA devices actually exist**
+
+```bash
+rdma link show
+```
+
+Output:
+```
+link mlx5_0/1 state ACTIVE physical_state LINK_UP  type RoCE  netdev eth0
+link mlx5_1/1 state ACTIVE physical_state LINK_UP  type RoCE  netdev eth1
+link mlx5_2/1 state ACTIVE physical_state LINK_UP  type RoCE  netdev eth2
+link mlx5_3/1 state ACTIVE physical_state LINK_UP  type RoCE  netdev eth3
+link mlx5_4/1 state ACTIVE physical_state LINK_UP  type RoCE  netdev eth4
+link mlx5_5/1 state ACTIVE physical_state LINK_UP  type RoCE  netdev eth5
+link mlx5_6/1 state ACTIVE physical_state LINK_UP  type RoCE  netdev eth6
+link mlx5_7/1 state ACTIVE physical_state LINK_UP  type RoCE  netdev eth7
+```
+
+All 8 NICs are active. But NCCL said "No IB devices found matching NCCL_IB_HCA."
+
+**Step 3: Check what NCCL_IB_HCA is set to**
+
+```bash
+show nccl env    <- FabricLab simulator command
+                 # Real equivalent: env | grep NCCL
+```
+
+Output:
+```
+NCCL_IB_HCA:     mlx5_bond_0
+NCCL_SOCKET_IFNAME: eth0
+NCCL_IB_GID_INDEX: 3
+```
+
+`NCCL_IB_HCA=mlx5_bond_0` -- this is an InfiniBand bonded interface name used on IB deployments. These DGX nodes are in RoCEv2 mode with individual NICs named `mlx5_0` through `mlx5_7`. NCCL scanned for `mlx5_bond_0`, found nothing, and fell back to TCP.
+
+Additionally: `NCCL_SOCKET_IFNAME=eth0` -- this is using the RDMA training interface for control messages, which will cause QP establishment failures under load.
+
+**Step 4: Fix both environment variables**
+
+```bash
+set nccl ib-hca mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7    <- FabricLab simulator command
+set nccl socket-ifname eno1                                                      <- FabricLab simulator command
+```
+
+> **In production**, these are environment variables set before launching the training job:
+> ```bash
+> export NCCL_IB_HCA=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1
+> export NCCL_SOCKET_IFNAME=eno1
+> # Then relaunch your training job
+> ```
+> The simulator uses shorthand `set nccl` commands to model the state change. The environment variables themselves work identically -- they are read by NCCL at process startup.
+
+**Step 5: Re-run nccl-tests and verify**
+
+```bash
+run nccl-tests
+```
+
+Output:
+```
+[0] NCCL INFO Channel 00: transport selected: NET
+[0] NCCL INFO Using 8 channels, Double Binary Tree
+[0] NCCL INFO 128 GPUs connected, all paths verified
+
+  1073741824   float   sum   -1   18243.1    58.8   110.2      0
+  8589934592   float   sum   -1  115822.3    74.1   138.9      0
+```
+
+busbw of 138 GB/s on a 128-GPU cluster (16 nodes x 8 GPUs) is within expected range for this topology. `#wrong: 0`.
+
+---
+
+## What you now know
+
+NCCL is the translation layer between the training framework and the fabric. It owns algorithm selection, QP management, and performance reporting -- but it does not own the fabric conditions that determine whether those operations succeed.
+
+You know the three AllReduce algorithms -- ring (optimal for small clusters, near-100% bandwidth), tree (logarithmic steps but 50% bandwidth), and double-binary tree (logarithmic steps AND near-100% bandwidth) -- and how the topology knowledge from Chapter 7 maps to which algorithm NCCL should use.
+
+You know the environment variables that determine whether NCCL even finds your RDMA NICs. `NCCL_IB_HCA` matching the actual device names from `rdma link show` is the most common fix for "NCCL is running at 1% bandwidth" with no error message. `NCCL_SOCKET_IFNAME` pointing to the management interface, not the RDMA interface, is the most common cause of QP establishment failures under load.
+
+You know how to read the nccl-tests output table -- the difference between algbw and busbw, why busbw is the number that matters, why `#wrong > 0` is a severity-1 incident, and what "expected busbw" looks like for different cluster sizes and topologies.
+
+And you know the correlation workflow: starting from a NCCL symptom, which CLI command to run first, what that command tells you, and how it routes you to the Chapter 3-7 diagnostic that resolves the root cause.
+
+[Continue to Chapter 9 ->](/learn/ch9-optics-cabling)
+</file>

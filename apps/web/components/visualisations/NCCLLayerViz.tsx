@@ -1,8 +1,8 @@
 "use client"
 import { useState } from "react"
 
-// â”€â”€â”€ NCCLLayerViz â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Shows the software stack from training framework → NCCL → RDMA driver → NIC
+// -- NCCLLayerViz -----------------------------------------------------------------
+// Shows the software stack from training framework -> NCCL -> RDMA driver -> NIC
 // Click any layer to see what it owns and what it does NOT own
 
 type Layer = "framework" | "nccl" | "verbs" | "driver" | "nic" | "fabric"
@@ -49,8 +49,8 @@ const layers: {
       "GPU topology detection (NVLink vs external fabric)",
       "Queue Pair establishment and lifecycle",
       "Error detection: timeouts, QP failures",
-      "busbw metric — performance reporting",
-      "Fallback transport selection (RDMA → socket)",
+      "busbw metric -- performance reporting",
+      "Fallback transport selection (RDMA -> socket)",
     ],
     doesNotOwn: [
       "PFC configuration",
@@ -66,7 +66,7 @@ const layers: {
   {
     id: "verbs",
     label: "RDMA Verbs API",
-    sublabel: "libibverbs — ibv_post_send / ibv_poll_cq",
+    sublabel: "libibverbs -- ibv_post_send / ibv_poll_cq",
     color: "#4c1d95",
     border: "#a78bfa",
     owns: [
@@ -91,7 +91,7 @@ const layers: {
     border: "#f59e0b",
     owns: [
       "DSCP marking of outbound packets (DSCP 26)",
-      "QP state machine (Init → RTR → RTS → Error)",
+      "QP state machine (Init -> RTR -> RTS -> Error)",
       "PSN (Packet Sequence Number) tracking",
       "NIC firmware interaction",
       "Verbs API implementation",
@@ -107,7 +107,7 @@ const layers: {
   {
     id: "nic",
     label: "ConnectX-7 ASIC",
-    sublabel: "Hardware — transport engine in silicon",
+    sublabel: "Hardware -- transport engine in silicon",
     color: "#7f1d1d",
     border: "#ef4444",
     owns: [
@@ -129,7 +129,7 @@ const layers: {
   {
     id: "fabric",
     label: "Fabric (switches)",
-    sublabel: "Spectrum-X / QM9700 — the network",
+    sublabel: "Spectrum-X / QM9700 -- the network",
     color: "#1e3a5f",
     border: "#38bdf8",
     owns: [
@@ -156,7 +156,7 @@ export function NCCLLayerViz() {
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">
-        The full stack — from training framework to fabric
+        The full stack -- from training framework to fabric
       </p>
       <p className="mb-4 text-xs text-slate-600">
         Click any layer to see what it owns and what it hands to the layer below
@@ -192,7 +192,7 @@ export function NCCLLayerViz() {
                 </span>
               </div>
               {active === layer.id && (
-                <span className="text-xs text-slate-500">â–² expanded</span>
+                <span className="text-xs text-slate-500">expanded</span>
               )}
             </div>
           </button>
@@ -218,7 +218,7 @@ export function NCCLLayerViz() {
             <ul className="space-y-1">
               {selected.owns.map((item) => (
                 <li key={item} className="flex items-start gap-2 text-xs text-slate-300">
-                  <span style={{ color: selected.border }} className="mt-0.5 flex-shrink-0">âœ“</span>
+                  <span style={{ color: selected.border }} className="mt-0.5 flex-shrink-0">+</span>
                   {item}
                 </li>
               ))}
@@ -231,7 +231,7 @@ export function NCCLLayerViz() {
             <ul className="space-y-1">
               {selected.doesNotOwn.map((item) => (
                 <li key={item} className="flex items-start gap-2 text-xs text-slate-500">
-                  <span className="mt-0.5 flex-shrink-0">âœ—</span>
+                  <span className="mt-0.5 flex-shrink-0">x</span>
                   {item}
                 </li>
               ))}

@@ -1,0 +1,457 @@
+---
+title: "Chapter 17: Storage Network Packet Path"
+module: "HPC Networking Foundations"
+level: "Advanced"
+estimatedMinutes: 55
+labLink: ""
+---
+
+The GPU just finished a training step. Before the next one begins, the framework writes a checkpoint --
+gigabytes of model weights flushed from HBM to persistent storage. That write crosses a network fabric
+you have not traced at packet level yet. Chapter 10 showed you the architecture. This chapter shows you
+the bytes.
+
+You already know how a compute RoCEv2 packet travels from one GPU to another (Ch16). The storage path
+reuses the same NIC silicon and many of the same protocol layers, but the software above it is completely
+different. The command that arrives at a storage appliance is not a NCCL message -- it is an NVMe
+command capsule wrapped in an RDMA transfer. The fabric it crosses does not need PFC in most designs.
+The congestion thresholds are set for a different traffic profile.
+
+By the end of this chapter you will be able to trace a checkpoint write from HBM through PCIe through
+the CX7 NIC through the storage switch to the NVMe-oF target, name every header along the way, and
+diagnose failures with the right commands on the right devices.
+
+## Act 1 -- The Storage Request in Context
+
+When PyTorch calls `torch.save()` on a checkpoint, the call stack eventually reaches the kernel NVMe-oF
+initiator or the cuFile library. Either way, a block of GPU memory needs to land on a storage appliance.
+The DGX H100 does not have a dedicated storage processor. The two dual-port ConnectX-7 NICs in Slot1
+and Slot2 carry both storage traffic and in-band management. The host CPU (Intel Xeon) runs the NVMe-oF
+initiator stack -- it is the CPU that maps namespaces, allocates queue pairs, and posts work requests.
+
+This matters because the initiator is not close to the data. The model weights live in HBM, attached
+to the GPU over NVLink. To get those weights onto the wire, the data must cross PCIe from GPU to the
+CX7 NIC. The CX7 can DMA directly from GPU memory via GPUDirect, which is the GDS path covered in
+Act 6. The baseline path -- the one you learn first -- is the host CPU-mediated path where data goes
+GPU HBM -> system DRAM -> CX7 NIC -> storage switch -> appliance.
+
+<StorageDMAPathViz />
+
+The storage fabric is a separate physical network from the compute fabric. In a BasePOD, the compute
+fabric uses QM9700 HDR InfiniBand or SN5600 Ethernet spine/leaf switches. The storage fabric uses
+SN4600C (or similar) 100GbE switches in a simpler topology: each DGX node connects its storage CX7
+ports to dedicated storage leaf switches, which connect to the storage appliances. There is no reason
+to run the full rail-optimised fat-tree topology here -- the storage traffic pattern is not all-to-all.
+
+The three physical fabrics on a DGX cluster:
+- Compute fabric: GPU-to-GPU RDMA (RoCEv2 or InfiniBand). Eight CX7 HCA ports per DGX. Full bisection
+  bandwidth. Rail-optimised topology.
+- Storage fabric: NVMe-oF checkpoint and dataset I/O. Two dual-port CX7 NIC ports per DGX. 2:1
+  oversubscription acceptable. Simpler leaf topology.
+- OOB/management fabric: BMC, SSH, UFM, DCGM telemetry. Separate 1GbE network. Covered in Ch18.
+
+<ComputeVsStorageFabricViz />
+
+## Act 2 -- NVMe-oF Packet Structure
+
+NVMe-oF is NVMe over Fabrics. The core insight is that the NVMe command queue model -- submission
+queue entries (SQE) and completion queue entries (CQE) -- is preserved exactly but the queue pair
+is no longer a PCIe register on a local SSD. It is an RDMA queue pair to a remote storage target
+over a network fabric.
+
+The transport binding that matters here is NVMe-oF over RoCEv2 (also called NVMe/RoCE or NVMeoF-RDMA).
+NVMe-oF also supports a TCP transport (NVMe/TCP) which does not require RDMA-capable NICs but has
+higher latency. In DGX deployments with ConnectX-7 NICs, the RDMA transport is always preferred.
+
+### The NVMe Submission Queue Entry
+
+An SQE is 64 bytes. It contains the NVMe command opcode (0x01 = Write, 0x02 = Read), the Namespace
+Identifier (NSID), the logical block address (LBA), the number of logical blocks, and the SGL
+(Scatter/Gather List) descriptor that points to the data buffer. In the NVMe-oF RDMA binding, the
+data transfer itself is a separate RDMA operation. The SQE is a capsule -- a wrapper that triggers
+the data movement.
+
+The complete NVMe-oF RDMA exchange for a write:
+
+1. Initiator sends SEND capsule (the SQE) to the target over RDMA.
+2. Target optionally sends an RDMA READ to pull data from the initiator's registered memory region.
+   OR the initiator sends an RDMA WRITE to push data to the target's registered memory region.
+3. Target sends a SEND capsule back (the CQE) to notify completion.
+
+Step 2 uses the RKEY mechanism from Ch16 -- the initiator registers a memory region, publishes the
+virtual address and RKEY in the SGL, and the target performs an RDMA READ against that registration.
+The CX7 NIC enforces memory region boundaries just as it does for compute traffic.
+
+<NVMeOFCapsuleViz />
+
+### Capsule sizes
+
+The SQE capsule: 64-byte NVMe command + optional inline data (for small I/O). The CQE capsule:
+16-byte NVMe completion. The data payload: carried separately via RDMA Write (target-push) or
+RDMA Read (target-pull). For a 4 MiB checkpoint write, the SQE is tiny (64 bytes) and the
+data moves as a series of RDMA Write operations against the registered memory region.
+
+### NVMe-oF discovery
+
+Before any I/O, the initiator performs NVMe-oF discovery: it connects to a well-known discovery
+controller at port 8009 on the target and receives a list of subsystems and namespaces. This is a
+TCP-based exchange even when the data transport is RDMA. The discovery response contains the target
+NQN (NVMe Qualified Name), the transport address, and the transport type. The initiator then
+establishes RDMA queue pairs to each target subsystem it wants to use.
+
+## Act 3 -- The DMA Path: GPU HBM to CX7
+
+The host CPU initiator posts a work request to the CX7 NIC. The WQE (Work Queue Entry) describes
+the operation: an RDMA Send (to deliver the SQE capsule) followed by an RDMA Write or Read (for the
+data payload). The CX7 firmware processes the WQE from its send queue, the same pipeline described
+in Ch16 Act 3 -- but this time the source of the data is not GPU RDMA memory registered by NCCL.
+It is either system DRAM (host CPU path) or HBM (GDS path).
+
+### Host CPU path (baseline)
+
+1. PyTorch/framework copies checkpoint tensor from GPU HBM to pinned system DRAM via `cudaMemcpy` or
+   similar. This crosses PCIe. On H100, PCIe 5.0 x16 gives approximately 64 GB/s peak per slot.
+2. The CPU NVMe-oF initiator (`nvme-rdma` kernel module) has already registered the pinned DRAM
+   buffer as an RDMA MR (Memory Region) with the CX7 NIC at connection setup time.
+3. The initiator posts an RDMA Send WQE pointing at the SQE capsule (64 bytes in DRAM).
+4. The CX7 DMA-reads the SQE capsule from DRAM into its transmit buffer.
+5. The CX7 builds the full frame and puts it on the wire toward the storage switch.
+6. Target receives the SQE, issues an RDMA Read WQE against the initiator's registered MR.
+7. CX7 on the initiator side receives the incoming RDMA Read request, DMA-reads the data payload
+   from the pinned DRAM MR, and sends it back as RDMA Read Response frames.
+8. When the transfer completes, the CX7 posts a completion event to the initiator's CQ.
+9. The initiator sends the CQE capsule back to the target, completing the transaction.
+
+The bottleneck in this path is the PCIe hop between GPU and DRAM (step 1). A 4 MiB checkpoint
+block crosses PCIe twice: once from HBM to DRAM, once from DRAM to CX7. GPUDirect Storage
+eliminates the DRAM staging entirely.
+
+<StorageDMAPathViz />
+
+### Memory registration and RKEY lifetime
+
+NVMe-oF RDMA connections use persistent memory regions registered at queue pair setup time -- not
+per-I/O like some NCCL flows. The `nvme-rdma` driver registers the DMA buffer pool once when the
+connection is established. The RKEY published in the SGL is valid for the lifetime of the connection.
+If the connection drops (link failure, appliance reboot), the MR is invalidated and the connection
+must be re-established. This is why storage fabric link stability matters more than instantaneous
+bandwidth: a flap invalidates in-flight I/O and forces reconnection.
+
+## Act 4 -- Inside the Storage Fabric
+
+The storage leaf switch in a BasePOD is typically a Mellanox Spectrum-1 or Spectrum-2 based switch
+in the SN4600C family -- 64 ports at 100GbE. It is not the same switch as the compute fabric spine
+(QM9700 for IB, SN5600 for RoCEv2). The design is deliberately simpler because the storage traffic
+pattern does not require full bisection bandwidth.
+
+### Oversubscription in the storage fabric
+
+A compute fat-tree is designed for 1:1 oversubscription -- every GPU-to-GPU flow gets full
+bandwidth at every hop. The storage fabric runs at 2:1 oversubscription by design. A DGX node
+with two dual-port CX7 storage NICs has 4 x 100GbE = 400 Gbps of storage NIC bandwidth.
+The storage switch uplink to the appliance layer may aggregate to 200 Gbps per DGX node.
+This is acceptable because checkpoint writes are bursty -- they do not sustain 400 Gbps
+continuously. The average utilisation across a training run is far lower.
+
+<StorageFabricTopologyViz />
+
+### PFC in the storage fabric
+
+This is the most important design difference from the compute fabric: most storage fabric designs
+do NOT run PFC. The reasons:
+
+1. NVMe-oF reconnection is tolerant of occasional packet loss. The initiator will retry.
+2. PFC storm risk on a storage fabric can cascade to the storage appliances, which are more
+   sensitive to congestion than GPU NICs.
+3. NVMe/TCP bindings (which some deployments use) explicitly do not use RDMA and therefore
+   cannot use PFC at all.
+4. The storage traffic is not latency-bound the same way GPU-to-GPU AllReduce is.
+
+When the storage fabric uses NVMe-oF RDMA (as in DGX with ConnectX-7), you can optionally run
+RoCEv2 with ECN-only congestion control: DCQCN marks packets at the switch when the buffer
+crosses a threshold, and the NIC reduces its injection rate. But no PFC. The backpressure signal
+is DSCP-marked ECN, not pause frames.
+
+### ECN thresholds on the storage switch
+
+Because storage traffic is bursty (large sequential writes) rather than fine-grained
+(many small GPU RDMA messages), the ECN marking thresholds are set higher than on the compute fabric:
+
+Compute fabric ECN thresholds (from Ch5): Kmin ~80KB, Kmax ~400KB.
+Storage fabric ECN thresholds (typical): Kmin ~200KB, Kmax ~1MB.
+
+The higher thresholds allow the switch buffer to absorb burst traffic from multiple DGX nodes
+flushing checkpoints simultaneously without triggering DCQCN rate reduction prematurely.
+The exact values depend on your storage appliance latency targets and checkpoint write size.
+Always verify: `show interface ethernet swp1 queues` and `show buffers` on the storage switch.
+
+## Act 5 -- Across the Wire: Storage Frame Anatomy
+
+You have seen the compute frame anatomy in Ch16. Now trace the storage frame at the same level.
+The outer framing is identical -- Ethernet/IPv4/UDP/BTH -- but the payload above BTH is an RDMA
+Send carrying an NVMe-oF capsule instead of an AllReduce message.
+
+For the SQE capsule SEND (step 1 of the exchange):
+
+```
+Ethernet II header         14 bytes
+  Destination MAC          storage switch port MAC
+  Source MAC               CX7 storage NIC MAC (enp170s0f0 or enp41s0f0)
+  EtherType                0x0800 (IPv4)
+
+IPv4 header                20 bytes
+  Source IP                DGX node storage IP (e.g. 10.20.1.10)
+  Destination IP           Storage appliance target portal IP (e.g. 10.20.2.5)
+  Protocol                 UDP (17)
+  DSCP                     26 or 46 -> priority 3 (site-configurable, verify with mlnx_qos)
+  TTL                      64
+
+UDP header                 8 bytes
+  Source port              ephemeral (entropy for ECMP, typically 0xC000-0xFFFF)
+  Destination port         4791 (RoCEv2 well-known port)
+
+BTH (Base Transport Header) 12 bytes
+  OpCode                   0x04 = SEND_ONLY (for SQE capsule delivery)
+  Partition Key            0xFFFF (default)
+  Queue Pair Number        NVMe-oF QP allocated at connection setup
+  PSN                      per-QP packet sequence number
+  Flags                    solicited event set (notifies target CQ)
+
+RETH (RDMA Extended Transport Header) -- present for RDMA Write/Read
+  12 bytes: virtual address, RKEY, DMA length
+
+NVMe-oF SQE capsule        64 bytes
+  Opcode                   0x01 (Write) or 0x02 (Read)
+  NSID                     target namespace identifier
+  LBA                      starting logical block address
+  NLB                      number of logical blocks minus 1
+  SGL1                     scatter/gather list descriptor
+    type                   SGL_KEYED_DATA_BLOCK (0x44)
+    length                 data transfer length in bytes
+    address                virtual address of initiator data buffer
+    RKEY                   memory region key (registered at connection setup)
+
+ICRC (Invariant CRC)       4 bytes
+```
+
+Total header overhead for the SQE capsule frame: ~134 bytes. The SQE capsule itself is 64 bytes.
+That 64-byte command triggers the data transfer, which is carried in subsequent RDMA Write frames.
+
+<StorageFrameAnatomyViz />
+
+### The data transfer frames
+
+The data payload arrives in RDMA Write frames, not Send frames. Each frame carries a RETH header
+(target virtual address + RKEY + total DMA length) on the first packet, then pure data in
+subsequent packets. For a 4 MiB checkpoint block, at 4096-byte MTU you get roughly 1024 data
+frames. The BTH OpCode sequence is:
+
+- First packet: `RDMA_WRITE_FIRST` (0x06) -- carries RETH
+- Middle packets: `RDMA_WRITE_MIDDLE` (0x07) -- data only
+- Last packet: `RDMA_WRITE_LAST` (0x08) or `RDMA_WRITE_ONLY` (0x0A) if single-frame
+
+The ICRC covers the invariant fields of all these frames. The switch never rewrites the ICRC --
+the BTH and RETH are not modified in transit.
+
+### DSCP and priority on the storage fabric
+
+The storage CX7 NIC stamps DSCP on outbound storage frames. The value is configured via the
+NVMe-oF subsystem or via explicit QoS policy, not by NCCL or cuFile. Verify with:
+
+```bash
+mlnx_qos -i enp170s0f0 --dscp
+```
+
+The switch must have a matching DSCP-to-priority map. On a storage switch running Cumulus Linux:
+
+```bash
+nv show qos dscp-map
+```
+
+If the NIC stamps DSCP 26 but the switch maps DSCP 26 to priority 0 (best-effort), the storage
+traffic competes with management traffic in the same output queue. This is a classic misconfiguration.
+
+## Act 6 -- The GDS Path
+
+GPUDirect Storage (GDS) eliminates the CPU and system DRAM from the checkpoint write path. The data
+moves directly: GPU HBM -> PCIe -> CX7 NIC -> storage fabric. No `cudaMemcpy`. No pinned DRAM bounce
+buffer. The CPU still manages the control plane -- posting WQEs, handling CQEs, running the
+NVMe-oF initiator state machine -- but it is not in the data path.
+
+<GDSPathViz />
+
+### How GDS works at the hardware level
+
+The cuFile library (`libcufile.so`) coordinates between the GPU driver and the NIC driver. At
+session open time, cuFile:
+
+1. Calls `cuMemCreate` to allocate the source HBM buffer (or uses an existing tensor allocation).
+2. Calls `ibv_reg_mr` via the RDMA verbs layer to register the HBM buffer directly as an RDMA MR
+   on the CX7 NIC. The NIC firmware learns the IOVA (I/O Virtual Address) mapping for the HBM
+   pages via the PCIe peer-to-peer DMA window opened by the GPU driver.
+3. The registered RKEY is placed in the SGL of the NVMe SQE, pointing directly at HBM.
+4. When the target issues RDMA Read against that RKEY, the CX7 fetches data from HBM over PCIe
+   without touching system DRAM.
+
+The practical benefit is PCIe bandwidth is used once (HBM -> NIC) instead of twice (HBM -> DRAM
+-> NIC). At PCIe 5.0 x16 (~64 GB/s), this cuts the PCIe load roughly in half for large sequential
+checkpoint writes.
+
+### GDS requirements and limitations
+
+- Requires `nvidia-fs` kernel module (the GPUDirect Storage driver).
+- The storage appliance must support GDS on the target side (WEKA, DDN, NetApp, Pure FlashBlade
+  with NVMe-oF RDMA all support it).
+- GDS does NOT work over NVMe/TCP (TCP binding cannot use peer-to-peer RDMA).
+- GDS is most beneficial for large sequential writes (checkpoints, large dataset reads).
+  For small random I/O, the CPU-mediated path often performs comparably because the PCIe
+  round-trip latency dominates.
+- Verify the nvidia-fs module is loaded: `lsmod | grep nvidia_fs`.
+- Verify the storage connection is established via RDMA: `nvme list-subsys` and check transport type.
+
+### GDS diagnostic check
+
+```bash
+# Confirm GPUDirect Storage driver is present
+lsmod | grep nvidia_fs
+
+# Run GDS built-in validation
+gds_check
+
+# Verify NVMe-oF connection is RDMA, not TCP
+nvme list-subsys
+# Look for "trtype=rdma" in the output
+
+# Check for any GDS error in kernel log
+dmesg | grep -i "gds\|cufile\|nvidia-fs" | tail -20
+```
+
+## Act 7 -- Diagnostic Commands for the Storage Fabric
+
+A storage fabric fault looks different from a compute fabric fault. There is no UFM covering it.
+There are no IB port state counters. The signals are NVMe error logs, RDMA transport errors on
+the storage QPs, and TCP retransmit counters if you are running NVMe/TCP.
+
+<StorageDiagnosticsViz />
+
+### NVMe-oF initiator status
+
+```bash
+# List all NVMe subsystems and their transport
+nvme list-subsys
+
+# List all namespaces with their device path and controller
+nvme list
+
+# Check error log for the first namespace device
+nvme error-log /dev/nvme0
+
+# Show smart/health log (catches drive-side errors vs fabric errors)
+nvme smart-log /dev/nvme0n1
+```
+
+The error log returns a table of error entries, each with an error count, status field (lower 8
+bits are the NVMe status code), and a command ID. Status code 0x00 = success. Non-zero means
+the command was aborted, the media failed, or a transport error occurred.
+
+### RDMA transport diagnostics on the storage NIC
+
+```bash
+# Show RDMA QP statistics for the storage NIC (enp170s0f0 = Slot1 port0)
+rdma stat show dev mlx5_8
+
+# Show RDMA link state
+rdma link show
+
+# Detailed QP error counters
+perfquery -x 0 -i 1 mlx5_8
+# or via ethtool:
+ethtool -S enp170s0f0 | grep -E "tx_|rx_|err|drop"
+```
+
+Look for `out_of_buffer`, `out_of_sequence`, `local_length_error`, `retry_exceeded` in the QP
+error counters. `retry_exceeded` means the CX7 sent a packet, got no acknowledgement, retried
+the maximum number of times, and gave up. The QP is now in ERROR state. The initiator will attempt
+reconnection, but in-flight I/O is lost.
+
+### Storage switch counters
+
+On the SN4600C storage leaf switch running Cumulus Linux / NVUE:
+
+```bash
+# Interface counters for the DGX-facing port
+nv show interface swp1 counters
+
+# Error counters specifically
+nv show interface swp1 counters errors
+
+# Buffer occupancy -- check for persistent congestion
+nv show qos interface swp1 buffer
+
+# ECN marking statistics
+nv show qos interface swp1 pfc
+```
+
+If `tx_pause` is non-zero on the storage switch, that is a problem -- the design should not have
+PFC enabled. Non-zero `tx_pause` indicates a misconfigured switch profile that has PFC enabled
+on the storage traffic class. Disable it: PFC on a storage fabric will cause the appliance to
+receive pause frames and back up, stalling all storage I/O to that switch segment.
+
+### End-to-end latency check
+
+```bash
+# NVMe-oF round-trip latency with fio (1 I/O depth, 4K block, read)
+fio --name=latency_check --filename=/dev/nvme0n1 --rw=randread \
+    --bs=4k --iodepth=1 --numjobs=1 --time_based --runtime=30 \
+    --lat_percentiles=1 --output-format=normal
+
+# GDS-specific latency (requires cuFile)
+gds_perf --read --sequential --file /path/to/testfile --size 1G
+```
+
+Target NVMe-oF RDMA latency for 4K random read: under 100 microseconds. If you are seeing
+1-2 ms, the connection is likely falling back to TCP (check `nvme list-subsys`), the RNIC
+is in error state, or there is a routing failure forcing traffic through a non-optimal path.
+
+## Act 8 -- Compute vs Storage: Side by Side
+
+You have now traced both fabrics to packet level. Here is where they differ:
+
+<ComputeVsStorageFabricViz />
+
+| Dimension | Compute Fabric | Storage Fabric |
+|---|---|---|
+| Hardware | 8x single-port CX7 HCA (per DGX) | 2x dual-port CX7 NIC (per DGX) |
+| Switch | QM9700 (IB) or SN5600 (RoCEv2) | SN4600C or similar 100GbE |
+| Topology | Rail-optimised fat-tree, 1:1 oversubscription | Simple leaf, 2:1 oversubscription |
+| Transport | RDMA (IB or RoCEv2) | NVMe-oF RDMA or NVMe/TCP |
+| PFC | Required (lossless for AllReduce) | NOT used in most designs |
+| Congestion control | DCQCN with tight thresholds | ECN only with larger thresholds |
+| Traffic pattern | All-to-all, synchronised (AllReduce) | Burst writes (checkpoint), sequential reads |
+| Payload protocol | NCCL messages / raw RDMA writes | NVMe command capsules over RDMA |
+| Key diagnostic | `ibstat`, `perfquery`, DCGM | `nvme error-log`, `rdma stat`, `fio` |
+| GDS possible? | N/A | Yes (RDMA transport only) |
+
+The most dangerous assumption is that because both fabrics use ConnectX-7 NICs and RoCEv2, they
+should be configured identically. They should not. The PFC requirement, ECN thresholds, and
+traffic patterns are fundamentally different. A storage fabric misconfigured as a compute fabric
+will PFC-stall on checkpoint bursts. A compute fabric misconfigured as a storage fabric will
+drop packets and destroy AllReduce performance.
+
+## What you now know
+
+- The DGX H100/H200 storage path uses the host CPU (Intel Xeon) as the NVMe-oF initiator. The
+  ConnectX-7 NICs in Slot1 and Slot2 carry the storage traffic. No BlueField-3, no ARM offload.
+- An NVMe-oF write is a two-phase RDMA exchange: an RDMA Send delivers the 64-byte SQE capsule
+  to the target; one or more RDMA Write or Read operations carry the data payload using the RKEY
+  from the SGL.
+- The storage frame over RoCEv2 has the same Ethernet/IP/UDP/BTH outer structure as a compute
+  frame. The BTH OpCode and payload differ: Send capsule for NVMe commands, RDMA Write for data.
+- The storage fabric runs at 2:1 oversubscription, does not use PFC, and sets ECN thresholds
+  higher than the compute fabric to handle bursty checkpoint writes.
+- GDS (GPUDirect Storage) bypasses system DRAM entirely. The CX7 DMA-reads data directly from
+  GPU HBM via a PCIe peer-to-peer window opened by the `nvidia-fs` driver.
+- Storage fabric faults show up in `nvme error-log`, RDMA QP error counters (`rdma stat`), and
+  switch buffer/ECN counters -- not in UFM or `ibstat`.
+
+[Continue to Chapter 18 -- OOB and Management Network ->](/learn/ch18-oob-management-network)

@@ -41,7 +41,7 @@ export function DCQCNTuningViz() {
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">
-        DCQCN parameter tuning — effect on AllReduce throughput
+        DCQCN parameter tuning -- effect on AllReduce throughput
       </p>
       <p className="mb-5 text-xs text-slate-600">
         Adjust rp_time_reset and ECN mark rate to see how DCQCN rate recovery affects busbw
@@ -106,7 +106,7 @@ export function DCQCNTuningViz() {
             )
           })}
           <text x={svgWidth - 2} y={svgHeight - 2} fill="#334155" fontSize="7" textAnchor="end">
-            time →  {TOTAL_MS}ms
+            {"time -> "}{TOTAL_MS}ms
           </text>
         </svg>
         <div className="flex items-center gap-4 mt-2 text-[9px]">
@@ -137,11 +137,11 @@ export function DCQCNTuningViz() {
         <div className="rounded-xl p-3 col-span-2"
           style={{ backgroundColor: isProblematic ? "#78350f22" : "#14532d22", border: `1px solid ${isProblematic ? "#f59e0b33" : "#22c55e33"}` }}>
           <div className="text-xs font-semibold mb-1" style={{ color: isProblematic ? "#f59e0b" : "#22c55e" }}>
-            {isProblematic ? "âš  DCQCN over-reaction likely" : "âœ“ DCQCN parameters healthy"}
+            {isProblematic ? "DCQCN over-reaction likely" : "DCQCN parameters healthy"}
           </div>
           <p className="text-slate-400 text-[10px] leading-5">
             {isProblematic
-              ? `rp_time_reset=${rpTimeReset}ms is too long for ${burstPeriodMs}ms AllReduce burst intervals. NIC hasn't recovered before next burst. Reduce to 50–100ms. Run: mlxconfig set RP_TIME_RESET=100`
+              ? `rp_time_reset=${rpTimeReset}ms is too long for ${burstPeriodMs}ms AllReduce burst intervals. NIC hasn't recovered before next burst. Reduce to 50-100ms. Run: mlxconfig set RP_TIME_RESET=100`
               : `NIC recovers to full rate between AllReduce bursts. DCQCN is working correctly. If busbw is still low, investigate fabric topology or load balancing instead.`}
           </p>
         </div>
