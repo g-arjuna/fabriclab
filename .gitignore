@@ -138,11 +138,16 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# Local authoring scratch
-/.claude/worktrees/
-/.claude/worktrees/**
+# Claude Code and local tooling
+/.claude/
 outputs/
 tmp_devserver/
+
+# Internal docs (kept locally, not for public repo)
+docs/CLAUDE_*
+docs/ENGINEERING_SYNC.md
+docs/codex-handoff.md
+docs/1.md
 tmp_lab_shots/
 tmp_lab_redesign/
 tmp-vercel-deploy.sh

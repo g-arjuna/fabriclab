@@ -1,82 +1,36 @@
 # FabricLab
 
-FabricLab is an interactive HPC / AI data centre networking learning platform for network
-engineers moving from enterprise networking into AI cluster infrastructure.
+Free, open-source learning platform for HPC and AI data-centre networking — built for network engineers moving from enterprise environments into GPU cluster infrastructure.
 
-The repo now combines:
+**Live at [fabriclab.dev](https://fabriclab.dev)**
 
-- repo-backed chapter content and visualisations
-- a state-driven lab simulator
-- Supabase-backed learner data, release metadata, synced progress, community comments, forum threads,
-  and notification preferences
-- a Vercel-ready Next.js app in `apps/web`
+---
 
-## Repo status
+## What it is
 
-- 17 chapter routes live (`Ch0-Ch16`)
-- 12 interactive labs
-- 119+ React visualisation components registered in `mdxComponents.ts`
-- catalog-driven curriculum metadata in `apps/web/content/catalog.json`
-- Supabase auth/access/release-control scaffolding in repo
+FabricLab combines written chapters with a browser-based CLI simulator so you can read about a concept and immediately work through a realistic fault scenario. No VMs, no lab provisioning — just open a chapter and start learning.
 
-## Access model
+- **20 chapters** — InfiniBand, RoCEv2, NCCL, congestion control, topology design, GPU generations, storage fabric, optics, BGP for AI fabrics, and more
+- **12 interactive labs** — diagnose fabric faults using real CLI commands in a stateful terminal simulator
+- **100+ React visualisations** — packet paths, congestion mechanics, cluster topologies, protocol stacks
 
-Current defaults:
+All content is free to read. Sign in to sync progress and join chapter discussions.
 
-- every published chapter is open to signed-in learners
-- every published lab is open to signed-in learners
-- public visitors can still browse the curriculum and community
-- sign-in is required for chapters and labs
-- signed-in learners get synced progress plus community/admin features
-- release controls still exist so unfinished content can stay unpublished
+---
 
-Auth defaults:
+## Tech stack
 
-- first-party FabricLab session cookies
-- Google and GitHub OAuth on the real domain
-- canonical site domain: `https://fabriclab.dev`
-- branded auth entrypoint: `https://auth.fabriclab.dev`
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 15 (App Router) |
+| Content | MDX + custom React visualisation components |
+| Auth & database | Supabase (Postgres + Row Level Security) |
+| Deployment | Vercel |
+| Terminal emulator | xterm.js |
 
-## Chapter status
+---
 
-| Ch | Slug | Title | Status |
-|----|------|-------|--------|
-| 0 | ch0-hardware-foundations | The Hardware Story | live |
-| 1 | ch1-os-platforms | Operating Systems and Management Platforms | live |
-| 2 | ch2-why-different | Why HPC Networking Is Different | live |
-| 3 | ch3-the-cli | The CLI - Reading the Fabric | live |
-| 4 | ch4-infiniband-operations | InfiniBand Operations | live |
-| 5 | ch5-pfc-ecn-congestion | PFC, ECN, and Congestion Control | live |
-| 6 | ch6-efficient-load-balancing | Efficient Load Balancing | live |
-| 7 | ch7-topology-design | Topology Design | live |
-| 8 | ch8-nccl-performance | NCCL - The Application Layer | live |
-| 9 | ch9-optics-cabling | Optics, Cabling, and the Physical Layer | live |
-| 10 | ch10-storage-fabric | The Storage Fabric | live |
-| 11 | ch11-monitoring-telemetry | Monitoring, Telemetry, and Observability | live |
-| 12 | ch12-nvlink-switch-system | Scale-Up Networking - NVLink Switch System | live |
-| 13 | ch13-alternative-topologies | Alternative Topologies | live |
-| 14 | ch14-gpu-hardware-generations | GPU Hardware Generations and Network Implications | live |
-| 15 | ch15-ip-routing-ai-fabrics | IP Routing for AI/ML Fabrics | live |
-| 16 | ch16-gpu-compute-network-packet-anatomy | The GPU Compute Network - Packet Anatomy | live |
-
-## Labs
-
-| Lab | Slug | Fault modelled |
-|-----|------|----------------|
-| 0 | lab0-failed-rail | Rail failure isolated to an err-disabled switch port |
-| 1 | lab1-pfc-fix | PFC not enabled on the compute traffic class |
-| 2 | lab2-congestion | Fabric congestion from missing ECN |
-| 3 | lab3-uneven-spine | ECMP hot-spotting on spine uplinks |
-| 4 | lab4-topology-sizing | Undersized fabric proposal and oversubscription analysis |
-| 5 | lab5-nccl-diagnosis | NCCL transport fallback to sockets |
-| 6 | lab6-alert-triage | Silent fabric degradation across UFM, DCGM, and switch telemetry |
-| 7 | lab7-pause-storm | Hidden NIC-side pause storm caused by missing ECN |
-| 8 | lab8-pfc-priority-mismatch | PFC enabled on the wrong traffic class |
-| 9 | lab9-errdisable-recovery | Physical fault causing err-disable and rail recovery workflow |
-| 10 | lab10-ecmp-hotspot | BGP Link Bandwidth community missing -> equal ECMP on reduced-capacity spine |
-| 11 | lab11-bgp-path-failure | Different-ASN spines -> suboptimal 3-hop routing on link failure |
-
-## Quickstart
+## Running locally
 
 ```bash
 cd apps/web
@@ -84,7 +38,7 @@ npm install
 cp .env.example .env.local
 ```
 
-Fill in the Supabase values in `apps/web/.env.local`, then:
+Fill in the Supabase values in `.env.local`, then:
 
 ```bash
 npm run catalog:sync
@@ -93,155 +47,62 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Useful routes:
+The platform runs in read-only mode without Supabase — chapters and labs are fully accessible, auth and progress sync are disabled.
 
-- `/`
-- `/curriculum`
-- `/login`
-- `/account`
-- `/admin/releases`
-- `/learn/ch0-hardware-foundations`
-- `/lab?lab=lab0-failed-rail`
+### Environment variables
 
-## Required environment variables
+See `apps/web/.env.example` for the full list. The minimum required to run with auth:
 
-Defined in `apps/web/.env.example`:
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_APP_URL` | App origin (e.g. `http://localhost:3000`) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase public anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-side only) |
+| `SUPABASE_ADMIN_EMAILS` | Comma-separated admin email addresses |
+| `AUTH_SESSION_SECRET` | Secret for session cookies |
 
-- `NEXT_PUBLIC_APP_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SUPABASE_ADMIN_EMAILS`
-- `AUTH_SESSION_SECRET`
-- `NEXT_PUBLIC_OAUTH_PROVIDERS` (optional, for example `google,github`)
-- `GOOGLE_OAUTH_CLIENT_ID` (optional)
-- `GOOGLE_OAUTH_CLIENT_SECRET` (optional)
-- `GITHUB_OAUTH_CLIENT_ID` (optional)
-- `GITHUB_OAUTH_CLIENT_SECRET` (optional)
-- `AUTH_ENTRY_HOSTS` (optional, for example `auth.fabriclab.dev`)
-- `NEXT_PUBLIC_COMMUNITY_REPO_URL` (optional)
-- `NEXT_PUBLIC_COMMUNITY_ISSUES_URL` (optional)
-- `NEXT_PUBLIC_COMMUNITY_DISCUSSIONS_URL` (optional)
-- `NEXT_PUBLIC_SUPPORT_URL` (optional)
-- `GITHUB_COMMUNITY_ISSUES_TOKEN` (optional, server-side issue mirroring)
-- `GITHUB_COMMUNITY_ISSUE_LABELS` (optional, comma-separated labels for mirrored issues)
+OAuth (`GOOGLE_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_ID`, etc.) and community integrations are optional.
 
-## Public repo checklist
+### Supabase setup
 
-Before making the GitHub repository public:
+1. Create a Supabase project and set the site URL to `http://localhost:3000`.
+2. Apply the migrations in order from `supabase/migrations/`.
+3. Run `npm run catalog:sync` from `apps/web` to populate the content catalog.
+4. Optionally configure Google and/or GitHub OAuth.
 
-1. confirm `.env.local` and any exported env files are still ignored
-2. rotate live secrets if they were ever exposed in shell output or screenshots
-3. verify Vercel and Supabase now use the rotated values
-4. keep `.env.example` placeholder-only
-5. keep admin-only routes protected:
-   - `/api/admin/notifications/test`
-   - `/api/admin/testing/session`
-   - `/api/admin/community/cleanup-test-artifacts`
+---
 
-## Supabase setup
+## Project layout
 
-1. Create a Supabase dev project.
-2. Set site URL to `http://localhost:3000`.
-3. Apply the SQL in `supabase/migrations/20260328_001_auth_access_release_control.sql`.
-4. Apply the SQL in `supabase/migrations/20260329_002_community_comments.sql`.
-5. Apply the SQL in `supabase/migrations/20260329_003_community_forum_threads.sql`.
-6. Run `npm run catalog:sync` from `apps/web`.
-7. Configure Google and/or GitHub OAuth clients for the FabricLab-owned callback routes if you want live sign-in.
-8. Apply `supabase/migrations/20260330_005_notification_preferences_confirmed.sql`.
-
-## Community setup
-
-FabricLab now supports two community surfaces:
-
-- in-app chapter and lab comment threads
-- in-app chapter and lab tracked discussions with optional GitHub issue mirroring
-- an in-app general forum at `/community`
-- optional external links for repo, issues, discussions, and support
-
-If you want general forum threads to optionally create matching GitHub issues, set:
-
-- `GITHUB_COMMUNITY_ISSUES_TOKEN`
-- `GITHUB_COMMUNITY_ISSUE_LABELS`
-
-The token should be a GitHub token that can create issues in the FabricLab repository. For a
-fine-grained personal access token, grant repository access to `g-arjuna/fabriclab` and enable
-`Issues: Read and write`. The GitHub target is derived from
-`NEXT_PUBLIC_COMMUNITY_REPO_URL`.
-
-If you want to expose public community destinations, set the optional `NEXT_PUBLIC_COMMUNITY_*`
-and `NEXT_PUBLIC_SUPPORT_URL` variables in `apps/web/.env.local` and in Vercel.
-
-If you enable first-party OAuth providers, set `NEXT_PUBLIC_OAUTH_PROVIDERS`
-to a comma-separated list such as `google,github` so the login page can show the corresponding buttons.
-
-## Notifications
-
-FabricLab now supports:
-
-- first-sign-in notification preference onboarding
-- persistent email preferences in `/account`
-- reply-notification opt-ins when creating discussions
-- Mailgun-backed outbound notification delivery
-
-Production notification tooling currently includes:
-
-- admin Mailgun test panel in `/admin/releases`
-- admin smoke-session route for production browser smoke tests
-
-These are internal ops tools, not learner-facing features.
-
-## Project structure
-
-```text
+```
 apps/web/
   app/                        Next.js routes
   content/chapters/           MDX chapter files
-  content/catalog.json        chapter/lab metadata and default release settings
-  data/labs/                  lab scenario configuration
+  content/catalog.json        chapter and lab metadata
+  data/labs/                  lab scenario config
   components/visualisations/  React visualisation components
-  components/terminal/        xterm.js multi-device terminal
-  components/topology/        topology views
-  components/auth/            auth/session client UI
-  lib/catalog/                shared catalog + access helpers
-  lib/auth/                   server-side viewer/admin helpers
-  lib/supabase/               browser/server/admin clients
-  lib/progress/               remote progress sync helpers
-  lib/mdxComponents.ts        MDX component registry
-supabase/migrations/          schema and RLS
+  lib/catalog/                catalog and access helpers
+  lib/auth/                   server-side auth helpers
+  lib/supabase/               database clients
+supabase/migrations/          schema and RLS policies
 ```
 
-## Release workflow
+---
 
-Content remains git-driven:
+## Contributing
 
-1. Claude writes content artifacts
-2. Codex deploys/integrates them
-3. update `apps/web/content/catalog.json` for any new chapter/lab
-4. run `npm run catalog:sync`
-5. verify locally / on preview
-6. publish from `/admin/releases` when the content is ready
+Contributions are welcome — especially:
 
-This prevents unfinished weekly content drops from automatically going live.
+- technical corrections backed by primary references
+- lab feedback from working network engineers
+- UI and accessibility improvements
+- new chapter or lab ideas
 
-## Content-week guidance
+Open an issue or pull request at [g-arjuna/fabriclab](https://github.com/g-arjuna/fabriclab). For larger changes, open an issue first to discuss scope.
 
-If the focus is content rather than engineering:
+---
 
-- keep chapter/lab slugs stable
-- keep `apps/web/content/catalog.json` in sync with any new content drops
-- default new content to unpublished
-- use `/admin/releases` only to publish once the repo content and catalog row are ready
-- do not touch auth/community/deployment unless there is a real regression
+## License
 
-## Validation
-
-```bash
-apps/web/node_modules/.bin/tsc --noEmit --project apps/web/tsconfig.json
-```
-
-## Two-agent workflow
-
-- Claude owns educational content, MDX prose, lab narrative, and visualisation teaching logic
-- Codex owns platform engineering, integration, auth, release control, deployment plumbing,
-  registries, image placement, and browser QA
+MIT
