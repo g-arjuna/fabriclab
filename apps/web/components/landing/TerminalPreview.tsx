@@ -62,6 +62,8 @@ export function TerminalPreview() {
   }, [isPaused]);
 
   return (
+    <>
+      <style>{`@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}`}</style>
     <div className="mt-12 w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f1a] text-left shadow-2xl shadow-slate-950/50">
       <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
         <span className="h-2 w-2 rounded-full bg-rose-400" />
@@ -92,5 +94,6 @@ export function TerminalPreview() {
         })}
       </div>
     </div>
+    </>
   );
 }

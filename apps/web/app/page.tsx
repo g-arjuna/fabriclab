@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { AuthControls } from "@/components/auth/AuthControls";
 import { TerminalPreview } from "@/components/landing/TerminalPreview";
-import { getHomepageCatalog } from "@/lib/catalog/runtime";
+import { getHomepageCatalog } from "@/lib/catalog/homepage";
 import { SOURCE_CHAPTERS, SOURCE_LABS } from "@/lib/catalog/source";
 
 const personas = [
@@ -121,19 +121,6 @@ export default async function Home() {
 
   return (
     <main className="bg-[#020617] text-slate-100">
-      <style jsx global>{`
-        @keyframes blink {
-          0%,
-          49% {
-            opacity: 1;
-          }
-          50%,
-          100% {
-            opacity: 0;
-          }
-        }
-      `}</style>
-
       <nav className="fixed inset-x-0 top-0 z-50 h-16 border-b border-white/8 bg-slate-950/65 backdrop-blur-xl">
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-3">
