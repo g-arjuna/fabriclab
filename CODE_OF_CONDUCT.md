@@ -24,6 +24,10 @@ FabricLab is meant to be useful to engineers who are learning in public, asking 
 
 This applies to issues, pull requests, discussions, and any repo-linked community spaces.
 
+## Reporting
+
+If you experience or witness unacceptable behaviour, please report it by opening a confidential issue at [g-arjuna/fabriclab](https://github.com/g-arjuna/fabriclab/issues) or by emailing **conduct@fabriclab.dev**. Reports are reviewed by the project maintainers and handled with discretion.
+
 ## Enforcement
 
 Project maintainers may remove comments, close threads, or block contributors who repeatedly violate this code.
