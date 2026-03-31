@@ -157,6 +157,15 @@ import { ManagementAddressViz } from "@/components/visualisations/ManagementAddr
 import { VXLANVNIViz } from "@/components/visualisations/VXLANVNIViz"
 import { SuperPodScalingViz } from "@/components/visualisations/SuperPodScalingViz"
 import { AddressingMistakesViz } from "@/components/visualisations/AddressingMistakesViz"
+// === Ch20 -- Ultra Ethernet Consortium (UEC) ===
+import { UECPainPointsViz } from "@/components/visualisations/UECPainPointsViz"
+import { UECStackViz } from "@/components/visualisations/UECStackViz"
+import { UECPacketFormatViz } from "@/components/visualisations/UECPacketFormatViz"
+import { UECReliabilityViz } from "@/components/visualisations/UECReliabilityViz"
+import { UECCongestionViz } from "@/components/visualisations/UECCongestionViz"
+import { UECMultipathViz } from "@/components/visualisations/UECMultipathViz"
+import { UECSwitchCapabilitiesViz } from "@/components/visualisations/UECSwitchCapabilitiesViz"
+import { UECDeploymentReadinessViz } from "@/components/visualisations/UECDeploymentReadinessViz"
 import {
   LeafSwitchProcessingViz,
   SpineForwardingViz,
@@ -323,4 +332,13 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   AlternativeNICStackViz,
   FabricComparisonMatrixViz,
   ProductionDebugMapViz,
+  // Ch20
+  UECPainPointsViz,
+  UECStackViz,
+  UECPacketFormatViz,
+  UECReliabilityViz,
+  UECCongestionViz,
+  UECMultipathViz,
+  UECSwitchCapabilitiesViz,
+  UECDeploymentReadinessViz,
 }

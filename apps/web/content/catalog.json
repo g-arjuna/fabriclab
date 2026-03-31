@@ -506,6 +506,32 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch19-ip-addressing-planning"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch20-uec",
+      "number": 20,
+      "title": "Ultra Ethernet Consortium (UEC)",
+      "href": "/learn/ch20-uec",
+      "durationMinutes": 60,
+      "durationLabel": "60 min",
+      "partKey": "scale-architecture",
+      "partTitle": "Part 4 - Scale and Architecture",
+      "partDescription": "Requires Part 3 - Ch 12-16",
+      "tags": [
+        "UEC",
+        "UET",
+        "PFC-free",
+        "SACK retransmit",
+        "Packet spraying",
+        "NPM"
+      ],
+      "description": "Why RoCEv2 has friction at scale, and how UEC addresses it: UET packet format, SACK-based reliability without lossless fabric, 1-RTT congestion feedback, native multipath spraying, switch requirements, and honest deployment readiness as of March 2026.",
+      "previewSummary": "Understand where AI networking is going -- PFC elimination, end-to-end reliability, and native packet spraying -- and what it takes to actually deploy it.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch20-uec"
     }
   ],
   "labs": [

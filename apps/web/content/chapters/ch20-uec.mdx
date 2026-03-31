@@ -1,0 +1,451 @@
+---
+title: "Chapter 20: Ultra Ethernet Consortium (UEC)"
+module: "HPC Networking Foundations"
+level: "Advanced"
+estimatedMinutes: 60
+labLink: ""
+---
+
+You have spent nineteen chapters learning how to build, operate, and debug an AI fabric built on
+RoCEv2. You know PFC, DCQCN, lossless queuing, ECMP entropy, and packet anatomy. Now someone
+in your architecture review asks: "What about UEC?"
+
+The Ultra Ethernet Consortium exists because the industry ran a collective experiment called
+RoCEv2-at-scale and learned where the stitches pull. This chapter explains what those failure
+modes are, how UEC addresses them at the protocol level, what the transport stack looks like
+packet-by-packet, and -- critically -- where the technology sits in March 2026: which pieces
+are spec-complete, which are shipping in silicon, and what a realistic deployment path looks
+like for a DGX-class cluster.
+
+By the end of this chapter you can hold a technical conversation with a vendor pitching UEC,
+evaluate the claims against the spec, and understand what it would take to actually deploy it.
+
+## Act 1 -- Why RoCEv2 at Scale Has Friction
+
+Before talking about what UEC is, you need to understand what RoCEv2 at scale costs you. Not
+in marketing terms -- in operational terms. You have seen most of these failure modes in
+earlier chapters. This chapter names them as the design constraints UEC was built to solve.
+
+### Problem 1: PFC as a system dependency
+
+RoCEv2 requires a lossless Ethernet fabric. PFC (Priority Flow Control, Ch5) is the mechanism
+that achieves losslessness by backpressuring senders when buffers fill. PFC works -- but it
+introduces three operational risks:
+
+First, PFC pause storms. A pause frame from one congested port propagates upstream, causing
+additional ports to pause, which propagates further upstream. In a fat-tree with 512+ nodes,
+a badly timed burst can create a fabric-wide deadlock where nothing moves. You saw this in Ch5.
+The mitigation (PFC watchdog, ECN tuning, careful threshold management) is real engineering
+work on every deployment.
+
+Second, PFC domain coupling. The lossless domain must be consistent end-to-end. Every switch
+and every NIC on every RoCEv2 path must have matching PFC priorities, DSCP mappings, and ECN
+thresholds. A single misconfigured switch -- DSCP mapped to the wrong priority, PFC enabled on
+the wrong traffic class -- breaks RDMA across every flow that crosses it. You know this because
+you have debugged it (Ch3 Act 6 scenario, Ch8 Lab 8).
+
+Third, heterogeneous fabrics are hard. If you mix compute traffic (PFC-required) with storage
+traffic (PFC-not-wanted per Ch17) or management traffic on the same switches, you must carefully
+segment traffic classes and verify the config on every device. The more diverse your workloads,
+the harder this gets.
+
+### Problem 2: Congestion control latency
+
+DCQCN (Data Center Quantized Congestion Notification, Ch5 Act 5) is a rate-based algorithm.
+When a switch sees buffer overflow, it marks packets with ECN CE bits. The destination NIC
+receives the CE-marked packets and generates CNP (Congestion Notification Packets) back to the
+source. The source NIC reduces its injection rate. This feedback loop has inherent latency: the
+CE mark must travel to the destination, the CNP must travel back, and the source must respond.
+At 400G link rates, the fabric can queue significant data during this feedback loop. DCQCN is
+tuned, not eliminated -- you adjust alpha, timer intervals, and thresholds to make it fast enough
+for your traffic mix (Ch8 Act 6), but the control loop delay is structural.
+
+### Problem 3: ECMP entropy and flow pinning
+
+AI AllReduce traffic is structurally low entropy (Ch6). A single NCCL job generates a small
+number of long-lived flows between fixed endpoint pairs. Static ECMP hash-assigns all flows
+from one endpoint pair to the same path. You need per-packet spraying (RSHP), dynamic load
+balancing (DLB), or Global Load Balancing (GLB) to spread load. These work (they are deployed
+in every production BasePOD) but they require explicit configuration, NIC support, and switch
+support. Not every combination of NIC and switch supports every mode.
+
+### Problem 4: Out-of-order delivery
+
+RoCEv2 over per-packet spraying requires that the receiving NIC reassemble out-of-order packets
+before they reach the RDMA layer. ConnectX-7 supports this (it has sufficient buffer to absorb
+reordering within a flow), but it adds complexity and limits the reordering window. If packets
+arrive sufficiently out of order -- because different paths have very different latencies -- the
+NIC must wait for gaps, which adds latency to the completion event. Larger clusters with more
+path diversity exacerbate this.
+
+These four problems are not fatal -- hundreds of production clusters run RoCEv2 successfully.
+But they are the friction points. UEC is a specification effort to eliminate each of them at
+the protocol level.
+
+<UECPainPointsViz />
+
+## Act 2 -- What UEC Is: The Consortium and the Spec
+
+The Ultra Ethernet Consortium was formed in July 2023 by AMD, Arista, Broadcom, Cisco, Eviden,
+HPE, Intel, Meta, Microsoft, and others. NVIDIA joined later. The goal: define a new transport
+protocol for AI/HPC workloads that runs over standard Ethernet physical layer but does not
+require PFC.
+
+The UEC specification structure has four protocol components. These are not separate protocols
+layered on top of each other -- they are four functional blocks within a single coherent
+transport design:
+
+**UET (Ultra Ethernet Transport)** -- the packet format and delivery model. Defines how data
+is segmented, how messages are packetized, and what the packet header looks like. UET is the
+thing that replaces the BTH (Base Transport Header) layer in a RoCEv2 packet.
+
+**Retransmit** -- reliability without lossless fabric. Defines the selective acknowledgement
+(SACK) and retransmit mechanism that allows the transport to recover from packet loss without
+requiring the fabric to prevent it. This is the key structural difference from RoCEv2.
+
+**Congestion control** -- ACK-based, not pause-based. Defines the congestion signal mechanism
+using acknowledgement packets and explicit signalling rather than PFC pause frames. The
+congestion signal is end-to-end (sender to receiver) not hop-by-hop (switch to switch).
+
+**Multipath** -- native packet spraying. Defines how packets from a single message are
+sprayed across multiple paths, and how the receiver reassembles them correctly regardless of
+delivery order. Out-of-order delivery is a first-class design assumption, not an edge case.
+
+<UECStackViz />
+
+The UEC 1.0 specification was ratified in Q4 2024. As of March 2026, UEC 1.0 is the current
+published spec. The spec defines the protocol behaviour required of any UEC-compliant endpoint
+(NIC or DPU) and the fabric behaviour required of UEC-capable switches. It does not mandate
+specific silicon implementations.
+
+## Act 3 -- The UET Packet Format
+
+A UEC packet over Ethernet looks superficially similar to a RoCEv2 packet from the outside.
+The outer headers are the same: Ethernet/IPv4/UDP. The destination UDP port for UEC is 4792
+(distinct from RoCEv2's 4791). The key differences are in the transport header above UDP.
+
+RoCEv2 uses the BTH (Base Transport Header): 12 bytes with opcode, partition key, destination
+QP number, and PSN (Packet Sequence Number). Above BTH, the payload type depends on the opcode
+(RDMA Write, RDMA Send, RDMA Read, etc.).
+
+UEC replaces BTH with the UET header. The UET header is 20 bytes and contains:
+
+```
+UET header (20 bytes)
+  Version            4 bits   UEC version (currently 1)
+  OpCode             8 bits   Message type (Write, Send, Read, Ack, Nack, Fence...)
+  Flags              4 bits   E=ECN-capable, C=CE-marked, S=Solicited, F=First, L=Last
+  DCID               24 bits  Destination Context ID -- replaces QPN
+  SCID               24 bits  Source Context ID -- replaces source QPN
+  Message ID         32 bits  Per-source-context message sequence number
+  Packet Offset      32 bits  Byte offset of this packet within the message
+  Payload Length     16 bits  Data bytes in this packet
+  Acknowledgement    32 bits  Cumulative ack + SACK bitmask field (in Ack/Nack packets)
+```
+
+The most important structural difference: instead of a Packet Sequence Number (PSN) that
+increments per packet, UEC uses a Message ID plus a Packet Offset within that message. This
+means the receiver can reconstruct message order even when packets arrive out of order across
+different paths -- it does not need to see packets in PSN order. The receiver buffers all
+packets for a given Message ID and presents the complete message to the application only when
+all offsets are accounted for.
+
+The DCID/SCID pair replaces the QPN. Context IDs are still connection endpoints allocated at
+setup time, but the naming change reflects that a UEC context does not carry the same per-queue
+state requirements as an RDMA Queue Pair.
+
+<UECPacketFormatViz />
+
+### Message segmentation
+
+A UEC message is segmented into packets by the sender. The maximum packet size is limited by
+the path MTU (typically 4096 or 8192 bytes for AI fabrics). The sender stamps each packet with
+the Message ID and the byte offset of the first byte in that packet within the message. The
+receiver buffers incoming packets indexed by offset and presents the reassembled message to the
+application when all gaps are filled.
+
+For a 256 KB AllReduce gradient block at 4096-byte MTU, this produces 64 packets per message,
+all carrying the same Message ID. The sender can spray all 64 onto different physical paths
+simultaneously. Arrival order does not matter.
+
+## Act 4 -- Reliability: SACK Without Lossless Fabric
+
+This is the most operationally significant UEC design decision: the fabric does not need to be
+lossless. UEC endpoints handle reliability through retransmission.
+
+The mechanism is selective acknowledgement (SACK). The receiver sends ACK packets back to the
+sender. An ACK carries:
+
+- A cumulative acknowledgement offset: all bytes up to this offset have been received
+- A SACK bitmask: individual packets above the cumulative ack that have been received out of order
+
+The sender maintains a retransmit timer per outstanding message. If it does not receive an ACK
+advancing the cumulative ack within the timeout, it retransmits the missing segment(s)
+identified by the SACK bitmask.
+
+This is structurally similar to TCP SACK but implemented at the NIC level in RDMA context -- no
+host CPU involvement, no kernel stack, no socket buffer. The NIC firmware manages the retransmit
+timer, buffers outstanding packets, and handles the ACK/retransmit state machine.
+
+<UECReliabilityViz />
+
+### What packet loss actually costs under UEC
+
+A retransmit adds latency equal to: RTT (round-trip time) + retransmit timer granularity.
+For a BasePOD with 2us hop-to-hop latency, an RTT from GPU to storage switch and back is
+approximately 4us. If the retransmit timer fires at the end of a 10us interval (a typical
+setting for lightly loaded fabrics), a single packet loss costs approximately 10-14us of added
+latency per affected message.
+
+Compare this to RoCEv2: a dropped packet causes the QP to enter ERROR state, which requires
+application-level intervention (NCCL detects the failure, resets the QP, retransmits the
+AllReduce message). The recovery time is measured in milliseconds, not microseconds.
+
+UEC's retransmit model is much more graceful: individual packet loss is handled silently by
+the NIC without application involvement. Only sustained loss (multiple retransmit timeouts,
+exceeding a configurable threshold) escalates to the application layer.
+
+### Implications for fabric design
+
+Because reliability is end-to-end rather than fabric-guaranteed, UEC deployments can:
+
+- Run without PFC on the Ethernet fabric. Standard best-effort queuing is sufficient.
+- Use ECN marking for congestion feedback (keeping the switch-level signal), but the response
+  mechanism is different (see Act 5).
+- Tolerate occasional packet drops from hardware failures, brief congestion events, or even
+  lossy wireless paths -- none of these cause application-visible failures.
+
+This does not mean you want a lossy fabric. High loss rates mean frequent retransmits, which
+means added latency and wasted bandwidth. But a well-designed fabric with 0.001% drop rate
+produces negligible retransmit overhead while completely eliminating PFC configuration and
+its associated operational risks.
+
+## Act 5 -- Congestion Control: End-to-End Without Pause Frames
+
+UEC defines its own congestion control algorithm designed to work without PFC. The mechanism
+uses the ECN CE-bit in IP headers (the same ECN bit as DCQCN) but the response is ACK-based
+rather than CNP-based.
+
+The flow:
+
+1. A UEC-capable switch marks outgoing packets with the ECN CE bit when its buffer occupancy
+   exceeds a threshold. This is the same ECN marking mechanism used in DCQCN (Ch5). Switch
+   configuration for this is identical: set Kmin and Kmax buffer thresholds for each traffic
+   class.
+
+2. The receiver sees CE-marked packets and sets the C flag in ACK packets it sends back to
+   the source. The ACK already had to travel back for SACK purposes -- piggybacking the
+   congestion signal on it is free.
+
+3. The sender NIC firmware reads the C flag from incoming ACKs and reduces its injection
+   rate. The rate reduction algorithm in UEC 1.0 is based on DCQCN's mathematical model
+   (the same alpha-based multiplicative decrease, additive increase) but because the signal
+   arrives on ACKs rather than CNPs, the feedback loop timing is slightly different.
+
+<UECCongestionViz />
+
+### Comparison with DCQCN
+
+The feedback loop in DCQCN: packet arrives at congested switch -> switch marks CE -> packet
+arrives at receiver -> receiver generates CNP -> CNP arrives at sender -> sender reduces rate.
+Total feedback delay: 2 x network RTT (packet forward + CNP return).
+
+The feedback loop in UEC: packet arrives at congested switch -> switch marks CE -> packet
+arrives at receiver -> receiver sets C flag in next ACK -> ACK arrives at sender -> sender
+reduces rate. Total feedback delay: 1 x network RTT (packet forward + ACK return). The ACK
+was going to travel anyway. The congestion signal is on the critical path, not an additional
+round trip.
+
+This matters at 400G link speeds where a 2x RTT feedback delay vs 1x RTT feedback delay means
+the difference between marking 100 packets vs 200 packets before the sender responds. At
+1.6 Tbps (next-generation 8x 200G), the congestion overshoot in DCQCN before the CNP loop
+closes becomes a real problem. UEC's faster feedback loop is designed for 400G-to-1600G.
+
+### PFC-free operation: what stays, what goes
+
+What stays in a UEC fabric:
+- ECN marking on switches (identical configuration to RoCEv2)
+- Priority queuing for traffic classes (storage vs compute vs management)
+- DSCP marking on endpoints for traffic class identification
+
+What goes:
+- PFC pause frame generation and processing (disabled on switches and NICs)
+- Lossless queuing configuration (headroom buffers for PFC, pause-propagation timers)
+- PFC watchdog configuration
+- The requirement that every device in a path agrees on PFC priority mapping
+
+## Act 6 -- Native Packet Spraying: Multipath Without RSHP
+
+RoCEv2 per-packet spraying (RSHP in Spectrum-X, Ch6 Act 6) requires NIC firmware support to
+vary the source UDP port on each packet, so ECMP hashes differently per packet. The switch
+sees different 5-tuples and distributes across paths. But this is an approximation: the hash
+function distributes with statistical fairness, not precise per-packet round-robin.
+
+UEC's multipath mechanism is specified at the transport layer. The sender explicitly assigns
+packets to paths. The protocol defines a set of path IDs that correspond to available ECMP
+next-hops. The sender NIC cycles through available path IDs, assigning successive packets to
+successive paths. The receiver uses Message ID and Packet Offset to reassemble regardless of
+arrival order.
+
+The path assignment is in the packet header as a hint to ECMP-aware switches. A UEC-capable
+switch can use the path hint field for forwarding decisions rather than (or in addition to)
+the 5-tuple hash. This gives deterministic path assignment rather than hash-probabilistic
+assignment.
+
+<UECMultipathViz />
+
+### Explicit path awareness
+
+UEC switches export path utilisation metrics to endpoints via a dedicated feedback channel
+(defined in the UEC spec as the Network Performance Monitor, NPM). The NIC can receive
+per-path utilisation data from the fabric and dynamically select less-loaded paths. This
+closes the loop: the NIC knows which paths are congested before sending, not after.
+
+In a 32-node BasePOD with 8 spine switches, each DGX node has 8 ECMP paths to every other node.
+Under UEC with NPM, the sending NIC receives per-spine utilisation from each spine switch and
+assigns gradient AllReduce packets to the least-loaded spine at the time of sending. This is
+more effective than GLB (which learns about congestion from CNPs, after the fact) because the
+information arrives before the packet is sent.
+
+### Receiver buffer requirements
+
+Out-of-order arrival under multipath spraying requires receiver buffer to hold the maximum
+in-flight data for any given message. For a 256KB gradient block sprayed across 8 paths, the
+maximum out-of-order window is the bandwidth-delay product across one path times the number
+of paths minus one. At 400G x 8 paths x 2us RTT, the maximum buffering per message is
+approximately 800 KB. UEC NICs must provision receive buffers accordingly -- this is a silicon
+cost that does not exist in ordered RoCEv2.
+
+## Act 7 -- What UEC Requires From the Switch
+
+A common question at architecture reviews: "Can I run UEC on my existing switches?"
+
+The honest answer is: partially. UEC is explicitly designed to run over standard Ethernet
+switches without any protocol changes. A switch that can forward IPv4/UDP packets and mark
+ECN bits can forward UEC traffic. The lossless queuing configuration (headroom buffers, PFC)
+is simply not configured -- no new switch features required.
+
+However, three optional switch capabilities in the UEC spec significantly improve performance:
+
+**ECN marking with per-flow granularity**: Standard ECN marks per-queue when any flow in
+the queue is congested. UEC benefits from per-flow ECN marking (similar to per-flow RED)
+where the marking probability is a function of that specific flow's queue depth contribution.
+Broadcom Tomahawk 5 and Mellanox Spectrum-4 both support per-flow ECN marking in their
+latest firmware releases.
+
+**Network Performance Monitor (NPM) export**: The UEC spec defines an NPM feedback channel
+where each switch port periodically exports per-path utilisation metrics to connected
+endpoints. This requires switch-side support for the NPM protocol (a UDP multicast to a
+well-known group). Not all switches implement this. As of March 2026, NPM support is in
+early firmware availability on Spectrum-4 and Broadcom Jericho3-based platforms.
+
+**Path-ID-aware forwarding**: Instead of (or in addition to) 5-tuple ECMP hash, a
+UEC-capable switch can use the path ID field in the UET header for forwarding decisions.
+This requires custom TCAM/lookup programming and is available in programmable ASIC platforms
+(Tofino2, P4-programmable switches) and newer fixed-function ASICs with UEC-specific firmware.
+
+<UECSwitchCapabilitiesViz />
+
+### The baseline deployment question
+
+For the vast majority of AI fabrics as of March 2026: run UEC endpoints on existing Ethernet
+switches with ECN enabled. You get PFC-free operation and the retransmit-based reliability.
+You lose NPM path feedback and path-ID-aware forwarding -- the multipath is still hash-based
+ECMP, just like RoCEv2 with RSHP. You gain the operational simplicity of no PFC.
+
+Whether the NPM and path-ID features justify a switch refresh is a deployment-specific
+calculation: how large is the cluster, how often do you see PFC events in production, how much
+does the PFC configuration complexity cost you operationally vs the switch refresh cost.
+
+## Act 8 -- Deployment State: March 2026
+
+This chapter is being written in March 2026. The UEC deployment state is honest: the
+specification is ahead of production silicon availability.
+
+**UEC 1.0 specification**: Ratified Q4 2024. Published on ultra-ethernet.org. Complete
+normative specification for UET transport, retransmit, congestion control, and multipath.
+
+**Switch silicon**:
+- Broadcom Tomahawk 5 (StraDNX): ECN marking and basic UEC forwarding support in firmware
+  Q4 2024 release. NPM support in beta SDK as of early 2026.
+- Mellanox/NVIDIA Spectrum-4: ECN forwarding for UEC traffic (all Spectrum-4 switches support
+  standard ECN). UET-specific extensions under active development. No public NPM announcement
+  as of March 2026 from NVIDIA for Spectrum-4.
+- Intel Tofino2 / P4-based platforms: Programmable. UEC reference P4 program available from
+  Intel P4 Studio as of H1 2025. Deployment requires P4 expertise.
+
+**NIC/endpoint silicon**:
+- AMD Pensando Salina (DPU): UEC 1.0 compliant silicon, announced February 2025. First
+  production-available UEC endpoint silicon.
+- Intel Gaudi 3 (networking ports): UEC-capable per Intel roadmap. GA availability announced
+  for 2025. Gaudi 3 AI accelerators include integrated 24-port 200GbE UEC-capable networking.
+- Broadcom Astera (formerly Emulex): UEC NIC silicon in qualification with hyperscale customers
+  Q1 2026. Not yet shipping at volume.
+- NVIDIA ConnectX-8 / BlueField-4: No public UEC announcement from NVIDIA as of March 2026.
+  NVIDIA's Spectrum-X platform (ConnectX-7 + SN5600) represents their current AI fabric
+  strategy. The absence of a NVIDIA UEC announcement is the significant industry observation
+  as of this writing.
+
+**DGX platform compatibility**: DGX H100/H200 use ConnectX-7 NICs. ConnectX-7 does not
+implement UEC. DGX B200 uses BlueField-3 NICs. BlueField-3 does not implement UEC.
+A DGX cluster cannot run UEC today without replacing the NICs. This is the key constraint
+for the current DGX install base.
+
+**Hyperscale deployments**: Meta, Microsoft, and Google have all publicly referenced UEC
+in their AI networking roadmaps. Meta published internal UEC evaluation results showing
+PFC-free operation with comparable throughput to RoCEv2-with-PFC in controlled lab conditions.
+No publicly disclosed large-scale production deployment of UEC (vs RoCEv2) exists as of
+March 2026.
+
+<UECDeploymentReadinessViz />
+
+### The honest summary for a network engineer
+
+UEC solves real problems. The PFC elimination is operationally valuable at scale. The retransmit
+model is more resilient than RoCEv2's QP-error recovery. The native packet spraying is cleaner
+than RSHP hacks.
+
+But in March 2026, if you are deploying a DGX H100 or B200 cluster, you are deploying RoCEv2.
+The ConnectX-7 and BlueField-3 NICs in those nodes do not speak UEC. The SN5600/QM9700
+switches are tuned for RoCEv2 with Spectrum-X lossless extensions.
+
+UEC is the right reference point for what the next generation of AI networking looks like.
+It tells you what to evaluate in a 2026/2027 purchase decision when buying new NIC silicon.
+It tells you what to ask vendors: "Is this UEC 1.0 compliant?" "Does your switch support NPM?"
+"What is the retransmit overhead at 0.01% loss rate?"
+
+Right now, the curriculum you have been building -- PFC, DCQCN, lossless fabric, RSHP, BGP
+unnumbered -- is what runs production AI clusters. UEC is where they are going.
+
+## What you now know
+
+- RoCEv2's operational friction at scale comes from four sources: PFC as a system dependency
+  (pause storms, misconfig propagation), DCQCN's 2-RTT feedback latency, low-entropy ECMP
+  requiring explicit spraying configuration, and out-of-order delivery limitations.
+
+- UEC is a four-component specification (UET transport + retransmit + congestion control +
+  multipath) ratified in Q4 2024. It targets PFC elimination, native packet spraying, and
+  ACK-based congestion control with 1-RTT feedback latency.
+
+- The UET packet format replaces BTH with a 20-byte header using Message ID + Packet Offset
+  instead of PSN. This enables out-of-order reassembly natively. Destination UDP port is 4792.
+
+- UEC reliability uses SACK-based retransmit at the NIC firmware layer. Individual packet
+  loss costs approximately 1 RTT of added latency (microseconds) vs RoCEv2's QP-error recovery
+  path (milliseconds).
+
+- UEC congestion control marks the same ECN CE bits as DCQCN but reads them from ACK packets
+  rather than CNPs. The feedback loop is 1 RTT instead of 2 RTT -- relevant at 400G and above.
+
+- Switch requirements: ECN marking is sufficient for baseline UEC. NPM path feedback and
+  path-ID-aware forwarding improve multipath performance but require newer firmware or ASICs.
+
+- Deployment reality (March 2026): AMD Pensando Salina is production-available UEC silicon.
+  Intel Gaudi 3 has UEC-capable ports. NVIDIA ConnectX-7/BF3 (used in all current DGX nodes)
+  do not support UEC. A DGX cluster cannot run UEC without NIC replacement.
+
+- Operationally: if you are running a DGX cluster today, you run RoCEv2. UEC is the evaluation
+  framework for your next NIC/switch purchase cycle. The right question to ask vendors in 2026
+  is "UEC 1.0 compliant?" not "does this support RoCEv2?"
+
+[Continue to Appendix A -- Reference Command Index ->](/learn/appendix-a-commands)
