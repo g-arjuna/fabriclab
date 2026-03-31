@@ -157,6 +157,7 @@ vision.md
 content/input/
 content/modules/
 content/schema/
+apps/web/components/visualisations/COMPONENTS_REGISTRY.md
 tmp_lab_shots/
 tmp_lab_redesign/
 tmp-vercel-deploy.sh
