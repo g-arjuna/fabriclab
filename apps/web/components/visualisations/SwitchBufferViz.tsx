@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useState } from "react"
 
 export function SwitchBufferViz() {
@@ -72,8 +72,8 @@ export function SwitchBufferViz() {
             </div>
             <div className="text-sm font-semibold" style={{ color: sw.color }}>
               {sw.handles
-                ? `âœ“ Buffer sufficient (${((sw.buffer / burstSizeMB) * 100).toFixed(0)}% headroom)`
-                : `âœ— Buffer overflow — needs ${(burstSizeMB / sw.buffer).toFixed(1)}× more buffer or per-packet LB`}
+                ? `✓ Buffer sufficient (${((sw.buffer / burstSizeMB) * 100).toFixed(0)}% headroom)`
+                : `✗ Buffer overflow — needs ${(burstSizeMB / sw.buffer).toFixed(1)}× more buffer or per-packet LB`}
             </div>
           </div>
         ))}
@@ -92,3 +92,5 @@ export function SwitchBufferViz() {
 }
 
 export default SwitchBufferViz
+
+

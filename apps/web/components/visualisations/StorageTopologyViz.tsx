@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useState } from "react"
 
 // ── StorageTopologyViz ────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ const specs = {
     adaptiveRouting: true,
     color: "#1e3a5f",
     border: "#60a5fa",
-    nodes: ["ConnectX-7 × 8\nper DGX node"],
+    nodes: ["ConnectX-7 × 2\nper DGX node"],
   },
   storage: {
     label: "Storage fabric",
@@ -36,7 +36,7 @@ const specs = {
     adaptiveRouting: false,
     color: "#14532d",
     border: "#22c55e",
-    nodes: ["BlueField-3 × 2\nper DGX node"],
+    nodes: ["ConnectX-7 × 2\nper DGX node"],
   },
 }
 
@@ -94,7 +94,7 @@ export function StorageTopologyViz() {
           <rect x="220" y="85" width="120" height="50" rx="8"
             fill="#0f172a" stroke="#334155" strokeWidth="1.5" />
           <text x="280" y="107" textAnchor="middle" fill="#94a3b8" fontSize="9" fontWeight="600">DGX H100</text>
-          <text x="280" y="122" textAnchor="middle" fill="#475569" fontSize="8">8 GPUs · 8 CX7 · 2 BF3</text>
+          <text x="280" y="122" textAnchor="middle" fill="#475569" fontSize="8">8 GPUs · 8 CX7 · 2 CX7 (Slot1/2)</text>
 
           {/* Compute fabric (left side) */}
           {showCompute && (
@@ -137,7 +137,7 @@ export function StorageTopologyViz() {
               {/* BlueField-3 label */}
               <rect x="420" y="100" width="80" height="20" rx="4"
                 fill="#14532d33" stroke="#22c55e55" strokeWidth="1" />
-              <text x="460" y="114" textAnchor="middle" fill="#22c55e" fontSize="7">BlueField-3 × 2</text>
+              <text x="460" y="114" textAnchor="middle" fill="#22c55e" fontSize="7">ConnectX-7 × 2</text>
 
               {/* Storage switch */}
               <rect x="490" y="52" width="60" height="28" rx="4"
@@ -235,3 +235,7 @@ export function StorageTopologyViz() {
 }
 
 export default StorageTopologyViz
+
+
+
+

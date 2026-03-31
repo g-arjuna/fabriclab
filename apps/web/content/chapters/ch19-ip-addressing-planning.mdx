@@ -1,4 +1,4 @@
----
+﻿---
 title: "Chapter 19: IP Addressing and Planning"
 module: "HPC Networking Foundations"
 level: "Advanced"
@@ -424,9 +424,9 @@ switch. The only access to OOB addresses is via the management workstation or ju
 ### In-band management plane
 
 DGX nodes need a management interface reachable from tools like Prometheus, Ansible, and
-DCGM scraper. This uses the CX7 Slot1 or Slot2 storage NIC (bonded for redundancy) with
-an IP in the compute fabric routable space -- but in a dedicated /24 separate from the
-GPU compute /32 addresses:
+DCGM scraper. This uses one port from each CX7 Slot1 and Slot2 adapter (bonded for
+redundancy), connected to the compute leaf switch -- not the storage switch -- with an IP in
+the compute fabric routable space, in a dedicated /24 separate from the GPU compute /32 addresses:
 
 ```
 10.10.4.0/24   --  DGX in-band management (BasePOD 1)
@@ -436,9 +436,9 @@ GPU compute /32 addresses:
   10.10.4.8    DGX-08 mgmt bond
 ```
 
-These are routed via the compute fabric BGP (each leaf advertises the /24 block for its
-connected DGX management IPs). Prometheus reaches them via normal BGP-learned routes.
-They are NOT in the OOB 10.0.x.x range.
+These are routed via the compute fabric BGP: each compute leaf advertises the /24 block for
+its connected DGX management bond addresses. Prometheus reaches them via normal BGP-learned
+routes without touching the storage fabric. They are NOT in the OOB 10.0.x.x range.
 
 The distinction matters: if a DGX compute NIC goes down, in-band management via the storage
 CX7 NIC is still reachable. If the OOB switch goes down, in-band management is still
@@ -699,4 +699,9 @@ not minutes.
   plan. A one-hour addressing session before racking a single switch prevents a week of
   debugging after every GPU is running.
 
-[Continue to Chapter 20 -- Ultra Ethernet Consortium (UEC) ->](/learn/ch20-uec)
+---
+
+*This is the final chapter of the current curriculum. More chapters are in development.*
+
+
+

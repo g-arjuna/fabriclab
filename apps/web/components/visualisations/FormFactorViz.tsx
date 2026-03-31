@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useState } from "react"
 
 // ── FormFactorViz ─────────────────────────────────────────────────────────────
@@ -99,11 +99,11 @@ const formFactors: {
     modulation: "PAM-4",
     powerW: 20,
     backwardCompat: ["OSFP 400G"],
-    whereUsed: "DGX H200 / B200 NIC ports, 800G AI switches",
+    whereUsed: "DGX B200 NIC ports, 800G AI switches (QM9700 HDR uplinks, Spectrum-X 800G)",
     dgxUsed: true,
     color: "#1e3a5f",
     border: "#93c5fd",
-    note: "Same physical cage as OSFP 400G — 800G OSFP modules fit in 400G OSFP cages on switches with the right firmware. DGX B200 and H200 use 800G OSFP.",
+    note: "Same physical cage as OSFP 400G — 800G OSFP modules fit in 400G OSFP cages on switches with the right firmware. DGX B200 uses 800G OSFP. DGX H100 and H200 use 400G OSFP (ConnectX-7 NDR).",
   },
   {
     id: "osfpxd",
@@ -276,3 +276,5 @@ export function FormFactorViz() {
 }
 
 export default FormFactorViz
+
+

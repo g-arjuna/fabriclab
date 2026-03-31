@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useState } from "react"
 
 // ── NVMeoFProtocolViz ─────────────────────────────────────────────────────────
@@ -58,18 +58,18 @@ const transports: {
     fullName: "NVMe over RDMA (RoCEv2)",
     latency: "~2–10 µs",
     latencyTier: 1,
-    cpuOverhead: "Near-zero — DPU handles all I/O",
+    cpuOverhead: "Near-zero — CX7 NIC handles data-path DMA",
     cpuTier: 1,
     switchReq: "Ethernet with ECN (PFC optional)",
     usedIn: "AI training clusters, HPC storage fabrics",
     aiCluster: true,
     description:
-      "NVMe commands transmitted using RDMA verbs over RoCEv2. The DPU issues NVMe commands as RDMA Write operations. No TCP overhead. No CPU involvement on the data path at either end. The combination of RDMA transport and GDS completes the zero-CPU-copy path — data flows from storage appliance directly to GPU HBM with no system RAM involvement.",
+      "NVMe commands transmitted using RDMA verbs over RoCEv2. The initiator CX7 NIC delivers the NVMe SQE capsule via RDMA Send; the target then pulls the data payload via RDMA Read against the initiator's registered MR. No TCP overhead. No host CPU involvement on the data path. The combination of RDMA transport and GDS completes the zero-CPU-copy path — data flows from storage appliance directly to GPU HBM with no system RAM involvement.",
     pros: [
       "Zero CPU copies — host CPU never touches storage data",
       "~10–50× lower latency than TCP transport",
       "Enables GPUDirect Storage zero-copy path",
-      "DPU handles all NVMe-oF I/O without host CPU",
+      "CX7 NIC handles all NVMe-oF data-path DMA without host CPU",
       "Same switch infrastructure as compute fabric (Spectrum)",
     ],
     cons: [
@@ -244,9 +244,9 @@ export function NVMeoFProtocolViz() {
       <div className="mt-4 rounded-xl bg-green-950/30 border border-green-500/20 p-3">
         <div className="text-[10px] text-slate-400 leading-4">
           <span className="font-semibold text-green-400">Why RDMA wins: </span>
-          Only NVMe-oF/RDMA enables GPUDirect Storage's zero-copy path. The DPU's RDMA engine
-          issues NVMe write commands as RDMA operations, writing GPU HBM contents directly to
-          the storage appliance without CPU involvement at either end.
+          Only NVMe-oF/RDMA enables GPUDirect Storage's zero-copy path. The CX7 NIC's RDMA engine
+          handles all data-path DMA — the target pulls checkpoint data from the initiator MR via
+          RDMA Read, writing GPU HBM contents to the storage appliance without host CPU involvement.
         </div>
       </div>
     </div>
@@ -254,3 +254,9 @@ export function NVMeoFProtocolViz() {
 }
 
 export default NVMeoFProtocolViz
+
+
+
+
+
+

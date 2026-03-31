@@ -18,7 +18,7 @@ const beforeHops = [
 
 const afterHops = [
   { id: "storage", label: "Storage appliance", sub: "NVMe SSD", color: "#14532d", border: "#22c55e", x: 80 },
-  { id: "dpu",     label: "BlueField-3 DPU",   sub: "DMA engine", color: "#065f46", border: "#10b981", x: 270 },
+  { id: "nic",     label: "ConnectX-7 NIC",    sub: "DMA engine", color: "#065f46", border: "#10b981", x: 270 },
   { id: "gpu",     label: "GPU HBM",            sub: "training data", color: "#7f1d1d", border: "#ef4444", x: 460 },
 ]
 
@@ -54,7 +54,7 @@ export function StorageDataPathViz() {
         GPUDirect Storage — data path comparison
       </p>
       <p className="mb-5 text-xs text-slate-600">
-        Before GDS: data passes through CPU RAM twice. After GDS: DPU DMA writes directly to GPU HBM.
+        Before GDS: data passes through CPU RAM twice. After GDS: CX7 NIC DMA writes directly to GPU HBM.
       </p>
 
       {/* Mode toggle */}

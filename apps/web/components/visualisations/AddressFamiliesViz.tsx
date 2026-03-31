@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 
@@ -54,7 +54,7 @@ const FAMILIES = [
     prefix: "/32 per DGX",
     owner: "DGX host CX7 Slot1/Slot2 bond",
     count: "1 per DGX",
-    purpose: "SSH, Prometheus DCGM scrape, Ansible, monitoring. Uses the storage CX7 NICs so survives compute NIC failures. Routed via compute fabric BGP",
+    purpose: "SSH, Prometheus DCGM scrape, Ansible, monitoring. Uses one port per CX7 Slot1/Slot2 adapter bonded to the compute leaf switch. Routed via compute fabric BGP. Survives compute HCA failures.",
     breaks: "If same /24 as GPU compute: Prometheus scraping and NCCL training traffic compete in same subnet",
     example: "DGX-01 mgmt bond: 10.10.4.1/32",
   },
@@ -204,3 +204,4 @@ export function AddressFamiliesViz() {
 }
 
 export default AddressFamiliesViz;
+

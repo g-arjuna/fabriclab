@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useState } from "react"
 
 export function OversubscriptionCalculatorViz() {
@@ -13,7 +13,7 @@ export function OversubscriptionCalculatorViz() {
   const isNonBlocking = oversubRatio <= 1
 
   const ratingColor = oversubRatio <= 1 ? "#22c55e" : oversubRatio <= 1.5 ? "#f59e0b" : "#ef4444"
-  const ratingLabel = oversubRatio <= 1 ? "Non-blocking âœ“" : oversubRatio <= 1.5 ? "Mild oversubscription" : "OVERSUBSCRIBED âœ—"
+  const ratingLabel = oversubRatio <= 1 ? "Non-blocking ✓" : oversubRatio <= 1.5 ? "Mild oversubscription" : "OVERSUBSCRIBED ✗"
 
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
@@ -84,3 +84,4 @@ export function OversubscriptionCalculatorViz() {
 }
 
 export default OversubscriptionCalculatorViz
+

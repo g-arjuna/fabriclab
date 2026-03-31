@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useState } from "react"
 
 type Field = "size" | "time" | "algbw" | "busbw" | "wrong"
@@ -14,7 +14,7 @@ const FIELD_EXPLANATIONS: Record<Field, { label: string; detail: string; color: 
     label: "Elapsed time (microseconds)",
     detail: "How long the entire AllReduce took — from the first GPU starting to send until every GPU has the complete reduced result. Includes algorithm overhead, network latency, and serialisation.",
     color: "#a78bfa",
-    example: "9814 Î¼s = 9.8ms for a 512MB AllReduce on 32 GPUs.",
+    example: "9814 µs = 9.8ms for a 512MB AllReduce on 32 GPUs.",
   },
   algbw: {
     label: "Algorithm bandwidth (GB/s)",
@@ -24,9 +24,9 @@ const FIELD_EXPLANATIONS: Record<Field, { label: string; detail: string; color: 
   },
   busbw: {
     label: "Bus bandwidth (GB/s) — THE number that matters",
-    detail: "algbw × 2(N-1)/N. This corrects for the ring algorithm's communication volume and tells you what fraction of NIC line rate NCCL is actually using. Compare this to your NIC speed (400Gb/s = 50 GB/s). For a 32-node cluster, expect 35–45 GB/s busbw for large tensors.",
+    detail: "algbw × 2(N-1)/N. This corrects for the ring algorithm's communication volume. Each DGX H100 node has 8 × 400G NICs (~400 GB/s aggregate per node). The busbw in a 32-node / 256-GPU test reflects per-node aggregate throughput across all 8 NICs. Compare busbw to 8 × 50 GB/s = 400 GB/s per node max. A healthy 32-node cluster shows 130–160 GB/s busbw at large tensor sizes (33–40% of theoretical max, expected due to ring overhead and fabric hops).",
     color: "#22c55e",
-    example: "102.6 GB/s busbw for 32 GPUs × 400G NICs = 81% line rate utilisation. Healthy.",
+    example: "102.6 GB/s busbw on a 32-node BasePOD ≈ 26% of 400 GB/s per-node NIC capacity. At 512 MB messages, fabric is the limit. At 8 GB messages, 146 GB/s busbw approaches ~37% — healthy for this cluster size.",
   },
   wrong: {
     label: "#wrong — correctness check",
@@ -47,7 +47,7 @@ const OUTPUT_ROWS = [
 
 const COLUMNS: { key: Field; header: string }[] = [
   { key: "size", header: "size (B)" },
-  { key: "time", header: "time (Î¼s)" },
+  { key: "time", header: "time (µs)" },
   { key: "algbw", header: "algbw (GB/s)" },
   { key: "busbw", header: "busbw (GB/s)" },
   { key: "wrong", header: "#wrong" },
@@ -78,7 +78,7 @@ export function NCCLTestOutputViz() {
                   onClick={() => setSelectedField(col.key === selectedField ? null : col.key)}
                 >
                   {col.header}
-                  {selectedField === col.key && " â—€"}
+                  {selectedField === col.key && " ◀"}
                 </th>
               ))}
             </tr>
@@ -139,3 +139,7 @@ export function NCCLTestOutputViz() {
   )
 }
 export default NCCLTestOutputViz
+
+
+
+

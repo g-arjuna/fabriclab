@@ -111,7 +111,7 @@ export function StorageSeparationViz() {
               <text x="30" y="62" textAnchor="middle" fill="#475569" fontSize="8">AllReduce</text>
               {/* DPU → switch */}
               <line x1="60" y1="155" x2="200" y2="115" stroke="#22c55e" strokeWidth="2" />
-              <text x="30" y="155" textAnchor="middle" fill="#22c55e" fontSize="8">BlueField-3</text>
+              <text x="30" y="155" textAnchor="middle" fill="#22c55e" fontSize="8">ConnectX-7</text>
               <text x="30" y="167" textAnchor="middle" fill="#475569" fontSize="8">checkpoint</text>
               {/* switch → compute dest */}
               <line x1="380" y1="90" x2="490" y2="50" stroke="#60a5fa" strokeWidth="2" />
@@ -156,7 +156,7 @@ export function StorageSeparationViz() {
               <text x="30" y="56" textAnchor="middle" fill="#475569" fontSize="8">AllReduce</text>
               {/* DPU → storage switch */}
               <line x1="60" y1="152" x2="170" y2="152" stroke="#22c55e" strokeWidth="2" />
-              <text x="30" y="148" textAnchor="middle" fill="#22c55e" fontSize="8">BlueField-3</text>
+              <text x="30" y="148" textAnchor="middle" fill="#22c55e" fontSize="8">ConnectX-7</text>
               <text x="30" y="160" textAnchor="middle" fill="#475569" fontSize="8">checkpoint</text>
               {/* compute switch → GPU peers */}
               <line x1="330" y1="48" x2="490" y2="48" stroke="#60a5fa" strokeWidth="2" />

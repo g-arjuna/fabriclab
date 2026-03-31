@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useState } from "react"
 
 // ── PCIeBandwidthViz ─────────────────────────
@@ -141,10 +141,11 @@ export function PCIeBandwidthViz() {
       </div>
 
       <div style={{ padding: "10px 14px", background: "#1e293b", borderRadius: "8px", fontSize: "12px", color: "#5F5E5A", borderLeft: "2px solid #378ADD" }}>
-        SXM GPUs avoid this entirely: NIC-to-GPU RDMA in a DGX node uses GDS via the DPU, bypassing PCIe for bulk data. The PCIe bus carries only control traffic — never training data.
+        SXM GPUs avoid the bottleneck differently: GPUDirect Storage uses the Slot1/Slot2 ConnectX-7 NIC over PCIe Gen5 to DMA directly into GPU HBM, eliminating system RAM copies. PCIe Gen5 x16 (64 GB/s) is wide enough that the NIC, not PCIe, is the limit. Control traffic is the only non-data PCIe consumer.
       </div>
     </div>
   )
 }
 
 export default PCIeBandwidthViz
+

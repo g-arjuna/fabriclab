@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useState } from "react"
 
 // ── GPUFormFactorViz ─────────────────────────
@@ -112,7 +112,7 @@ export function GPUFormFactorViz() {
 
       <div style={{ marginTop: "12px", padding: "10px 14px", background: "#1e293b", borderRadius: "8px", fontSize: "12px", color: "#5F5E5A", borderLeft: `2px solid ${mode === "sxm" ? "#1D9E75" : "#D85A30"}` }}>
         {mode === "sxm"
-          ? "SXM: NVLink handles all GPU-to-GPU traffic. PCIe carries only CPU control traffic and BlueField-3 DPU storage operations — neither on the training critical path."
+          ? "SXM: NVLink handles all GPU-to-GPU traffic. PCIe carries only CPU control traffic and ConnectX-7 storage NIC (Slot1/Slot2) operations — neither on the training critical path."
           : "PCIe: all GPU-to-GPU and NIC-to-GPU traffic shares the same PCIe bus. Effective training bandwidth is 28× lower than SXM for intra-node communication."}
       </div>
     </div>
@@ -120,3 +120,4 @@ export function GPUFormFactorViz() {
 }
 
 export default GPUFormFactorViz
+

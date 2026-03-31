@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState } from "react"
 
@@ -213,7 +213,7 @@ export function DPUExplainerViz() {
             <div className="space-y-2">
               {[
                 { name: "ConnectX-7 × 8", count: "One per GPU", network: "Compute fabric", purpose: "AllReduce, RDMA training traffic — Rails 0–7", color: "#1e40af" },
-                { name: "BlueField-3 × 2", count: "Slot1 / Slot2", network: "Storage fabric", purpose: "NVMe-oF storage and in-band management", color: "#6d28d9" },
+                { name: "ConnectX-7 × 2", count: "Slot1 / Slot2", network: "Storage fabric", purpose: "NVMe-oF storage and in-band management", color: "#0ea5e9" },
               ].map(item => (
                 <div key={item.name} className="rounded-xl p-3"
                   style={{ backgroundColor: item.color + "22", border: `1px solid ${item.color}44` }}>
@@ -245,3 +245,4 @@ export function DPUExplainerViz() {
 }
 
 export default DPUExplainerViz
+

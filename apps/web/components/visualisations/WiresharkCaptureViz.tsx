@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useState } from "react"
 
 // -- WiresharkCaptureViz -------------------------
@@ -268,7 +268,7 @@ const CAPTURES: Record<string, CaptureData> = {
       {
         proto: "Internet Protocol Version 4",
         color: "#14532d",
-        summary: "TTL: 61 (decremented twice at Leaf1 and SpineC)",
+        summary: "TTL: 61 (decremented three times: Leaf1, SpineC, Leaf4)",
         fields: [
           { name: "TTL", value: "61", bytes: "3d", highlight: "changed", children: [
             { name: "Started:", value: "64 at source NIC. Decremented at Leaf1 (->63), SpineC (->62), Leaf4 (->61)" }
@@ -479,3 +479,4 @@ export function WiresharkCaptureViz({ captureId }: Props) {
 }
 
 export default WiresharkCaptureViz
+

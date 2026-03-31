@@ -73,13 +73,14 @@ the data movement.
 
 The complete NVMe-oF RDMA exchange for a write:
 
-1. Initiator sends SEND capsule (the SQE) to the target over RDMA.
-2. Target optionally sends an RDMA READ to pull data from the initiator's registered memory region.
-   OR the initiator sends an RDMA WRITE to push data to the target's registered memory region.
+1. Initiator sends a SEND capsule (the SQE) to the target over RDMA.
+2. Target issues an RDMA Read Work Request against the initiator's registered memory region (the
+   RKEY published in the SQE SGL). The initiator CX7 responds autonomously with RDMA Read Response
+   frames carrying the checkpoint payload. No initiator CPU instruction touches the data.
 3. Target sends a SEND capsule back (the CQE) to notify completion.
 
-Step 2 uses the RKEY mechanism from Ch16 -- the initiator registers a memory region, publishes the
-virtual address and RKEY in the SGL, and the target performs an RDMA READ against that registration.
+Step 2 uses the RKEY mechanism from Ch16: the initiator registers a memory region, publishes the
+virtual address and RKEY in the SGL, and the target performs an RDMA Read against that registration.
 The CX7 NIC enforces memory region boundaries just as it does for compute traffic.
 
 <NVMeOFCapsuleViz />
@@ -106,9 +107,11 @@ subsystem it wants to use.
 ## Act 3 -- The DMA Path: GPU HBM to CX7
 
 The host CPU initiator posts a work request to the CX7 NIC. The WQE (Work Queue Entry) describes
-the operation: an RDMA Send (to deliver the SQE capsule) followed by an RDMA Write or Read (for the
-data payload). The CX7 firmware processes the WQE from its send queue, the same pipeline described
-in Ch16 Act 3 -- but this time the source of the data is not GPU RDMA memory registered by NCCL.
+the first operation: an RDMA Send to deliver the SQE capsule. The data payload moves separately ?
+the target issues an RDMA Read against the initiator's registered MR, and the initiator CX7
+responds with RDMA Read Response frames (handled entirely by NIC firmware). The CX7 firmware
+processes the WQE from its send queue, the same pipeline described in Ch16 Act 3 -- but this time
+the source of the data is not GPU RDMA memory registered by NCCL.
 It is either system DRAM (host CPU path) or HBM (GDS path).
 
 ### Host CPU path (baseline)
@@ -221,8 +224,8 @@ BTH (Base Transport Header) 12 bytes
   PSN                      per-QP packet sequence number
   Flags                    solicited event set (notifies target CQ)
 
-RETH (RDMA Extended Transport Header) -- present for RDMA Write/Read
-  12 bytes: virtual address, RKEY, DMA length
+SGL1 (inside the SQE) provides the virtual address, RKEY, and DMA length used by the target's
+subsequent RDMA Read request against the initiator MR.
 
 NVMe-oF SQE capsule        64 bytes
   Opcode                   0x01 (Write) or 0x02 (Read)
@@ -239,20 +242,20 @@ ICRC (Invariant CRC)       4 bytes
 ```
 
 Total header overhead for the SQE capsule frame: ~134 bytes. The SQE capsule itself is 64 bytes.
-That 64-byte command triggers the data transfer, which is carried in subsequent RDMA Write frames.
+That 64-byte command triggers the data transfer, which is carried in subsequent RDMA Read Response frames.
 
 <StorageFrameAnatomyViz />
 
 ### The data transfer frames
 
-The data payload arrives in RDMA Write frames, not Send frames. Each frame carries a RETH header
-(target virtual address + RKEY + total DMA length) on the first packet, then pure data in
-subsequent packets. For a 4 MiB checkpoint block, at 4096-byte MTU you get roughly 1024 data
+The data payload arrives in RDMA Read Response frames, not Send frames. The target issues an
+RDMA Read request against the initiator MR, and the initiator CX7 returns data in one or more
+Read Response packets. For a 4 MiB checkpoint block, at 4096-byte MTU you get roughly 1024 data
 frames. The BTH OpCode sequence is:
 
-- First packet: `RDMA_WRITE_FIRST` (0x06) -- carries RETH
-- Middle packets: `RDMA_WRITE_MIDDLE` (0x07) -- data only
-- Last packet: `RDMA_WRITE_LAST` (0x08) or `RDMA_WRITE_ONLY` (0x0A) if single-frame
+- First packet: `RDMA_READ_RESPONSE_FIRST` (0x0D)
+- Middle packets: `RDMA_READ_RESPONSE_MIDDLE` (0x0E) -- data only
+- Last packet: `RDMA_READ_RESPONSE_LAST` (0x0F) or `RDMA_READ_RESPONSE_ONLY` (0x10) if single-frame
 
 The ICRC covers the invariant fields of all these frames. The switch never rewrites the ICRC --
 the BTH and RETH are not modified in transit.
@@ -450,10 +453,10 @@ drop packets and destroy AllReduce performance.
 - The DGX H100/H200 storage path uses the host CPU (Intel Xeon) as the NVMe-oF initiator. The
   ConnectX-7 NICs in Slot1 and Slot2 carry the storage traffic. No BlueField-3, no ARM offload.
 - An NVMe-oF write is a two-phase RDMA exchange: an RDMA Send delivers the 64-byte SQE capsule
-  to the target; one or more RDMA Write or Read operations carry the data payload using the RKEY
-  from the SGL.
+  to the target; the target then issues an RDMA Read against the initiator MR, and the initiator
+  CX7 returns one or more RDMA Read Response frames using the RKEY from the SGL.
 - The storage frame over RoCEv2 has the same Ethernet/IP/UDP/BTH outer structure as a compute
-  frame. The BTH OpCode and payload differ: Send capsule for NVMe commands, RDMA Write for data.
+  frame. The BTH OpCode and payload differ: Send capsule for NVMe commands, RDMA Read Response for data.
 - The storage fabric runs at 2:1 oversubscription, does not use PFC, and sets ECN thresholds
   higher than the compute fabric to handle bursty checkpoint writes.
 - GDS (GPUDirect Storage) bypasses system DRAM entirely. The CX7 DMA-reads data directly from

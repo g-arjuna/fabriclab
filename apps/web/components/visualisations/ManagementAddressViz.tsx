@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 
@@ -36,8 +36,8 @@ const PLANES: {
     label: "In-Band Management Plane",
     color: "#f59e0b",
     range: "10.10.4.0/24 (BasePOD 1)",
-    nic: "DGX CX7 Slot1/Slot2 bonded (enp170s0f0 + enp41s0f0)",
-    switch_: "Compute leaf switch -- same as compute fabric physically",
+    nic: "DGX CX7 Slot1/Slot2 port0 bonded (enp170s0f0 + enp41s0f0) — uplinks to compute leaf",
+    switch_: "Compute leaf switch — NOT the storage switch. Same physical switch as GPU compute fabric.",
     routable: "Routable via compute fabric BGP",
     when: "SSH, Ansible, Prometheus DCGM scrape, monitoring, health checks. Used when host OS is running.",
     addrs: [
@@ -152,3 +152,4 @@ export function ManagementAddressViz() {
 }
 
 export default ManagementAddressViz;
+
