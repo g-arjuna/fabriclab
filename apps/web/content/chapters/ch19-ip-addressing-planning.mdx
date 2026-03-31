@@ -1,0 +1,702 @@
+---
+title: "Chapter 19: IP Addressing and Planning"
+module: "HPC Networking Foundations"
+level: "Advanced"
+estimatedMinutes: 65
+labLink: ""
+---
+
+You are standing in front of a blank rack. Eight DGX H100 nodes in boxes. Four leaf switches.
+Two spine switches. A storage switch. An OOB switch. A UFM server. An allocation spreadsheet
+open on your laptop.
+
+What goes in that spreadsheet?
+
+Every chapter before this one assumed the fabric had working IP addresses. This chapter explains
+how those addresses were chosen -- and why a wrong choice made here will haunt you at 3am when
+a training job stalls because two pods share an overlapping range and the BGP session between
+them never came up.
+
+IP addressing for an AI fabric is not complicated, but it is unforgiving. There are no spanning
+tree reconvergences to mask a bad design. There is no NAT to hide an overlap. Every address must
+be correct, unique, and consistently assigned before the first GPU sends a packet. A network
+engineer who understands why each range exists and how the pieces fit together can address a
+BasePOD in under an hour. One who does not will spend a week debugging mysteriously absent
+BGP routes.
+
+This chapter takes you through every address family in an AI fabric -- loopbacks, P2P links,
+server prefixes, BMC ranges, storage ranges, VXLAN VNIs, VLAN IDs -- with a complete worked
+example for a BasePOD that scales cleanly to SuperPOD.
+
+## Act 1 -- The Address Families: What Needs an IP and Why
+
+Before touching a single octet, you need to understand what actually needs an address in a
+modern AI fabric. The list is longer than it looks.
+
+<AddressFamiliesViz />
+
+In a BGP-unnumbered fabric (Ch15 Act 2), the inter-switch links do not get IPv4 addresses.
+BGP peers over IPv6 link-local. So the address families that DO need planned space are:
+
+**Loopback addresses** -- Every switch and every server that participates in BGP routing
+needs a loopback. The loopback is the switch's identity. It is the address UFM uses for
+SNMP polling, the address Prometheus uses for telemetry scraping, the BGP router-ID, and
+the VTEP IP for VXLAN encapsulation. If a loopback changes, everything that references
+that switch breaks simultaneously.
+
+**Server host prefixes** -- Each DGX server needs an IP on its in-band management or
+compute interface. In a flat L3 fabric, each server is typically a /32 host route advertised
+by its directly connected leaf into BGP. In an EVPN-VXLAN design, each server gets an IP
+within its tenant VRF subnet.
+
+**Management addresses** -- Three separate planes, all needing distinct ranges:
+- BMC/IPMI (OOB): one IP per DGX, one per switch management port
+- In-band management: one IP per DGX host management interface (CX7 Slot1/Slot2)
+- UFM/monitoring server: one IP
+
+**Storage addresses** -- Each DGX has two dual-port CX7 storage NICs (4 addresses total
+per DGX). The storage appliances each have NVMe-oF target portal IPs.
+
+**VXLAN VTEP addresses** -- In an EVPN design, each leaf switch needs a VTEP IP. This is
+typically the same as the loopback or a dedicated loopback2 address.
+
+**VLAN IDs and VXLAN VNIs** -- Not IP addresses but allocated alongside them. VLANs are
+12-bit (1-4094). VNIs are 24-bit (1-16777215). They need a mapping scheme.
+
+<PodScaleViz />
+
+The scale of a BasePOD and SuperPOD makes discipline mandatory:
+
+| Scope | Switches | DGX nodes | Server prefixes | Loopbacks |
+|---|---|---|---|---|
+| BasePOD | ~10 | 8-32 | 32-128 | ~50 |
+| SuperPOD (1 BasePOD) | ~10 | 32 | 128 | ~50 |
+| SuperPOD (20 BasePODs) | ~200 | 640 | 2560 | ~900 |
+| SuperPOD (140 DGX H100) | ~50 | 140 | 560 | ~200 |
+
+A full 140-node H100 SuperPOD is a common deployment unit. You need addresses for 140 x 8 = 1120
+GPU network interfaces, 140 BMCs, 140 storage NIC pairs, ~50 switches, and associated
+management services. Get this wrong once and fixing it in production means coordinated
+downtime across everything.
+
+## Act 2 -- RFC 1918 Space Partitioning
+
+RFC 1918 defines three private address ranges:
+- `10.0.0.0/8` -- 16 million addresses
+- `172.16.0.0/12` -- 1 million addresses
+- `192.168.0.0/16` -- 65,536 addresses
+
+For AI fabric deployments, `10.0.0.0/8` is the only range large enough. Use the full /8 and
+partition it cleanly between fabrics, pods, and device types. `172.16.x.x` and `192.168.x.x`
+are often already in use in the corporate network you are connecting to -- using them for the
+AI cluster creates the nightmare scenario where two default routes exist and traffic black-holes.
+
+<RFC1918PartitioningViz />
+
+The recommended top-level partitioning for a multi-pod AI deployment:
+
+```
+10.0.0.0/8  --  ENTIRE AI CLUSTER
+  |
+  +-- 10.0.0.0/16   OOB management (BMC + switch mgmt0)
+  |     10.0.1.0/24   DGX BMC addresses (BasePOD 1)
+  |     10.0.2.0/24   Switch management addresses (BasePOD 1)
+  |     10.0.3.0/24   UFM / monitoring servers
+  |     10.0.10.0/24  DGX BMC addresses (BasePOD 2)
+  |     ... /24 per pod, sub-allocated
+  |
+  +-- 10.10.0.0/16  Compute fabric loopbacks + server prefixes
+  |     10.10.0.0/24  Switch loopbacks (BasePOD 1)
+  |     10.10.1.0/24  Server host prefixes (BasePOD 1, rail 0)
+  |     10.10.2.0/24  Server host prefixes (BasePOD 1, rail 1)
+  |     10.10.10.0/24 Switch loopbacks (BasePOD 2)
+  |     ... /24 per pod
+  |
+  +-- 10.20.0.0/16  Storage fabric
+  |     10.20.1.0/24  DGX storage NICs (BasePOD 1)
+  |     10.20.2.0/24  Storage appliance portals (BasePOD 1)
+  |     10.20.10.0/24 DGX storage NICs (BasePOD 2)
+  |
+  +-- 10.30.0.0/16  EVPN tenant VRF subnets
+  |     10.30.1.0/24  Tenant 1 GPU network
+  |     10.30.2.0/24  Tenant 2 GPU network
+  |     ... one /24 per tenant
+  |
+  +-- 10.100.0.0/16  Reserved for future SuperPOD expansion
+  +-- 10.200.0.0/16  Reserved for interconnect to corporate network
+```
+
+This partitioning has three properties a network engineer cares about:
+
+1. **Summarisable**: each pod's complete address usage fits in a small number of /16 or /24
+   aggregates. When you peer a BasePOD BGP fabric with a SuperPOD spine, you advertise
+   `10.10.0.0/16` as a summary, not hundreds of /32 host routes. The corporate firewall
+   policy stays manageable.
+
+2. **Non-overlapping by construction**: OOB is always `10.0.x.x`. Compute is always `10.10.x.x`.
+   Storage is always `10.20.x.x`. There is no scenario where a DGX host confuses its BMC
+   address with its GPU compute address because they are in different /16 blocks.
+
+3. **Pod-indexed**: the third octet encodes the pod number. Pod 1 = .1.x, pod 2 = .10.x
+   (leaving room within the pod for device type sub-allocation). When you see `10.10.1.45`
+   in a log, you immediately know: compute fabric, BasePOD 1, server address.
+
+## Act 3 -- Loopback Addressing in Detail
+
+The loopback is the most important address on any switch in the fabric. It is reachable via
+any path, it never goes down due to a link failure, and it is the BGP router-ID. Get
+loopback assignments wrong and debugging is painful -- two switches with the same loopback
+produce BGP table corruption that looks like an intermittent hardware fault.
+
+<LoopbackAddressingViz />
+
+### /32 loopbacks -- why host routes
+
+Every switch loopback is a /32. Not a /24, not a /30. A /32 host route. This is a BGP
+fabric-specific convention that differs from traditional OSPF designs and it confuses
+engineers coming from enterprise backgrounds.
+
+The reason: in a BGP unnumbered fabric, loopbacks are redistributed into BGP as /32 host
+routes. Each switch advertises its own loopback /32. The BGP table on each switch then has
+one /32 per switch in the fabric -- a flat table of identities. There are no subnet masks
+to maintain, no split subnets to debug, and no case where a /24 loopback subnet accidentally
+attracts traffic meant for a different switch.
+
+This also means there is no broadcast domain. A /32 has one host. No ARP, no need for
+subnet-directed broadcast suppression.
+
+### Loopback allocation scheme for a BasePOD
+
+```
+BasePOD 1 switch loopbacks: 10.10.0.0/24
+
+  Leaf switches:
+    leaf-01  10.10.0.1/32
+    leaf-02  10.10.0.2/32
+    leaf-03  10.10.0.3/32
+    leaf-04  10.10.0.4/32
+    (reserve .5-.15 for leaf expansion)
+
+  Spine switches:
+    spine-01  10.10.0.16/32
+    spine-02  10.10.0.17/32
+    (reserve .18-.31 for spine expansion)
+
+  UFM/management server:
+    ufm-01    10.10.0.32/32
+
+  Super-spine (if extending to SuperPOD):
+    super-spine-01  10.10.0.48/32
+    super-spine-02  10.10.0.49/32
+```
+
+The structure within the /24 is deliberate:
+- .1-.15: leaf switches (4 used + 11 reserved for growth)
+- .16-.31: spine switches (2 used + 14 reserved)
+- .32-.47: management/UFM
+- .48-.63: super-spines
+- .64-.255: reserved
+
+When BasePOD 2 is added: it uses `10.10.10.0/24` for its loopbacks. Pod 3: `10.10.20.0/24`.
+The third octet increments by 10 per pod, leaving room for the pod-internal device sub-allocation.
+
+### VTEP loopbacks for EVPN-VXLAN
+
+In an EVPN-VXLAN deployment, each leaf switch acts as a VTEP (VXLAN Tunnel Endpoint). The
+VTEP encapsulates tenant traffic into VXLAN packets and sends them to remote VTEPs. The
+VTEP IP is the source/destination IP in the outer VXLAN IP header.
+
+You have two options:
+
+**Option A: use the primary loopback as VTEP** -- Simple. The same /32 that identifies
+the switch in BGP is also the VTEP. Drawback: you cannot use anycast VTEP (a resilience
+technique where two leaf switches share one VTEP IP for dual-homed servers) without a
+dedicated VTEP loopback.
+
+**Option B: dedicated loopback2 for VTEP** -- The switch has two loopbacks:
+`loopback0` for BGP router-ID and management identity, `loopback1` for VTEP.
+In anycast VTEP deployments, two leaf switches that dual-home a server share the same
+`loopback1` address. This allows the server to ARP for one gateway MAC and have traffic
+delivered via either leaf without reconvergence.
+
+```bash
+# Cumulus Linux NVUE: configure primary loopback and VTEP loopback
+nv set interface lo ip address 10.10.0.1/32
+nv set interface lo ip address 10.10.0.1/32  # BGP router-ID
+nv set nve vxlan source-ip 10.10.0.1         # VTEP IP (Option A: same as loopback)
+# Or Option B: dedicated VTEP address
+nv set interface vtep0 ip address 10.10.0.65/32  # anycast VTEP pair shares .65
+nv set nve vxlan source-ip 10.10.0.65
+nv config apply
+```
+
+## Act 4 -- P2P Link Addressing: Numbered vs Unnumbered
+
+This is the decision point where most network engineers coming from enterprise backgrounds
+get confused. Traditional OSPF/IS-IS designs give every P2P link a /30 or /31 subnet --
+two addresses, one per end. In a 200-switch AI fabric that means 2400 P2P addresses that
+must be planned, assigned, documented, and debugged.
+
+BGP unnumbered (Ch15 Act 2, RFC 5549) eliminates this entirely. The link has no IPv4 address.
+BGP peers using the IPv6 link-local address that every interface auto-generates. The NLRI
+(the prefixes being advertised) remains IPv4. The mechanics work through IPv6 ND.
+
+<PToPLinkViz />
+
+### When to use numbered P2P links
+
+BGP unnumbered is the right choice for all inter-switch links in a modern AI fabric. But there
+are specific scenarios where you still want numbered P2P addresses:
+
+**Troubleshooting target**: when you suspect a specific inter-switch link is dropping packets,
+you want to ping the far end of that link directly. With unnumbered links you have no IPv4
+address to target -- you must use `show interface swp1` counters and rely on per-interface
+error counts rather than reachability testing.
+
+**Legacy switch compatibility**: some older switches or third-party switches in the fabric
+do not support BGP unnumbered. Numbered /31 links are the fallback.
+
+**Peering with external networks**: the peering session from the fabric to the corporate
+border router almost always uses a numbered /30 or /31. BGP unnumbered requires both sides
+to support RFC 5549.
+
+### /31 vs /30 for numbered P2P links
+
+Use /31 (RFC 3021). A /30 wastes two addresses (network address and broadcast) on a link
+that will only ever have two hosts. A /31 gives exactly two host addresses. Modern network
+equipment handles /31 correctly. Save your address space.
+
+```
+/30 link:  10.10.0.0   network address (unusable)
+           10.10.0.1   switch A
+           10.10.0.2   switch B
+           10.10.0.3   broadcast (unusable)
+
+/31 link:  10.10.0.0   switch A
+           10.10.0.1   switch B
+```
+
+If you are building a numbered fabric (unusual but valid), allocate a dedicated /24 for P2P
+links that is separate from the loopback /24:
+
+```
+P2P link range: 10.10.5.0/24  (BasePOD 1, if using numbered links)
+  leaf-01 <-> spine-01:  10.10.5.0/31  (.0 = leaf side, .1 = spine side)
+  leaf-01 <-> spine-02:  10.10.5.2/31
+  leaf-02 <-> spine-01:  10.10.5.4/31
+  ...
+```
+
+### IPv6 link-local mechanics (what actually happens with BGP unnumbered)
+
+Every interface automatically generates an IPv6 link-local address in the `fe80::/10` range.
+The address is derived from the interface MAC address using the EUI-64 algorithm:
+take the 48-bit MAC, insert `ff:fe` in the middle to get 64 bits, flip the 7th bit.
+
+For a CX7 with MAC `a0:88:c2:01:02:03`:
+- Split MAC at midpoint: `a0:88:c2` and `01:02:03`
+- Insert `ff:fe`: `a0:88:c2:ff:fe:01:02:03`
+- Flip bit 7 of first byte: `a0` = `10100000` -> bit 7 flipped -> `10100010` = `a2`
+- Result: `fe80::a288:c2ff:fe01:203`
+
+This link-local address is reachable only on the directly attached link -- it cannot be
+routed. BGP uses it purely for the peering session exchange. The prefixes (IPv4 /32 host
+routes) are what gets advertised and routed.
+
+```bash
+# Verify IPv6 link-local on a Cumulus switch (auto-generated, no config needed)
+ip -6 addr show swp1
+# Output: inet6 fe80::a288:c2ff:fe01:203/64 scope link
+
+# Verify BGP unnumbered session using link-local peer address
+nv show vrf default router bgp peer swp1
+# Peer address will show as fe80::... not an IPv4 address
+```
+
+## Act 5 -- Server Prefix Allocation and /32 Host Routes
+
+Each DGX server needs IPs on its network interfaces. In an AI fabric, the compute interfaces
+(the eight CX7 HCAs for RoCEv2) get IPs that are advertised as /32 host routes into BGP.
+Understanding why /32 and not /24 changes how you design the entire server addressing scheme.
+
+<ServerPrefixViz />
+
+### Why /32 host routes dominate AI fabric server addressing
+
+In an enterprise network, servers typically get a /24 subnet and the switch has a gateway IP
+in that subnet. AllReduce on a GPU cluster cannot work this way -- you cannot have a shared
+L2 subnet spanning leaf switches without violating the lossless fabric requirements (PFC
+domains, ECN thresholds, and the need to control broadcast traffic).
+
+The correct model: each server interface is a /32. It is directly connected to its leaf
+switch. The leaf switch advertises the /32 into BGP. Remote leaves learn the /32 via BGP
+and install a host route pointing to the originating leaf's next-hop.
+
+This means:
+- No shared L2 domain across leaf switches
+- No ARP flooding fabric-wide
+- No broadcast storms possible (each server is its own /32 island)
+- The leaf switch is a pure L3 router from the server's perspective
+
+### RoCEv2 interface addressing for a DGX H100
+
+Each DGX H100 has eight compute CX7 HCAs. In a RoCEv2 fabric, each HCA gets an IP address:
+
+```
+DGX-01 compute interface addresses (BasePOD 1):
+  mlx5_0 / eth0:  10.10.1.1/32   (Rail 0, Leaf-01 facing)
+  mlx5_1 / eth1:  10.10.1.2/32   (Rail 1, Leaf-02 facing)
+  mlx5_2 / eth2:  10.10.1.3/32   (Rail 2, Leaf-03 facing)
+  mlx5_3 / eth3:  10.10.1.4/32   (Rail 3, Leaf-04 facing)
+  mlx5_4 / eth4:  10.10.1.5/32   (Rail 0, second port if dual-homed)
+  mlx5_5 / eth5:  10.10.1.6/32
+  mlx5_6 / eth6:  10.10.1.7/32
+  mlx5_7 / eth7:  10.10.1.8/32
+
+DGX-02 compute interface addresses:
+  mlx5_0 / eth0:  10.10.1.9/32
+  mlx5_1 / eth1:  10.10.1.10/32
+  ...
+```
+
+With 8 DGX nodes x 8 interfaces = 64 compute /32 addresses per BasePOD. These easily fit
+in a /24 block (`10.10.1.0/24` has 254 usable addresses; 64 addresses consumed, 190 reserved
+for expansion).
+
+Each leaf switch advertises the /32 addresses for the DGX ports connected to it:
+- Leaf-01 advertises: 10.10.1.1/32, 10.10.1.9/32, 10.10.1.17/32, ... (DGX-01 to DGX-08 rail0)
+- Leaf-02 advertises: 10.10.1.2/32, 10.10.1.10/32, ... (rail1 ports)
+
+### BGP next-hop behaviour with /32 host routes
+
+When DGX-01 sends a packet to DGX-02's IP `10.10.1.10`, the DGX-01 NIC looks up the route.
+The BGP table on DGX-01 shows: `10.10.1.10/32 via 10.10.0.2` (Leaf-02's loopback). But
+there are 4 paths to Leaf-02's loopback (via each spine). ECMP distributes the traffic across
+all 4 paths to the same leaf. Within each path, the last hop is the direct connected link
+between the leaf and DGX-02's NIC.
+
+This is why the loopback is the BGP next-hop, not the P2P link address: in a BGP unnumbered
+design there is no P2P link address to use. The loopback provides a stable /32 that the
+spine switches can route traffic toward.
+
+## Act 6 -- Management Address Planning in Full Detail
+
+This is the addressing that Ch18 assumed existed. Now you plan it.
+
+<ManagementAddressViz />
+
+Three separate management planes, three separate address ranges:
+
+### OOB plane: BMC and switch management
+
+This lives in `10.0.0.0/16`. Physically on the OOB switch (SN2201). Never routable from
+the compute fabric.
+
+```
+10.0.1.0/24   --  DGX BMC addresses (BasePOD 1)
+  10.0.1.1     DGX-01 BMC (iDRAC)
+  10.0.1.2     DGX-02 BMC
+  ...
+  10.0.1.8     DGX-08 BMC
+  (.9-.127 reserved for node expansion to 127 nodes)
+
+10.0.2.0/24   --  Switch management (BasePOD 1)
+  10.0.2.1     leaf-01 mgmt0
+  10.0.2.2     leaf-02 mgmt0
+  10.0.2.3     leaf-03 mgmt0
+  10.0.2.4     leaf-04 mgmt0
+  10.0.2.16    spine-01 mgmt0
+  10.0.2.17    spine-02 mgmt0
+  10.0.2.32    storage-sw-01 mgmt0
+  10.0.2.33    oob-sw-01 mgmt0  (the OOB switch has its own mgmt interface)
+  10.0.2.48    ufm-server-01
+
+10.0.3.0/24   --  Monitoring and management servers
+  10.0.3.1     prometheus-01
+  10.0.3.2     grafana-01
+  10.0.3.3     ansible-control
+```
+
+**Critical routing rule**: there must be NO route from the compute fabric (`10.10.x.x`) to
+the OOB plane (`10.0.x.x`). The OOB switch is not connected to any compute or storage
+switch. The only access to OOB addresses is via the management workstation or jump server.
+
+### In-band management plane
+
+DGX nodes need a management interface reachable from tools like Prometheus, Ansible, and
+DCGM scraper. This uses the CX7 Slot1 or Slot2 storage NIC (bonded for redundancy) with
+an IP in the compute fabric routable space -- but in a dedicated /24 separate from the
+GPU compute /32 addresses:
+
+```
+10.10.4.0/24   --  DGX in-band management (BasePOD 1)
+  10.10.4.1    DGX-01 mgmt bond (enp170s0f0 + enp41s0f0)
+  10.10.4.2    DGX-02 mgmt bond
+  ...
+  10.10.4.8    DGX-08 mgmt bond
+```
+
+These are routed via the compute fabric BGP (each leaf advertises the /24 block for its
+connected DGX management IPs). Prometheus reaches them via normal BGP-learned routes.
+They are NOT in the OOB 10.0.x.x range.
+
+The distinction matters: if a DGX compute NIC goes down, in-band management via the storage
+CX7 NIC is still reachable. If the OOB switch goes down, in-band management is still
+reachable. You need the OOB BMC only when the host OS itself is down.
+
+### Storage plane
+
+```
+10.20.1.0/24   --  DGX storage NIC addresses (BasePOD 1)
+  10.20.1.1    DGX-01 Slot1 port0 (enp170s0f0)
+  10.20.1.2    DGX-01 Slot1 port1 (enp170s0f1)
+  10.20.1.3    DGX-01 Slot2 port0 (enp41s0f0)
+  10.20.1.4    DGX-01 Slot2 port1 (enp41s0f1)
+  10.20.1.5    DGX-02 Slot1 port0
+  ...
+  10.20.1.32   DGX-08 Slot2 port1
+
+10.20.2.0/24   --  Storage appliance NVMe-oF target portals
+  10.20.2.1    WEKA-01 portal 1
+  10.20.2.2    WEKA-01 portal 2
+  10.20.2.3    WEKA-02 portal 1
+  ...
+```
+
+## Act 7 -- VXLAN VNI Allocation for EVPN Multi-Tenancy
+
+VNIs are 24-bit identifiers: range 1 to 16,777,215. VLAN IDs are 12-bit: 1-4094. Both need
+planned allocation. Burning VNIs randomly is how you create a spreadsheet that nobody
+understands and changes that nobody will make for fear of breaking something.
+
+<VXLANVNIViz />
+
+### VNI naming convention
+
+A simple and widely used VNI allocation convention:
+
+```
+VNI = (Pod number * 10000) + (Tenant number * 100) + (Segment number)
+
+Example:
+  Pod 1, Tenant 1, Segment 1:  10101
+  Pod 1, Tenant 1, Segment 2:  10102  (L3 VRF VNI for this tenant)
+  Pod 1, Tenant 2, Segment 1:  10201
+  Pod 2, Tenant 1, Segment 1:  20101
+```
+
+This gives you 9 pods, 99 tenants per pod, and 99 segments per tenant -- more than enough
+for most deployments, and every VNI is immediately decodable.
+
+In EVPN terminology, each tenant typically needs:
+- A **MAC-VRF VNI** (L2 VNI): used for BUM (Broadcast, Unknown unicast, Multicast) flooding
+  and ARP suppression within the tenant's L2 segment.
+- An **IP-VRF VNI** (L3 VNI): used for routing between subnets within the tenant's L3 VRF.
+
+```
+Tenant 1 (production training job):
+  L2 VNI:  10101  -- MAC-VRF for GPU network segment
+  L3 VNI:  10102  -- IP-VRF for inter-subnet routing
+
+Tenant 2 (dev/test cluster):
+  L2 VNI:  10201
+  L3 VNI:  10202
+```
+
+### VLAN ID planning alongside VNIs
+
+VLAN IDs are the L2 segment identifiers on the leaf switches before encapsulation into VXLAN.
+The VLAN-to-VNI mapping is maintained by EVPN. Keep them aligned to prevent confusion:
+
+```
+VLAN 101 <-> VNI 10101  (Tenant 1 GPU segment)
+VLAN 102 <-> VNI 10102  (reserved for future L3 VNI bridging interface)
+VLAN 201 <-> VNI 10201  (Tenant 2 GPU segment)
+```
+
+**VLAN exhaustion warning**: 4094 is the hard limit. In a multi-tenant SuperPOD with many
+tenants plus storage VLANs plus management VLANs plus OOB VLANs, you can approach this
+limit faster than you expect. Allocating VLANs 1-999 for infrastructure (storage, management,
+OOB) and VLANs 1000-4094 for tenants gives you 3094 tenant VLANs -- enough for most
+deployments, but you must enforce the allocation from day one.
+
+### EVPN VNI configuration on Cumulus Linux
+
+```bash
+# On leaf-01: configure EVPN VNI for tenant 1
+nv set bridge domain br_default vlan 101 vni 10101
+nv set vrf TENANT1 evpn vni 10102
+nv set router bgp autonomous-system 4200000001
+nv set router bgp router-id 10.10.0.1
+nv set vrf TENANT1 router bgp address-family ipv4-unicast redistribute connected enable on
+nv set evpn enable on
+nv config apply
+
+# Verify VNI-to-VLAN mapping
+nv show evpn vni
+# Output shows VNI, type (L2/L3), tenant VRF, and VTEP IP
+```
+
+## Act 8 -- Scaling from BasePOD to SuperPOD
+
+A BasePOD is a single fabric island. A SuperPOD connects multiple BasePODs via a shared
+spine layer (the "super-spine"). The IP addressing must scale cleanly across this boundary.
+
+<SuperPodScalingViz />
+
+### The pod aggregation problem
+
+Each BasePOD has its own BGP ASN structure. When you connect BasePODs, you have two
+design options for route distribution:
+
+**Option A: full mesh iBGP between BasePODs** -- All pods share the same AS and exchange
+routes via iBGP through route reflectors. Simpler but all /32 host routes leak between pods,
+creating very large BGP tables at the super-spine layer.
+
+**Option B: per-pod eBGP with summary advertisements** -- Each BasePOD has its own ASN.
+At the super-spine, each pod advertises a summary aggregate (/16 or /24) rather than
+individual /32 host routes. The super-spine BGP table stays small. Traffic crosses pods
+via the super-spine. This is the recommended model.
+
+With Option B, the RFC 1918 top-level partitioning you chose in Act 2 pays off directly:
+each BasePOD summarises its compute space to `10.10.0.0/24` (pod 1) or `10.10.10.0/24`
+(pod 2). The super-spine sees two /24 summaries instead of 256 individual /32s.
+
+```bash
+# On leaf-01 in BasePOD 1: aggregate the pod's compute prefix before advertising to super-spine
+nv set vrf default router bgp address-family ipv4-unicast aggregate-route 10.10.0.0/20 summary-only
+# summary-only suppresses the more-specific /32s from being advertised to the super-spine
+nv config apply
+```
+
+### SuperPOD address allocation example (140-node H100)
+
+```
+SuperPOD (BasePOD 1 + BasePOD 2, 140 DGX H100 total):
+
+  Super-spine loopbacks:    10.10.100.0/24
+    super-spine-01:  10.10.100.1/32
+    super-spine-02:  10.10.100.2/32
+    super-spine-03:  10.10.100.3/32
+    super-spine-04:  10.10.100.4/32
+
+  BasePOD 1 summary:  10.10.1.0/24  (compute), 10.0.1.0/24 (OOB), 10.20.1.0/24 (storage)
+  BasePOD 2 summary:  10.10.11.0/24 (compute), 10.0.11.0/24 (OOB), 10.20.11.0/24 (storage)
+```
+
+The key insight: when you planned the pod-indexed addressing in Act 2 (pod N uses
+`10.10.(N*10).0/24`), you implicitly built the summarisation hierarchy. The third octet
+encodes the pod, making `/20` summaries natural (pod 1-3 = 10.10.0.0/20, pod 4-6 = 10.10.32.0/20).
+
+## Act 9 -- The Seven Mistakes That Break at 3am
+
+Every mistake in this list has been made in production. Some caused hours of debugging.
+Some caused multi-day outages.
+
+<AddressingMistakesViz />
+
+### Mistake 1: Compute and OOB in overlapping ranges
+
+**What happens**: You allocate `10.0.0.0/8` for compute and also use `10.0.1.0/24` for
+BMC addresses. The DGX compute NIC has a route to `10.0.0.0/8` via BGP. When it tries
+to reach the BMC at `10.0.1.10`, the packet goes over the compute fabric instead of the
+OOB switch. The BMC never receives it because the compute switch has no route to the BMC.
+Management is unreachable via the path it should be unreachable via, and the engineer
+cannot figure out why ipmitool hangs.
+
+**Fix**: OOB and compute must be in entirely separate /16 blocks. No overlap possible by
+construction. `10.0.x.x` = OOB always. `10.10.x.x` = compute always.
+
+### Mistake 2: /24 server subnets instead of /32 host routes
+
+**What happens**: You give each DGX-leaf segment a /24 subnet (`DGX-01 on 10.10.1.0/24,
+DGX-02 on 10.10.2.0/24`). AllReduce traffic needs to flow between DGX-01 and DGX-02.
+The leaf has two /24 subnets in the routing table but they are directly connected -- no
+BGP route is generated because they are connected routes, not BGP-learned routes. Traffic
+within a DGX works fine. Traffic between DGX nodes fails because no route exists across
+the fabric.
+
+**Fix**: Server interfaces as /32. Leaf advertises /32 into BGP. Spines learn /32 and
+forward. Remote leaves install /32 as BGP route. Works.
+
+### Mistake 3: VLAN ID reuse across storage and compute
+
+**What happens**: VLAN 10 is used for compute traffic on the leaf switches and also VLAN 10
+is configured on the storage switch for storage management. When the leaf switch's VLAN 10
+trunking port is plugged into the storage switch accidentally (wrong cable in a dense rack),
+VLAN 10 traffic merges. GPU AllReduce packets flood the storage network. Storage appliances
+receive millions of unfamiliar multicast packets. NVMe-oF connections reset under the load.
+
+**Fix**: Dedicate VLAN ranges by fabric. VLANs 1-99: reserved/infrastructure. VLANs 100-199:
+storage. VLANs 1000-4094: compute/tenants. Never share a VLAN ID across fabrics.
+
+### Mistake 4: Not reserving headroom in every /24
+
+**What happens**: BasePOD 1 is deployed with 8 DGX nodes. Each uses 8 IPs in `10.10.1.0/24`.
+64 addresses consumed of 254. Six months later, the cluster is expanded to 32 DGX nodes.
+Now you need 256 addresses in `10.10.1.0/24` -- one more than the /24 can hold. Either the
+30th DGX gets an address in a different /24 (breaking the pod-indexed scheme) or you
+renumber the entire pod.
+
+**Fix**: Plan for maximum pod size before deployment. A BasePOD is typically 32 DGX nodes
+maximum. 32 x 8 = 256 compute addresses. Allocate a full /23 (`10.10.0.0/23` = 512 addresses)
+for the compute interfaces of one pod, not a /24. Reserve half for future use.
+
+### Mistake 5: BGP router-ID collision
+
+**What happens**: Two switches in the fabric have the same loopback IP. They both advertise
+the same /32 into BGP. Each switch sees two equal-cost paths to `10.10.0.1/32`. Depending
+on which switch is queried, traffic that should reach switch A arrives at switch B. SNMP
+polling for switch A returns switch B's counters. UFM topology shows switches flickering
+between two apparent locations.
+
+**Fix**: Automate loopback assignment. Generate loopbacks from the pod-indexed scheme in a
+spreadsheet and push via Ansible. Never assign by hand without a source-of-truth document.
+
+### Mistake 6: VNI assignment without a naming convention
+
+**What happens**: Tenant 1 gets VNI 100. Tenant 2 gets VNI 200. Later, a temporary debug
+VNI 150 is created and forgotten. Six months later, a new engineer adds VNI 100 to a second
+pod and conflicts with a VNI range that extends across both pods. EVPN distributes conflicting
+MAC-IP bindings. Traffic for one tenant randomly ends up in another tenant's VRF.
+
+**Fix**: Use the formula from Act 7. Every VNI encodes pod + tenant + segment. Any VNI
+is immediately decodable. Conflicts are prevented by construction.
+
+### Mistake 7: No summary route plan at SuperPOD interconnect
+
+**What happens**: BasePOD 1 and BasePOD 2 are connected at the super-spine. Neither pod
+was designed with aggregatable address ranges. BasePOD 1 uses `10.5.1.0/24` for some
+compute, `10.8.3.0/24` for other compute (assigned ad-hoc). There is no clean summary.
+The super-spine must carry the full BGP table of both pods -- thousands of /32 host routes.
+When super-spine-01 reboots, it takes 4 minutes to reconverge because it must re-learn
+every individual /32 from both pods.
+
+**Fix**: Design the summarisation into the address plan from day one. Pod N owns `10.10.(N*10).0/23`
+for compute. The super-spine carries two /23 summaries per pod. Convergence is seconds,
+not minutes.
+
+## What you now know
+
+- Every address family in an AI fabric has a purpose. Loopbacks are router identities.
+  /32 host routes are how servers appear in BGP. OOB addresses are physically separate.
+  Storage addresses are on a different physical switch. Each family lives in its own /16 block.
+- The top-level `10.0.0.0/8` partitioning is the most important single decision. OOB = 10.0.x.x,
+  Compute = 10.10.x.x, Storage = 10.20.x.x, Tenants = 10.30.x.x. Non-overlapping by
+  construction and summarisable at pod boundaries.
+- Switch loopbacks are /32 host routes, pod-indexed in a /24 block, with reserved ranges
+  for leaf/spine/super-spine expansion. The loopback is the BGP router-ID, the VTEP IP,
+  and the management polling target.
+- BGP unnumbered (RFC 5549) eliminates all P2P link addressing. Numbered /31 links are only
+  needed for troubleshooting convenience, third-party compatibility, or external peering.
+- VNIs encode pod + tenant + segment in a 24-bit number. VLAN IDs are deduplicated by
+  range across fabrics. VLAN exhaustion (>4094) is a real risk in large multi-tenant
+  deployments and must be planned from day one.
+- BasePOD-to-SuperPOD scaling works by BGP route aggregation. Each pod advertises a summary
+  prefix, not individual /32s. This only works if the pod's address space is designed to be
+  aggregatable from the start.
+- The seven common mistakes all share one root cause: addressing decided ad-hoc without a
+  plan. A one-hour addressing session before racking a single switch prevents a week of
+  debugging after every GPU is running.
+
+[Continue to Chapter 20 -- Ultra Ethernet Consortium (UEC) ->](/learn/ch20-uec)

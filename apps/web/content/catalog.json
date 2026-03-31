@@ -480,6 +480,32 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch18-oob-management-network"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch19-ip-addressing-planning",
+      "number": 19,
+      "title": "IP Addressing and Planning",
+      "href": "/learn/ch19-ip-addressing-planning",
+      "durationMinutes": 65,
+      "durationLabel": "65 min",
+      "partKey": "scale-architecture",
+      "partTitle": "Part 4 - Scale and Architecture",
+      "partDescription": "Requires Part 3 - Ch 12-16",
+      "tags": [
+        "IP addressing",
+        "Loopbacks",
+        "RFC1918",
+        "BGP unnumbered",
+        "VXLAN",
+        "SuperPOD"
+      ],
+      "description": "A complete addressing reference for DGX BasePOD and SuperPOD deployments: address families, RFC 1918 partitioning, loopback design, P2P links, /32 server routes, management-plane planning, VXLAN VNI allocation, and scaling pitfalls.",
+      "previewSummary": "Plan every address family in the fabric before you rack hardware: loopbacks, links, servers, management, overlays, and growth.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch19-ip-addressing-planning"
     }
   ],
   "labs": [

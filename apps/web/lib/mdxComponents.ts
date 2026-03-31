@@ -147,6 +147,16 @@ import { SwitchMgmtVsDataViz } from "@/components/visualisations/SwitchMgmtVsDat
 import { UFMManagementPlaneViz } from "@/components/visualisations/UFMManagementPlaneViz"
 import { BF3ManagementArchViz } from "@/components/visualisations/BF3ManagementArchViz"
 import { OOBSecurityViz } from "@/components/visualisations/OOBSecurityViz"
+import { AddressFamiliesViz } from "@/components/visualisations/AddressFamiliesViz"
+import { PodScaleViz } from "@/components/visualisations/PodScaleViz"
+import { RFC1918PartitioningViz } from "@/components/visualisations/RFC1918PartitioningViz"
+import { LoopbackAddressingViz } from "@/components/visualisations/LoopbackAddressingViz"
+import { PToPLinkViz } from "@/components/visualisations/PToPLinkViz"
+import { ServerPrefixViz } from "@/components/visualisations/ServerPrefixViz"
+import { ManagementAddressViz } from "@/components/visualisations/ManagementAddressViz"
+import { VXLANVNIViz } from "@/components/visualisations/VXLANVNIViz"
+import { SuperPodScalingViz } from "@/components/visualisations/SuperPodScalingViz"
+import { AddressingMistakesViz } from "@/components/visualisations/AddressingMistakesViz"
 import {
   LeafSwitchProcessingViz,
   SpineForwardingViz,
@@ -296,6 +306,16 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   UFMManagementPlaneViz,
   BF3ManagementArchViz,
   OOBSecurityViz,
+  AddressFamiliesViz,
+  PodScaleViz,
+  RFC1918PartitioningViz,
+  LoopbackAddressingViz,
+  PToPLinkViz,
+  ServerPrefixViz,
+  ManagementAddressViz,
+  VXLANVNIViz,
+  SuperPodScalingViz,
+  AddressingMistakesViz,
   LeafSwitchProcessingViz,
   SpineForwardingViz,
   DestinationNICDeliveryViz,
