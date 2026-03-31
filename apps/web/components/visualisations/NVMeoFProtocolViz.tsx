@@ -64,12 +64,12 @@ const transports: {
     usedIn: "AI training clusters, HPC storage fabrics",
     aiCluster: true,
     description:
-      "NVMe commands transmitted using RDMA verbs over RoCEv2. The initiator CX7 NIC delivers the NVMe SQE capsule via RDMA Send; the target then pulls the data payload via RDMA Read against the initiator's registered MR. No TCP overhead. No host CPU involvement on the data path. The combination of RDMA transport and GDS completes the zero-CPU-copy path — data flows from storage appliance directly to GPU HBM with no system RAM involvement.",
+      "NVMe commands transmitted using RDMA verbs over RoCEv2. The host CPU NVMe-oF initiator delivers the NVMe SQE capsule via RDMA Send through the CX7 NIC; the target then pulls the data payload via RDMA Read against the initiator's registered MR. No TCP overhead. The CPU manages command queuing but does not touch data bytes on the data path. With GDS, data flows directly GPU HBM → CX7 → storage with no system RAM copies.",
     pros: [
       "Zero CPU copies — host CPU never touches storage data",
       "~10–50× lower latency than TCP transport",
       "Enables GPUDirect Storage zero-copy path",
-      "CX7 NIC handles all NVMe-oF data-path DMA without host CPU",
+      "CX7 NIC handles data-path DMA — host CPU manages command queuing only",
       "Same switch infrastructure as compute fabric (Spectrum)",
     ],
     cons: [
