@@ -107,7 +107,7 @@ subsystem it wants to use.
 ## Act 3 -- The DMA Path: GPU HBM to CX7
 
 The host CPU initiator posts a work request to the CX7 NIC. The WQE (Work Queue Entry) describes
-the first operation: an RDMA Send to deliver the SQE capsule. The data payload moves separately ?
+the first operation: an RDMA Send to deliver the SQE capsule. The data payload moves separately —
 the target issues an RDMA Read against the initiator's registered MR, and the initiator CX7
 responds with RDMA Read Response frames (handled entirely by NIC firmware). The CX7 firmware
 processes the WQE from its send queue, the same pipeline described in Ch16 Act 3 -- but this time

@@ -61,7 +61,7 @@ const ROWS: Row[] = [
   {
     dim: "Payload",
     compute: "NCCL messages (RDMA Write chunks, 256KB-4MB typical)",
-    storage: "NVMe command capsules (64B SQE) + RDMA Write data (4MB block)",
+    storage: "NVMe command capsules (64B SQE) + RDMA Read data (target-pull, 4MB block)",
     detail: "The NVMe-oF SQE capsule is tiny (64 bytes) but triggers a large data transfer via RDMA Read (target-pull): the target issues a Read request against the initiator MR, and the initiator CX7 sends RDMA Read Response frames with the checkpoint payload. The frame anatomy is the same outer structure (Ethernet/IP/UDP/BTH) but the BTH opcodes (0x0D-0x10 for Read Response vs 0x06-0x08 for Write) and payload semantics are completely different from NCCL traffic.",
   },
   {

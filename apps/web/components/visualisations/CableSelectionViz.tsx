@@ -143,7 +143,7 @@ const distanceBrackets = [
 
 const speedGens = [
   { id: "400G", label: "400G (DGX H100)" },
-  { id: "800G", label: "800G (DGX H200/B200)" },
+  { id: "800G", label: "800G (DGX B200)" },
 ]
 
 const costLabels = ["", "Low", "Medium", "High", "Very High"]

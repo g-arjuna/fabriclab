@@ -10,7 +10,7 @@ type Mode = "before" | "after"
 
 const beforeHops = [
   { id: "storage", label: "Storage appliance", sub: "NVMe SSD", color: "#14532d", border: "#22c55e", x: 40 },
-  { id: "nic",     label: "DPU / NIC",         sub: "RX buffer", color: "#1e3a5f", border: "#60a5fa", x: 165 },
+  { id: "nic",     label: "ConnectX-7 NIC",     sub: "RX buffer", color: "#1e3a5f", border: "#60a5fa", x: 165 },
   { id: "kram",    label: "System RAM",         sub: "kernel buffer", color: "#4c1d95", border: "#a78bfa", x: 290 },
   { id: "uram",    label: "System RAM",         sub: "user buffer", color: "#4c1d95", border: "#818cf8", x: 415 },
   { id: "gpu",     label: "GPU HBM",            sub: "training data", color: "#7f1d1d", border: "#ef4444", x: 540 },

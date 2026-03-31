@@ -3,7 +3,7 @@ title: "Chapter 8: NCCL -- The Application Layer of AI Networking"
 module: "HPC Networking Foundations"
 level: "Intermediate"
 estimatedMinutes: 55
-labLink: "/lab_2lab=lab5-nccl-diagnosis"
+labLink: "/lab?lab=lab5-nccl-diagnosis"
 ---
 
 ## The symptom that starts every real incident
@@ -255,10 +255,11 @@ The theoretical maximum busbw equals the NIC line rate (400 Gb/s = 50 GB/s per N
 
 | Cluster size | Topology | Expected busbw (large tensors) | Alarm threshold |
 |---|---|---|---|
-| 8 GPUs, 1 node | NVLink only | 800-880 GB/s (NVLink) | < 600 GB/s |
-| 32 GPUs, BasePOD | 2-stage leaf-spine | 350-390 GB/s | < 280 GB/s |
-| 256 GPUs, SuperPOD | 3-stage | 280-340 GB/s | < 200 GB/s |
-| 2048 GPUs, large cluster | 5-stage | 200-280 GB/s | < 150 GB/s |
+| 8 GPUs, 1 node | NVLink only | 800–880 GB/s (NVLink) | < 600 GB/s |
+| 32 GPUs, 4 nodes | 2-stage leaf-spine | 350–390 GB/s | < 280 GB/s |
+| 256 GPUs, 32 nodes (BasePOD) | 2-stage leaf-spine | 130–160 GB/s | < 100 GB/s |
+| 256 GPUs, SuperPOD | 3-stage | 280–340 GB/s | < 200 GB/s |
+| 2048 GPUs, large cluster | 5-stage | 200–280 GB/s | < 150 GB/s |
 
 > **Why busbw decreases with cluster size**: More GPUs means more hops, more protocol overhead, and more QP management. A 256-GPU SuperPOD will always show lower busbw than a 32-GPU BasePOD -- this is expected and does not indicate a problem.
 

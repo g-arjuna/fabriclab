@@ -286,16 +286,20 @@ Status: `No issues yet`
 1. Chapter MDX encoding cleanup is complete in the current pass.
    - The chapter body no longer has the mojibake-like punctuation that made the first-pass review hard to trust.
 
+### Pass 3 corrections applied
+
+1. **Lab route fixed** — `labLink` was `"/lab_2lab=lab5-nccl-diagnosis"` (packaging artifact corrupted `?`); corrected to `"/lab?lab=lab5-nccl-diagnosis"`.
+2. **Throughput table aligned to NCCLTestOutputViz** — added `256 GPUs, 32 nodes (BasePOD)` row (130–160 GB/s, < 100 GB/s alarm) which matches the 32-node / 256-GPU viz data; relabelled the 32-GPU row as `32 GPUs, 4 nodes`; corrected hyphens to en-dashes throughout the table.
+
 ### Current verdict
 
-- Chapter 8 is now packaging-clean and ASCII-normalized.
-- No additional chapter-body issue was isolated in the current pass.
+- Chapter 8 is Clean after Pass 3 corrections.
 
 ---
 
 ## Chapter 9 -- `ch9-optics-cabling`
 
-Status: `Reviewed`
+Status: `No issues yet`
 
 ### Factual issues
 
@@ -318,10 +322,13 @@ Status: `Reviewed`
 1. Chapter MDX encoding cleanup is complete in the current pass.
    - The earlier mojibake-like punctuation in the optics-generation section is now normalized.
 
+### Pass 3 corrections applied
+
+1. **CableSelectionViz speed selector** — `800G (DGX H200/B200)` corrected to `800G (DGX B200)`. DGX H200 uses 400G OSFP (ConnectX-7); only DGX B200 moves to 800G OSFP. Matches the correction applied to `FormFactorViz.tsx` in Pass 2.
+
 ### Current verdict
 
-- Needs a targeted correction pass on the H200/800G claims across prose and linked visuals.
-- Encoding cleanup is complete; the remaining issue is hardware-generation accuracy.
+- Chapter 9 is Clean after Pass 3 correction. Remaining prose / roadmap-viz H200 claims are lower priority and tracked separately.
 
 ---
 
@@ -345,14 +352,18 @@ Status: `Reviewed`
 ### Visualisation / packaging issues
 
 1. Likely stale visualisation set:
-   - `apps/web/components/visualisations/StorageDataPathViz.tsx`
    - `apps/web/components/visualisations/StorageSeparationViz.tsx`
    - `apps/web/components/visualisations/StorageTopologyViz.tsx`
 
+### Pass 3 corrections applied
+
+1. **NVMeoFProtocolViz — description** (L68): removed "No host CPU involvement on the data path" and rewrote to accurately state CPU manages command queuing while CX7 handles data-path DMA. With GDS, data flows GPU HBM → CX7 → storage with no system RAM copies.
+2. **NVMeoFProtocolViz — pros bullet** (L73): `"CX7 NIC handles all NVMe-oF data-path DMA without host CPU"` → `"CX7 NIC handles data-path DMA — host CPU manages command queuing only"`.
+3. **StorageDataPathViz — beforeHops NIC label** (L13): `"DPU / NIC"` → `"ConnectX-7 NIC"`. H100/H200 storage path uses CX7 in NIC mode, not a DPU.
+
 ### Current verdict
 
-- Prose looks much better.
-- Chapter 10 now mainly needs a dedicated storage-visual rewrite pass.
+- NVMeoFProtocolViz and StorageDataPathViz corrected. Remaining debt: `StorageSeparationViz.tsx` and `StorageTopologyViz.tsx` still need a BF3 model audit.
 
 ---
 
@@ -536,13 +547,14 @@ Status: `Reviewed`
    - hardcodes UDP destination port `4791`
    - frames the data phase as RDMA Write while the SQE explanation says the target performs RDMA Read against the published RKEY
 
-3. `apps/web/components/visualisations/ComputeVsStorageFabricViz.tsx`
-   - summarizes the storage data path as "RDMA Write data" rather than matching the target-pull explanation taught earlier in the chapter
+### Pass 3 corrections applied
+
+1. **Ch17 prose stray `?`** (L111): `"moves separately ?"` → `"moves separately —"`. The `?` was a packaging artifact corrupting an em-dash separating the two-phase capsule/data description.
+2. **ComputeVsStorageFabricViz payload label** (L65): `"RDMA Write data (4MB block)"` → `"RDMA Read data (target-pull, 4MB block)"`. NVMe-oF RDMA uses target-pull (RDMA Read); BTH opcodes are 0x0D–0x10 (Read Response), not 0x06–0x08 (Write). Now consistent with ch17 prose, NVMeOFCapsuleViz detail text, and StorageFrameAnatomyViz.
 
 ### Current verdict
 
-- Chapter 17 is a real protocol-correctness pass, not just polish.
-- It should stay unpublished until the NVMe/RDMA ports, transfer-direction narrative, and diagnostics are made internally consistent.
+- Act 3 prose artifact and ComputeVsStorageFabricViz direction corrected. Remaining open items: port-number consistency (4791 vs 4420) in NVMeOFCapsuleViz and StorageFrameAnatomyViz, and the perfquery/PFC label issues in the diagnostics section.
 
 ---
 
