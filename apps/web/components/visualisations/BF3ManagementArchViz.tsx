@@ -51,7 +51,7 @@ export function BF3ManagementArchViz() {
     {
       id: "b200_gpu", label: "8x NVIDIA B200 GPU", sub: "NVLink 5.0 + HBM3e",
       color: "#22c55e", x: 20, y: 20, w: 220, h: 40,
-      detail: "8 Blackwell GPUs in the DGX B200. Compute fabric uses 4x single-port CX7 HCA (fewer than H100 because B200 PCIe topology differs).",
+      detail: "8 Blackwell GPUs in the DGX B200. Compute fabric uses 8x single-port CX7 HCA cards (4 OSFP ports, 2 NICs per OSFP port via a port splitter / bifurcation adapter). The PCIe topology differs from H100 but the NIC count is the same.",
     },
     {
       id: "b200_cpu", label: "2x Intel Xeon Platinum", sub: "Host CPU",
@@ -59,14 +59,14 @@ export function BF3ManagementArchViz() {
       detail: "The host CPU runs the DGX OS and orchestration software but does NOT run the NVMe-oF initiator. That responsibility has been offloaded to the BlueField-3 ARM cores.",
     },
     {
-      id: "b200_cx7", label: "4x CX7 HCA (compute fabric)", sub: "200/400GbE per port",
+      id: "b200_cx7", label: "8x CX7 HCA (compute fabric)", sub: "400GbE per port (4 OSFP ports)",
       color: "#0ea5e9", x: 20, y: 140, w: 220, h: 40,
-      detail: "Four single-port CX7 HCAs for the compute fabric. Fewer than H100 due to different PCIe topology on the B200 platform.",
+      detail: "Eight single-port ConnectX-7 HCAs for the compute fabric. Exposed as 4 OSFP ports (2 NICs per OSFP). Same 8-NIC count as DGX H100 -- the PCIe topology and cabling differ but the logical NIC count is identical.",
     },
     {
       id: "b200_bf3", label: "2x BlueField-3 DPU (NIC mode)", sub: "Dual-port, storage + mgmt",
       color: "#a78bfa", x: 20, y: 200, w: 220, h: 70,
-      detail: "This is the key difference. Two dual-port BlueField-3 DPUs replace the CX7 Slot1/Slot2 NICs. Each BF3 has 8x ARM Cortex-A78 cores running ARM Linux. The NVMe-oF initiator runs on the BF3 ARM cores. The host communicates with the BF3 via rshim (PCIe character device).",
+      detail: "This is the key difference. Two dual-port BlueField-3 DPUs replace the CX7 Slot1/Slot2 NICs. Each BF3 has 16x ARM Cortex-A78 cores (running at up to 3.0 GHz) with its own DDR5 DRAM, running an independent ARM Linux OS. The NVMe-oF initiator runs on the BF3 ARM cores -- the host Xeon CPU is not in the storage data path. The host communicates with the BF3 via rshim (PCIe character device).",
       cmd: "lsmod | grep rshim  # on host  |  nvme list-subsys  # on BF3 ARM Linux",
     },
     {
@@ -107,7 +107,7 @@ export function BF3ManagementArchViz() {
         <div style={{ background: "#312e8122", borderRadius: 8, padding: "10px 14px", marginBottom: 16, borderLeft: "3px solid #a78bfa" }}>
           <div style={{ fontSize: 11, color: "#c4b5fd", fontWeight: 700, marginBottom: 4 }}>Key architectural shift</div>
           <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.6 }}>
-            The DGX B200 replaces CX7 storage NICs with BlueField-3 DPUs. The NVMe-oF initiator moves from the host Intel Xeon
+            The DGX B200 replaces CX7 storage NICs with BlueField-3 DPUs (16 Cortex-A78 cores each). The NVMe-oF initiator moves from the host Intel Xeon
             to the BF3 ARM cores. This adds a second OOB management path (BF3 oob_net0) and requires rshim for firmware updates.
           </div>
         </div>

@@ -53,15 +53,13 @@ const SEND_FIELDS: Field[] = [
 
 const WRITE_FIELDS: Field[] = [
   { name: "Ethernet + IP + UDP", size: 42, value: "(same outer framing)", color: "#475569", note: "Identical outer headers to the SQE frame. Same src/dst IPs, same UDP dst port 4791." },
-  { name: "BTH OpCode", size: 1, value: "0x06", color: "#0ea5e9", note: "RDMA_WRITE_FIRST -- first packet of a multi-packet RDMA Write. Middle packets use 0x07, last packet 0x08, single-packet write 0x0A." },
-  { name: "BTH SE/MigReq/Pad/TV", size: 1, value: "0x00", color: "#0ea5e9", note: "SE=0 for data frames (no CQ notification on intermediate frames). AckReq=0 on middle packets -- ACK requested only on last packet." },
+  { name: "BTH OpCode", size: 1, value: "0x0D", color: "#0ea5e9", note: "RDMA_READ_RESPONSE_FIRST (0x0D) -- first packet of a multi-packet Read Response stream. Middle packets use 0x0E, last packet 0x0F, single-packet response 0x10. These are sent by the initiator CX7 in response to the target's RDMA Read request." },
+  { name: "BTH SE/MigReq/Pad/TV", size: 1, value: "0x00", color: "#0ea5e9", note: "SE=0 for intermediate data frames. The final Read Response packet (opcode 0x0F/0x10) has AckReq=1 so the target sends an ACK back to the initiator." },
   { name: "BTH Partition Key", size: 2, value: "0xFFFF", color: "#0ea5e9", note: "Same partition key as SQE frame" },
   { name: "BTH QPN", size: 3, value: "0x00001A", color: "#0ea5e9", note: "Same NVMe-oF QP. All phases of the exchange share the same QP." },
   { name: "BTH PSN", size: 4, value: "0x80001235", color: "#0ea5e9", note: "PSN incremented from the SQE frame. PSN sequence must be contiguous. A gap triggers an NAK from the target." },
-  { name: "RETH Virtual Address", size: 8, value: "0xFFFF8800_04000000", color: "#38bdf8", note: "Target virtual address where data should be written. This is a pointer into the target's registered memory on the storage appliance." },
-  { name: "RETH RKEY", size: 4, value: "0x00000021", color: "#38bdf8", note: "Remote Key authorising access to the target memory region. Allocated when the target registers its receive buffer." },
-  { name: "RETH DMA Length", size: 4, value: "0x00400000", color: "#38bdf8", note: "4194304 bytes = 4 MiB. Total transfer length for this RDMA Write operation, spanning all packets." },
-  { name: "Data Payload", size: 4096, value: "checkpoint bytes", color: "#bae6fd", note: "Raw model weight bytes. First 4096 bytes of the 4 MiB checkpoint block. For GDS, these came from GPU HBM via PCIe peer-to-peer DMA. For the host CPU path, they came from pinned system DRAM." },
+  { name: "AETH (first/last packet only)", size: 4, value: "0x00000000", color: "#38bdf8", note: "ACK Extended Transport Header -- present on the first and last Read Response packet. Syndrome=0x00 indicates success. Only on RDMA_READ_RESPONSE_FIRST (0x0D) and LAST (0x0F)." },
+  { name: "Data Payload", size: 4096, value: "checkpoint bytes", color: "#bae6fd", note: "Raw model weight bytes DMA-read by the initiator CX7 from its registered DRAM MR (host CPU path) or GPU HBM (GDS path). This payload lands in the target storage appliance's receive buffer, keyed by the RKEY the target supplied in its RDMA Read request." },
   { name: "ICRC", size: 4, value: "computed", color: "#0f172a", note: "CRC32C over invariant BTH + RETH + payload. Each packet has its own ICRC." },
 ];
 
@@ -72,8 +70,8 @@ const FRAME_TOTALS: Record<FrameType, { frames: string; overhead: string; payloa
     payload: "64-byte NVMe SQE command",
   },
   write: {
-    frames: "~1024 data frames for a 4 MiB write at 4096-byte MTU",
-    overhead: "~66 bytes per frame (Ethernet + IP + UDP + BTH + RETH on first + ICRC)",
+    frames: "~1024 RDMA Read Response frames for a 4 MiB transfer at 4096-byte MTU",
+    overhead: "~50 bytes per frame (Ethernet + IP + UDP + BTH + AETH on first/last + ICRC)",
     payload: "Up to 4096 bytes of checkpoint data per frame",
   },
 };
@@ -118,7 +116,7 @@ export function StorageFrameAnatomyViz() {
               fontWeight: frameType === t ? 700 : 400,
             }}
           >
-            {t === "send" ? "SQE SEND frame (Phase 1)" : "RDMA Write frame (Phase 2)"}
+            {t === "send" ? "SQE SEND frame (Phase 1)" : "RDMA Read Response frame (Phase 2)"}
           </button>
         ))}
       </div>

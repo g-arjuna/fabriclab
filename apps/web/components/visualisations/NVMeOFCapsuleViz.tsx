@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 // NVMeOFCapsuleViz -- Shows the NVMe-oF RDMA exchange phases and packet structure
-// Phase 1: SQE capsule SEND, Phase 2: RDMA Write data transfer, Phase 3: CQE capsule SEND
+// Phase 1: SQE capsule SEND, Phase 2: RDMA Read target-pull transfer, Phase 3: CQE capsule SEND
 
 type Phase = "sqe" | "data" | "cqe";
 
@@ -16,9 +16,9 @@ const PHASES: { id: Phase; label: string; color: string; desc: string }[] = [
   },
   {
     id: "data",
-    label: "Phase 2: RDMA Write (data payload)",
+    label: "Phase 2: RDMA Read (target-pull data)",
     color: "#0ea5e9",
-    desc: "Target issues RDMA Read against the initiator MR, OR initiator pushes via RDMA Write. Data flows as 1 to 1024+ frames depending on block size.",
+    desc: "Target issues an RDMA Read WQE against the initiator's registered MR (keyed by the RKEY in the SQE SGL). The initiator's CX7 responds with RDMA Read Response frames carrying the checkpoint payload. Data flows as 1 to 1024+ frames depending on block size. The initiator CPU is not involved -- the CX7 firmware handles the Read Response DMA autonomously.",
   },
   {
     id: "cqe",
@@ -41,9 +41,9 @@ const DATA_STACK = [
   { name: "Ethernet II", bytes: "14 B", color: "#94a3b8", detail: "Same outer framing" },
   { name: "IPv4", bytes: "20 B", color: "#64748b", detail: "Same src/dst IPs" },
   { name: "UDP", bytes: "8 B", color: "#475569", detail: "Same port 4791" },
-  { name: "BTH", bytes: "12 B", color: "#0ea5e9", detail: "OpCode: RDMA_WRITE_FIRST (0x06) / MIDDLE (0x07) / LAST (0x08)" },
-  { name: "RETH (first packet only)", bytes: "16 B", color: "#38bdf8", detail: "Virtual addr + RKEY + DMA length -- tells NIC where to write on target" },
-  { name: "Data Payload", bytes: "up to 4096 B", color: "#bae6fd", detail: "Raw checkpoint bytes from GPU HBM (via GDS) or system DRAM" },
+  { name: "BTH", bytes: "12 B", color: "#0ea5e9", detail: "OpCode: RDMA_READ_RESPONSE_FIRST (0x0D) / MIDDLE (0x0E) / LAST (0x0F) / ONLY (0x10). Sent by the initiator CX7 in response to the target's RDMA Read request." },
+  { name: "AETH (first/last packet)", bytes: "4 B", color: "#38bdf8", detail: "ACK Extended Transport Header -- present on first and last Read Response packets. Syndrome field indicates success (0x00) or NAK." },
+  { name: "Data Payload", bytes: "up to 4096 B", color: "#bae6fd", detail: "Checkpoint bytes DMA-read by the initiator CX7 from the pinned DRAM MR (host CPU path) or from GPU HBM via GDS (GPUDirect path). Sent to the target storage appliance." },
   { name: "ICRC", bytes: "4 B", color: "#334155", detail: "Invariant CRC" },
 ];
 
@@ -143,12 +143,12 @@ export function NVMeOFCapsuleViz() {
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <div style={{ flex: 1, height: 2, background: "#64748b", borderRadius: 1 }} />
-                <div style={{ fontSize: 10, color: "#64748b" }}>RDMA READ req &lt;--</div>
+                <div style={{ fontSize: 10, color: "#64748b" }}>&lt;-- RDMA READ request (target pulls)</div>
                 <div style={{ flex: 1, height: 2, background: "#64748b", borderRadius: 1 }} />
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
-                <div style={{ fontSize: 10, color: phase.color, fontWeight: 700 }}>data frames --&gt;</div>
+                <div style={{ fontSize: 10, color: phase.color, fontWeight: 700 }}>RDMA Read Response frames --&gt;</div>
                 <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
               </div>
             </div>
@@ -220,9 +220,12 @@ export function NVMeOFCapsuleViz() {
         <div style={{ marginTop: 14, background: "#1e293b", borderRadius: 6, padding: "10px 14px", borderLeft: "3px solid #0ea5e9" }}>
           <div style={{ fontSize: 12, color: "#38bdf8", fontWeight: 700, marginBottom: 4 }}>RKEY origin</div>
           <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>
-            The RKEY in the RETH was published by the initiator inside the SQE SGL field in Phase 1.
-            The target uses it to access the initiator memory region directly -- no CPU involvement in the data transfer.
-            For GDS, the MR covers GPU HBM pages. For the host CPU path, it covers pinned system DRAM.
+            The RKEY was published by the initiator inside the SQE SGL descriptor (Phase 1). The
+            target issues an RDMA Read Work Request specifying the initiator virtual address, RKEY,
+            and length. The initiator CX7 receives this Read request and autonomously DMA-reads the
+            data from the registered MR, sending back RDMA Read Response frames. No CPU instruction
+            touches the data payload. For GDS, the MR covers GPU HBM pages. For the host CPU path,
+            it covers pinned system DRAM.
           </div>
         </div>
       )}

@@ -8,7 +8,7 @@ labLink: ""
 
 Every chapter so far has described what happens *around* the packet -- the protocols, the topology, the routing table, the congestion control mechanism. This chapter goes inside the packet itself.
 
-A gradient tensor leaves GPU 0 on DGX Node A. Roughly 1.4 microseconds later, it arrives at GPU 0 on DGX Node B. Between those two moments, a specific sequence of hardware operations rewrites the frame's headers four times, makes three routing decisions, runs two ECMP hashes, and enforces PFC priority on two switch ports -- all at line rate, all in silicon, without a single CPU instruction.
+A gradient tensor leaves GPU 0 on DGX Node A. Roughly 1.4 microseconds later, it arrives at GPU 0 on DGX Node B. Between those two moments, a specific sequence of hardware operations rewrites the frame's headers three times, makes three routing decisions, runs two ECMP hashes, and enforces PFC priority on two switch ports -- all at line rate, all in silicon, without a single CPU instruction.
 
 If you are a network engineer, you have spent your career understanding packets. You know what a Wireshark decode tree looks like. You know what "TTL decremented by 1" means at a transit router. You know the difference between a MAC table lookup and a routing table lookup. This chapter uses exactly that knowledge to take you inside the AI fabric -- translating the familiar disciplines of L2/L3 networking into the specific, concrete mechanics of GPU-to-GPU communication at 400 gigabits per second.
 
@@ -30,7 +30,7 @@ Before the first packet can be analysed, the interfaces that produce it must be 
 
 **Identity 1: The compute network (8x ConnectX-7 HCA ports)**
 
-Eight ConnectX-7 HCAs are installed in the DGX, each providing one 400G OSFP port. These are the ports that carry GPU training traffic -- AllReduce, AllGather, ReduceScatter, point-to-point tensor transfers. In a rail-optimised deployment, GPU `n` on every DGX node connects to Leaf Switch `n`, so GPU0 uses HCA0 (connected to Leaf0), GPU1 uses HCA1 (connected to Leaf1), and so on through GPU7/HCA7/Leaf7.
+Eight ConnectX-7 HCAs are installed in the DGX, each providing one 400G OSFP port. These are the ports that carry GPU training traffic -- AllReduce, AllGather, ReduceScatter, point-to-point tensor transfers. In a rail-optimised deployment, GPU `n` on every DGX node connects to a dedicated leaf switch (Rail `n`), so GPU0 uses HCA0, GPU1 uses HCA1, and so on through GPU7/HCA7. The leaf switch numbering in a given pod is a deployment variable -- what matters is that each GPU rail has its own dedicated leaf. In this chapter's worked example, GPU0/HCA0 on Node A is connected to Leaf1, and GPU0/HCA0 on Node B is connected to Leaf4.
 
 Each ConnectX-7 port has its own IP address. These are the IPs that appear as source and destination in RoCEv2 packets. They are configured on the HCA's network interface as seen by the host OS -- for example `mlx5_0` through `mlx5_7` in Linux -- but crucially, the host OS's routing table and ARP table are largely irrelevant once NCCL has established its Queue Pairs. The HCA firmware manages the data path completely independently of the kernel network stack once QPs are set up.
 
@@ -38,7 +38,7 @@ Each ConnectX-7 port has its own IP address. These are the IPs that appear as so
 
 The DGX H100 includes two additional ConnectX-7 HCA ports (beyond the eight compute ports) that serve the out-of-band management and storage fabric. These connect to a separate Spectrum-X or standard Ethernet OOB fabric used for UFM management traffic, NVMe-oF storage, and inter-node management connectivity. Like the compute CX7 ports, these have their own IPs and operate independently of the compute fabric. Chapter 17 and 18 cover storage and management networking in detail.
 
-A note on generations: the DGX H200 and DGX GB200 NVL72 introduce BlueField-3 DPUs for dedicated storage and DPU-offloaded management. In those platforms, the storage identity IS a BlueField-3 running its own ARM Linux with its own IP space -- a fundamentally different architecture. Everything written in this chapter applies to the DGX H100 specifically; the DGX H200/GB200 storage path differs in the ways Chapter 17 will describe.
+A note on generations: the DGX B200 and DGX GB200 NVL72 introduce BlueField-3 DPUs for dedicated storage and DPU-offloaded management. In those platforms, the storage identity IS a BlueField-3 running its own ARM Linux with its own IP space -- a fundamentally different architecture. The DGX H200 retains the same dual-port ConnectX-7 storage NIC model as the H100. Everything written in this chapter applies to the DGX H100 and H200; the DGX B200/GB200 storage path differs in the ways Chapter 17 will describe.
 
 **Identity 3: The management network (1GbE OOB + BMC)**
 
@@ -302,7 +302,7 @@ Src MAC: aa:bb:cc:bb:cc:dd  (Leaf4 swp1 gateway MAC)
 Dst MAC: 94:6d:ae:cc:dd:ee  (Node B's ConnectX-7 MAC -- destination GPU's NIC)
 ```
 
-TTL: 61 (decremented twice at the two transit hops).
+TTL: 61 (decremented three times: once at Leaf1, once at SpineC, once at Leaf4).
 
 The frame is delivered to the destination ConnectX-7. This is Capture E -- the frame as it arrives at the destination NIC. At this point, the entire Ethernet journey is visible: the original Ethernet header from Capture A has been rewritten three times (at Leaf1, at SpineC, at Leaf4), but the IP header, UDP header, BTH, and payload are byte-for-byte unchanged from when they left the source NIC.
 
@@ -497,7 +497,7 @@ The RDMA transport model is the same -- Queue Pairs, Work Requests, Memory Regio
 
 ### NVIDIA Quantum InfiniBand vs ConnectX-7 in RoCEv2 mode: same hardware, different mode
 
-A critical point often overlooked: the ConnectX-7 itself is a dual-mode adapter. The same physical card can operate in InfiniBand mode (connected to a QM9700 IB switch) or Ethernet mode (connected to an SN5600 Spectrum-X switch running RoCEv2). The switch determines the mode -- the NIC adapts.
+A critical point often overlooked: the ConnectX-7 itself is a dual-mode adapter. The same physical card can operate in InfiniBand mode (connected to a QM9700 IB switch) or Ethernet mode (connected to an SN5600 Spectrum-X switch running RoCEv2). The NIC mode is set explicitly via `mlxconfig` (shown below) -- the switch port type is matched to the configured NIC mode, not the other way around.
 
 ```bash
 # Check mode on a ConnectX-7

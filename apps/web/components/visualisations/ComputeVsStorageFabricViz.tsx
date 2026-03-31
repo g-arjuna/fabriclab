@@ -37,7 +37,7 @@ const ROWS: Row[] = [
     dim: "Transport protocol",
     compute: "RDMA (InfiniBand or RoCEv2)",
     storage: "NVMe-oF RDMA (preferred) or NVMe/TCP",
-    detail: "Both use RDMA verbs at the NIC layer, but the application protocol above RDMA is completely different. Compute uses NCCL-level RDMA Write/Read. Storage uses NVMe command capsules carried via RDMA Send, with data via RDMA Write/Read.",
+    detail: "Both use RDMA verbs at the NIC layer, but the application protocol above RDMA is completely different. Compute uses NCCL-level RDMA Write for AllReduce data movement. Storage NVMe-oF uses RDMA Send to deliver the NVMe SQE capsule, then the target pulls the data payload via RDMA Read (target-pull model) -- the target issues an RDMA Read WQE against the initiator's registered MR, and the initiator CX7 responds with RDMA Read Response frames.",
   },
   {
     dim: "PFC",
@@ -62,7 +62,7 @@ const ROWS: Row[] = [
     dim: "Payload",
     compute: "NCCL messages (RDMA Write chunks, 256KB-4MB typical)",
     storage: "NVMe command capsules (64B SQE) + RDMA Write data (4MB block)",
-    detail: "The NVMe-oF SQE capsule is tiny (64 bytes) but triggers a large data transfer. The frame anatomy is the same (Ethernet/IP/UDP/BTH) but the BTH opcode and payload content are completely different from NCCL traffic.",
+    detail: "The NVMe-oF SQE capsule is tiny (64 bytes) but triggers a large data transfer via RDMA Read (target-pull): the target issues a Read request against the initiator MR, and the initiator CX7 sends RDMA Read Response frames with the checkpoint payload. The frame anatomy is the same outer structure (Ethernet/IP/UDP/BTH) but the BTH opcodes (0x0D-0x10 for Read Response vs 0x06-0x08 for Write) and payload semantics are completely different from NCCL traffic.",
   },
   {
     dim: "GDS capable",

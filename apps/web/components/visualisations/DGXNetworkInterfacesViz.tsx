@@ -2,9 +2,13 @@
 import { useState } from "react"
 
 // -- DGXNetworkInterfacesViz -------------------------
-// Shows the three distinct network identities on a DGX H100 chassis
+// Shows the four distinct network identities on a DGX H100 chassis:
+// 1. Compute network (8x CX7 HCA)
+// 2. Storage / in-band management (2x dual-port CX7)
+// 3. Host OOB management (1GbE motherboard NIC)
+// 4. BMC (AST2600 dedicated IPMI port)
 
-type Identity = "compute" | "storage" | "mgmt"
+type Identity = "compute" | "storage" | "mgmt" | "bmc"
 
 const identities = [
   {
@@ -39,24 +43,41 @@ const identities = [
     fabric: "OOB/storage fabric (separate Spectrum-X or standard Ethernet, 2:1 oversubscription OK)",
     arp: "Yes -- standard ARP via Linux kernel",
     kernelInvolved: true,
-    detail: "DGX H100 uses additional ConnectX-7 ports (not BlueField-3) for the OOB/management/storage fabric. These are standard CX7 adapters with their own IPs, invisible on the compute fabric. NOTE: DGX H200 and DGX GB200 NVL72 DO use BlueField-3 DPUs for storage, running their own ARM Linux with independent IP spaces -- a fundamentally different architecture covered in Chapter 17.",
+    detail: "DGX H100 and H200 use additional ConnectX-7 ports (not BlueField-3) for the storage and in-band management fabric. These are standard CX7 adapters with their own IPs, invisible on the compute fabric. NOTE: DGX B200 and DGX GB200 NVL72 replace these CX7 NICs with BlueField-3 DPUs running their own ARM Linux with independent IP spaces -- a fundamentally different architecture covered in Chapters 17 and 18.",
   },
   {
     id: "mgmt" as Identity,
-    label: "Management / BMC",
-    hw: "1GbE OOB port + BMC (AST2600)",
-    ports: "1x 1GbE host OOB + 1x 1GbE dedicated BMC",
-    speed: "1 Gbps each",
+    label: "Host management (1GbE OOB)",
+    hw: "1GbE motherboard NIC",
+    ports: "1x 1GbE RJ45",
+    speed: "1 Gbps",
     color: "#6B21A8",
     border: "#9333EA",
     bg: "#2e1065",
-    linuxDev: "eno1 or similar (host OOB); BMC not visible to host OS",
-    ipExample: "172.16.1.1 (host OOB); 172.16.2.1 (BMC -- separate)",
-    stack: "Host OOB: standard Linux TCP/IP -- SSH, Prometheus, kubectl, NCCL bootstrap. BMC: independent ASPEED firmware.",
-    fabric: "OOB management switch (flat L2 or L3, separate from all compute/storage fabrics)",
-    arp: "Yes -- standard ARP on both host OOB and BMC interfaces",
+    linuxDev: "eno1 or similar",
+    ipExample: "172.16.1.1 (OOB management IP)",
+    stack: "Standard Linux TCP/IP -- SSH, Prometheus, DCGM exporter (in-band), kubectl, NCCL bootstrap (NCCL_SOCKET_IFNAME).",
+    fabric: "OOB management switch (flat L2, separate from compute/storage fabrics)",
+    arp: "Yes -- standard ARP via Linux kernel",
     kernelInvolved: true,
-    detail: "The host OOB interface carries management traffic: SSH, monitoring agents, Docker/containerd, and NCCL rendezvous/bootstrap (before QPs are established -- controlled by NCCL_SOCKET_IFNAME). The BMC is a completely independent AST2600 processor handling IPMI power control, serial-over-LAN, hardware event logs, and KVM-over-IP. The BMC functions even when the host OS is off or panicked.",
+    detail: "The host OOB interface carries host-OS-level management traffic: SSH sessions, monitoring agent scrapes (Prometheus/DCGM exporter on TCP 9400), Docker/containerd management, and NCCL rendezvous/bootstrap before QPs are established. This is NOT the BMC path -- the host CPU is alive and the OS is running for all traffic on this interface.",
+  },
+  {
+    id: "bmc" as Identity,
+    label: "BMC (AST2600 / IPMI)",
+    hw: "ASPEED AST2600 SoC (dedicated)",
+    ports: "1x 1GbE RJ45 (independent of host NIC)",
+    speed: "1 Gbps",
+    color: "#7C2D12",
+    border: "#F97316",
+    bg: "#431407",
+    linuxDev: "Not visible to host OS -- independent SoC",
+    ipExample: "172.16.2.1 (BMC IP -- separate from host OOB)",
+    stack: "ASPEED BMC firmware -- IPMI/Redfish/iKVM over dedicated 1GbE PHY. Independent of host CPU and OS.",
+    fabric: "OOB management switch (same physical switch as host OOB, separate VLAN recommended)",
+    arp: "Yes -- BMC ARP is independent of host OS",
+    kernelInvolved: false,
+    detail: "The BMC is a completely separate SoC (ASPEED AST2600, dual-core Cortex-A7 at 1.2 GHz, 512MB DDR4, 128MB SPI NOR flash). It is powered by the server standby rail -- alive as long as AC mains power is present, even when the host is off or panicked. Handles IPMI power control, serial-over-LAN console, hardware sensor polling (temperature, fan, PSU), KVM-over-IP, and Redfish API. Default credentials are admin/admin -- must be changed before production.",
   },
 ]
 
@@ -66,7 +87,7 @@ export function DGXNetworkInterfacesViz() {
 
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
-      <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">DGX H100 -- three network identities</div>
+      <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">DGX H100 -- four network identities</div>
       <div className="mb-5 text-xs text-slate-600">Click each network to see its hardware, stack, and role.</div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 20 }}>

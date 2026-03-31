@@ -69,7 +69,7 @@ const FABRICS: {
     ports: "1x BMC RJ45 per DGX + switch mgmt0",
     topology: "Flat L2, single VLAN (or VLAN-separated)",
     pfc: "N/A -- standard Ethernet",
-    purpose: "Power control, console, firmware, UFM, DCGM",
+    purpose: "Power control, console, firmware, UFM polling, IPMI/Redfish, KVM-over-IP",
     failure: "Cannot recover. No power cycle, no console, no fix.",
     props: [
       { k: "Protocol", v: "IPMI/Redfish/SSH/HTTPS" },

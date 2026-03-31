@@ -87,17 +87,21 @@ The CX7 NIC enforces memory region boundaries just as it does for compute traffi
 ### Capsule sizes
 
 The SQE capsule: 64-byte NVMe command + optional inline data (for small I/O). The CQE capsule:
-16-byte NVMe completion. The data payload: carried separately via RDMA Write (target-push) or
-RDMA Read (target-pull). For a 4 MiB checkpoint write, the SQE is tiny (64 bytes) and the
-data moves as a series of RDMA Write operations against the registered memory region.
+16-byte NVMe completion. The data payload for a checkpoint write is carried via RDMA Read
+(target-pull): the target issues an RDMA Read Work Request against the initiator's pre-registered
+Memory Region, and the initiator's CX7 responds with RDMA Read Response frames containing the
+payload. For a 4 MiB checkpoint write, the SQE capsule is tiny (64 bytes) and the data moves
+as a series of RDMA Read operations initiated by the target.
 
 ### NVMe-oF discovery
 
 Before any I/O, the initiator performs NVMe-oF discovery: it connects to a well-known discovery
-controller at port 8009 on the target and receives a list of subsystems and namespaces. This is a
-TCP-based exchange even when the data transport is RDMA. The discovery response contains the target
-NQN (NVMe Qualified Name), the transport address, and the transport type. The initiator then
-establishes RDMA queue pairs to each target subsystem it wants to use.
+controller at TCP port 8009 on the target and receives a list of subsystems and namespaces. Port 8009
+is the IANA-assigned NVMe-oF discovery port and is always reached over TCP -- this is mandated by the
+NVMe-oF specification regardless of whether the data transport will be RDMA or TCP. The discovery
+response contains the target NQN (NVMe Qualified Name), the transport address (the RDMA portal IP),
+and the transport type (rdma). The initiator then establishes RDMA queue pairs to each target
+subsystem it wants to use.
 
 ## Act 3 -- The DMA Path: GPU HBM to CX7
 
@@ -363,10 +367,10 @@ rdma stat show dev mlx5_8
 # Show RDMA link state
 rdma link show
 
-# Detailed QP error counters
-perfquery -x 0 -i 1 mlx5_8
-# or via ethtool:
-ethtool -S enp170s0f0 | grep -E "tx_|rx_|err|drop"
+# Detailed QP and port error counters on RoCEv2 / Ethernet CX7
+rdma stat show mlx5_8/1
+# or via ethtool for per-priority and pause counters:
+ethtool -S enp170s0f0 | grep -E "tx_|rx_|err|drop|pause|pfc"
 ```
 
 Look for `out_of_buffer`, `out_of_sequence`, `local_length_error`, `retry_exceeded` in the QP
@@ -388,8 +392,11 @@ nv show interface swp1 counters errors
 # Buffer occupancy -- check for persistent congestion
 nv show qos interface swp1 buffer
 
-# ECN marking statistics
+# PFC pause state on the storage-fabric switch port
 nv show qos interface swp1 pfc
+
+# ECN marking statistics (separate command)
+nv show qos interface swp1 ecn
 ```
 
 If `tx_pause` is non-zero on the storage switch, that is a problem -- the design should not have

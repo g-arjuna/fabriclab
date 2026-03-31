@@ -40,9 +40,12 @@ or SN5600 switches.
 **Storage fabric** -- NVMe-oF checkpoint writes and dataset reads. 100 Gbps per port.
 No PFC. 2:1 oversubscription acceptable. Lives on the SN4600C switches.
 
-**OOB management fabric** -- BMC communication, SSH to switches, UFM polling, DCGM telemetry,
+**OOB management fabric** -- BMC communication, SSH to switch management ports, UFM polling,
 firmware uploads, power control, virtual console. 1 Gbps per port. Standard L2 network.
 Completely physically separate. Lives on commodity 1GbE switches (Mellanox SN2201 or similar).
+Note: DCGM and NVSM telemetry collection is in-band -- the Prometheus/DCGM exporter on each
+DGX node is scraped over the in-band CX7 Slot1/Slot2 management interface, not over the OOB
+switch. This is covered in Act 7.
 
 As a network engineer, the OOB network is where your classical skills still apply directly.
 It is a flat L2 domain with a simple L3 gateway. No ECMP. No RDMA. No PFC. But it carries
@@ -232,7 +235,8 @@ curl -sk -u admin:pass -X POST \
 ## Act 5 -- OOB Switch Topology and IP Design
 
 The OOB management network is physically separate. It runs on its own switches -- typically
-the Mellanox SN2201, a 1RU switch with 48 x 1GbE RJ45 downlinks and 4 x 25GbE SFP28 uplinks.
+the Mellanox SN2201, a 1RU switch with 48 x 1GbE RJ45 downlinks and 4 x 100GbE QSFP28 uplinks
+(25GbE operation is available via breakout cable or adapters, but 100GbE is the native uplink interface).
 The SN2201 runs Cumulus Linux, same as the storage leaf switches, which means the same NVUE
 command set applies. One 48-port SN2201 can terminate the BMC ports for 16 DGX nodes (each
 DGX has one BMC RJ45), all the switch management ports (each ONYX/Cumulus switch has one
@@ -422,7 +426,7 @@ monitoring only. The storage and management CX7 NICs are pure network adapters.
 
 The DGX B200 changes this. It replaces the two dual-port CX7 storage NICs with two
 dual-port BlueField-3 DPUs. These are not just NICs -- each BlueField-3 has its own
-ARM Cortex-A78 CPU complex (eight Cortex-A78 cores running at up to 3.0 GHz), its own
+ARM Cortex-A78 CPU complex (sixteen Cortex-A78 cores running at up to 3.0 GHz), its own
 DDR5 DRAM, and runs its own independent ARM Linux OS.
 
 <BF3ManagementArchViz />
@@ -516,8 +520,10 @@ The jump server itself should be hardened, MFA-protected, and session-logged.
 
 ### BMC authentication hardening
 
-Default BMC credentials are printed on service tag labels. Change them on every device
-before the cluster enters production:
+DGX BMC factory default credentials are `admin` / `admin` and must be changed before the
+cluster enters production. Unlike some server vendors, NVIDIA DGX does not print per-unit
+BMC credentials on the service label -- the factory default is uniform across all units
+and is hardened at first-boot provisioning time:
 
 ```bash
 # IPMI: change BMC password

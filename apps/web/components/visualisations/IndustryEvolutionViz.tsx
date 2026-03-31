@@ -66,8 +66,8 @@ const eras: Era[] = [
     color: "#1e3a5f",
     borderColor: "#818cf8",
     summary: "InfiniBand vs Ethernet — both are real",
-    detail: "The industry has settled into two camps. Large-scale AI training clusters (cloud providers, AI labs) use InfiniBand NDR or the upcoming XDR (800G). Enterprise AI infrastructure and multi-tenant clusters often use RoCEv2 over Spectrum-X Ethernet. NVIDIA's Quantum-X800 switches support XDR InfiniBand at 800G per port. BlueField-3 DPUs handle storage and security offload. The H200 and upcoming Blackwell (B200) generation push further.",
-    tech: ["InfiniBand XDR (800G)", "Spectrum-X 400GbE", "BlueField-3 DPU", "ConnectX-8", "DGX H200 / B200"],
+    detail: "The industry has settled into two camps. Large-scale AI training clusters use InfiniBand NDR (400G, DGX H100/H200) or the ramping XDR generation (800G, DGX B200/GB200 Blackwell). Enterprise and multi-tenant clusters often use RoCEv2 over Spectrum-X Ethernet. NVIDIA's Quantum-X800 switches support XDR InfiniBand at 800G per port. The DGX H200 is a Hopper-generation product (same ConnectX-7 NIC as H100, upgraded GPU die and HBM3e). The DGX B200 is Blackwell -- new NIC generation, BlueField-3 DPUs for storage, 800G optics.",
+    tech: ["InfiniBand XDR (800G)", "Spectrum-X 800GbE", "BlueField-3 DPU", "ConnectX-8", "DGX B200 / GB200"],
     why: "No single winner. Choice depends on scale, existing infrastructure, budget, and operational expertise.",
   },
 ]
