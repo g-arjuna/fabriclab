@@ -3,7 +3,9 @@ import Link from "next/link";
 import { AuthControls } from "@/components/auth/AuthControls";
 import { TerminalPreview } from "@/components/landing/TerminalPreview";
 import { getHomepageCatalog } from "@/lib/catalog/homepage";
-import { SOURCE_CHAPTERS, SOURCE_LABS } from "@/lib/catalog/source";
+import { SOURCE_LABS } from "@/lib/catalog/source";
+
+const GITHUB_URL = "https://github.com/g-arjuna/fabriclab";
 
 const personas = [
   {
@@ -24,8 +26,15 @@ const personas = [
   },
 ];
 
-const homepageChapterCount = SOURCE_CHAPTERS.length;
 const homepageLabCount = SOURCE_LABS.length;
+
+function GitHubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+      <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z" />
+    </svg>
+  );
+}
 
 function RackIcon() {
   return (
@@ -109,6 +118,7 @@ function partTag(partKey?: string) {
 
 export default async function Home() {
   const chapters = await getHomepageCatalog();
+  const publishedCount = chapters.filter((c) => c.isPublished).length;
 
   const homepageChapterCards = chapters.map((chapter) => ({
     id: `Chapter ${chapter.number}`,
@@ -140,6 +150,15 @@ export default async function Home() {
             </Link>
             <Link href="/community" className="text-sm text-slate-400 transition hover:text-slate-200">
               Community
+            </Link>
+            <Link
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-slate-400 transition hover:text-slate-200"
+            >
+              <GitHubIcon />
+              GitHub
             </Link>
             <AuthControls compact />
             <Link
@@ -177,9 +196,9 @@ export default async function Home() {
             <span className="mt-2 block text-cyan-400">that runs AI.</span>
           </h1>
           <p className="mt-6 max-w-2xl text-center text-lg leading-8 text-slate-400">
-            InfiniBand. RoCEv2. RDMA. DGX SuperPOD. Spectrum-X. Learn AI and HPC networking through
-            interactive chapters, stateful labs, and a simulator built for network engineers.
-            Sign in once, then keep your progress and discussion history attached to one account.
+            InfiniBand. RoCEv2. RDMA. Congestion control. Scale-out fabric design. Learn AI and HPC
+            networking through interactive chapters, stateful labs, and a simulator built for network
+            engineers — free, open, and community reviewed.
           </p>
 
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
@@ -223,18 +242,19 @@ export default async function Home() {
                 is fragmented across vendor docs, conference talks, and incident writeups.
               </p>
               <p>
-                FabricLab turns that scattered knowledge into a structured, reviewable, interactive
+                FabricLab turns that scattered knowledge into a structured, open, community-reviewed
                 platform. Chapters explain the hardware and protocols. Labs let you test commands
-                against live state. The community can then sharpen both.
+                against live state. Anyone can contribute a correction, a new lab, or a sharper
+                explanation.
               </p>
             </div>
           </div>
 
           <div className="grid gap-6">
             {[
-              { value: "400G", label: "per GPU rail in a modern DGX training fabric" },
+              { value: "400G", label: "per GPU rail in a modern AI training fabric" },
               { value: "0", label: "packet drops tolerated in healthy RDMA training flows" },
-              { value: "17", label: "published chapters live in the open catalog today" },
+              { value: String(publishedCount), label: "chapters published in the open catalog" },
             ].map((stat) => (
               <div
                 key={stat.value}
@@ -257,8 +277,8 @@ export default async function Home() {
             A structured path from hardware to protocol.
           </h2>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-400">
-            {homepageChapterCount} chapters. {homepageLabCount} scenario labs. One simulator. Browse
-            the catalog in public, then sign in to open the learning surfaces.
+            {chapters.length} chapters. {homepageLabCount} scenario labs. One simulator. All chapters
+            are free to read — sign in to track your progress and join the discussion.
           </p>
 
           <div className="mt-10 flex gap-6 overflow-x-auto pb-4 lg:grid lg:grid-cols-3 lg:overflow-visible">
@@ -281,7 +301,7 @@ export default async function Home() {
                       }`}
                     />
                     <span className={card.isPublished ? "text-green-400" : "text-amber-300"}>
-                      {card.isPublished ? "Available" : "Staged"}
+                      {card.isPublished ? "Available" : "Coming soon"}
                     </span>
                   </div>
                 </>
@@ -340,8 +360,8 @@ export default async function Home() {
               <BrainNetworkIcon />
               <h3 className="mt-6 text-2xl font-semibold text-white">Community feedback loop</h3>
               <p className="mt-4 text-base leading-8 text-slate-400">
-                Readers can comment directly on chapters and labs, report technical glitches, and
-                help tighten the curriculum without waiting for a closed release cycle.
+                Readers can comment directly on chapters and labs, report technical errors, and
+                help sharpen the curriculum — without waiting for a closed release cycle.
               </p>
             </div>
           </div>
@@ -375,28 +395,37 @@ export default async function Home() {
         <div className="mx-auto max-w-7xl px-6">
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">COMMUNITY</p>
           <h2 className="mt-4 text-4xl font-semibold text-white">
-            Keep the platform open. Make it sharper every week.
+            Open source. Community reviewed. Always free.
           </h2>
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
             <div className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
               <h3 className="text-xl font-semibold text-white">Comment where the issue appears</h3>
               <p className="mt-3 text-sm leading-7 text-slate-400">
                 Leave technical corrections, lab glitches, and operator notes directly on the
-                relevant chapter or lab page.
+                relevant chapter or lab page. Feedback lives next to the content it improves.
               </p>
             </div>
             <div className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
               <h3 className="text-xl font-semibold text-white">Contribute through the repo</h3>
               <p className="mt-3 text-sm leading-7 text-slate-400">
-                The repository is set up for focused fixes, issue reports, new labs, and chapter
-                improvements without turning the platform into a private product wall.
+                The platform is fully open source. Fix a chapter, add a lab, or improve a
+                visualisation — all via pull request on GitHub.
               </p>
+              <Link
+                href={GITHUB_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 text-sm text-cyan-400 transition hover:text-cyan-300"
+              >
+                <GitHubIcon />
+                g-arjuna/fabriclab
+              </Link>
             </div>
             <div className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
-              <h3 className="text-xl font-semibold text-white">Support without restricting access</h3>
+              <h3 className="text-xl font-semibold text-white">Free to read, forever</h3>
               <p className="mt-3 text-sm leading-7 text-slate-400">
-                FabricLab stays openly accessible. Support links are optional and simply help fund
-                more chapter review, better labs, and platform polish.
+                Every chapter and lab is free to access. Sign in only if you want to track
+                progress, join discussions, or contribute feedback. No paywalls.
               </p>
             </div>
           </div>
@@ -417,8 +446,8 @@ export default async function Home() {
               Learn the fabric in the open.
             </h2>
             <p className="mt-4 text-lg leading-8 text-slate-400">
-              Browse the catalog in public, then sign in to open chapters and labs, join tracked
-              discussions, and keep your progress attached to one account.
+              Every chapter is free to read. Sign in to track your progress, join chapter
+              discussions, and keep your learning history in one place.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link
@@ -434,10 +463,13 @@ export default async function Home() {
                 Go to the labs
               </Link>
               <Link
-                href="/community"
-                className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-6 py-3 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
+                href={GITHUB_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-6 py-3 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
               >
-                Community hub
+                <GitHubIcon />
+                View on GitHub
               </Link>
             </div>
           </div>
