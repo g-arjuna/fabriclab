@@ -148,6 +148,15 @@ docs/CLAUDE_*
 docs/ENGINEERING_SYNC.md
 docs/codex-handoff.md
 docs/1.md
+
+# Internal agent/workflow files
+plan.md
+AGENTS.md
+CONTENT_PIPELINE.md
+vision.md
+content/input/
+content/modules/
+content/schema/
 tmp_lab_shots/
 tmp_lab_redesign/
 tmp-vercel-deploy.sh
