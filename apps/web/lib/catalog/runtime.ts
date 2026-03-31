@@ -162,6 +162,22 @@ export function groupChaptersByPart(chapters: CatalogItem[]) {
   }, {});
 }
 
+export async function getHomepageCatalog(): Promise<CatalogItem[]> {
+  noStore();
+
+  const bypassAuth = !isSupabaseConfigured();
+  if (bypassAuth) {
+    return getSourceChapters().map((item) => mergeCatalogItem(item));
+  }
+
+  const rows = await getCatalogRows("chapter");
+  const rowMap = new Map(rows.map((row) => [row.slug, row]));
+
+  return getSourceChapters()
+    .map((item) => mergeCatalogItem(item, rowMap.get(item.slug) ?? null))
+    .sort((a, b) => a.number - b.number);
+}
+
 export function getSourceCatalogSeedRows() {
   return SOURCE_CATALOG_ITEMS.map((item) => ({
     slug: item.slug,
