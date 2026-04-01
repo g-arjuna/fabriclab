@@ -27,21 +27,6 @@ const personas = [
   },
 ];
 
-const studioHighlights = [
-  {
-    title: "Built for diagnosis",
-    body: "The UI is organized around the decisions an operator makes under pressure: identify the signal, validate the fabric state, then choose the next command.",
-  },
-  {
-    title: "Readable on smaller screens",
-    body: "Dense desktop clusters have been broken into calmer, touch-friendly sections so phone users can still browse chapters, labs, and discussion without fighting the layout.",
-  },
-  {
-    title: "Exciting, not noisy",
-    body: "The page keeps the glow and terminal energy, but the visual hierarchy now gives each section room to breathe instead of stacking everything at once.",
-  },
-];
-
 const learningLoop = [
   {
     title: "Structured chapters",
@@ -292,59 +277,8 @@ export default async function Home() {
             </div>
 
             <div className="relative">
-              <SurfaceCard className="overflow-hidden border-cyan-400/15 bg-[linear-gradient(180deg,rgba(7,17,31,0.82),rgba(2,6,23,0.96))] p-4 sm:p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.4rem] border border-white/8 bg-slate-950/70 px-4 py-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-                      Inside the simulator
-                    </p>
-                    <p className="mt-1 text-sm text-slate-300">
-                      Diagnose a fabric issue without leaving the page.
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-200">
-                    Live state
-                  </span>
-                </div>
-
-                <TerminalPreview />
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[1.3rem] border border-white/8 bg-slate-950/70 p-4">
-                    <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                      What changes on mobile
-                    </p>
-                    <p className="mt-2 text-sm leading-7 text-slate-300">
-                      Primary actions stay visible, card widths collapse cleanly, and sections no
-                      longer depend on sideways scrolling.
-                    </p>
-                  </div>
-                  <div className="rounded-[1.3rem] border border-white/8 bg-slate-950/70 p-4">
-                    <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                      Why it matters
-                    </p>
-                    <p className="mt-2 text-sm leading-7 text-slate-300">
-                      The experience feels more like a guided instrument panel and less like a wall
-                      of stacked chrome.
-                    </p>
-                  </div>
-                </div>
-              </SurfaceCard>
+              <TerminalPreview className="mt-4 max-w-none" />
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-white/6 bg-slate-950/70 py-14 sm:py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="grid gap-4 lg:grid-cols-3">
-            {studioHighlights.map((item) => (
-              <SurfaceCard key={item.title} className="h-full bg-slate-900/55">
-                <p className="text-xs uppercase tracking-[0.26em] text-slate-500">Why it feels better</p>
-                <h2 className="mt-3 text-xl font-semibold text-white">{item.title}</h2>
-                <p className="mt-3 text-sm leading-7 text-slate-400">{item.body}</p>
-              </SurfaceCard>
-            ))}
           </div>
         </div>
       </section>

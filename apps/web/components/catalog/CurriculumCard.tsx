@@ -9,7 +9,26 @@ type CurriculumCardProps = {
 
 function Tag({ children }: { children: string }) {
   return (
-    <span className="rounded-full border border-white/10 bg-slate-950 px-3 py-1 text-[10px] uppercase tracking-[0.28em] text-slate-400">
+    <span
+      className="max-w-full truncate rounded-full border border-white/10 bg-slate-950 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-400"
+      title={children}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Badge({
+  children,
+  className,
+  title,
+}: {
+  children: string;
+  className: string;
+  title?: string;
+}) {
+  return (
+    <span className={`max-w-full truncate rounded-full px-3 py-1 text-xs ${className}`} title={title ?? children}>
       {children}
     </span>
   );
@@ -19,24 +38,16 @@ function AccessBadge({ item, canAccess }: { item: CatalogItem; canAccess: boolea
   if (canAccess) {
     return (
       <>
-        <span className="rounded-full bg-green-950 px-3 py-1 text-xs text-green-400">
-          {item.durationLabel}
-        </span>
-        <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-green-400">
-          Available
-        </span>
+        <Badge className="bg-green-950 text-green-400">{item.durationLabel}</Badge>
+        <Badge className="bg-slate-800 text-green-400">Available</Badge>
       </>
     );
   }
 
   return (
     <>
-      <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400">
-        {item.durationLabel}
-      </span>
-      <span className="rounded-full bg-amber-950 px-3 py-1 text-xs text-amber-300">
-        Sign in required
-      </span>
+      <Badge className="bg-slate-800 text-slate-400">{item.durationLabel}</Badge>
+      <Badge className="bg-amber-950 text-amber-300">Sign in required</Badge>
     </>
   );
 }
@@ -45,30 +56,32 @@ export function CurriculumCard({ item, canAccess }: CurriculumCardProps) {
   return (
     <Link
       href={item.href}
-      className={`group rounded-[1.75rem] border p-5 transition sm:p-6 ${
+      className={`group block overflow-hidden rounded-[1.5rem] border p-4 transition sm:rounded-[1.75rem] sm:p-6 ${
         canAccess
           ? "border-white/8 bg-slate-900/80 hover:border-white/20"
           : "border-amber-500/15 bg-slate-900/90 hover:border-amber-400/30"
       }`}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/8 bg-slate-950/70 text-2xl font-semibold text-slate-500 sm:h-16 sm:w-16 sm:text-3xl">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/8 bg-slate-950/70 text-xl font-semibold text-slate-500 sm:h-16 sm:w-16 sm:rounded-2xl sm:text-3xl">
           {item.number}
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h3 className="text-xl font-semibold text-white sm:text-2xl">{item.title}</h3>
+          <div className="flex flex-col gap-3">
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold leading-tight text-white sm:text-2xl">
+                {item.title}
+              </h3>
               <p className="mt-3 text-sm leading-7 text-slate-400">{item.description}</p>
             </div>
 
-            <div className="flex flex-wrap gap-2 lg:justify-end">
+            <div className="flex flex-wrap gap-2">
               <AccessBadge item={item} canAccess={canAccess} />
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2 overflow-hidden">
             {item.tags.map((tag) => (
               <Tag key={tag}>{tag}</Tag>
             ))}
