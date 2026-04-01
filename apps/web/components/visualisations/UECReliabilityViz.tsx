@@ -1,3 +1,4 @@
+'use client'
 import { useState, useEffect, useRef } from "react"
 
 type Phase = "idle" | "running" | "loss" | "sack" | "retransmit" | "done"
