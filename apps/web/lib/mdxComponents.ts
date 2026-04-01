@@ -166,6 +166,13 @@ import { UECCongestionViz } from "@/components/visualisations/UECCongestionViz"
 import { UECMultipathViz } from "@/components/visualisations/UECMultipathViz"
 import { UECSwitchCapabilitiesViz } from "@/components/visualisations/UECSwitchCapabilitiesViz"
 import { UECDeploymentReadinessViz } from "@/components/visualisations/UECDeploymentReadinessViz"
+// === Ch21 -- Congestion Control Deep Dive ===
+import JCTSensitivityViz from "@/components/visualisations/JCTSensitivityViz"
+import DCQCNStateMachineViz from "@/components/visualisations/DCQCNStateMachineViz"
+import SwiftRTTViz from "@/components/visualisations/SwiftRTTViz"
+import HPCCINTPacketViz from "@/components/visualisations/HPCCINTPacketViz"
+import TIMELYGradientViz from "@/components/visualisations/TIMELYGradientViz"
+import CCAlgorithmComparisonViz from "@/components/visualisations/CCAlgorithmComparisonViz"
 import {
   LeafSwitchProcessingViz,
   SpineForwardingViz,
@@ -341,4 +348,11 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   UECMultipathViz,
   UECSwitchCapabilitiesViz,
   UECDeploymentReadinessViz,
+  // Ch21
+  JCTSensitivityViz,
+  DCQCNStateMachineViz,
+  SwiftRTTViz,
+  HPCCINTPacketViz,
+  TIMELYGradientViz,
+  CCAlgorithmComparisonViz,
 }

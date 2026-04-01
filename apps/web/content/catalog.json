@@ -532,6 +532,33 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch20-uec"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch21-congestion-control-deep-dive",
+      "number": 21,
+      "title": "Congestion Control Deep Dive",
+      "href": "/learn/ch21-congestion-control-deep-dive",
+      "durationMinutes": 60,
+      "durationLabel": "60 min",
+      "partKey": "scale-architecture",
+      "partTitle": "Part 4 - Scale and Architecture",
+      "partDescription": "Requires Part 3 - Ch 12-16",
+      "tags": [
+        "DCQCN",
+        "Swift",
+        "HPCC",
+        "TIMELY",
+        "UEC CC",
+        "Congestion Control",
+        "JCT"
+      ],
+      "description": "A rigorous, algorithm-level treatment of every congestion control scheme used in production AI fabrics — DCQCN, Swift, HPCC, TIMELY, and UEC CC — with practical guidance on parameter tuning and algorithm selection.",
+      "previewSummary": "Understand how DCQCN, Swift, HPCC, TIMELY, and UEC CC differ — and which algorithm to choose for your fabric.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch21-congestion-control-deep-dive"
     }
   ],
   "labs": [
