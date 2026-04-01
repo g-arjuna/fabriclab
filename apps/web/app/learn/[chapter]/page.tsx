@@ -111,7 +111,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
 
           {pageIndex === 0 ? (
             <div className="mb-10 md:mb-12">
-              <h1 className="max-w-5xl text-4xl font-semibold leading-tight tracking-tight text-white md:text-5xl">
+              <h1 className="max-w-5xl text-3xl font-semibold leading-tight tracking-tight text-white sm:text-4xl md:text-5xl">
                 {document.title}
               </h1>
               <div className="mt-5 flex flex-wrap gap-3">
@@ -137,20 +137,20 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               <p className="text-xs uppercase tracking-[0.28em] text-slate-600">
                 {document.title} / Part {pageIndex + 1} of {totalPages}
               </p>
-              <h2 className="mt-3 max-w-5xl text-3xl font-semibold leading-tight tracking-tight text-white md:text-4xl">
+              <h2 className="mt-3 max-w-5xl text-2xl font-semibold leading-tight tracking-tight text-white sm:text-3xl md:text-4xl">
                 {page.heading}
               </h2>
             </div>
           )}
 
-          <div className="rounded-[28px] border border-white/8 bg-slate-950/22 px-5 py-6 shadow-[0_18px_46px_rgba(2,6,23,0.18)] sm:px-8 sm:py-8 md:px-9 md:py-9">
+          <div className="rounded-[28px] border border-white/8 bg-slate-950/22 px-4 py-5 shadow-[0_18px_46px_rgba(2,6,23,0.18)] sm:px-8 sm:py-8 md:px-9 md:py-9">
             <div
               className="chapter-prose prose prose-invert max-w-none
                 prose-headings:font-semibold prose-headings:tracking-tight
-                prose-h2:mb-5 prose-h2:mt-14 prose-h2:text-[1.95rem]
-                prose-h3:mb-4 prose-h3:mt-10 prose-h3:text-[1.35rem]
-                prose-p:mb-7 prose-p:text-[1rem] prose-p:leading-[1.95] prose-p:text-slate-300
-                prose-li:max-w-[88ch] prose-li:text-[0.98rem] prose-li:leading-[1.9] prose-li:text-slate-300
+                prose-h2:mb-5 prose-h2:mt-12 prose-h2:text-[1.6rem] sm:prose-h2:text-[1.95rem]
+                prose-h3:mb-4 prose-h3:mt-10 prose-h3:text-[1.2rem] sm:prose-h3:text-[1.35rem]
+                prose-p:mb-6 prose-p:text-[0.98rem] prose-p:leading-[1.85] prose-p:text-slate-300 sm:prose-p:mb-7 sm:prose-p:text-[1rem] sm:prose-p:leading-[1.95]
+                prose-li:max-w-[88ch] prose-li:text-[0.96rem] prose-li:leading-[1.8] prose-li:text-slate-300 sm:prose-li:text-[0.98rem] sm:prose-li:leading-[1.9]
                 prose-ul:my-8 prose-ul:space-y-3 prose-ol:my-8 prose-ol:space-y-3
                 prose-strong:text-slate-100
                 prose-blockquote:my-8 prose-blockquote:border-l prose-blockquote:border-cyan-500/30 prose-blockquote:pl-5 prose-blockquote:text-slate-300
@@ -244,12 +244,12 @@ export default async function ChapterPage({ params, searchParams }: Props) {
               <p className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-600">
                 Jump to section
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex gap-2 overflow-x-auto pb-2">
                 {allPages.map((chapterPage, index) => (
                   <Link
                     key={chapterPage.index}
                     href={`/learn/${chapter}?page=${index}`}
-                    className={`rounded-full px-3 py-1.5 text-xs transition ${
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs transition ${
                       index === pageIndex
                         ? "bg-slate-700 text-slate-200"
                         : "bg-slate-900 text-slate-500 hover:text-slate-300"

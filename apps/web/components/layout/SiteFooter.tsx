@@ -5,7 +5,7 @@ import { PublicCommunityLinks } from "@/components/community/PublicCommunityLink
 export function SiteFooter() {
   return (
     <footer className="border-t border-white/8 bg-[#020617]">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8 text-xs text-slate-600 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 text-xs text-slate-600 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <span className="font-mono uppercase tracking-[0.28em] text-cyan-400">FABRICLAB</span>
@@ -17,7 +17,7 @@ export function SiteFooter() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-5 text-xs">
+          <div className="flex flex-wrap items-center gap-4 text-xs">
             <Link href="/" className="transition hover:text-slate-400">
               Home
             </Link>

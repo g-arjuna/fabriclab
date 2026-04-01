@@ -131,7 +131,7 @@ export function CommunityForumThreadView({ threadId }: { threadId: string }) {
 
   if (fetching) {
     return (
-      <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-8 text-slate-400">
+      <section className="rounded-[1.9rem] border border-white/10 bg-slate-900/70 p-6 text-slate-400 sm:p-8">
         Loading discussion...
       </section>
     );
@@ -139,7 +139,7 @@ export function CommunityForumThreadView({ threadId }: { threadId: string }) {
 
   if (setupPending) {
     return (
-      <section className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-8 text-amber-100">
+      <section className="rounded-[1.9rem] border border-amber-500/20 bg-amber-500/10 p-6 text-amber-100 sm:p-8">
         The general forum tables are not provisioned yet. Apply the latest Supabase community forum
         migration first.
       </section>
@@ -148,7 +148,7 @@ export function CommunityForumThreadView({ threadId }: { threadId: string }) {
 
   if (error && !thread) {
     return (
-      <section className="rounded-3xl border border-rose-500/20 bg-rose-500/10 p-8 text-rose-100">
+      <section className="rounded-[1.9rem] border border-rose-500/20 bg-rose-500/10 p-6 text-rose-100 sm:p-8">
         {error}
       </section>
     );
@@ -156,7 +156,7 @@ export function CommunityForumThreadView({ threadId }: { threadId: string }) {
 
   if (!thread) {
     return (
-      <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-8 text-slate-300">
+      <section className="rounded-[1.9rem] border border-white/10 bg-slate-900/70 p-6 text-slate-300 sm:p-8">
         Thread not found.
       </section>
     );
@@ -164,7 +164,7 @@ export function CommunityForumThreadView({ threadId }: { threadId: string }) {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-8">
+      <section className="rounded-[1.9rem] border border-white/10 bg-slate-900/70 p-6 sm:p-8">
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
           <span className="rounded-full border border-white/10 px-2.5 py-1 uppercase tracking-[0.24em] text-cyan-300">
             {thread.thread_type === "general" ? "General discussion" : thread.thread_type}
@@ -187,7 +187,7 @@ export function CommunityForumThreadView({ threadId }: { threadId: string }) {
             </Link>
           </div>
         ) : null}
-        <h1 className="mt-5 text-4xl font-semibold text-white">{thread.title}</h1>
+        <h1 className="mt-5 text-3xl font-semibold text-white sm:text-4xl">{thread.title}</h1>
         <p className="mt-5 whitespace-pre-line text-base leading-8 text-slate-300">{thread.body}</p>
         {thread.github_issue_url ? (
           <div className="mt-6">
@@ -203,15 +203,15 @@ export function CommunityForumThreadView({ threadId }: { threadId: string }) {
         ) : null}
       </section>
 
-      <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-8">
-        <div className="flex items-center justify-between gap-3">
+      <section className="rounded-[1.9rem] border border-white/10 bg-slate-900/70 p-6 sm:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Replies</p>
             <h2 className="mt-3 text-2xl font-semibold text-white">Continue the discussion</h2>
           </div>
           <Link
             href="/community"
-            className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+            className="inline-flex items-center justify-center rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
           >
             Back to community
           </Link>
@@ -264,14 +264,14 @@ export function CommunityForumThreadView({ threadId }: { threadId: string }) {
                   className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm leading-7 text-slate-100 outline-none transition focus:border-cyan-500/40"
                 />
               </label>
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-6 text-slate-500">
                   Keep replies concrete so they can later be promoted into documentation or issue tracking.
                 </p>
                 <button
                   type="submit"
                   disabled={posting}
-                  className="rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {posting ? "Posting..." : "Post reply"}
                 </button>

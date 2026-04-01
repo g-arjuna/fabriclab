@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { CommunityForum } from "@/components/community/CommunityForum";
+import { PublicTopNav } from "@/components/layout/PublicTopNav";
 import { getPublicCommunityConfig } from "@/lib/community/config";
 
 function LinkCard({
@@ -22,12 +23,12 @@ function LinkCard({
       href={href}
       target={href.startsWith("http") ? "_blank" : undefined}
       rel={href.startsWith("http") ? "noreferrer" : undefined}
-      className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 transition hover:border-white/20"
+      className="rounded-[1.8rem] border border-white/10 bg-slate-900/70 p-5 transition hover:border-white/20 sm:p-6"
     >
       <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-slate-950 text-cyan-300">
         {icon}
       </div>
-      <h2 className="text-xl font-semibold text-white">{title}</h2>
+      <h2 className="mt-5 text-xl font-semibold text-white">{title}</h2>
       <p className="mt-3 text-sm leading-7 text-slate-400">{body}</p>
       <span className="mt-5 inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300">
         {cta}
@@ -82,42 +83,42 @@ export default function CommunityPage() {
   const config = getPublicCommunityConfig();
 
   return (
-    <main className="min-h-screen bg-[#020617] px-6 py-16 text-slate-100">
-      <div className="mx-auto max-w-6xl">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <Link href="/" className="text-sm text-cyan-300 transition hover:text-cyan-200">
-            {"<- Back to FabricLab"}
-          </Link>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/curriculum"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
-            >
-              Open curriculum
-            </Link>
-            <Link
-              href="/lab"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
-            >
-              Open labs
-            </Link>
-          </div>
-        </div>
+    <main className="min-h-screen bg-[#020617] text-slate-100">
+      <PublicTopNav ctaHref="/curriculum" ctaLabel="Open curriculum" />
 
-        <header className="mt-10 max-w-4xl">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Community</p>
-          <h1 className="mt-4 text-4xl font-semibold text-white">
-            Build FabricLab in the open
-          </h1>
-          <p className="mt-4 text-lg leading-8 text-slate-300">
-            FabricLab is now positioned as a free public learning platform. The fastest way to make
-            it better is to capture operator feedback directly on chapters and labs, keep the repo
-            contribution-ready, and make support optional rather than mandatory.
-          </p>
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
+        <header className="grid gap-6 lg:grid-cols-[1fr_0.8fr] lg:items-end">
+          <div className="max-w-4xl">
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Community</p>
+            <h1 className="mt-4 text-3xl font-semibold text-white sm:text-4xl lg:text-5xl">
+              Build FabricLab in the open
+            </h1>
+            <p className="mt-4 text-base leading-8 text-slate-300 sm:text-lg">
+              FabricLab is a free public learning platform. The best improvements come from
+              capturing operator feedback directly on chapters and labs, keeping the repo
+              contribution-ready, and making support optional rather than mandatory.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="rounded-[1.7rem] border border-white/10 bg-slate-900/70 p-5">
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">In-app feedback</p>
+              <p className="mt-3 text-sm leading-7 text-slate-300">
+                Chapters and labs can host discussion right next to the technical context.
+              </p>
+            </div>
+            <div className="rounded-[1.7rem] border border-cyan-400/20 bg-cyan-400/10 p-5">
+              <p className="text-xs uppercase tracking-[0.24em] text-cyan-200">Contribution loop</p>
+              <p className="mt-3 text-sm leading-7 text-cyan-100">
+                Focused fixes, source-backed technical corrections, and smaller PRs are the fastest
+                way to improve the platform.
+              </p>
+            </div>
+          </div>
         </header>
 
-        <section className="mt-12 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-8">
+        <section className="mt-12 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-[1.9rem] border border-white/10 bg-slate-900/70 p-6 sm:p-8">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">In-app feedback</p>
             <h2 className="mt-3 text-2xl font-semibold text-white">Comment on every chapter and lab</h2>
             <p className="mt-4 text-sm leading-7 text-slate-400">
@@ -127,18 +128,18 @@ export default function CommunityPage() {
             </p>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-8">
+          <div className="rounded-[1.9rem] border border-white/10 bg-slate-900/70 p-6 sm:p-8">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Contribution workflow</p>
             <h2 className="mt-3 text-2xl font-semibold text-white">Use the docs, then open focused changes</h2>
             <p className="mt-4 text-sm leading-7 text-slate-400">
-              The repo now includes contribution guidance, a code of conduct, and a roadmap for the
+              The repo includes contribution guidance, a code of conduct, and a roadmap for the
               highest-value fixes. Keep educational content changes scoped, cite primary sources for
               technical corrections, and prefer small PRs over giant rewrites.
             </p>
           </div>
         </section>
 
-        <section className="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <section className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {config.repoUrl ? (
             <LinkCard
               title="Repository"
@@ -180,7 +181,7 @@ export default function CommunityPage() {
         <CommunityForum />
 
         {!config.repoUrl && !config.issuesUrl && !config.discussionsUrl && !config.supportUrl ? (
-          <section className="mt-12 rounded-3xl border border-amber-500/20 bg-amber-500/10 p-6">
+          <section className="mt-12 rounded-[1.7rem] border border-amber-500/20 bg-amber-500/10 p-6">
             <p className="text-sm leading-7 text-amber-100">
               External community and support links are not configured yet. Set the optional
               `NEXT_PUBLIC_COMMUNITY_*` and `NEXT_PUBLIC_SUPPORT_URL` variables when you are ready

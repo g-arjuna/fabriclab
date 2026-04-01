@@ -1,0 +1,382 @@
+---
+title: "Lab 14: SRv6 TE Path Steering"
+labNumber: 14
+slug: "lab14-srv6-te-path-steering"
+description: "Steer checkpoint-to-storage traffic (DSCP 10) off the shared spine pool onto a dedicated SRv6-TE path, leaving the latency-sensitive NCCL spine uncongested."
+difficulty: "Advanced"
+estimatedTime: 40
+pairedChapter: "ch22-segment-routing-ai"
+published: true
+---
+
+import LabTerminal from '@/components/lab/LabTerminal'
+import LabHint from '@/components/lab/LabHint'
+import LabCheck from '@/components/lab/LabCheck'
+import LabAnswerBox from '@/components/lab/LabAnswerBox'
+
+## Scenario
+
+Two racks of GPU nodes share a four-spine fat-tree fabric. Rack A runs NCCL All-Reduce
+(latency-sensitive, DSCP 26). Rack B runs periodic model checkpoint-to-storage (throughput-hungry,
+DSCP 10, long flows up to 50 GB per checkpoint).
+
+When both workloads run simultaneously, the checkpoint flows hash to the same spines as the
+collective under ECMP. This creates a mixed-traffic spine that causes PFC pause propagation
+into the collective's priority class, and NCCL training latency increases by 35%.
+
+Your task: configure SR-TE policies on `leaf-rackB` so that DSCP 10 traffic is always
+steered through `spine-02` and `spine-03`, leaving `spine-01` and `spine-04` for ECMP
+collective traffic. Rack A traffic must remain on normal ECMP with no changes to any Rack A
+leaf switches.
+
+---
+
+## Environment
+
+```
+Rack A leaves:  leaf-A1, leaf-A2 (NCCL collective, DSCP 26)
+Rack B leaf:    leaf-rackB (checkpoint source, DSCP 10)
+Spines:         spine-01 through spine-04
+Storage leaf:   leaf-storage (End.DT4 SID pre-provisioned)
+```
+
+All switches run Cumulus Linux 5.x with FRR. IS-IS is already running and adjacencies are up.
+SRv6 locators have been pre-assigned but no SR-TE policies exist yet.
+
+Pre-provisioned SIDs (read-only reference, do not change):
+```
+spine-02::End  =  2001:db8:0:spine02::1
+spine-03::End  =  2001:db8:0:spine03::1
+leaf-storage::End.DT4(VRF STORAGE) = 2001:db8:0:lsrv::100
+```
+
+---
+
+## Task 1 — Verify IS-IS SRv6 Adjacency
+
+Before configuring SR-TE, confirm that all SRv6 locators are reachable from `leaf-rackB`.
+
+<LabTerminal nodeId="leaf-rackB" prompt="leaf-rackB$">
+```
+# Check IS-IS adjacencies are up:
+vtysh -c "show isis neighbor"
+# Expected: spine-01 through spine-04 all show state = Up
+
+# Verify SRv6 locators are distributed:
+vtysh -c "show isis srv6 node"
+# Expected: entries for spine-02 and spine-03 with their locator prefixes
+
+# Verify individual SIDs are reachable:
+ping6 2001:db8:0:spine02::1
+ping6 2001:db8:0:spine03::1
+ping6 2001:db8:0:lsrv::100
+# All three must respond before proceeding
+```
+</LabTerminal>
+
+<LabHint level={1}>
+If SIDs are not responding to ping6, check whether IS-IS has SRv6 enabled and the locator
+is being advertised. Run `vtysh -c "show isis database detail" | grep SRv6` to verify
+the SRv6 Capabilities TLV is present in the IS-IS LSP.
+</LabHint>
+
+---
+
+## Task 2 — Configure the SR-TE Segment List
+
+Create the explicit segment list that steers traffic through spine-02 then spine-03.
+
+<LabTerminal nodeId="leaf-rackB" prompt="leaf-rackB$">
+```
+vtysh
+configure terminal
+
+# Define the segment list: spine-02 → spine-03 → leaf-storage (decap)
+segment-routing
+ traffic-eng
+  segment-list CHECKPOINT-PATH
+   index 10 ipv6 2001:db8:0:spine02::1
+   index 20 ipv6 2001:db8:0:spine03::1
+   index 30 ipv6 2001:db8:0:lsrv::100
+  !
+ !
+!
+
+# Verify the segment list is accepted:
+do show sr-te segment-list
+# Expected: CHECKPOINT-PATH with 3 segments listed
+```
+</LabTerminal>
+
+<LabHint level={1}>
+The segment list must be in transit order: first SID visited is `index 10`, last is `index 30`.
+The SID at index 30 (`End.DT4`) is the egress function — it decapsulates and delivers into
+the STORAGE VRF on `leaf-storage`. If you reverse the order, the packet will arrive at the
+wrong node first.
+</LabHint>
+
+---
+
+## Task 3 — Define the SR-TE Policy
+
+Bind the segment list to an SR-TE policy with color 100 (checkpoint traffic).
+
+<LabTerminal nodeId="leaf-rackB" prompt="leaf-rackB$">
+```
+vtysh
+configure terminal
+
+segment-routing
+ traffic-eng
+  policy CHECKPOINT-STORAGE
+   color 100 endpoint 2001:db8:0:lsrv::1
+   candidate-path preference 100 explicit segment-list CHECKPOINT-PATH
+  !
+ !
+!
+
+# Verify the policy is active:
+do show sr-te policy
+# Expected output:
+# Policy CHECKPOINT-STORAGE
+#   Endpoint: 2001:db8:0:lsrv::1
+#   Color: 100
+#   Status: Active
+#   Binding SID: 2001:db8:0:leaf-rackB::200  (auto-assigned)
+#   Candidate-paths:
+#     Preference 100 (Active): CHECKPOINT-PATH
+```
+</LabTerminal>
+
+---
+
+## Task 4 — Apply DSCP-to-SR-TE Steering Policy
+
+Map DSCP 10 (checkpoint traffic) to SR-TE color 100, and leave DSCP 26 on normal ECMP.
+
+<LabTerminal nodeId="leaf-rackB" prompt="leaf-rackB$">
+```
+vtysh
+configure terminal
+
+# Route map: DSCP 10 → SR-TE color 100
+route-map STEER-CHECKPOINT permit 10
+  match ip dscp 10
+  set sr-te color 100
+!
+route-map STEER-CHECKPOINT permit 20
+  ! All other traffic: normal ECMP, no set action
+!
+
+# Apply to all server-facing ingress interfaces on leaf-rackB:
+interface swp1
+  ip policy route-map STEER-CHECKPOINT
+!
+interface swp2
+  ip policy route-map STEER-CHECKPOINT
+!
+interface swp3
+  ip policy route-map STEER-CHECKPOINT
+!
+interface swp4
+  ip policy route-map STEER-CHECKPOINT
+!
+
+do write memory
+
+# Verify route-map is applied:
+do show ip policy
+# Expected: swp1-4 each show "STEER-CHECKPOINT" as the input policy
+```
+</LabTerminal>
+
+<LabHint level={1}>
+The `set sr-te color 100` action tells FRR to encapsulate matching packets with the SR-TE
+policy that has color=100 and endpoint=the packet's destination. The policy lookup uses
+both color AND endpoint — make sure the endpoint in Task 3 matches the actual storage leaf
+address that checkpoint flows are destined for.
+</LabHint>
+
+---
+
+## Task 5 — Verify Path Steering with traceroute6
+
+From a Rack B compute node, run traceroute6 to storage and verify the path transits spine-02 then spine-03.
+
+<LabTerminal nodeId="rackB-node01" prompt="rackB-node01$">
+```
+# Mark the probe packet with DSCP 10 (checkpoint class):
+traceroute6 -n -Q 0x28 2001:db8:0:lsrv::1
+# -Q 0x28 sets DSCP 10 (0x28 = 0x0A << 2 in DSCP notation)
+
+# Expected path:
+# 1  2001:db8:0:leaf-rackB::1   (leaf-rackB)
+# 2  2001:db8:0:spine02::1      (spine-02 — confirmed SR-TE path)
+# 3  2001:db8:0:spine03::1      (spine-03 — confirmed SR-TE path)
+# 4  2001:db8:0:lsrv::100       (leaf-storage End.DT4)
+# 5  <storage server>
+
+# Also verify NCCL traffic is NOT forced through spine-02/03:
+traceroute6 -n -Q 0x68 2001:db8:0:leaf-A1::1
+# -Q 0x68 = DSCP 26 (RoCE traffic)
+# Expected: may use any spine (ECMP), should NOT exclusively use spine-02/03
+```
+</LabTerminal>
+
+<LabHint level={2}>
+If traceroute6 shows DSCP 10 traffic NOT going through spine-02, the route-map may not
+be matching correctly. Check:
+1. `show ip policy` — is the route-map applied to the correct interfaces?
+2. `show route-map STEER-CHECKPOINT` — does the DSCP match clause show the correct value?
+3. `show sr-te policy` — is the policy status "Active"? If it shows "Down", the segment-list
+   SIDs may not be reachable (Task 1 must pass completely).
+</LabHint>
+
+---
+
+## Task 6 — Verify SRH in Captured Traffic
+
+Confirm that checkpoint packets actually carry the SRH with the correct SID list.
+
+<LabTerminal nodeId="spine-01" prompt="spine-01$">
+```
+# On spine-01, capture and look for SRH:
+tcpdump -i swp1 -v 'ip6 and ip6[6]==43' -c 20
+# ip6[6]==43 = Next Header = Routing Header (SRH)
+
+# For DSCP 10 traffic (checkpoint), you should see ZERO SRH packets on spine-01.
+# Checkpoint traffic should not appear on spine-01 at all after SR-TE is applied.
+
+# Confirm checkpoint traffic appears on spine-02:
+ssh spine-02 'tcpdump -i swp1 -v "ip6 and ip6[6]==43" -c 5'
+# Expected: SRH packets visible, SID list showing spine-02::1, spine-03::1, lsrv::100
+```
+</LabTerminal>
+
+---
+
+## Task 7 — Verify MTU Accommodates SRH
+
+Ensure the 3-SID SRH (56 bytes) does not cause fragmentation.
+
+<LabTerminal nodeId="leaf-rackB" prompt="leaf-rackB$">
+```
+# Calculate required MTU:
+# Inner payload: 9000 bytes (standard jumbo)
+# SRH overhead: 8 (fixed) + 3 × 16 (SIDs) = 56 bytes
+# IPv6 header: 40 bytes
+# Required MTU: 9000 + 56 + 40 = 9096 bytes
+# (or use uSID to eliminate SRH entirely for this path)
+
+# Verify fabric MTU:
+nv show interface swp1 | grep mtu
+nv show interface swp2 | grep mtu
+
+# If MTU is 9000 only, either:
+# Option A: Increase MTU to 9216 on all spine-facing ports
+nv set interface swp1-48 link mtu 9216
+nv config apply
+
+# Option B: Use uSID compression (no SRH needed for <=4 hops)
+# Configure uSID behavior in the segment-list:
+# (FRR 9.1+ supports uSID natively with "behavior usid")
+
+# Verify no ICMPv6 Packet Too Big events:
+ip6tables -I INPUT -p icmpv6 --icmpv6-type packet-too-big -j LOG --log-prefix "SRH-MTU: "
+# Monitor /var/log/syslog for SRH-MTU entries during checkpoint run
+```
+</LabTerminal>
+
+---
+
+## Lab Checks
+
+<LabCheck id="check-isis-adj" title="IS-IS adjacencies up, SRv6 locators reachable">
+Pass: `vtysh -c "show isis neighbor"` shows all 4 spines in Up state AND
+`ping6 2001:db8:0:spine02::1` and `ping6 2001:db8:0:spine03::1` succeed from `leaf-rackB`.
+</LabCheck>
+
+<LabCheck id="check-seglist" title="Segment list CHECKPOINT-PATH configured">
+Pass: `vtysh -c "show sr-te segment-list"` on `leaf-rackB` shows `CHECKPOINT-PATH`
+with exactly 3 segments in the correct order: spine-02::1, spine-03::1, lsrv::100.
+</LabCheck>
+
+<LabCheck id="check-policy" title="SR-TE policy active">
+Pass: `vtysh -c "show sr-te policy"` shows `CHECKPOINT-STORAGE` with status `Active`
+and `Preference 100 (Active): CHECKPOINT-PATH`.
+</LabCheck>
+
+<LabCheck id="check-routemap" title="DSCP 10 route-map applied to swp1-4">
+Pass: `vtysh -c "show ip policy"` shows `STEER-CHECKPOINT` on interfaces swp1, swp2,
+swp3, swp4 on `leaf-rackB`.
+</LabCheck>
+
+<LabCheck id="check-traceroute" title="DSCP 10 traffic transits spine-02 then spine-03">
+Pass: `traceroute6 -n -Q 0x28 2001:db8:0:lsrv::1` from `rackB-node01` shows hop 2 as
+`spine-02` and hop 3 as `spine-03`.
+</LabCheck>
+
+<LabCheck id="check-spine01-clean" title="spine-01 receives no checkpoint SRH traffic">
+Pass: `tcpdump -i swp1 -v 'ip6 and ip6[6]==43'` on `spine-01` captures zero SRH packets
+during a 30-second checkpoint workload run.
+</LabCheck>
+
+---
+
+## Debrief
+
+### What you built
+
+An SR-TE policy that provides **application-transparent traffic engineering** for a mixed
+AI workload fabric. The checkpoint application was not modified. NCCL was not modified.
+The path separation was achieved entirely in the network layer by:
+
+1. Reading DSCP 10 (already set by the checkpoint job's I/O library)
+2. Mapping it to SR-TE color 100 at the ingress leaf
+3. Encapsulating with an explicit SID list: spine-02 → spine-03 → leaf-storage decap
+
+### The MTU lesson
+
+Every SID adds 16 bytes to the SRH. Three SIDs = 56 bytes of SRH overhead beyond the
+standard IPv6 header. If your fabric runs at 9000-byte MTU, the effective inner payload
+is 8904 bytes — not 9000. In an AI workload context, this matters:
+
+- NCCL negotiates path MTU during QP setup. If a checkpoint flow discovers a 8904-byte
+  PMTU mid-transfer, it will retransmit with smaller message fragments.
+- The correct remediation is either: set fabric MTU to 9216 everywhere (recommended), or
+  use uSID which packs all 3 hops into the IPv6 DA with zero SRH bytes.
+
+### Why spine-01 is now "clean"
+
+Before SR-TE, ECMP hashed approximately 25% of checkpoint flows to spine-01 (uniform
+4-spine distribution). Those checkpoint flows occupied buffer space on spine-01 that the
+NCCL collective was also using, causing PFC pause propagation into the collective's queue
+when the checkpoint elephant flow filled spine-01's buffer.
+
+After SR-TE, spine-01 receives exactly zero checkpoint traffic regardless of how many
+checkpoint flows are running. The collective can use spine-01's full buffer capacity for
+NCCL traffic. Training latency improvement: 30–40% in a typical AI factory scenario with
+simultaneous checkpoint and training on the same fabric.
+
+### SR-TE is stateless in the core
+
+The most important operational property of this solution: **spine-01, spine-02, spine-03,
+spine-04 required zero configuration changes**. The spines remain completely stateless.
+They read the SID in the IPv6 DA, look it up in the FIB (installed via IS-IS), and forward.
+The path decision lives entirely in the SID list inside each packet. This is fundamentally
+different from RSVP-TE, which would require explicit reservation messages on every spine.
+
+<LabAnswerBox id="reflection" title="Optional reflection: What breaks if spine-02 goes down?">
+```
+Think through: if spine-02 fails while SR-TE is active, what happens to checkpoint traffic?
+
+Consider:
+- The SID list has spine-02 at index 10 (first waypoint)
+- If spine-02 is unreachable, the SID ping6 2001:db8:0:spine02::1 would fail
+- The SR-TE policy's candidate-path becomes Down (no reachable next segment)
+- What fallback behavior does FRR provide?
+  (Hint: candidate-path preference, backup paths)
+
+What would you add to the policy configuration to provide resilience?
+```
+</LabAnswerBox>

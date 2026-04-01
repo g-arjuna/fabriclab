@@ -559,6 +559,31 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch21-congestion-control-deep-dive"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch22-segment-routing-ai",
+      "number": 22,
+      "title": "Segment Routing for AI Fabrics",
+      "href": "/learn/ch22-segment-routing-ai",
+      "durationMinutes": 65,
+      "durationLabel": "65 min",
+      "partKey": "advanced-networking",
+      "partTitle": "Part 5 - Advanced Networking",
+      "partDescription": "Requires Part 4 - Ch 22-23",
+      "tags": [
+        "SRv6",
+        "SR-TE",
+        "EVPN",
+        "Flex-Algo",
+        "Traffic engineering"
+      ],
+      "description": "A practitioner's guide to deploying SRv6, SR-TE, EVPN+SRv6, and IS-IS Flex-Algo in production AI data centre fabrics.",
+      "previewSummary": "Learn how explicit path steering, SRv6 SIDs, EVPN integration, and Flex-Algo change traffic engineering in AI fabrics.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch22-segment-routing-ai"
     }
   ],
   "labs": [
@@ -802,6 +827,26 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch15-ip-routing-ai-fabrics"
+    },
+    {
+      "kind": "lab",
+      "slug": "lab14-srv6-te-path-steering",
+      "number": 14,
+      "title": "SRv6 TE Path Steering",
+      "href": "/lab?lab=lab14-srv6-te-path-steering",
+      "durationMinutes": 40,
+      "durationLabel": "40 min",
+      "tags": [
+        "SRv6",
+        "SR-TE",
+        "Traffic engineering"
+      ],
+      "description": "Steer checkpoint-to-storage traffic onto a dedicated SRv6-TE path so collective traffic keeps the uncongested spine pool.",
+      "previewSummary": "A future simulator lab on DSCP-aware SRv6 path steering for checkpoint traffic in a shared AI fabric.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch22-segment-routing-ai"
     }
   ]
 }
