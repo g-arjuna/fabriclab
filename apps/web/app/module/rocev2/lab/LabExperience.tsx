@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 
 import { AuthControls } from "@/components/auth/AuthControls";
 import { CommunityThread } from "@/components/community/CommunityThread";
@@ -76,6 +75,36 @@ const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
 type LabId = keyof typeof LABS;
 const LABS_WITH_SOLUTION_REPLAYS = new Set<LabId>([lab0.id]);
 
+function DesktopRecommendationPrompt({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-6 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-900/95 p-6 shadow-2xl shadow-slate-950/50">
+        <p className="text-xs uppercase tracking-[0.28em] text-amber-300">Desktop recommended</p>
+        <h2 className="mt-4 text-2xl font-semibold text-white">Use FabricLab labs on a desktop if you can</h2>
+        <p className="mt-4 text-sm leading-7 text-slate-300">
+          Labs combine topology, multi-device terminal sessions, and reference tooling in one
+          workspace. The experience is much better on a laptop or desktop display.
+        </p>
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <Link
+            href="/lab"
+            className="inline-flex flex-1 items-center justify-center rounded-full border border-white/10 px-5 py-3 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+          >
+            Back to labs
+          </Link>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="inline-flex flex-1 items-center justify-center rounded-full bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+          >
+            Continue anyway
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function formatElapsed(startTime: number | null, now: number): string {
   const elapsedSeconds = startTime ? Math.max(0, Math.floor((now - startTime) / 1000)) : 0;
   return `${String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:${String(elapsedSeconds % 60).padStart(2, "0")}`;
@@ -141,9 +170,7 @@ function KnowledgePanelDrawer() {
   );
 }
 
-export function LabExperience() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export function LabExperience({ labId }: { labId: string }) {
   const loadLab = useLabStore((state) => state.loadLab);
   const resetLab = useLabStore((state) => state.resetLab);
   const completeLab = useLabStore((state) => state.completeLab);
@@ -153,10 +180,10 @@ export function LabExperience() {
   const markLabComplete = useProgressStore((state) => state.markLabComplete);
   const [topologyExpanded, setTopologyExpanded] = useState(false);
   const [solutionOpen, setSolutionOpen] = useState(false);
+  const [showDesktopPrompt, setShowDesktopPrompt] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  const requestedLabId = (searchParams.get("lab") as LabId | null) ?? lab1.id;
-  const activeLab = useMemo(() => LABS[requestedLabId] ?? lab1, [requestedLabId]);
+  const activeLab = useMemo(() => LABS[labId as LabId] ?? lab1, [labId]);
   const activeDevices = useMemo(() => LAB_DEVICES[activeLab.id] ?? [], [activeLab.id]);
   const sourceChapter = LAB_SOURCE_CHAPTERS[activeLab.id];
   const hasSolution = LABS_WITH_SOLUTION_REPLAYS.has(activeLab.id);
@@ -166,6 +193,12 @@ export function LabExperience() {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setShowDesktopPrompt(true);
+    }
+  }, [activeLab.id]);
 
   useEffect(() => {
     loadLab(activeLab);
@@ -206,10 +239,6 @@ export function LabExperience() {
     return activeLab.hints.find((hint) => hint.level === highest) ?? null;
   }, [activeLab.hints, labState.shownHintLevels]);
 
-  const handleLabSelection = (labId: LabId) => {
-    router.replace(`/lab?lab=${labId}`);
-  };
-
   const handleReset = () => {
     resetLab();
     loadLab(activeLab);
@@ -225,10 +254,10 @@ export function LabExperience() {
         <header className="flex h-12 flex-shrink-0 items-center justify-between border-b border-white/8 bg-[#07111f] px-4">
           <div className="flex min-w-0 items-center gap-2">
             <Link
-              href="/curriculum"
+              href="/lab"
               className="flex-shrink-0 rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400 transition hover:text-slate-200"
             >
-              {"\u2190 Curriculum"}
+              {"\u2190 Labs"}
             </Link>
             {sourceChapter && (
               <Link
@@ -244,41 +273,9 @@ export function LabExperience() {
           </div>
 
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-xl border border-white/10 bg-slate-900 p-1">
-              {([lab0.id, lab1.id, lab2.id, lab3.id, lab4.id, lab5.id, lab6.id, lab7.id, lab8.id, lab9.id, lab10.id, lab11.id] as LabId[]).map((labId, index) => {
-                const isActive = activeLab.id === labId;
-                const shortLabels: Record<string, string> = {
-                  [lab0.id]: "Failed Rail",
-                  [lab1.id]: "PFC Fix",
-                  [lab2.id]: "Congestion",
-                  [lab3.id]: "Spine LB",
-                  [lab4.id]: "Topology",
-                  [lab5.id]: "NCCL",
-                  [lab6.id]: "Alert Triage",
-                  [lab7.id]: "Pause Storm",
-                  [lab8.id]: "PFC Priority",
-                  [lab9.id]: "Err-Disable",
-                  [lab10.id]: "ECMP Hotspot",
-                  [lab11.id]: "BGP Failure",
-                };
-
-                return (
-                  <button
-                    key={labId}
-                    type="button"
-                    onClick={() => handleLabSelection(labId)}
-                    className={`whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
-                      isActive
-                        ? "bg-cyan-400 text-slate-950"
-                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                    }`}
-                  >
-                    <span className="mb-0.5 block text-[9px] leading-none opacity-50">Lab {index}</span>
-                    {shortLabels[labId]}
-                  </button>
-                );
-              })}
-            </div>
+            <span className="hidden rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-xs text-amber-200 lg:inline-flex">
+              Desktop recommended
+            </span>
             <AuthControls compact />
           </div>
         </header>
@@ -448,6 +445,10 @@ export function LabExperience() {
         labId={activeLab.id}
         title={activeLab.title}
       />
+
+      {showDesktopPrompt ? (
+        <DesktopRecommendationPrompt onDismiss={() => setShowDesktopPrompt(false)} />
+      ) : null}
 
       {labState.isComplete && labState.score !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 px-6 backdrop-blur-sm">
