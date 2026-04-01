@@ -53,6 +53,19 @@ export function formatConditionLabel(key: string): string {
     routeMapApplied: "Route-map applied to swp1-4",
     tracerouteVerified: "Traceroute confirmed SR-TE path",
     spine01Clean: "Spine-01 clean of checkpoint SRH",
+    mrInspected: "Memory Region inspected",
+    rkeyVulnerabilityReproduced: "RKEY exposure reproduced",
+    gidFilteringIdentified: "GID filtering issue identified",
+    gidFilteringEnabled: "GID filtering enabled",
+    rkeyRotated: "RKEY rotated to a high-entropy value",
+    attackBlocked: "Attack blocked after hardening",
+    pkeyIsolationVerified: "PKey isolation verified in UFM",
+    clVersionVerified: "Cumulus version and NVUE availability verified",
+    portsAudited: "Physical port audit completed on all devices",
+    asicHealthChecked: "ASIC identity and health counters checked",
+    mtuVerified: "Server-facing MTU baseline verified",
+    bgpClean: "BGP baseline confirmed clean",
+    auditReportComplete: "Audit report completed",
   };
 
   return labels[key] ?? key;

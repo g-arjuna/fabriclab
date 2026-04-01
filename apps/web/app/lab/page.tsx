@@ -23,6 +23,8 @@ const SUPPORTED_LAB_IDS = new Set([
   "lab10-ecmp-hotspot",
   "lab11-bgp-path-failure",
   "lab14-srv6-te-path-steering",
+  "lab15-rdma-rkey-exposure",
+  "lab16-spectrum-x-platform-audit",
 ]);
 
 function LabLoadingState() {

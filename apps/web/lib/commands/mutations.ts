@@ -6,12 +6,19 @@ import { lab3 } from "@/data/labs/lab3-uneven-spine";
 import { lab4 } from "@/data/labs/lab4-topology-sizing";
 import { lab5 } from "@/data/labs/lab5-nccl-diagnosis";
 import { lab14 } from "@/data/labs/lab14-srv6-te-path-steering";
+import { lab15 } from "@/data/labs/lab15-rdma-rkey-exposure";
+import { lab16 } from "@/data/labs/lab16-spectrum-x-platform-audit";
 import {
   applyRouteMapSwp14,
   configureRouteMapDscp10,
   configureSegmentList,
   configureSrtePolicy,
 } from "@/lib/commands/lab14Handlers";
+import {
+  enableGidFilter,
+  ibvRegMrRotate,
+  rkeyScan,
+} from "@/lib/commands/lab15Handlers";
 import { useLabStore } from "@/store/labStore";
 
 const LAB_CONFIGS = {
@@ -21,6 +28,8 @@ const LAB_CONFIGS = {
   [lab4.id]: lab4,
   [lab5.id]: lab5,
   [lab14.id]: lab14,
+  [lab15.id]: lab15,
+  [lab16.id]: lab16,
 };
 
 export function runMutation(command: string): CommandResult {
@@ -175,6 +184,12 @@ export function runMutation(command: string): CommandResult {
       return configureRouteMapDscp10();
     case "apply route-map swp1-4":
       return applyRouteMapSwp14();
+    case "enable gid filter":
+      return enableGidFilter();
+    case "ibv_reg_mr rotate":
+      return ibvRegMrRotate();
+    case "rkey scan":
+      return rkeyScan();
     case "help":
       return {
         output: `Available commands:

@@ -190,6 +190,20 @@ import SRv6SIDViz from "@/components/visualisations/SRv6SIDViz"
 import SRTEPolicyViz from "@/components/visualisations/SRTEPolicyViz"
 import EVPNSRv6Viz from "@/components/visualisations/EVPNSRv6Viz"
 import FlexAlgoPathViz from "@/components/visualisations/FlexAlgoPathViz"
+// === Ch23 -- AI Networking Security ===
+import RDMAThreatModelViz from "@/components/visualisations/RDMAThreatModelViz"
+import SpectrumXTenantIsolationViz from "@/components/visualisations/SpectrumXTenantIsolationViz"
+import PKeyMembershipViz from "@/components/visualisations/PKeyMembershipViz"
+import UFMCyberAIViz from "@/components/visualisations/UFMCyberAIViz"
+// === Ch24 -- Spectrum-X Architecture and the AI Factory Platform ===
+import SpectrumXStackViz from "@/components/visualisations/SpectrumXStackViz"
+import Spectrum4ASICViz from "@/components/visualisations/Spectrum4ASICViz"
+import SuperNICReorderViz from "@/components/visualisations/SuperNICReorderViz"
+import ScalableUnitViz from "@/components/visualisations/ScalableUnitViz"
+import SpectrumXSoftwareStackViz from "@/components/visualisations/SpectrumXSoftwareStackViz"
+import GPUCommPatternViz from "@/components/visualisations/GPUCommPatternViz"
+import StorageOptionComparisonViz from "@/components/visualisations/StorageOptionComparisonViz"
+import FailureDomainViz from "@/components/visualisations/FailureDomainViz"
 
 // === Legacy components (no longer in active chapters, kept for reference) ===
 // ServerRackViz, NICCardViz, DGXNodeViz, HardwareComparison
@@ -367,4 +381,18 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   SRTEPolicyViz,
   EVPNSRv6Viz,
   FlexAlgoPathViz,
+  // Ch23
+  RDMAThreatModelViz,
+  SpectrumXTenantIsolationViz,
+  PKeyMembershipViz,
+  UFMCyberAIViz,
+  // Ch24
+  SpectrumXStackViz,
+  Spectrum4ASICViz,
+  SuperNICReorderViz,
+  ScalableUnitViz,
+  SpectrumXSoftwareStackViz,
+  GPUCommPatternViz,
+  StorageOptionComparisonViz,
+  FailureDomainViz,
 }

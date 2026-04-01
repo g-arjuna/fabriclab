@@ -1,0 +1,184 @@
+---
+title: "Lab 16 — Spectrum-X Platform Bring-Up Audit"
+labNumber: 16
+slug: "lab16-spectrum-x-platform-audit"
+pairedChapter: "ch24-spectrum-x-architecture"
+difficulty: "intermediate"
+estimatedMinutes: 40
+published: true
+---
+
+import LabTerminal from '@/components/lab/LabTerminal'
+import LabHint from '@/components/lab/LabHint'
+import LabCheck from '@/components/lab/LabCheck'
+import LabAnswerBox from '@/components/lab/LabAnswerBox'
+
+## Scenario
+
+A new Scalable Unit has been racked and cabled at the Bangalore AI factory expansion site. The provisioning engineer completed the physical installation — DGX nodes, SN5600 leaf switches, and the SN4600C storage switch — but was pulled onto an emergency datacenter incident before finishing the baseline configuration audit. You have been handed console access to three devices and a reference topology document showing the expected port connections.
+
+Your responsibility is to perform a systematic bring-up audit before any RoCE configuration begins. Every hour that RoCE configuration proceeds on top of an unchecked physical layer is an hour that cabling errors, optic failures, and MTU mismatches can hide inside complex DCQCN interaction bugs. The audit you run today is the gate that protects the entire RoCE bring-up in Lab 17.
+
+The devices are at factory defaults. All physical links are reported up by the pre-installation test. No NVUE configuration has been applied. You have console sessions on leaf-01, leaf-02, and storage-01.
+
+---
+
+## Task 1 — Verify Cumulus Version and NVUE Availability
+
+Before issuing any configuration commands, confirm the NOS version and NVUE readiness on leaf-01. A factory-shipped SN5600 may carry an older Cumulus image that needs upgrade before Spectrum-X features are available. NVUE was introduced in Cumulus Linux 5.0 — any version below that lacks the declarative config API.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+Verify the installed Cumulus Linux version and check that NVUE is available.
+Use: nv --version
+Use: cl-platform-info
+</LabTerminal>
+
+<LabHint level={1}>
+  Try `nv --version` to check NVUE availability, then `cl-platform-info` to see the full platform and OS details.
+</LabHint>
+
+<LabHint level={2}>
+  If `nv --version` returns a command-not-found error, Cumulus Linux is below 5.0 and requires an upgrade before any NVUE configuration. In this lab, it should return version 5.x.
+</LabHint>
+
+<LabCheck condition="clVersionVerified" passMessage="✓ Cumulus version confirmed and NVUE is available. Baseline OS verified." failMessage="Run nv --version and cl-platform-info on leaf-01 to confirm the version." />
+
+---
+
+## Task 2 — Audit All Physical Ports
+
+Perform a complete physical port audit on all three devices. Check that every expected port (swp1–32 on the leaf switches, swp1–16 on storage-01) is in the correct state. Any port showing `down` that should be `up` — or any port showing `up` that should be `down` — is a cabling error that must be investigated before RoCE configuration begins.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+Audit all physical ports on leaf-01.
+Use: nv show interface | grep -E "swp|state"
+</LabTerminal>
+
+<LabTerminal nodeId="leaf-02" prompt="leaf-02#">
+Audit all physical ports on leaf-02.
+Use: nv show interface | grep -E "swp|state"
+</LabTerminal>
+
+<LabTerminal nodeId="storage-01" prompt="storage-01#">
+Audit all physical ports on storage-01.
+Use: nv show interface | grep -E "swp|state"
+</LabTerminal>
+
+<LabHint level={1}>
+  Run the same grep command on all three devices. Compare the output against the reference BasePOD topology document. Any swp port that should connect to a DGX NIC must show `up` before you proceed.
+</LabHint>
+
+<LabHint level={2}>
+  On storage-01, only swp1–16 are expected to have active connections (8 DGX nodes × 1 storage NIC each = 8 ports, plus uplinks to storage array). If swp17+ show `up`, verify against the topology doc — unexpected links can indicate cross-cabling.
+</LabHint>
+
+<LabHint level={3}>
+  `nv show interface` without the grep shows all interface state in tabular format. Look for the `state` column. Values: `up`, `down`, `admin-down`. A port in `admin-down` is deliberately disabled — check if this is expected or an error.
+</LabHint>
+
+<LabCheck condition="portsAudited" passMessage="✓ All physical ports audited on all three devices. Port state map recorded." failMessage="Run the port audit on all three devices (leaf-01, leaf-02, storage-01) before marking this task complete." />
+
+---
+
+## Task 3 — Check ASIC Health and Switch Identity
+
+Use `decode-syseeprom` to confirm that each switch's hardware identity matches the expected model. A mis-shipped unit (e.g., an SN4600C where an SN5600 should be) would have the correct link indicators but wrong ASIC capabilities. `cl-netstat` provides a live view of ASIC forwarding counters — non-zero error counters at factory default warrant investigation.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+Confirm ASIC identity and check ASIC health counters.
+Use: decode-syseeprom
+Use: cl-netstat
+</LabTerminal>
+
+<LabTerminal nodeId="storage-01" prompt="storage-01#">
+Confirm storage switch identity (should be SN4600C, not SN5600).
+Use: decode-syseeprom
+</LabTerminal>
+
+<LabHint level={1}>
+  `decode-syseeprom` reads the EEPROM burned at the factory and is authoritative for switch identity. Look for `Product Name` containing `SN5600` on the leaf switches and `SN4600` on the storage switch.
+</LabHint>
+
+<LabHint level={2}>
+  `cl-netstat` shows ASIC forwarding counters. At factory default with no traffic, all counters should be zero or very low. Non-zero `FCS Errors` or `Align Errors` at rest indicate a hardware problem with the switch or a cabling issue.
+</LabHint>
+
+<LabCheck condition="asicHealthChecked" passMessage="✓ ASIC identity confirmed on all devices. Hardware matches expected models. ASIC health clean." failMessage="Run decode-syseeprom on leaf-01 and storage-01, and cl-netstat on leaf-01 to verify ASIC health." />
+
+---
+
+## Task 4 — Verify MTU = 9216 on Server-Facing Ports
+
+RoCEv2 in AI clusters uses jumbo frames (MTU 9216). If any server-facing port is at the default MTU of 1500, RoCEv2 packets will be silently fragmented or dropped, producing hard-to-diagnose NCCL collective timeouts that look like network congestion but are actually MTU mismatches. MTU must be verified — and corrected if wrong — before any RoCE configuration.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+Verify MTU on all server-facing ports (swp1-32).
+Use: ip link show | grep mtu
+Expected: MTU 9216 on server-facing ports
+</LabTerminal>
+
+<LabHint level={1}>
+  At factory default, all interfaces are at MTU 1500. You are checking here whether pre-configuration was applied. If any interface shows `mtu 1500`, note it as a required action — MTU will be set via NVUE in the RoCE configuration lab (Lab 17).
+</LabHint>
+
+<LabHint level={2}>
+  `ip link show | grep mtu` shows every interface with its MTU inline. Server-facing ports are swp1–32 on leaf switches and swp1–16 on storage-01. Management interface (eth0) MTU is irrelevant to RoCE — do not flag eth0 MTU differences.
+</LabHint>
+
+<LabCheck condition="mtuVerified" passMessage="✓ MTU audit complete. Any MTU 1500 ports flagged for correction in RoCE configuration phase." failMessage="Run 'ip link show | grep mtu' on leaf-01 to check current MTU values." />
+
+---
+
+## Task 5 — Confirm BGP Has No Configured Peers
+
+BGP must be in a clean unconfigured state before the Spectrum-X BGP unnumbered configuration is applied. If a previous engineer partially configured BGP — even with an incorrect ASN or peer — the subsequent NVUE BGP configuration will produce unexpected behaviour. Confirm the baseline is empty.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+Verify BGP is unconfigured (clean baseline).
+Use: nv show router bgp
+</LabTerminal>
+
+<LabHint level={1}>
+  At factory default, `nv show router bgp` should return empty output or show BGP as disabled with no configured peers. Any existing peer entries must be investigated before you proceed.
+</LabHint>
+
+<LabHint level={2}>
+  If you see existing BGP configuration, use `nv unset router bgp` followed by `nv config apply` to clear it before the RoCE lab. In this lab environment the baseline is factory clean — but verify rather than assume.
+</LabHint>
+
+<LabCheck condition="bgpClean" passMessage="✓ BGP baseline confirmed clean. No pre-existing peer configuration found." failMessage="Run 'nv show router bgp' on leaf-01 to confirm the BGP baseline state." />
+
+---
+
+## Task 6 — Produce Structured Audit Report
+
+You have now completed all five physical checks. Compile a structured bring-up audit report in the answer box below. A good audit report captures not just what you found, but what the acceptable values are and what action is required for any deviation. This report becomes the handoff document for the engineer who will run Lab 17 (RoCE configuration).
+
+Include in your report:
+1. Device identity confirmation (product names from decode-syseeprom)
+2. Port state summary (count of expected-up vs actual-up ports per device)
+3. ASIC health status (pass/fail with any counter anomalies)
+4. MTU status per device (current values vs required 9216)
+5. BGP baseline status
+6. List of required actions before RoCE configuration can begin
+
+<LabAnswerBox
+  condition="auditReportComplete"
+  placeholder="Enter your structured audit report here. Include device identity, port counts, ASIC health, MTU status, BGP baseline, and required actions..."
+  minLength={150}
+  passMessage="✓ Audit report recorded. Lab 16 complete — Scalable Unit cleared for RoCE configuration."
+/>
+
+---
+
+## Debrief
+
+Physical bring-up audit is not bureaucracy — it is the only mechanism that catches layer 1 and layer 2 errors before they become impossible-to-diagnose layer 3 and application problems. The two most costly errors caught by this audit pattern are:
+
+**MTU mismatches** (1500 vs 9216): An NCCL collective running over a path with an MTU mismatch produces packet fragmentation at the first 1500-byte hop. The fragmented packets arrive at the destination NIC in pieces that do not match any RoCEv2 QP expectation. The NIC generates NACKs. NCCL interprets the NACK storm as network congestion and backs off. Training throughput drops to 10–20% of expected. This failure mode looks identical to severe link congestion in monitoring dashboards and has burned multiple days of debugging time in production AI clusters.
+
+**Wrong switch model** (`decode-syseeprom` catches this): An SN5600 has the Spectrum-4 ASIC with the hardware adaptive routing engine. An SN5600 running a different ASIC revision (Spectrum-3) has only 32 MB buffer and no hardware AR. If a mis-shipped unit is installed without identity verification, the entire Spectrum-X AR capability is absent from that SU rail, producing measurably worse All-Reduce performance that is attributed to software tuning rather than hardware error.
+
+The `decode-syseeprom` command is authoritative. The front-panel label can be wrong. The SNMP system description can be wrong. The EEPROM is written at the factory and cannot be changed without physical access to the ASIC.
+
+Proceed to Lab 17 to apply the RoCE PFC and ECN configuration on top of this verified physical baseline.

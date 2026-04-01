@@ -37,6 +37,33 @@ export interface TopologyState {
   segmentListConfigured?: boolean
   routeMapApplied?: boolean
   isisAdjVerified?: boolean
+  gidFilterEnabled?: boolean
+  rkeyRotated?: boolean
+  clVersionVerified?: boolean
+  portsAudited?: boolean
+  asicHealthChecked?: boolean
+  mtuVerified?: boolean
+  bgpClean?: boolean
+  auditReportComplete?: boolean
+  leaf01PortsChecked?: boolean
+  leaf02PortsChecked?: boolean
+  storagePortsChecked?: boolean
+  leaf01EepromChecked?: boolean
+  storageEepromChecked?: boolean
+  netstatChecked?: boolean
+  leaf01ProductName?: string
+  leaf02ProductName?: string
+  storage01ProductName?: string
+  leaf01PortsUp?: number
+  leaf02PortsUp?: number
+  storage01PortsUp?: number
+  leaf01MtuCurrent?: number
+  bgpPeersConfigured?: number
+  leaf01PortsExpected?: number
+  leaf02PortsExpected?: number
+  storagePortsExpected?: number
+  leaf02MtuCurrent?: number
+  storage01MtuCurrent?: number
 }
 
 export interface LabState {

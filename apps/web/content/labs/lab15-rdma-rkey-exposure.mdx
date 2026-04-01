@@ -1,0 +1,310 @@
+---
+title: "Lab 15: RDMA RKEY Exposure and Isolation"
+labNumber: 15
+slug: "lab15-rdma-rkey-exposure"
+description: "Reproduce an RDMA RKEY exposure attack from a multi-tenant cluster, identify the two misconfigurations that enabled it, and apply GID filtering and RKEY rotation to harden the environment."
+difficulty: "Advanced"
+estimatedTime: 40
+pairedChapter: "ch23-ai-networking-security"
+published: true
+---
+
+import LabTerminal from '@/components/lab/LabTerminal'
+import LabHint from '@/components/lab/LabHint'
+import LabCheck from '@/components/lab/LabCheck'
+import LabAnswerBox from '@/components/lab/LabAnswerBox'
+
+## Scenario
+
+A security audit has flagged a critical finding on a multi-tenant GPU cluster: a
+TenantB engineer was able to read memory from a TenantA GPU node using a guessed
+RKEY value. The cluster runs DGX H100 nodes with ConnectX-7 NICs. The storage
+network is RoCEv2 over Ethernet — no InfiniBand.
+
+You have been handed a test environment that reproduces the vulnerable configuration:
+
+- `tenanta-node`: A TenantA compute node that has pre-allocated a Memory Region
+  and is listening for legitimate RDMA connections from TenantA peers.
+- `tenantb-node`: A TenantB compute node. It has been pre-loaded with `rkey_scan`,
+  a tool that iterates RKEY values and attempts RDMA reads.
+- `leaf-switch`: The SN5600 Spectrum-X leaf switch both nodes connect to.
+- `ufm-server`: The UFM Enterprise server managing the fabric.
+
+Your task: reproduce the attack, identify both misconfigurations, fix them, and
+confirm the attack fails after hardening.
+
+---
+
+## Task 1 — Examine the Pre-Allocated Memory Region
+
+Before attacking anything, understand what you are protecting. Inspect the Memory
+Region on `tenanta-node`.
+
+<LabTerminal nodeId="tenanta-node" prompt="tenanta-node:~$">
+```
+# Inspect the pre-allocated MR:
+show mr info
+
+# Also inspect the GID table for this NIC:
+ibv_devinfo -d mlx5_0 -i 1
+```
+</LabTerminal>
+
+<LabHint level={1}>
+Look carefully at the RKEY value shown in the `show mr info` output. A high-entropy
+RKEY looks like `0xA7F3C209`. A low-entropy RKEY looks like `0x00000027`. The
+difference is 39 guesses vs 4 billion guesses. Which one do you see?
+</LabHint>
+
+<LabCheck id="check-mr-inspected" title="Memory Region examined">
+Pass: `show mr info` output viewed on `tenanta-node`. The RKEY value and its
+entropy level have been noted.
+</LabCheck>
+
+---
+
+## Task 2 — Reproduce the RKEY Exposure Attack
+
+Switch to `tenantb-node` and run the RKEY scanner. This simulates what a malicious
+or misconfigured Tenant B node can do when GID filtering is disabled.
+
+<LabTerminal nodeId="tenantb-node" prompt="tenantb-node:~$">
+```
+# First confirm tenantb's own GID:
+ibv_devinfo -d mlx5_0
+
+# Run the RKEY scanner against tenanta-node:
+rkey scan
+```
+</LabTerminal>
+
+<LabHint level={1}>
+The scanner iterates RKEY values starting from 0x00000001. It attempts an RDMA read
+at each value. A success means it got a valid RKEY and read real memory content.
+Note both the RKEY value that succeeded AND the number of attempts needed. This is
+the attack surface.
+</LabHint>
+
+<LabCheck id="check-attack-reproduced" title="RKEY exposure attack reproduced">
+Pass: `rkey scan` on `tenantb-node` shows a successful read — the output shows
+actual memory content and the RKEY value that succeeded. Condition
+`rkeyVulnerabilityReproduced` is set.
+</LabCheck>
+
+---
+
+## Task 3 — Identify the Two Misconfigurations
+
+You have now seen the attack succeed. Your job is to identify exactly why it worked.
+There are two independent misconfigurations — either one alone would be sufficient
+to prevent the attack, but both should be fixed.
+
+<LabTerminal nodeId="tenanta-node" prompt="tenanta-node:~$">
+```
+# Check GID filtering status on the ConnectX-7 NIC:
+show gid filter
+
+# This shows the current value of ROCE_ADDR_FILTER_ENABLE
+# and whether tenantb's GID is in the allowed set
+```
+</LabTerminal>
+
+<LabHint level={1}>
+Two misconfigurations enabled this attack: (1) GID filtering is disabled — Tenant B's
+NIC was allowed to establish a QP connection to Tenant A's NIC with no restriction.
+(2) The RKEY is low-entropy — once the QP connection was established, the attacker
+only needed to try a small range of values. Fix both.
+</LabHint>
+
+<LabHint level={2}>
+`show gid filter` will show `ROCE_ADDR_FILTER_ENABLE: 0 (DISABLED)`. This means any
+remote GID can connect. The factory default for ConnectX-7 is disabled. This is the
+first fix: `enable gid filter`. The second fix is `ibv_reg_mr rotate` to force a new
+high-entropy RKEY.
+</LabHint>
+
+<LabCheck id="check-misconfiguration-identified" title="Both misconfigurations identified">
+Pass: `show gid filter` run on `tenanta-node` shows GID filtering is DISABLED.
+Condition `gidFilteringIdentified` is set.
+</LabCheck>
+
+---
+
+## Task 4 — Enable GID Filtering
+
+Apply the first fix: enable GID-based access control on TenantA's ConnectX-7 NIC.
+This prevents any remote GID not on the allow-list from establishing a QP connection.
+
+<LabTerminal nodeId="tenanta-node" prompt="tenanta-node:~$">
+```
+# Enable GID filtering (ROCE_ADDR_FILTER):
+enable gid filter
+
+# Verify the filter is now active:
+show gid filter
+```
+</LabTerminal>
+
+<LabHint level={1}>
+After running `enable gid filter`, the `show gid filter` output should show
+`ROCE_ADDR_FILTER_ENABLE: 1 (ENABLED)` and confirm that tenantb-node's GID is no
+longer in the allowed set. Note that this change takes effect immediately — no
+reboot required.
+</LabHint>
+
+<LabCheck id="check-gid-filter-enabled" title="GID filtering enabled">
+Pass: `show gid filter` after the fix shows `ROCE_ADDR_FILTER_ENABLE: 1 (ENABLED)`
+and tenantb-node's GID is absent from the allowed list. Condition
+`gidFilteringEnabled` is set.
+</LabCheck>
+
+---
+
+## Task 5 — Rotate the RKEY
+
+Apply the second fix: force a new RKEY by deregistering and re-registering the
+Memory Region. This invalidates the old (guessed) RKEY and assigns a new one from
+a high-entropy pool.
+
+<LabTerminal nodeId="tenanta-node" prompt="tenanta-node:~$">
+```
+# Rotate the Memory Region RKEY:
+ibv_reg_mr rotate
+
+# Verify the new RKEY has high entropy:
+show mr info after
+```
+</LabTerminal>
+
+<LabHint level={1}>
+After rotation, `show mr info after` should show a new RKEY value in the range
+`0xA0000000–0xFFFFFFFF` — a high-entropy value that would take on average 2 billion
+guesses to find, vs the original which needed only 39. Note that any legitimate
+TenantA peer that was using the old RKEY will need the new value via the application's
+connection setup protocol.
+</LabHint>
+
+<LabCheck id="check-rkey-rotated" title="RKEY rotated to high-entropy value">
+Pass: `show mr info after` shows a new RKEY value >= `0xA0000000`. Condition
+`rkeyRotated` is set.
+</LabCheck>
+
+---
+
+## Task 6 — Confirm the Attack Fails
+
+Re-run the RKEY scanner from `tenantb-node`. Both fixes are now in place. The
+scanner should fail on every attempt.
+
+<LabTerminal nodeId="tenantb-node" prompt="tenantb-node:~$">
+```
+# Re-run the scanner with both fixes applied:
+rkey scan
+
+# Also try a direct QP connection:
+ibv_rc_pingpong -d mlx5_0 -g 1
+```
+</LabTerminal>
+
+<LabHint level={1}>
+With GID filtering enabled, the scanner cannot even establish a QP connection —
+it will fail before it can present any RKEY at all. The output should show
+`IBV_WC_REM_ACCESS_ERR` or a connection refusal on every attempt, not a successful
+read.
+</LabHint>
+
+<LabCheck id="check-attack-blocked" title="Attack blocked — all scan attempts fail">
+Pass: `rkey scan` on `tenantb-node` after both fixes shows zero successful reads.
+All attempts return `IBV_WC_REM_ACCESS_ERR`. Condition `attackBlocked` is set.
+</LabCheck>
+
+---
+
+## Task 7 — Verify PKey Isolation at the Fabric Level
+
+GID filtering protects at the NIC level. For a defence-in-depth posture, also verify
+that the fabric-level isolation (PKey partitions) is correctly configured. Check the
+UFM PKey table.
+
+<LabTerminal nodeId="ufm-server" prompt="ufm-admin@ufm:~$">
+```
+# View the full PKey partition table:
+show ufm pkey table
+
+# View recent UFM events (confirms changes were logged):
+show ufm events
+```
+</LabTerminal>
+
+<LabCheck id="check-pkey-verified" title="PKey partition isolation confirmed">
+Pass: `show ufm pkey table` shows TenantA nodes in partition `0x8001` and TenantB
+nodes in partition `0x8002` with no overlap. Condition `pkeyIsolationVerified` is set.
+</LabCheck>
+
+---
+
+## Debrief
+
+### The two misconfigurations
+
+**(a) GID filtering disabled (ROCE_ADDR_FILTER_ENABLE=0)**
+The factory default for ConnectX-7 is to accept QP connections from any remote GID.
+This is appropriate in a single-tenant environment where all nodes are trusted. In a
+multi-tenant cluster, it means any node can connect to any other node's RDMA endpoint
+and attempt RDMA operations — subject only to RKEY validation.
+
+The fix — `ROCE_ADDR_FILTER_ENABLE=1` — should be applied at provisioning time and
+treated as a mandatory hardening step for every multi-tenant RoCEv2 deployment. It
+costs nothing in performance. The check is done at QP establishment, not per-packet.
+
+**(b) Low-entropy RKEY (predictable kernel seed)**
+With GID filtering disabled, the RKEY was the only barrier. A 32-bit RKEY should
+require 2 billion guesses on average. The pre-allocated MR had RKEY `0x00000027` —
+only 39 guesses. This is a real vulnerability present in several Linux kernel versions
+where the RKEY counter is initialised from a low-entropy source.
+
+Check your own systems: run `show mr info` equivalent (`ibv_reg_mr` test tool) on
+a freshly booted node and look at the RKEY values assigned to the first few MRs.
+If they are small numbers (< 0x0000FFFF), your kernel has this issue. Ensure
+`/proc/sys/kernel/randomize_va_space` is set to 2.
+
+### Why either fix alone is insufficient
+
+If only GID filtering is applied: RKEY rotation is not strictly necessary because a
+blocked QP means the attacker cannot present any RKEY at all. But if GID filtering
+is ever accidentally disabled (firmware upgrade, misconfiguration), the low-entropy
+RKEY is immediately exploitable again. Both fixes in combination provide defence in
+depth.
+
+If only RKEY rotation is applied: a high-entropy RKEY makes scanning impractical but
+not impossible given enough time or a side-channel. GID filtering eliminates the
+attack surface entirely — no QP, no opportunity to scan.
+
+### The enforcement hierarchy
+
+```
+Layer 1 (fabric): PKey partitioning  — blocks cross-tenant QPs at HCA hardware
+Layer 2 (NIC):    GID filtering      — blocks unrecognised remote GIDs at NIC ASIC
+Layer 3 (app):    RKEY entropy       — makes guessing impractical if layers 1+2 fail
+```
+
+All three layers must be deployed. In RoCEv2 (Ethernet) environments, Layer 1 (PKey)
+is not available — GID filtering (Layer 2) is your primary control. In InfiniBand
+environments, PKeys provide Layer 1 and GID filtering is an additional defence.
+
+<LabAnswerBox id="reflection" title="Reflection: what if tenantb is on a different leaf switch?">
+```
+Consider: TenantA is on leaf-01. TenantB is on leaf-02. Both leaves connect
+to the same spine. GID filtering is enabled on tenanta-node's NIC.
+
+Question 1: Can tenantb-node still attempt an RKEY scan against tenanta-node
+given GID filtering is enabled? Why or why not?
+
+Question 2: If GID filtering blocks the attack at the NIC level, what additional
+value does having VRF isolation (Spectrum-X) or PKey partitioning (IB) provide?
+
+Question 3: A new team member argues that since GID filtering is now enabled,
+there is no need to rotate the RKEY. What is the counterargument for still
+rotating it?
+```
+</LabAnswerBox>

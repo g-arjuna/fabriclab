@@ -1,0 +1,790 @@
+---
+title: "AI Networking Security"
+chapterNumber: 23
+slug: "ch23-ai-networking-security"
+description: "The complete security layer for AI fabrics: RDMA threat model, RoCEv2 RKEY protection, Spectrum-X GBP microsegmentation, InfiniBand PKey isolation, BlueField-3 as a security enforcement point, and UFM Cyber-AI anomaly detection."
+published: true
+prev: "ch22-segment-routing-ai"
+next: "ch24-spectrum-x-architecture"
+---
+
+## Act 1 — The AI Networking Threat Model
+
+GPU clusters are not like general-purpose data centres. The networking stack was
+designed from the ground up to eliminate latency — and in doing so, it eliminated
+several security properties that engineers in traditional environments take for granted.
+
+The most consequential of these is this: **RDMA completely bypasses the Linux kernel
+network stack**. Every iptables rule, every nftables chain, every netfilter hook —
+none of them see RDMA traffic. A correctly established RDMA Queue Pair sends data
+directly from a user-space memory buffer, through the ConnectX-7 NIC ASIC, onto the
+wire, and into the remote node's memory — without a single kernel system call on the
+data path. This is intentional. It is why RDMA achieves sub-microsecond latency.
+It is also why your firewall does nothing to protect it.
+
+### The RKEY exposure threat
+
+Every RDMA Memory Region (MR) has an RKEY — a 32-bit token that the remote sender
+must present to read from or write to that region. If a remote node knows a valid
+RKEY for a Memory Region on another node, it can perform RDMA reads and writes to
+GPU memory **without the target node's OS being involved at all**. The OS never sees
+the traffic. No process on the target ever gets a syscall. The data moves directly
+from NIC to memory.
+
+In a multi-tenant GPU cluster, this is a category-1 security failure. Tenant A's
+training gradient tensors live in GPU memory backed by RDMA MRs. If Tenant B
+obtains a valid RKEY — by guessing (more on entropy below), by a misconfigured
+permission, or by a fabric isolation failure — they can read those tensors. The
+model weights, the training checkpoint, the proprietary dataset: all readable at
+network speeds without any exploit of the OS.
+
+### The multi-tenant incast threat
+
+A second threat vector is operational rather than data-exfiltration: a misbehaving
+or malicious tenant can trigger a denial-of-service against a co-located tenant
+through incast. If Tenant B's nodes simultaneously send large RDMA writes to a
+single destination, the switch buffer fills. PFC pause frames propagate. If Tenant A
+is on the same lossless priority class (TC3, DSCP 26), Tenant A's NCCL All-Reduce
+stalls. Training throughput collapses. The attack requires no exploitation — just
+misconfigured QoS isolation or a deliberate traffic burst.
+
+### The three enforcement points
+
+Given that iptables is irrelevant, the actual security enforcement in an RDMA fabric
+comes from three distinct mechanisms, each operating at a different layer:
+
+| Layer | Mechanism | What it prevents |
+|-------|-----------|-----------------|
+| NIC ASIC | GID filtering (ROCE_ADDR_FILTER) | Unauthorized QP establishment from remote GIDs |
+| Fabric / SM | PKey partitioning | Cross-partition RDMA (IB fabrics) |
+| Application | MR access flags + RKEY entropy | Unauthorized reads/writes even if QP is up |
+
+All three must be deployed simultaneously. Any single mechanism alone is insufficient.
+A NIC with GID filtering enabled can still be vulnerable if RKEY entropy is low.
+PKey partitioning in InfiniBand is irrelevant if GID filtering on RoCEv2 is disabled.
+
+<RDMAThreatModelViz />
+
+---
+
+## Act 2 — RoCEv2 Memory Region and RKEY Security
+
+Understanding RKEY security requires understanding how Memory Regions work at the
+libibverbs API level — because the security boundary is defined there, not in the
+network.
+
+### Memory Region registration
+
+When an application calls `ibv_reg_mr()`, it registers a region of virtual memory
+with the NIC. The NIC pins those pages in physical memory (preventing the OS from
+swapping them out) and records the access permissions:
+
+```c
+struct ibv_mr *mr = ibv_reg_mr(
+    pd,                          // Protection Domain: which QPs can use this MR
+    buffer,                      // virtual address of the memory region
+    buffer_size,                 // length in bytes
+    IBV_ACCESS_LOCAL_WRITE |     // this QP can write
+    IBV_ACCESS_REMOTE_READ  |    // remote QPs can read (requires RKEY)
+    IBV_ACCESS_REMOTE_WRITE      // remote QPs can write (requires RKEY)
+);
+
+// After registration:
+// mr->lkey = local key  (used by local QPs to reference this MR)
+// mr->rkey = remote key (must be shared with remote side for RDMA access)
+```
+
+The `pd` (Protection Domain) scopes which local QPs can use this MR. But the RKEY
+is different — it is a token that must be communicated out-of-band (typically through
+the connection setup exchange in the application protocol) to the remote side. Once
+the remote side has the RKEY, they can issue RDMA Read or Write operations against
+this MR without any further participation from the local node's OS.
+
+### The RKEY entropy problem
+
+RKEYs are 32-bit values. On a correctly implemented system, they should be
+cryptographically random — an attacker would need to try up to 4 billion values to
+guess one. In practice, several Linux kernel versions initialised the RKEY counter
+from a low-entropy seed, resulting in the first RKEY allocated on a freshly booted
+node being a small, predictable value (often in the range 0x00000001–0x000000FF).
+
+An attacker with network access to the target node and no GID filtering blocking
+their QP connection can scan this range in milliseconds. With a 400GbE RDMA link, a
+scan of 256 RKEY values completes in under 100 microseconds. A successful hit gives
+full read access to whatever that MR contains — GPU gradient tensors, model weights,
+dataset batches.
+
+```bash
+# Check RKEY entropy on a live system by reading the MR info:
+# (from the local node)
+python3 -c "
+import subprocess
+result = subprocess.run(['ibv_reg_mr_test'], capture_output=True, text=True)
+print(result.stdout)
+# Look for: rkey=0x00000027  <-- suspiciously low = low entropy
+# Healthy:  rkey=0xA7F3C209  <-- high entropy = not guessable
+"
+
+# Kernel parameter that affects RKEY entropy:
+# (set in /proc/sys/kernel/randomize_va_space)
+# Value 0 = no ASLR = RKEY seed also predictable
+# Value 2 = full ASLR = RKEY generation uses higher entropy
+cat /proc/sys/kernel/randomize_va_space
+```
+
+### RKEY rotation as mitigation
+
+Deregistering and re-registering a Memory Region forces the kernel to assign a new
+RKEY. If the new RKEY is drawn from a high-entropy pool, the old value — even if it
+was guessed by an attacker — becomes invalid immediately.
+
+```c
+// Rotation sequence:
+ibv_dereg_mr(mr);                // invalidates old RKEY immediately
+mr = ibv_reg_mr(pd, buffer, buffer_size, access_flags);  // new RKEY assigned
+// Share new mr->rkey with legitimate peers via your connection protocol
+```
+
+The window of vulnerability during rotation is the time between deregistration and
+re-registration — typically under 1 microsecond. Any in-flight RDMA operation using
+the old RKEY will receive `IBV_WC_REM_ACCESS_ERR` at completion.
+
+### GID filtering: the primary isolation mechanism
+
+A GID (Global Identifier) is the InfiniBand/RoCEv2 equivalent of an IPv6 address
+for RDMA endpoints. By default on ConnectX-7, any remote GID can attempt to
+establish a QP connection. GID filtering restricts this: only GIDs on an
+administrator-controlled allow-list can establish QPs.
+
+```bash
+# Enable GID filtering on ConnectX-7:
+mst start
+mlxconfig -d /dev/mst/mt4129_pciconf0 s ROCE_ADDR_FILTER_ENABLE=1
+
+# Verify:
+mlxconfig -d /dev/mst/mt4129_pciconf0 q | grep ROCE_ADDR_FILTER
+# Expected: ROCE_ADDR_FILTER_ENABLE=1
+
+# Inspect current GID table:
+ibv_devinfo -d mlx5_0 -i 1
+# Shows GID entries — with filter enabled, only listed GIDs can connect
+
+# View which GIDs are currently allowed:
+rdma res show gid
+```
+
+With GID filtering active, a Tenant B node attempting to establish a QP to Tenant A
+will receive a connection refusal at the NIC ASIC level — before any RKEY exchange
+occurs. This eliminates the scanning threat entirely: no QP connection, no RKEY
+presentation, no RDMA access.
+
+---
+
+## Act 3 — Spectrum-X Multi-Tenant Isolation
+
+Spectrum-X provides two complementary isolation mechanisms for multi-tenant AI
+clouds: VRF-per-tenant for L3 routing isolation, and GBP (Group-Based Policy) for
+fine-grained microsegmentation within and across VRFs. These are independent layers
+and both should be deployed together.
+
+### VRF-per-tenant: the routing isolation baseline
+
+Each tenant gets a dedicated VRF with its own IP routing table. Tenant A's GPU
+prefixes (10.100.0.0/24) exist only in VRF_A. Tenant B's prefixes (10.200.0.0/24)
+exist only in VRF_B. Even if a Tenant B node sends a packet destined for a Tenant A
+address, the egress leaf's forwarding lookup occurs in VRF_B — where 10.100.0.0/24
+has no route. The packet is dropped before it ever reaches Tenant A.
+
+```bash
+# NVUE: create tenant VRFs on Spectrum-X leaf
+nv set vrf VRF_A
+nv set vrf VRF_B
+
+# Assign SVIs (Switched Virtual Interfaces) per tenant:
+nv set interface vlan100 ip vrf VRF_A
+nv set interface vlan100 ip address 10.100.0.254/24
+
+nv set interface vlan200 ip vrf VRF_B
+nv set interface vlan200 ip address 10.200.0.254/24
+
+nv config apply
+
+# Verify VRF routing isolation:
+nv show vrf VRF_A router rib ipv4 route
+nv show vrf VRF_B router rib ipv4 route
+# Tenant A routes appear ONLY in VRF_A, never in VRF_B
+```
+
+### EVPN RT control: inter-leaf route propagation
+
+For routes to propagate correctly between leaf switches (so Tenant A's GPU on leaf-01
+can reach Tenant A's GPU on leaf-03), EVPN Route Targets must be configured to
+import only same-tenant routes:
+
+```bash
+# On leaf-01: configure BGP EVPN for VRF_A
+router bgp 65001 vrf VRF_A
+  address-family l2vpn evpn
+    advertise ipv4 unicast
+    route-target import 65000:100   # only import routes tagged for Tenant A
+    route-target export 65000:100   # tag our routes for Tenant A
+  !
+
+router bgp 65001 vrf VRF_B
+  address-family l2vpn evpn
+    advertise ipv4 unicast
+    route-target import 65000:200   # only import routes tagged for Tenant B
+    route-target export 65000:200
+  !
+```
+
+With mismatched RTs, a Tenant B prefix announcement would carry RT 65000:200.
+Tenant A's VRF import policy only accepts RT 65000:100. The route is silently
+discarded at the control plane — it never enters VRF_A's routing table.
+
+### GBP microsegmentation: intra-VRF enforcement
+
+VRFs prevent inter-tenant routing. But within a tenant, you may need finer control.
+GBP (Group-Based Policy) operates at the Spectrum-4 ASIC's TCAM and can enforce
+allow/deny policies between Endpoint Groups (EPGs) — logical groups of workloads.
+
+A common GPU cloud use case: within VRF_A, Tenant A's GPU nodes should be able to
+reach the shared storage cluster, but they should not be able to reach each other's
+management interfaces (preventing lateral movement if one GPU node is compromised).
+
+```bash
+# NVUE: define GBP EPGs and policy
+nv set system global-id group-policy enable on
+
+# Create EPGs
+nv set bridge domain br_default group-policy epg GPU-NODES id 10
+nv set bridge domain br_default group-policy epg STORAGE id 20
+nv set bridge domain br_default group-policy epg MGMT id 30
+
+# Policy: GPU-NODES → STORAGE = allow
+nv set bridge domain br_default group-policy contract GPU-TO-STORAGE \
+  source-epg GPU-NODES destination-epg STORAGE action permit
+
+# Policy: GPU-NODES → MGMT = deny
+nv set bridge domain br_default group-policy contract GPU-TO-MGMT \
+  source-epg GPU-NODES destination-epg MGMT action deny
+
+nv config apply
+
+# Verify GBP is programmed in TCAM:
+nv show bridge domain br_default group-policy contract
+cl-resource-query | grep gbp
+# Shows TCAM entries consumed by GBP rules
+```
+
+The enforcement happens in hardware at line rate. There is no performance penalty
+for GBP policy — the Spectrum-4 ASIC processes the TCAM lookup on every packet
+forwarded, taking no additional forwarding time compared to standard L3 forwarding.
+
+<SpectrumXTenantIsolationViz />
+
+### Testing isolation with NVIDIA Air
+
+Before applying GBP policy changes to production, NVIDIA Air (the digital twin
+simulation platform, covered in detail in Chapter 31) provides a safe testing
+environment:
+
+```bash
+# Export current NVUE config:
+nv config save --format json > fabric-config.json
+
+# Push to Air simulation (Air CLI):
+air topology push --config fabric-config.json --topology ai-fabric-4leaf
+
+# In Air: test cross-tenant traffic
+air node exec tenantB-node -- \
+  ibv_rc_pingpong -d mlx5_0 -g 3 10.100.0.5
+# Expected with GBP: connection refused or no route
+# Expected without GBP: connection succeeds (isolation gap)
+```
+
+---
+
+## Act 4 — InfiniBand PKey Security Model
+
+PKey (Partition Key) is InfiniBand's native multi-tenancy mechanism. Unlike
+Spectrum-X's software-defined VRFs and GBP, PKey enforcement is built directly into
+every IB HCA's ASIC. It cannot be bypassed by the host OS, by the RDMA application,
+or by any software on the end node. Enforcement is at the hardware level, period.
+
+### PKey anatomy
+
+A PKey is a 16-bit value. The MSB (bit 15) encodes membership type:
+- **MSB = 1 (Full membership)**: This node can communicate with all other Full and
+  Limited members in this partition. Example: 0x8001 (partition 1, full membership).
+- **MSB = 0 (Limited membership)**: This node can communicate with Full members in
+  this partition but **not** with other Limited members. Example: 0x0001 (partition
+  1, limited membership).
+
+Two nodes can communicate via RDMA only if they share at least one PKey partition
+in which both hold at least one Full membership between them (one can be Limited
+if the other is Full, but both cannot be Limited).
+
+```
+PKey 0x8001 = partition 1, FULL  membership (bit 15 set)
+PKey 0x0001 = partition 1, LIMITED membership (bit 15 clear)
+PKey 0xFFFF = default management partition, FULL (every port member by default)
+PKey 0x7FFF = default management partition, LIMITED
+```
+
+### Why the management PKey must be segregated
+
+Every IB port is, by default, a member of the management partition (PKey 0xFFFF).
+This partition exists so that the Subnet Manager can communicate with every port for
+fabric management. If tenant compute nodes remain in the management partition, they
+can send SMPs (Subnet Management Packets) to the SM — potentially querying or even
+modifying routing tables and PKey assignments. This is a critical security boundary
+violation.
+
+The correct practice is to assign tenant nodes exclusively to custom partitions
+(0x8001, 0x8002, etc.) and remove them from the management partition. The SM itself
+and UFM servers remain in 0xFFFF.
+
+```bash
+# OpenSM partitions.conf — define tenant partitions:
+# Format: partition_name : rate=<rate>, mtu=<mtu> ;
+#   full  = full membership
+#   limited = limited membership
+
+PartitionConfig {
+    mgmt = ipoib, rate=NDR, mtu=4096, scope=0x00 ;
+        sm-01 = full ;
+        ufm-server = full ;
+
+    TenantA = ipoib, rate=NDR, mtu=4096, scope=0x00 ;
+        0x506b4b0300a1b200 = full ;   # tenantA-node-01 GUID
+        0x506b4b0300a1b201 = full ;   # tenantA-node-02 GUID
+        0x506b4b0300a1b210 = limited ;# storage-node GUID (limited = can serve but not initiate)
+
+    TenantB = ipoib, rate=NDR, mtu=4096, scope=0x00 ;
+        0x506b4b0300a1b202 = full ;   # tenantB-node-01 GUID
+        0x506b4b0300a1b203 = full ;   # tenantB-node-02 GUID
+        0x506b4b0300a1b210 = limited ;# storage-node GUID (shared storage)
+}
+```
+
+### SM PKey propagation
+
+After the OpenSM reads this configuration, it pushes PKey tables to every HCA port
+via SMP (Subnet Management Packets). The HCA stores the PKey table in its hardware
+registers. From that point, any RDMA operation that does not present a matching PKey
+is rejected by the remote HCA before the packet is even delivered to the application.
+
+```bash
+# Verify PKey table on a node (read from hardware via SM):
+smpquery pkeys <lid> <port>
+# Example: smpquery pkeys 5 1
+# Output:
+#   PKeys table for LID 5 port 1:
+#   Pkey[0] 0xffff    <- management partition (full)
+#   Pkey[1] 0x8001    <- TenantA partition (full)
+#   Pkey[2] 0x0000    <- empty slot
+#   ...
+
+# Verify connectivity across PKey boundary (should fail):
+ibv_rc_pingpong -d mlx5_0 -g 1    # on tenantA-node, listen
+ibv_rc_pingpong -d mlx5_0 -g 1 <tenantA-LID>  # on tenantB-node, connect
+# Expected: IBV_WC_REM_ACCESS_ERR or connection timeout
+# Reason: tenantB has PKey 0x8002, tenantA has 0x8001 — no shared partition
+
+# Verify connectivity within same partition (should succeed):
+ibv_rc_pingpong -d mlx5_0 -g 1 <tenantA-node-02-LID>  # from tenantA-node-01
+# Expected: 1000 iterations, ~0.9µs latency
+```
+
+<PKeyMembershipViz />
+
+### The Limited membership storage pattern
+
+A storage node that serves multiple tenants presents a challenge: it must be
+accessible to both TenantA and TenantB, but TenantA and TenantB must not be
+reachable to each other through the storage node's partition membership. Limited
+membership solves this exactly. The storage node holds limited membership in both
+TenantA and TenantB partitions. A Full member (a tenant GPU node) can initiate RDMA
+to a Limited member (the storage node). But two Limited members cannot communicate
+— so TenantA's storage connection and TenantB's storage connection cannot be used
+as a bridge between the tenants.
+
+---
+
+## Act 5 — BlueField-3 as Security Enforcement Point
+
+**This act applies exclusively to DGX B200 clusters.** DGX H100 and H200 use
+ConnectX-7 HCA — a high-performance network adapter with no embedded CPU. BlueField-3
+DPU (BF3) is present only in DGX B200. This distinction matters operationally:
+security architectures described here cannot be deployed on H100/H200 clusters.
+
+### BF3 architecture: independent ARM subsystem
+
+The BlueField-3 contains 16 ARM Cortex-A78AE cores running their own independent
+Linux instance — the DPU OS — completely separate from the host OS (DGX OS). Between
+the host CPU and the physical network sits the BF3's embedded switch (eSwitch). Every
+packet transmitted or received by the host passes through this eSwitch, giving the
+DPU OS full visibility and control over the host's network traffic.
+
+Critically: **the host OS cannot override eSwitch rules set by the DPU OS**. A
+compromise of the host OS — or a misconfigured tenant application — cannot disable
+the DPU's security policies. The isolation is hardware-enforced.
+
+```
+DGX B200 data path:
+  GPU memory → PCIe → BF3 eSwitch (DPU OS rules here) → physical 400GbE → fabric
+                           ↑
+                    This is the enforcement point.
+                    DPU OS programs OVS rules here.
+                    Host OS cannot bypass this.
+```
+
+### Zero-trust microsegmentation via eSwitch OVS
+
+The DPU OS runs Open vSwitch (OVS) on the eSwitch. OVS rules can classify traffic
+by source MAC, source IP, VLAN, DSCP, or any L2-L4 field, and apply actions:
+forward, drop, rate-limit, redirect to a monitoring port.
+
+```bash
+# On the DPU OS (accessed via: ssh admin@<bf3-oob-ip>):
+
+# Block all traffic from this host to a different tenant's subnet:
+ovs-vsctl add-br br-host
+ovs-vsctl add-port br-host pf0hpf  # host-facing port
+ovs-vsctl add-port br-host p0      # network-facing port
+
+# ACL: allow TenantA traffic (src 10.100.0.0/24), deny cross-tenant:
+ovs-ofctl add-flow br-host \
+  "priority=100,ip,nw_src=10.100.0.0/24,actions=output:p0"
+ovs-ofctl add-flow br-host \
+  "priority=50,ip,actions=drop"   # deny everything else
+
+# Verify rules are installed:
+ovs-ofctl dump-flows br-host
+```
+
+These rules survive a host OS reboot. They survive a kernel panic on the host. They
+survive a compromised application that attempts to modify networking. The DPU OS
+runs independently; the host cannot touch it.
+
+### DOCA App Shield (B200 only)
+
+DOCA App Shield is a runtime application monitoring service that runs entirely on
+the DPU OS. It uses ARM performance counters and memory-mapped views of the host's
+PCIe transactions to monitor host application behaviour — without any agent running
+on the host OS.
+
+```bash
+# On DPU OS: start DOCA App Shield monitoring
+doca_app_shield --monitor-pid-range 1-65535 \
+                --alert-threshold syscall_rate:10000 \
+                --output /var/log/app_shield.log &
+
+# View active alerts:
+tail -f /var/log/app_shield.log
+# Example alert:
+# [ALERT] PID 4821 (python3): syscall rate 48,221/sec -- anomalous
+# [INFO]  PID 1204 (nccl_all_reduce): normal pattern
+```
+
+### IPsec offload
+
+BF3 can terminate IPsec tunnels in hardware at line rate (400 Gbps). All traffic
+between GPU nodes can be encrypted in transit without consuming any host CPU cycles.
+This is particularly valuable when tenant data must cross a shared spine layer in
+a colocation environment.
+
+```bash
+# Configure IPsec offload on BF3:
+doca_ipsec --mode=offload \
+           --local-ip=10.100.0.5 \
+           --remote-ip=10.100.0.6 \
+           --spi=1001 \
+           --key=<256-bit-aes-key>
+
+# Verify offload is hardware-accelerated (not software):
+doca_ipsec --status
+# Expected: Mode: HW_OFFLOAD, Throughput: 400Gbps, CPU: 0%
+```
+
+---
+
+## Act 6 — UFM Cyber-AI Platform
+
+The UFM (Unified Fabric Manager) product family has three editions with distinct
+purposes. UFM Enterprise manages fabric routing, PKey assignments, and device
+configuration. UFM Telemetry streams per-port metrics to Prometheus and Grafana.
+UFM Cyber-AI is the anomaly detection engine — it is passive monitoring only and
+never modifies fabric state.
+
+Understanding which edition does what prevents a common operational mistake:
+engineers who expect UFM Telemetry to alert on security anomalies (it does not — it
+exports raw counters), or who expect UFM Cyber-AI to automatically remediate issues
+(it does not — it detects and alerts, humans remediate).
+
+### How Cyber-AI learns the baseline
+
+UFM Cyber-AI operates in two phases. During the learning phase (7–14 days by
+default), it collects port counters, traffic patterns, error rates, and timing
+distributions from every switch port and HCA in the fabric. It builds a statistical
+baseline: what is normal throughput for each port at each hour of the day, what is
+the normal PFC pause rate, what is the normal symbol error rate.
+
+After the learning phase, the detection phase begins. Live telemetry is compared
+continuously against the baseline. NVIDIA's ML model flags deviations that exceed
+learned thresholds — accounting for daily and weekly periodicity (a higher traffic
+burst on Monday morning is normal; the same burst at 3am Saturday is anomalous).
+
+### Alert taxonomy
+
+UFM Cyber-AI classifies alerts into three categories:
+
+**Hardware anomalies**: port symbol error rate spikes, link flap patterns, or
+unusual BER (Bit Error Rate) distributions. These indicate cable, optic, or
+connector degradation. A symbol error rate spike on a single port crossing 3σ above
+baseline is typically a dirty QSFP connector; crossing 8σ and sustained means the
+optic is failing.
+
+**Traffic anomalies**: unusual traffic flow patterns — all-to-one from a single
+source (potential data exfiltration), all-from-one to multiple destinations (bulk
+unauthorised data copy), or a sudden sustained throughput to destinations outside
+the normal job communication pattern.
+
+**Fabric health anomalies**: coordinated changes across multiple ports — a
+synchronised PFC pause increase across 8 ports suggests incast or PFC
+misconfiguration; a pattern of SM communication failures suggests routing table
+corruption or a rogue SM.
+
+<UFMCyberAIViz />
+
+### SIEM integration
+
+UFM Cyber-AI exports all alert events via syslog (RFC 5424 format) and a REST API.
+The syslog stream is compatible with Splunk, ELK Stack, and Graylog out of the box.
+The REST API follows the UFM REST conventions (same as UFM Enterprise).
+
+```bash
+# Configure syslog export from UFM Cyber-AI:
+# In /opt/ufm/conf/cyber_ai.conf:
+[syslog]
+enabled = true
+server = 10.0.0.100
+port = 514
+facility = LOCAL0
+severity_filter = MEDIUM,HIGH,CRITICAL
+
+# Example syslog output for a traffic anomaly:
+# <133>1 2026-03-15T02:14:38Z ufm-server UFMCyberAI - - -
+#   [ALERT] node=0x506b4b0300a1b202 port=1 type=TRAFFIC_ANOMALY
+#   severity=HIGH detail="all-to-one pattern 380Gbps sustained 22min
+#   dst=10.50.0.1 outside normal job communication matrix"
+
+# Query via REST API:
+curl -s -u admin:password https://ufm-server:8443/ufm/resources/cyber_ai/events \
+  | python3 -m json.tool
+```
+
+---
+
+## Act 7 — Network-Level DDoS Mitigation in AI Fabrics
+
+### Incast protection via ECN
+
+The most effective defence against a tenant-generated incast attack is correctly
+configured ECN thresholds, as covered in Chapter 21. If ECN `min_threshold` is set
+correctly (approximately BDP/4 for the link speed and RTT), the switch begins
+marking CE bits before its buffer fills. The attacking nodes' DCQCN rate controllers
+reduce their send rate. The attack is self-limiting.
+
+```bash
+# On the leaf switch facing the misbehaving tenant:
+# Check current ECN thresholds:
+nv show qos ecn profile roce
+
+# If thresholds are missing or too high:
+nv set qos ecn profile roce min-threshold 500KB
+nv set qos ecn profile roce max-threshold 1500KB
+nv config apply
+
+# Monitor if ECN marking is actually occurring:
+watch -n 1 'nv show interface swp1 counters | grep ecn'
+# ecn_marked_packets should increment rapidly under incast
+```
+
+### Per-tenant rate limiting at ToR
+
+If a tenant's traffic consistently exceeds their provisioned share of fabric
+bandwidth — whether intentional or due to a misconfigured job — NVUE can apply
+ingress policing on the server-facing port:
+
+```bash
+# Limit tenant B's ingress rate to 200 Gbps (50% of 400GbE):
+nv set interface swp12 link speed 200G
+# Note: this limits the physical interface. For per-traffic-class rate limiting:
+
+nv set qos scheduler profile tenant-b-limited
+nv set qos scheduler profile tenant-b-limited class 3 bandwidth 50  # 50% of port
+nv set interface swp12 qos scheduler profile tenant-b-limited
+nv config apply
+
+# Verify:
+nv show interface swp12 qos scheduler
+```
+
+### WJH as a security signal
+
+WJH (What Just Happened) captures hardware-level drop events on Spectrum-4 with
+nanosecond timestamps. In a security context, WJH provides early warning of a flood:
+an attacking node generating traffic faster than the fabric can absorb will produce
+a distinctive WJH pattern — high-frequency drops from a single source port, all with
+the same drop reason (`L3_LOOKUP_MISS` for spoofed destinations, or
+`TAIL_DROP_BY_TC` for queue overflow floods).
+
+```bash
+# Monitor WJH for flood patterns:
+# (requires wjhd running — typically via DOCA or Docker container)
+docker exec wjhd wjh-util show --type forwarding \
+  | grep -E "drop|flood|TAIL_DROP" \
+  | sort | uniq -c | sort -rn | head -20
+
+# Example output during a flood event:
+# 14821  2026-03-15 02:31:44  src=10.200.0.12 dst=10.100.0.5  reason=TAIL_DROP_BY_TC tc=3
+# 14819  2026-03-15 02:31:44  src=10.200.0.12 dst=10.100.0.6  reason=TAIL_DROP_BY_TC tc=3
+# ...
+# All drops from 10.200.0.12 (TenantB node) targeting TenantA addresses.
+# This is a cross-tenant flood — should have been blocked by VRF routing.
+# Escalate: check if GBP is configured and VRF route isolation is intact.
+
+# Check if the source is actually reaching the wrong VRF:
+nv show vrf VRF_A router rib ipv4 route 10.200.0.12/32
+# If this route exists in VRF_A, there is a route leak — critical security event.
+```
+
+### DOCA Flow ACL for B200 clusters
+
+On B200 nodes (BF3 equipped), DOCA Flow can suppress flood traffic before it reaches
+the switch — at the source NIC. This is more effective than switch-side rate limiting
+because it prevents the malicious traffic from ever consuming fabric bandwidth.
+
+```bash
+# On DPU OS of the misbehaving B200 node:
+# Install a DOCA Flow ACL rule to rate-limit outbound traffic:
+doca_flow_inspector --apply-acl \
+  "src_ip=10.200.0.12, dst_ip=any, rate_limit=100Gbps, burst=50MB"
+
+# This caps the host's outbound injection rate at 100 Gbps regardless of
+# what the host OS or any application attempts to send.
+```
+
+---
+
+## Act 8 — Audit, Compliance, and RBAC
+
+Security without auditability is incomplete. An operator who knows GBP was
+misconfigured needs to know *when* it was changed, *who* changed it, and *what
+the previous state was*. UFM and Cumulus Linux both provide the necessary audit
+infrastructure.
+
+### UFM RBAC
+
+UFM Enterprise implements role-based access control with three built-in roles and
+support for custom roles:
+
+| Role | Permissions |
+|------|-------------|
+| Admin | Full access: modify routing, PKeys, users, configuration |
+| Operator | Read-write on fabric operations; cannot modify PKey tables or user accounts |
+| Monitor | Read-only: view topology, counters, events; no configuration access |
+
+For AI factory operations, the recommended RBAC model is: fabric engineers hold
+Operator role, security teams hold Monitor role, only the fabric-owner holds Admin.
+PKey modifications require Admin — and because they can immediately disrupt running
+training jobs, they should require a second Admin to confirm (four-eyes principle).
+
+```bash
+# UFM: create a Monitor role user for the security team
+curl -s -X POST https://ufm-server:8443/ufm/resources/users \
+  -H "Content-Type: application/json" \
+  -u admin:password \
+  -d '{
+    "username": "security-monitor",
+    "password": "<strong-password>",
+    "role": "Monitor",
+    "email": "security@company.com"
+  }'
+
+# Verify role assignment:
+curl -s https://ufm-server:8443/ufm/resources/users/security-monitor \
+  -u admin:password | python3 -m json.tool
+```
+
+### Audit trail and syslog
+
+Every UFM configuration change is written to the audit log with user identity,
+source IP, timestamp, and the exact change applied. The audit log is also forwarded
+via syslog for archival and SIEM ingestion.
+
+```bash
+# View UFM audit log:
+cat /opt/ufm/log/audit.log | grep -E "PKey|GBP|policy" | tail -20
+# Example entries:
+# 2026-03-15 09:14:22 [AUDIT] user=fabric-eng ip=10.0.0.50
+#   action=PKey_MODIFY partition=TenantA node=0x506b4b0300a1b204
+#   change="added to TenantA partition as full member"
+# 2026-03-15 09:14:55 [AUDIT] user=fabric-eng ip=10.0.0.50
+#   action=PKey_APPLY partition=TenantA status=SUCCESS
+
+# On Cumulus Linux: all NVUE changes are logged
+journalctl -u nv-config --since "24 hours ago" \
+  | grep -E "apply|commit|user"
+```
+
+### PKey change management workflow
+
+Because a PKey misconfiguration can immediately partition a running training job —
+silently, with no error visible to the application — PKey changes require a careful
+workflow:
+
+1. **Test in NVIDIA Air first**: push the proposed partitions.conf to an Air
+   simulation of the fabric and verify all expected QP connections succeed and all
+   cross-tenant QP connections fail.
+2. **Schedule during maintenance**: PKey changes require an OpenSM sweep to propagate.
+   During the sweep, some ports may briefly not be usable. Never apply PKey changes
+   to a fabric running a production training job.
+3. **Verify after apply**: after the SM sweep completes, run `smpquery pkeys` on
+   representative nodes from each tenant and confirm the partition assignments are
+   correct.
+4. **Retain rollback config**: keep the previous partitions.conf with a timestamp so
+   recovery is a single file replace + SM restart.
+
+---
+
+## Chapter Summary
+
+AI fabric security is not a bolt-on — it is a set of mechanisms that operate at
+every layer from NIC ASIC to fabric management. The key practitioner takeaways:
+
+- **iptables protects nothing on an RDMA fabric**. The kernel network stack is not
+  in the RDMA data path. GID filtering, PKeys, and RKEY entropy are the actual
+  enforcement points.
+- **GID filtering (ROCE_ADDR_FILTER_ENABLE=1) should be the default on every
+  ConnectX-7 in a multi-tenant cluster**. The factory default is disabled. Fix this
+  at provisioning time.
+- **Low-entropy RKEYs are a real production vulnerability**, not a theoretical one.
+  Check kernel ASLR settings and verify RKEY values on freshly deployed nodes.
+- **Spectrum-X isolation requires both VRF routing and GBP**. VRFs prevent
+  inter-tenant routing; GBP prevents intra-VRF lateral movement. Neither alone is
+  sufficient.
+- **PKey partitioning in InfiniBand is hardware-enforced** — the most reliable
+  isolation available. The Limited membership model for shared storage nodes is the
+  correct pattern for multi-tenant IB clusters.
+- **BlueField-3 (B200 only) provides an independent enforcement plane** that the
+  host OS cannot bypass. For B200 clusters, the eSwitch and DOCA App Shield are the
+  highest-assurance security controls available.
+- **UFM Cyber-AI is passive** — it detects anomalies but does not remediate. Wire it
+  into your SIEM. Define response runbooks for each alert category.
+
+Lab 15 gives you hands-on experience reproducing an RKEY exposure attack, identifying
+both misconfigurations that enabled it, and applying GID filtering and RKEY rotation
+to harden the environment.

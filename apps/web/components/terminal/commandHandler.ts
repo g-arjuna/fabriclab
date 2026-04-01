@@ -11,6 +11,8 @@ import { lab9, lab9Devices } from "@/data/labs/lab9-errdisable-recovery";
 import { lab10, lab10Devices } from "@/data/labs/lab10-ecmp-hotspot";
 import { lab11, lab11Devices } from "@/data/labs/lab11-bgp-path-failure";
 import { lab14, lab14Devices } from "@/data/labs/lab14-srv6-te-path-steering";
+import { lab15, lab15Devices } from "@/data/labs/lab15-rdma-rkey-exposure";
+import { lab16, lab16Devices } from "@/data/labs/lab16-spectrum-x-platform-audit";
 import { calculateOversubscriptionA, calculateOversubscriptionB } from "@/lib/commands/calculateOversubscription";
 import { compareProposals } from "@/lib/commands/compareProposals";
 import { ibstat } from "@/lib/commands/ibstat";
@@ -44,6 +46,33 @@ import {
   traceroute6CheckpointDscp10,
   traceroute6NcclDscp26,
 } from "@/lib/commands/lab14Handlers";
+import {
+  ibvDevInfoGid,
+  ibvDevInfoTenantB,
+  ibvRcPingpong,
+  nvShowInterfaceSwp1Qos,
+  setPkeyTenantA,
+  setPkeyTenantB,
+  showGidFilter,
+  showGvmiTable,
+  showMrInfo,
+  showMrInfoAfter,
+  showQosTrustDscpMap,
+  showUfmEvents as showUfmEventsLab15,
+  showUfmPkeyTable,
+} from "@/lib/commands/lab15Handlers";
+import {
+  handleClNetstat,
+  handleClPlatformInfo,
+  handleDecodeSyseepromLeaf01,
+  handleDecodeSyseepromStorage,
+  handleIpLinkShowMtuLeaf01,
+  handleNvShowInterfaceLeaf01,
+  handleNvShowInterfaceLeaf02,
+  handleNvShowInterfaceStorage,
+  handleNvShowRouterBgp,
+  handleNvVersion,
+} from "@/lib/commands/lab16Handlers";
 import { ncclDebugTransport } from "@/lib/commands/ncclDebugTransport";
 import { recommendProposalA, recommendProposalB } from "@/lib/commands/recommendProposal";
 import { runMutation } from "@/lib/commands/mutations";
@@ -86,6 +115,8 @@ const LAB_CONFIGS: Record<string, LabConfig> = {
   [lab10.id]: lab10,
   [lab11.id]: lab11,
   [lab14.id]: lab14,
+  [lab15.id]: lab15,
+  [lab16.id]: lab16,
 };
 
 const LAB_DEVICES: Record<string, LabDevice[]> = {
@@ -102,6 +133,8 @@ const LAB_DEVICES: Record<string, LabDevice[]> = {
   [lab10.id]: lab10Devices,
   [lab11.id]: lab11Devices,
   [lab14.id]: lab14Devices,
+  [lab15.id]: lab15Devices,
+  [lab16.id]: lab16Devices,
 };
 
 const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
@@ -118,6 +151,8 @@ const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
   [lab10.id]: [...new Set(lab10Devices.map((device) => device.type))],
   [lab11.id]: [...new Set(lab11Devices.map((device) => device.type))],
   [lab14.id]: [...new Set(lab14Devices.map((device) => device.type))],
+  [lab15.id]: [...new Set(lab15Devices.map((device) => device.type))],
+  [lab16.id]: [...new Set(lab16Devices.map((device) => device.type))],
 };
 
 const LAB_CHAPTER_LINKS: Record<string, { slug: string; label: string }> = {
@@ -173,6 +208,49 @@ function tcpdumpSrhByDevice(): CommandResult {
   return activeDeviceId === "spine-02"
     ? tcpdumpSrhSwp1Spine02()
     : tcpdumpSrhSwp1Spine01();
+}
+
+function showUfmEventsByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab15.id
+    ? showUfmEventsLab15()
+    : showUfmEvents();
+}
+
+function showNvInterfaceByDevice(): CommandResult {
+  const activeDeviceId = useLabStore.getState().activeDeviceId;
+  if (activeDeviceId === "leaf-02") {
+    return handleNvShowInterfaceLeaf02();
+  }
+  if (activeDeviceId === "storage-01") {
+    return handleNvShowInterfaceStorage();
+  }
+  return handleNvShowInterfaceLeaf01();
+}
+
+function decodeSyseepromByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "storage-01"
+    ? handleDecodeSyseepromStorage()
+    : handleDecodeSyseepromLeaf01();
+}
+
+function showIpLinkByLabAndDevice(): CommandResult {
+  const store = useLabStore.getState();
+  if (store.lab.labId === lab16.id && store.activeDeviceId === "leaf-01") {
+    return handleIpLinkShowMtuLeaf01();
+  }
+
+  return {
+    output: `ip link    ← use 'rdma link show' for RDMA interface state
+
+eth0 through eth7: ConnectX-7 RoCEv2 interfaces (one per GPU rail)
+eno1:              Management ethernet (1GbE, for SSH access)
+
+For fabric diagnostics, use RDMA-aware tools:
+  rdma link show    — RDMA subsystem state per interface
+  ibstat            — per-NIC hardware state
+  ethtool -S eth0   — NIC driver statistics`,
+    type: "info" as const,
+  };
 }
 
 function ethtoolStatsByLab(): CommandResult {
@@ -907,6 +985,24 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "show route-map STEER-CHECKPOINT": showRouteMapSteerCheckpoint,
   "show mtu": showMtu,
   "show srv6 packets": showSrv6PacketsByDevice,
+  "show mr info": showMrInfo,
+  "ibv_devinfo -d mlx5_0 -i 1": ibvDevInfoGid,
+  "show gid filter": showGidFilter,
+  "show mr info after": showMrInfoAfter,
+  "ibv_devinfo -d mlx5_0": ibvDevInfoTenantB,
+  "ibv_rc_pingpong -d mlx5_0 -g 1": ibvRcPingpong,
+  "show qos trust dscp-map": showQosTrustDscpMap,
+  "nv show interface swp1 qos": nvShowInterfaceSwp1Qos,
+  "show gvmi table": showGvmiTable,
+  "show ufm pkey table": showUfmPkeyTable,
+  "nv --version": handleNvVersion,
+  "cl-platform-info": handleClPlatformInfo,
+  "nv show interface": showNvInterfaceByDevice,
+  "nv show interface | grep -E \"swp|state\"": showNvInterfaceByDevice,
+  "decode-syseeprom": decodeSyseepromByDevice,
+  "cl-netstat": handleClNetstat,
+  "ip link show | grep mtu": handleIpLinkShowMtuLeaf01,
+  "nv show router bgp": handleNvShowRouterBgp,
   "show rdma links": showRdmaLinks,
   "show switch port rail0": () => showSwitchPort("rail0"),
   "show switch port rail1": () => showSwitchPort("rail1"),
@@ -953,7 +1049,7 @@ For per-port counters on this switch, use:
   "show spine counters": showSpineCounters,
   "show ufm ports": showUfmPorts,
   "show ufm alarms": showUfmAlarms,
-  "show ufm events": showUfmEvents,
+  "show ufm events": showUfmEventsByLab,
   "show ufm port leaf-rail5 swp7": showUfmPortDetail,
   "show ufm topology": showUfmTopology,
   "show dcgm gpu5": showDcgmGpu5,
@@ -985,11 +1081,18 @@ For per-port counters on this switch, use:
   "enable ecn": () => runMutation("enable ecn"),
   "enable load-balance per-packet": () => runMutation("enable load-balance per-packet"),
   "disable ecn": () => runMutation("disable ecn"),
+  "configure segment-list": () => runMutation("configure segment-list"),
+  "configure sr-te policy": () => runMutation("configure sr-te policy"),
+  "configure route-map dscp10": () => runMutation("configure route-map dscp10"),
+  "apply route-map swp1-4": () => runMutation("apply route-map swp1-4"),
   "set nccl ib-hca": () => runMutation("set nccl ib-hca"),
   "set nccl ib-hca mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7": () =>
     runMutation("set nccl ib-hca mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"),
   "set nccl socket-ifname": () => runMutation("set nccl socket-ifname"),
   "set nccl socket-ifname eno1": () => runMutation("set nccl socket-ifname eno1"),
+  "enable gid filter": () => runMutation("enable gid filter"),
+  "ibv_reg_mr rotate": () => runMutation("ibv_reg_mr rotate"),
+  "rkey scan": () => runMutation("rkey scan"),
   "set bgp link-bandwidth community 1200": setBgpLinkBandwidthCommunity,
   "set bgp local-as 65000": setBgpLocalAsSpineA,
   "set bgp local-as 65000 spineb": setBgpLocalAsSpineB,
@@ -998,6 +1101,8 @@ For per-port counters on this switch, use:
   "replace optic rail2": replaceOpticRail2,
   "no shutdown": noShutdown,
   "reseat connector leaf-rail5 swp7": reseatConnector,
+  "set pkey tenanta 0x8001": setPkeyTenantA,
+  "set pkey tenantb 0x8002": setPkeyTenantB,
   "traceroute6 checkpoint dscp10": traceroute6CheckpointDscp10,
   "traceroute6 nccl dscp26": traceroute6NcclDscp26,
   "ping6 spine02 sid": ping6Spine02,
@@ -1054,18 +1159,7 @@ For fabric diagnostics, use RDMA-aware tools:
   ethtool -S eth0   — NIC driver statistics`,
     type: "info" as const,
   }),
-  "ip link show": () => ({
-    output: `ip link    ← use 'rdma link show' for RDMA interface state
-
-eth0 through eth7: ConnectX-7 RoCEv2 interfaces (one per GPU rail)
-eno1:              Management ethernet (1GbE, for SSH access)
-
-For fabric diagnostics, use RDMA-aware tools:
-  rdma link show    — RDMA subsystem state per interface
-  ibstat            — per-NIC hardware state
-  ethtool -S eth0   — NIC driver statistics`,
-    type: "info" as const,
-  }),
+  "ip link show": showIpLinkByLabAndDevice,
   export: () => ({
     output: `export: environment variables are set in the job launcher, not the CLI.
 
@@ -1089,11 +1183,43 @@ export function handleCommand(
   deviceId?: string,
   deviceType?: DeviceType,
 ): string {
-  void deviceId;
   const effectiveDeviceType = deviceType ?? "leaf-switch";
   const normalizedInput = input.trim().toLowerCase();
-  if (!isCommandAllowedOnDevice(normalizedInput, effectiveDeviceType)) {
-    const activeLabId = useLabStore.getState().lab.labId;
+  const activeLabId = useLabStore.getState().lab.labId;
+  const labDevices = activeLabId ? LAB_DEVICES[activeLabId] ?? [] : [];
+  const currentDevice = deviceId
+    ? labDevices.find((device) => device.id === deviceId)
+    : undefined;
+  const isAllowedOnCurrentDevice = currentDevice?.allowedCommands?.length
+    ? currentDevice.allowedCommands.some(
+      (candidate) =>
+        candidate.toLowerCase() === normalizedInput
+        || normalizedInput.startsWith(candidate.toLowerCase()),
+    )
+    : isCommandAllowedOnDevice(normalizedInput, effectiveDeviceType);
+
+  if (!isAllowedOnCurrentDevice) {
+    if (currentDevice?.allowedCommands?.length) {
+      const availableOnDevices = labDevices.filter(
+        (device) =>
+          device.id !== currentDevice.id
+          && device.allowedCommands.some(
+            (candidate) =>
+              candidate.toLowerCase() === normalizedInput
+              || normalizedInput.startsWith(candidate.toLowerCase()),
+          ),
+      );
+
+      if (availableOnDevices.length > 0) {
+        return (
+          `Command not available on this device (${currentDevice.label}).\n`
+          + `Try: ${availableOnDevices.map((device) => device.label).join(" or ")}`
+        );
+      }
+
+      return `Command not available on this device (${currentDevice.label}). Type 'help' to see available commands.`;
+    }
+
     const candidateDeviceTypes = activeLabId
       ? LAB_DEVICE_TYPES[activeLabId] ?? []
       : (["dgx", "leaf-switch", "spine-switch", "ufm-server"] as DeviceType[]);
@@ -1133,11 +1259,6 @@ export function handleCommand(
   }
 
   if (classification.handler === "help") {
-    const activeLabId = useLabStore.getState().lab.labId;
-    const labDevices = activeLabId ? LAB_DEVICES[activeLabId] ?? [] : [];
-    const currentDevice = deviceId
-      ? labDevices.find((device) => device.id === deviceId)
-      : undefined;
     const deviceCmds = currentDevice?.allowedCommands ?? DEVICE_COMMANDS[effectiveDeviceType] ?? [];
 
     return [
@@ -1146,13 +1267,13 @@ export function handleCommand(
     ].join("\n");
   }
 
-  const activeLabId = store.lab.labId;
+  const currentLabId = store.lab.labId;
   const handler = classification.handler === "show interface counters"
     ? (
       effectiveDeviceType === "spine-switch"
-        && activeLabId !== lab10.id
-        && activeLabId !== lab11.id
-        && !(activeLabId === lab14.id && store.activeDeviceId === "spine-01")
+        && currentLabId !== lab10.id
+        && currentLabId !== lab11.id
+        && !(currentLabId === lab14.id && store.activeDeviceId === "spine-01")
         ? showSpineCounters
         : showInterfaceCountersByLab
     )

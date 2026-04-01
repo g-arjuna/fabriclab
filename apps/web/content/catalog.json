@@ -584,6 +584,59 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch22-segment-routing-ai"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch23-ai-networking-security",
+      "number": 23,
+      "title": "AI Networking Security",
+      "href": "/learn/ch23-ai-networking-security",
+      "durationMinutes": 65,
+      "durationLabel": "65 min",
+      "partKey": "advanced-networking",
+      "partTitle": "Part 5 - Advanced Networking",
+      "partDescription": "Requires Part 4 - Ch 22-23",
+      "tags": [
+        "RDMA security",
+        "GID filtering",
+        "Spectrum-X",
+        "PKeys",
+        "UFM Cyber-AI"
+      ],
+      "description": "The complete security layer for AI fabrics: RDMA threat model, RoCEv2 RKEY protection, Spectrum-X GBP microsegmentation, InfiniBand PKey isolation, BlueField-3 as a security enforcement point, and UFM Cyber-AI anomaly detection.",
+      "previewSummary": "See where AI fabric security actually lives: NIC GID filtering, RKEY entropy, Spectrum-X isolation, PKeys, and anomaly detection.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch23-ai-networking-security"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch24-spectrum-x-architecture",
+      "number": 24,
+      "title": "Spectrum-X Architecture and the AI Factory Platform",
+      "href": "/learn/ch24-spectrum-x-architecture",
+      "durationMinutes": 45,
+      "durationLabel": "45 min",
+      "partKey": "ncp-ain-platform",
+      "partTitle": "Part 6 - NCP-AIN Platform Chapters",
+      "partDescription": "Requires Part 5 - Ch 24+",
+      "tags": [
+        "Spectrum-X",
+        "Spectrum-4",
+        "BlueField-3",
+        "NVUE",
+        "DOCA",
+        "NetQ",
+        "AI factory",
+        "Scalable Unit"
+      ],
+      "description": "NVIDIA Spectrum-X: Spectrum-4 ASIC, BlueField-3 SuperNIC, DOCA, NetQ, and the vertically integrated Ethernet platform behind AI factory fabrics.",
+      "previewSummary": "Map the Spectrum-X stack from ASIC and SuperNIC behavior to NVUE, NetQ, failure domains, and scalable unit design.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch24-spectrum-x-architecture"
     }
   ],
   "labs": [
@@ -847,6 +900,49 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch22-segment-routing-ai"
+    },
+    {
+      "kind": "lab",
+      "slug": "lab15-rdma-rkey-exposure",
+      "number": 15,
+      "title": "RDMA RKEY Exposure and Isolation",
+      "href": "/lab?lab=lab15-rdma-rkey-exposure",
+      "durationMinutes": 40,
+      "durationLabel": "40 min",
+      "tags": [
+        "RDMA security",
+        "RKEY",
+        "GID filtering",
+        "PKeys"
+      ],
+      "description": "Reproduce an RDMA RKEY exposure attack from a multi-tenant cluster, identify the two misconfigurations that enabled it, and apply GID filtering and RKEY rotation to harden the environment.",
+      "previewSummary": "Reproduce a cross-tenant RDMA exposure, then harden the cluster with GID filtering, RKEY rotation, and partition checks.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch23-ai-networking-security"
+    },
+    {
+      "kind": "lab",
+      "slug": "lab16-spectrum-x-platform-audit",
+      "number": 16,
+      "title": "Spectrum-X Platform Bring-Up Audit",
+      "href": "/lab?lab=lab16-spectrum-x-platform-audit",
+      "durationMinutes": 40,
+      "durationLabel": "40 min",
+      "tags": [
+        "Spectrum-X",
+        "Cumulus Linux",
+        "NVUE",
+        "Bring-up audit",
+        "Platform validation"
+      ],
+      "description": "Audit a newly racked Spectrum-X scalable unit before RoCE configuration begins by verifying version, ports, ASIC identity, MTU baseline, and BGP cleanliness.",
+      "previewSummary": "Run the day-zero audit that catches platform mismatches before RoCE and NCCL troubleshooting starts.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch24-spectrum-x-architecture"
     }
   ]
 }

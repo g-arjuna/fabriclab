@@ -1,0 +1,351 @@
+---
+title: "Spectrum-X Architecture and the AI Factory Platform"
+chapterNumber: 24
+slug: "ch24-spectrum-x-architecture"
+description: "A deep dive into NVIDIA Spectrum-X: the vertically integrated AI-optimised Ethernet platform combining Spectrum-4 switch ASICs, BlueField-3 SuperNICs, DOCA SDK, and NetQ telemetry into a coherent AI factory architecture."
+published: true
+prev: "ch23-ai-networking-security"
+next: "ch25-roce-configuration-operations"
+---
+
+## Act 1 — What Spectrum-X Is and Why It Exists
+
+Standard Ethernet was not designed for GPU collectives. When you run NCCL All-Reduce across 1,024 GPUs over conventional Ethernet, three failure modes converge simultaneously. ECMP hash collisions place multiple elephant flows onto the same spine link while adjacent links sit idle — the hash function has no visibility into queue depth, so it cannot self-correct. Head-of-line blocking in switch port buffers causes a single large flow to stall smaller flows sharing the same egress queue. Most critically, PFC storm risk: when a receiver asserts PAUSE on a priority class, the pause propagates upstream hop by hop, eventually freezing unrelated flows in a deadlock cascade. These pathologies combine to produce effective utilisation well below 50% of installed bandwidth during All-Reduce synchronisation barriers.
+
+Spectrum-X is NVIDIA's answer: a vertically integrated, AI-optimised Ethernet platform that addresses all three pathologies simultaneously through hardware co-design rather than software workarounds. The platform has four components that must be present together to unlock its full capability. The **Spectrum-4 switch ASIC** provides the hardware adaptive routing engine that eliminates ECMP hash collisions at the packet level. The **BlueField-3 SuperNIC** (in DGX B200 only — never in H100 or H200) provides the in-NIC reorder buffer that makes per-packet adaptive routing viable without triggering RoCEv2 Go-Back-N retransmit storms. The **DOCA SDK** exposes programmable packet processing on the BF3 ARM cores. **NetQ** provides fabric-wide telemetry with nanosecond-resolution event capture.
+
+The "AI factory" framing matters for how you think about cabling and topology. A production AI factory has three distinct fabrics with different traffic characteristics. The **training fabric** carries GPU-to-GPU collective traffic — bandwidth-sensitive, bursty, synchronous, and absolutely intolerant of head-of-line blocking. This is where Spectrum-4 leaf and spine switches live. The **storage fabric** carries checkpoint and dataset traffic — throughput-sensitive but more tolerant of latency jitter, typically terminated on dedicated SN4600C storage leaf switches. The **OOB management fabric** carries BMC, console, and orchestration traffic — lowest bandwidth, completely isolated from training and storage. Spectrum-X components span all three fabrics but in different roles.
+
+A standard Spectrum deployment — same Spectrum-4 ASIC, same Cumulus Linux — without the BF3 SuperNIC is just a high-bandwidth switch. The Spectrum-X designation means the full stack is present and the adaptive routing engine is configured to use per-packet spraying with the BF3 reorder buffer absorbing out-of-order delivery at the endpoint.
+
+<SpectrumXStackViz />
+
+```bash
+# Verify you are looking at a Spectrum-X deployment (not standard Spectrum)
+leaf-01# decode-syseeprom | grep -E "Product|Part"
+Product Name: MSN5600-CS2FO
+Part Number:  920-9N110-00R7-0N0
+# SN5600 = Spectrum-4 ASIC confirmed
+
+# Check that adaptive routing is in spectrum-x mode (not standard ECMP)
+leaf-01# nv show router adaptive-routing
+                    operational  applied
+------------------  -----------  -------
+enable              on           on
+mode                spectrum-x   spectrum-x
+reorder-mode        endpoint     endpoint
+```
+
+---
+
+## Act 2 — Spectrum-4 ASIC Deep Dive
+
+The Spectrum-4 is the switching ASIC at the centre of every Spectrum-X deployment. At 51.2 Tbps aggregate switching capacity it supports two port breakout configurations: 128 ports at 400 GbE each (QSFP112 cages), or 64 ports at 800 GbE (OSFP cages). For AI cluster leaf switches the 128×400GbE configuration dominates because each DGX H100 NIC runs at 400 GbE and you want one NIC per port for full non-blocking bisection bandwidth.
+
+Forwarding latency in cut-through mode is under 300 nanoseconds for a 64-byte cell. Store-and-forward mode — which some data centre switches use to eliminate corrupt frame propagation — would take 1 to 5 microseconds for a 9,000-byte jumbo frame. For GPU collective synchronisation barriers where thousands of small acknowledgement packets must complete before the next compute phase begins, that additional 1–5 µs per hop compounds across multi-hop paths and adds measurable collective completion time. Cut-through is non-negotiable in AI fabrics.
+
+The 48 MB shared packet buffer per Spectrum-4 chip is the single most operationally significant number in this chapter. For comparison, Broadcom Tomahawk 4 carries 12 MB of shared buffer. Four times the buffer means Spectrum-4 can absorb incast bursts at synchronisation barriers before ECN threshold is reached, giving DCQCN time to ramp flows back down before tail drops occur. This is not a theoretical advantage — in measured All-Reduce benchmarks the difference in tail latency between 12 MB and 48 MB buffer depth at the leaf is measurable at cluster scales above 256 GPUs.
+
+The **hardware adaptive routing engine** is the mechanism that eliminates ECMP hash collisions. Every packet arriving at a Spectrum-4 egress port triggers a hardware lookup against the current queue depth of all candidate next-hop paths. The engine selects the least-loaded path. This decision happens at line rate — no CPU interrupt, no software polling loop. The update interval for queue depth readings is per-packet: every new packet arrival queries fresh congestion state. Compare this to ECMP, which commits a flow to a path at the first packet based on a hash of the 5-tuple and never revisits that decision even if the chosen spine link becomes saturated.
+
+**What Just Happened (WJH)** is the hardware telemetry engine embedded in every Spectrum-4. When a packet is dropped — tail drop, ECN mark, TTL expiry, ACL deny — the WJH engine captures a drop event record containing the source/destination MACs and IPs, the VLAN and DSCP, the drop reason code, and a nanosecond-resolution timestamp. These records are written into a ring buffer in ASIC memory. They are accessible in two ways: via a DOCA application running on the BF3 DPU, or via a Docker container running the NetQ WJH agent directly on the switch CPU. Both paths expose the same event stream.
+
+<Spectrum4ASICViz />
+
+```bash
+# Query WJH drop events directly from Cumulus (last 60 seconds)
+leaf-01# docker exec wjh-container wjh_dump --layer L3 --period 60
+Timestamp              SrcIP          DstIP          DSCP  Reason
+2024-03-15T14:22:01.0  192.168.10.45  192.168.10.87  26    Tail drop - egress queue
+2024-03-15T14:22:01.1  192.168.10.46  192.168.10.88  26    ECN marked - threshold
+2024-03-15T14:22:01.3  192.168.10.45  192.168.10.90  26    Tail drop - egress queue
+Total drops in period: 3 L3, 0 L2, 0 tunnel
+
+# Compare Spectrum-4 buffer depth versus Tomahawk 4
+leaf-01# nv show system resource
+Resource          Used     Available  Total
+Shared buffer     12.3MB   35.7MB     48.0MB    ← Spectrum-4
+# Tomahawk 4 would show 12.0MB total
+
+# Check adaptive routing engine statistics
+leaf-01# nv show qos adaptive-routing statistics
+Rebalanced flows:    1,247,832
+Rerouted packets:      892,441
+Queue depth polls: 4,891,002,211
+Avg path change ms:       0.0003
+```
+
+---
+
+## Act 3 — BlueField-3 SuperNIC vs ConnectX-7 HCA
+
+This distinction is the most frequently misunderstood point in Spectrum-X architecture, so state it clearly before anything else: **BlueField-3 appears only in DGX B200. DGX H100 and DGX H200 use ConnectX-7 HCA (CX7). GH200 Grace-Hopper Superchip also uses ConnectX-7.** There is no configuration or firmware upgrade that turns a CX7 into a BF3 SuperNIC. They are different silicon.
+
+The reason BF3 is required for full Spectrum-X adaptive routing is the **RoCEv2 Go-Back-N retransmission protocol**. RoCEv2 uses a Selective Acknowledgement-like mechanism at the QP (Queue Pair) level, but the Go-Back-N behaviour is triggered by out-of-order packet arrival. When a ConnectX-7 receives packets out of order — which per-packet adaptive routing actively produces, because packets from the same flow spray across different spine paths — the CX7 sends a NACK for the first out-of-order packet and requests retransmission from the last in-order sequence number. The sender retransmits the entire window from that point. At scale, with millions of packets per second per flow and per-packet routing producing routine reordering, retransmit storms consume 30–40% of link bandwidth on CX7 deployments with aggressive adaptive routing.
+
+The BlueField-3 SuperNIC solves this with a dedicated **reorder buffer** implemented in hardware on the BF3 silicon. Before packets are delivered to the RDMA QP, they pass through the reorder buffer, which holds out-of-order packets until the sequence gap is filled. The QP sees an in-order stream regardless of how the network transported the packets. The Go-Back-N protocol is never triggered because out-of-order delivery is invisible to it.
+
+The 16 ARM Cortex-A78AE cores on the BF3 run a full DPU operating system independently of the host. Three operating modes exist. **DPU mode**: ARM cores run a DOCA application stack with full eSwitch control, packet processing offload, and host isolation — this is the security-focused deployment mode. **NIC mode**: BF3 acts as a transparent high-speed NIC, ARM cores idle, no DPU functions active. **SuperNIC mode**: DPU OS runs for management and DOCA telemetry, but the reorder buffer is activated and adaptive routing integration is enabled — this is the Spectrum-X deployment mode.
+
+DOCA runtime in SuperNIC mode exposes three primary applications. **DOCA Flow** provides a programmable packet processing pipeline where you can insert match-action rules in the BF3 eSwitch, offloading functions like NAT, ACL enforcement, and encapsulation/decapsulation from the host CPU. **DOCA Compress** offloads data compression and decompression to BF3 hardware engines, relevant for checkpoint compression to storage. **DOCA App Shield** monitors process integrity on the host from the isolated DPU OS — the host cannot tamper with App Shield because it runs in a separate security domain.
+
+<SuperNICReorderViz />
+
+```bash
+# On DGX B200 host: verify BF3 SuperNIC mode is active
+dgx-b200-01$ mst status
+MST modules:
+MST PCI module loaded
+
+MST devices:
+/dev/mst/mt41692_pciconf0  - PCI configuration cycles access
+                             domain:bus:dev.fn=0000:03:00.0 addr.reg=88 data.reg=92
+                             type: BlueField3(rev:0)
+
+dgx-b200-01$ doca_nic_config --query-mode
+Device: BlueField-3 [MT41692]
+Current mode: SuperNIC
+Reorder buffer: ENABLED
+AR integration: ENABLED
+Reorder buffer depth: 256 packets per flow
+
+# On DGX H100/H200: ConnectX-7, no reorder buffer available
+dgx-h100-01$ mst status | grep -i type
+type: ConnectX-7(rev:0)
+# No SuperNIC mode, no reorder buffer — this is correct and expected
+```
+
+---
+
+## Act 4 — Scalable Unit and BasePOD Architecture
+
+The **Scalable Unit (SU)** is the fundamental deployment building block of Spectrum-X. Every larger architecture — BasePOD, SuperPOD — is composed of integer multiples of SUs. Standardising on the SU enables factory-style pre-cabling, repeatable NVUE configuration templates, and predictable failure domains.
+
+A standard SU contains: 8 DGX nodes (H100, H200, or B200), 2 SN5600 leaf switches for the training fabric, and 1 SN4600C storage leaf switch for the storage fabric. Each DGX H100 or H200 has 8 ConnectX-7 NICs running at 400 GbE each. This gives a total of 64 NIC ports per SU that must be cabled to the 2 leaf switches (32 ports each — half the 64-port SN5600 capacity).
+
+The **rail-optimised wiring** pattern is what makes the SU's failure domain properties work. NIC 0 from every DGX connects to leaf-01. NIC 1 from every DGX also connects to leaf-01. NIC 2 and NIC 3 from every DGX connect to leaf-02. NIC 4 and NIC 5 connect to leaf-01. NIC 6 and NIC 7 connect to leaf-02. The pattern interleaves 4 NICs from each DGX across each leaf switch. This ensures that a single leaf switch failure removes 4 of 8 NICs from each node simultaneously — all nodes degrade equally, rather than some nodes losing all connectivity. This graceful degradation is a conscious design choice: a 50%-degraded cluster can still run training jobs at reduced efficiency.
+
+**BasePOD** aggregates 4 Scalable Units: 32 DGX nodes, 8 SN5600 leaf switches, 4 SN4600C storage switches. The leaf switches connect upward to a spine layer — typically 4 SN5600 spines for a BasePOD, providing non-blocking full-mesh connectivity between all leaf pairs. Total active port count in a BasePOD training fabric: 256 DGX NIC ports downlinks + 32 spine uplinks per leaf × 8 leaves. The 2:1 oversubscription ratio at the spine is acceptable because not all 32 nodes in a BasePOD communicate simultaneously at 100% utilisation — ring-AllReduce traffic patterns locality means most collective bandwidth stays within a single SU.
+
+**Physical cabling constraints** shape deployment decisions. Within a single rack, passive copper QSFP112-DD cables reach 2 metres at 400 GbE with full signal integrity. Cross-rack connections within the same row require active copper cables (ACC) up to 5 metres, or short-reach QSFP-DD 400G SR optics for fibre runs. Spine uplinks crossing multiple rows require multimode OM4 fibre with 400G-SR8 optics (OSFP breakout). A BasePOD with 4 SUs spread across 4 racks generates approximately 288 cross-rack fibre cables. Pre-tested fibre trunk assemblies — pre-terminated MPO-12 to LC breakout — are standard practice to avoid field-termination errors.
+
+<ScalableUnitViz />
+
+```bash
+# Verify rail wiring on leaf-01 — should see all 8 DGX nodes, NICs 0,1,4,5
+leaf-01# nv show interface | grep -E "swp[0-9]+" | grep -v "swp3[0-9]"
+Interface  State  Speed   MTU   RemoteHost         RemotePort
+swp1       up     400G    9216  dgx-01.rail0       ConnectX-7/0
+swp2       up     400G    9216  dgx-02.rail0       ConnectX-7/0
+swp3       up     400G    9216  dgx-03.rail0       ConnectX-7/0
+swp4       up     400G    9216  dgx-04.rail0       ConnectX-7/0
+swp5       up     400G    9216  dgx-05.rail0       ConnectX-7/0
+swp6       up     400G    9216  dgx-06.rail0       ConnectX-7/0
+swp7       up     400G    9216  dgx-07.rail0       ConnectX-7/0
+swp8       up     400G    9216  dgx-08.rail0       ConnectX-7/0
+# swp9-16: NICs 1 from each DGX (same leaf)
+# swp17-32: spine uplinks
+
+# Count total links per leaf
+leaf-01# nv show interface brief | grep "^swp" | grep " up " | wc -l
+32
+```
+
+---
+
+## Act 5 — Spectrum-X Software Stack
+
+The Spectrum-X software stack is designed as a coherent pipeline from switch configuration through packet forwarding through telemetry collection through pre-production validation. Understanding the component interaction order matters operationally: misconfiguring any layer invalidates the behaviour of all downstream layers.
+
+**Cumulus Linux 5.x** runs on every SN5600 and SN4600C switch as the Network Operating System. Unlike SONiC (which uses an abstraction layer database) or Arista EOS (which is a proprietary NOS), Cumulus is Linux-native: the forwarding table is programmed via kernel netlink APIs, full bash shell access is available, and the FRR (Free Range Routing) suite handles all dynamic routing protocols including BGP, OSPF, and BFD. This means that any Linux tool — tcpdump, iperf3, journalctl, systemd — works directly on the switch CPU.
+
+**NVUE (NVIDIA Unified CLI)** is the declarative management API layer introduced in Cumulus Linux 5.0. It replaces direct editing of `/etc/network/interfaces` and `/etc/frr/frr.conf` with a structured command hierarchy. Configuration is entered as `nv set <object> <parameter> <value>`, staged in a candidate configuration, then applied atomically with `nv config apply`. The underlying representation is a JSON document — this means NVUE configuration is serialisable, diffable, and suitable for GitOps workflows. Rollback is `nv config history` followed by `nv config rollback <revision>`. The two-phase commit (set → apply) prevents partial configuration states from reaching the forwarding plane.
+
+**DOCA SDK** on the host side is a set of libraries and runtime daemons that application code links against to access BF3 hardware functions. Applications compiled with DOCA run on the host server Linux, not on the BF3 ARM cores — they communicate with the BF3 via a PCIe messaging channel. This architecture means DOCA applications survive host reboots without manual BF3 restart, and BF3 firmware updates do not require host downtime. Key DOCA applications deployed in Spectrum-X clusters: DOCA Flow for eSwitch packet processing rules, DOCA Compress for checkpoint-to-storage offload, and DOCA App Shield for host integrity monitoring.
+
+**NetQ** is the fabric-wide telemetry platform. Unlike SNMP, which requires a poller to issue GET requests and receives counter snapshots, NetQ uses a push-based event model: every switch and host runs a lightweight NetQ agent that emits state-change events and time-series metrics to a central NetQ server. The NetQ server stores a queryable time-series database. Queries like "show me all interfaces that had more than 100 drops in the last 10 minutes" execute against stored events rather than requiring a new polling cycle. NetQ also integrates with WJH: drop events captured by the Spectrum-4 ASIC propagate through the NetQ agent to the central database.
+
+**NVIDIA Air** is the digital twin simulation platform. You export your NVUE topology configuration (switch counts, link connections, IP addressing), import it into Air, and run test traffic against a simulated fabric before deploying the same configuration to production. Air is particularly valuable for BGP policy changes and PFC/ECN threshold tuning — both of which are difficult to test safely in production. Air also supports CI/CD integration via API: a GitOps pipeline can automatically provision an Air simulation, run a smoke test, and block the merge if the simulation fails.
+
+<SpectrumXSoftwareStackViz />
+
+```bash
+# Apply a new NVUE configuration (two-phase commit)
+leaf-01# nv set interface swp1-32 link mtu 9216
+leaf-01# nv set interface swp1-32 link speed 400G
+leaf-01# nv config diff
+--- /etc/nvue.d/startup.yaml
++++ candidate
+@@ -10,6 +10,8 @@
+   swp1:
++    link:
++      mtu: 9216
++      speed: 400G
+# ... (32 interfaces shown)
+
+leaf-01# nv config apply
+Config applied successfully.
+
+# Verify rollback history
+leaf-01# nv config history
+Rev  Date                User     Message
+1    2024-03-15 09:00    admin    Initial baseline
+2    2024-03-15 14:22    admin    MTU and speed set
+3    2024-03-15 15:01    admin    (current)
+
+# Query NetQ for recent events on this switch
+netq-server$ netq show events level error between now and 30m
+Matching events records:
+Hostname  Message Type  Severity  Message                          Time
+leaf-01   link          error     swp29: link down (no signal)     14:58:03
+```
+
+---
+
+## Act 6 — GPU-to-GPU Communication Patterns and Their Networking Implications
+
+Understanding GPU collective communication patterns is not optional context for a network engineer in an AI cluster — it is directly causal to switch configuration decisions. The traffic pattern drives the congestion point drives the buffer sizing drives the ECN threshold drives the DCQCN parameters. Getting this chain wrong produces training throughput that collapses at scale even with perfectly cabled hardware.
+
+The dominant NCCL collective in LLM training is **All-Reduce**, which synchronises gradient tensors across all GPUs at the end of each backward pass. NCCL implements this as **ring-AllReduce** by default. In ring-AllReduce, GPUs are arranged in a logical ring. Each GPU simultaneously sends a chunk of its gradient tensor to the next GPU and receives a chunk from the previous GPU. After 2×(N-1) communication steps, every GPU holds the fully reduced gradient. The key property: at any instant, each GPU sends exactly one chunk and receives exactly one chunk — bandwidth is used uniformly, and the algorithm is bandwidth-optimal at O(2(N-1)/N × data_size × bandwidth).
+
+**Tree AllReduce** arranges GPUs in a binary tree. Reduce phase: leaf GPUs send to parent GPUs up the tree. Broadcast phase: root broadcasts down. Tree AllReduce completes in O(2 × log₂N) steps regardless of message size, making it latency-optimal for small gradient tensors. At large message sizes, ring-AllReduce wins on bandwidth. NCCL switches automatically based on message size.
+
+**Incast at synchronisation barriers** is the pathology to design around. When all 8 GPUs in a DGX complete their backward pass simultaneously — which they do, because they are processing the same mini-batch — all 8 NICs transmit All-Reduce traffic at line rate simultaneously. All 8 flows target the same logical destination (a ring-AllReduce neighbour, or a parameter server if using All-to-All). At the leaf switch, the single egress queue for the destination port receives 8 × 400 GbE = 3.2 Tbps of traffic attempting to exit through one 400 GbE port. Even with ECMP spreading across spine paths, incast congestion at the spine-to-leaf downlink is unavoidable during synchronisation barriers.
+
+This is the architectural moment where Spectrum-4's 48 MB buffer operates. The 48 MB absorbs the incast burst while DCQCN ECN marking signals senders to reduce their rate. With only 12 MB of buffer (Tomahawk 4), the burst exceeds the tail-drop threshold before DCQCN can respond, producing packet loss and triggering Go-Back-N retransmissions — which add more traffic to an already-congested queue in a feedback loop.
+
+Key NCCL tuning knobs that interact with fabric design: **NCCL_MIN_NCHANNELS** sets the minimum number of NCCL communication channels (ring instances) per GPU pair. More channels = more parallelism = more simultaneous flows, which spreads incast across more queue entries at the switch but increases the number of active QPs consuming switch buffer. **NCCL_IB_QPS_PER_CONNECTION** sets the number of RoCEv2 QPs per NCCL channel — higher values produce more granular adaptive routing paths but increase BF3 reorder buffer pressure. Cross-reference Chapter 8 for NCCL algorithm detail and Chapter 25 for QP configuration.
+
+<GPUCommPatternViz />
+
+```bash
+# Measure NCCL All-Reduce bandwidth before and after AR tuning
+dgx-01$ mpirun -np 8 --hostfile /etc/nccl-hostfile \
+  nccl-tests/build/all_reduce_perf \
+  -b 1G -e 4G -f 2 -g 1 -c 1
+#                             In-place                    Out-of-place
+# Size    Count  Type  Redop  Time(us)  Algbw(GB/s)   Time(us)  Algbw(GB/s)
+1073741824  256M  float  sum    1243.8      864.3         1251.2      857.7
+2147483648  512M  float  sum    2481.4      865.8         2494.6      861.1
+4294967296   1G   float  sum    4963.2      865.5         4978.8      863.9
+# 865 GB/s per direction = 93% of theoretical 400GbE × 8 NIC = 928 GB/s
+# With standard ECMP (no AR) this number drops to ~55% at 8-DGX scale
+
+# View NCCL transport selection
+dgx-01$ NCCL_DEBUG=INFO mpirun -np 2 ./nccl_test 2>&1 | grep -E "transport|channel"
+[0] NCCL INFO Channel 00: 0[0x03] -> 1[0x81] [send] via NET/IB/0
+[0] NCCL INFO Channel 01: 0[0x03] -> 1[0x81] [send] via NET/IB/1
+[0] NCCL INFO NET/IB : Using interface mlx5_0:1 (direct device)
+[0] NCCL INFO NET/IB : Using interface mlx5_1:1 (direct device)
+```
+
+---
+
+## Act 7 — Storage Architecture in the AI Factory
+
+Storage in an AI factory is not a single tier — it is three separate tiers with different hardware, protocols, and performance characteristics, each serving a different phase of the training lifecycle. Treating storage as an afterthought until the cluster is built is a common operational mistake that manifests as GPU idle time during checkpoint and dataset load.
+
+**Local NVMe** in each DGX node is primarily the OS boot drive. DGX H100 ships with approximately 3.84 TB of local NVMe in a RAID-1 configuration — sufficient for the OS, Docker images, and application binaries, but not for training datasets or model checkpoints. Local NVMe is invisible to the network fabric. Never size a training dataset to fit on local NVMe; it will not scale past single-node training.
+
+**NVMe-oF over RDMA (GPUDirect Storage)** eliminates the CPU data copy on the read path between storage and GPU HBM. The traditional path is: storage → PCIe → CPU DRAM → PCIe → GPU HBM, with two PCIe traversals and one CPU copy. GPUDirect Storage directly maps a storage NVMe namespace into GPU HBM address space via RDMA, bypassing CPU DRAM entirely. The DGX ConnectX-7 NIC terminates both compute RDMA (to other DGX nodes) and storage RDMA (to the storage system) — port selection is via DSCP marking and the dedicated storage leaf switch. DSCP 10 (0x0A) identifies checkpoint-to-storage traffic (see FABRICLAB_STRATEGY_COMPACT.md DSCP table).
+
+**Parallel file systems** are the workhorse storage tier for training datasets and distributed checkpointing. Lustre is the most widely deployed in AI clusters, providing POSIX semantics, stripe-based parallelism across object storage targets (OSTs), and mature RDMA transport (Lustre over LNet). IBM Spectrum Scale (GPFS) offers strong metadata performance and is common in enterprise deployments. VAST Data and WekaIO are newer entrants with NVMe-based all-flash backends and POSIX+S3 dual-protocol support — WekaIO in particular is popular for clusters that also serve model inference directly from the training storage tier.
+
+The **bandwidth mismatch** between compute and storage is fundamental: 8 DGX H100 nodes at full utilisation present 8 × 8 NICs × 50 GB/s NIC throughput = 3.2 TB/s aggregate compute bandwidth. No cost-effective storage system delivers 3.2 TB/s of write bandwidth continuously. Realistic checkpoint bandwidth for a 70B parameter model at bf16 precision is 140 GB of gradient state per checkpoint event. At a checkpoint frequency of once per 500 iterations (roughly every 5 minutes at typical batch sizes), effective checkpoint bandwidth demand is approximately 470 MB/s sustained — well within the capability of a Lustre cluster with 4–8 OSTs backed by NVMe drives.
+
+**Storage leaf design**: each Scalable Unit has one dedicated SN4600C storage leaf switch. The SN4600C connects downward to the DGX storage NICs (typically CX7 port 7, dedicated to storage) and upward to the storage array network. Separating storage traffic onto a dedicated switch prevents a checkpoint storm from impacting the training fabric: storage ECN events cannot propagate pause frames onto the training fabric because the two switch domains are physically separate.
+
+<StorageOptionComparisonViz />
+
+```bash
+# Verify GPUDirect Storage is active and using RDMA path
+dgx-01$ gds_stat -p
+GDS version: 1.7.2
+GDS driver version: 515.105
+Detected RDMA capable network: yes
+Active network interface: mlx5_7 (storage NIC, ConnectX-7)
+Current GDS configuration: enabled
+
+# Check storage NIC RDMA stats (mlx5_7 = NIC 7, dedicated to storage)
+dgx-01$ ethtool -S mlx5_7 | grep -E "rx_bytes|tx_bytes|rdma"
+     rx_bytes: 142832941568
+     tx_bytes:   8429184000
+     rdma_read_requests:    1,247,832
+     rdma_write_requests:     892,441
+
+# Measure checkpoint write bandwidth to Lustre
+dgx-01$ ior -a POSIX -w -r -o /lustre/checkpoints/test.ckpt \
+  -b 4g -t 1m -g -F -e -k
+Results:
+  write: 423.85 MiB/s
+  read:  891.22 MiB/s
+```
+
+---
+
+## Act 8 — Failure Domain Isolation and Resiliency
+
+Failure domain analysis in a Spectrum-X AI fabric requires thinking at four levels simultaneously: individual link, switch, rail, and collective-participation. These levels have different blast radius and different recovery mechanisms.
+
+A **failure domain** in this context is the set of compute resources that are affected when a single fault occurs. In a conventional three-tier data centre network, a single top-of-rack switch failure takes all servers in that rack offline. In a rail-optimised Spectrum-X SU, a single leaf switch failure affects 4 NICs (out of 8) on every DGX node in the SU simultaneously — no node loses all connectivity, but all nodes lose half their bandwidth. The training job can continue at reduced efficiency rather than stopping entirely. This is an intentional resiliency trade-off: graceful degradation over hard failure.
+
+**Individual link failure** is the most common fault in an AI cluster (fibre optic failures, SFP/QSFP transceiver failures, mechanical disturbance of cable trays). The Spectrum-4 adaptive routing engine detects queue depth collapse on a failed link within microseconds — the link goes down, queue depth drops to zero, AR stops routing packets to that next-hop. BGP reconverges to remove the failed link's ECMP next-hop entry. With BFD (Bidirectional Forwarding Detection) configured at 50 ms detection timers on all spine-facing links, the maximum time to detect a silent link failure (one where the physical layer does not signal loss) is 3 × 50 ms = 150 ms. ECMP reconvergence after BFD triggers BGP withdraw takes an additional 100–200 ms with standard BGP timer tuning. Total link failure impact: one collective operation may fail (NCCL timeout), and the training framework (NEMO, Megatron-LM) handles this via elastic training restart.
+
+**Spine link failures** are higher impact because spine links carry inter-SU traffic. A spine link failure reduces bisection bandwidth between affected leaf pairs. With 4 spine switches in a BasePOD and 4 uplinks per leaf per spine (16 uplinks per leaf total), losing one spine switch removes 25% of uplink capacity. ECMP reconverges across the remaining spines with no configuration change required.
+
+**MLAG (Multi-Chassis LAG)** on the SN4600C storage switch provides active-active redundancy for the storage fabric. Two SN4600C switches are configured as an MLAG pair — they appear as a single logical switch to the DGX storage NICs and the storage array. Either switch can fail without storage access interruption. The MLAG peer link (a 400 GbE direct interconnect between the two SN4600C switches) carries synchronisation traffic and must be provisioned with adequate bandwidth to carry the full storage load during single-switch operation.
+
+**BF3 link-level heartbeats** (in B200 deployments) add a 100 ms keepalive between the DPU OS and the network fabric. This heartbeat is distinct from BFD — BFD monitors forwarding plane paths, while BF3 heartbeats monitor the DPU-to-switch control plane channel. If the heartbeat fails, the BF3 DPU can declare an isolated state and flush its reorder buffer, preventing stale out-of-order packets from being delivered to QPs after a link recovery event.
+
+The trade-off between fast failure detection and fast convergence is non-trivial. Aggressive BFD timers (50 ms intervals, 3-packet holddown = 150 ms detection) produce low MTTD but increase CPU load on the switch in proportion to the number of BFD sessions. A BasePOD with 8 leaf switches and 4 spines has 32 spine-facing BFD sessions. At 50 ms transmit interval, each switch generates 20 BFD packets per second per session = 640 BFD packets per second switch-wide. This is trivial overhead. But in a SuperPOD with 64 leaf switches (512 BFD sessions per spine), the BFD overhead becomes measurable.
+
+<FailureDomainViz />
+
+```bash
+# Configure BFD on spine-facing links (Cumulus FRR syntax)
+leaf-01# nv set vrf default router bgp neighbor swp33 bfd
+leaf-01# nv set vrf default router bgp neighbor swp33 bfd detect-multiplier 3
+leaf-01# nv set vrf default router bgp neighbor swp33 bfd min-rx-interval 50
+leaf-01# nv set vrf default router bgp neighbor swp33 bfd min-tx-interval 50
+leaf-01# nv config apply
+
+# Verify BFD session state on all spine uplinks
+leaf-01# net show bfd peers
+BFD Peers:
+  peer 10.1.0.1 vrf default
+    ID: 1, Interface: swp33, State: UP
+    TX interval: 50ms, RX interval: 50ms, Multiplier: 3
+    Last state change: 2024-03-15 14:00:00
+  peer 10.1.0.2 vrf default
+    ID: 2, Interface: swp34, State: UP
+    TX interval: 50ms, RX interval: 50ms, Multiplier: 3
+
+# Simulate spine link failure and measure convergence
+leaf-01# ip link set swp33 down
+leaf-01# date +%s%3N   # capture ms timestamp
+1710511200123
+
+# Watch BGP withdraw propagate
+leaf-01# journalctl -fu frr | grep "withdrawn"
+Mar 15 14:25:00.247 bgpd[1234]: 10.1.0.1 WITHDRAWN prefix 10.100.0.0/14
+# Convergence time: 247ms - 123ms = 124ms ✓ (within target <200ms)
+```
+
+---
+
+## Chapter Summary
+
+Spectrum-X is not merely a new switch model — it is a platform-level design that must be understood as the integration of four components working together. The Spectrum-4 ASIC provides the hardware adaptive routing engine and deep 48 MB packet buffer that absorb incast bursts and eliminate hash collision-driven load imbalance. The BlueField-3 SuperNIC (DGX B200 only) provides the in-NIC reorder buffer that decouples per-packet adaptive routing from the RoCEv2 Go-Back-N retransmission protocol — without BF3, aggressive adaptive routing degrades throughput rather than improving it. The DOCA SDK provides programmable packet processing from the host Linux environment. NetQ provides the fabric-wide push-based telemetry that makes Spectrum-X operationally manageable at scale.
+
+The Scalable Unit is the deployment atom. Understand the rail-wired topology, the failure domain properties it produces, and the BasePOD/SuperPOD hierarchy before attempting any production deployment. Storage tier design is inseparable from network design: GPUDirect Storage, dedicated storage leaf switches, and NVMe-oF over RDMA are first-class networking concerns, not afterthoughts.
+
+Chapter 25 builds directly on this foundation, covering RoCEv2 PFC/ECN configuration, DCQCN parameter tuning, and the specific NVUE command sequences required to bring a Scalable Unit's training fabric into production-ready state. Lab 16 provides hands-on practice with the physical bring-up audit procedure that must precede any RoCE configuration.
+
+**Key numbers to retain for NCP-AIN exam context:**
+- Spectrum-4 aggregate bandwidth: 51.2 Tbps
+- Spectrum-4 shared buffer: 48 MB (vs Tomahawk 4: 12 MB)  
+- Cut-through latency: <300 ns
+- BF3 ARM cores: 16× Cortex-A78AE
+- Standard SU composition: 8 DGX + 2 SN5600 + 1 SN4600C
+- BasePOD = 4 SUs = 32 DGX nodes
+- BFD detection timer: 50 ms × 3 = 150 ms MTTD

@@ -23,6 +23,8 @@ import { lab9, lab9Devices } from "@/data/labs/lab9-errdisable-recovery";
 import { lab10, lab10Devices } from "@/data/labs/lab10-ecmp-hotspot";
 import { lab11, lab11Devices } from "@/data/labs/lab11-bgp-path-failure";
 import { lab14, lab14Devices } from "@/data/labs/lab14-srv6-te-path-steering";
+import { lab15, lab15Devices } from "@/data/labs/lab15-rdma-rkey-exposure";
+import { lab16, lab16Devices } from "@/data/labs/lab16-spectrum-x-platform-audit";
 import { isComplete } from "@/lib/labEngine";
 import { formatConditionLabel } from "@/lib/formatters";
 import { useLabStore } from "@/store/labStore";
@@ -42,6 +44,8 @@ const LABS = {
   [lab10.id]: lab10,
   [lab11.id]: lab11,
   [lab14.id]: lab14,
+  [lab15.id]: lab15,
+  [lab16.id]: lab16,
 };
 
 const LAB_DEVICES = {
@@ -58,6 +62,8 @@ const LAB_DEVICES = {
   [lab10.id]: lab10Devices,
   [lab11.id]: lab11Devices,
   [lab14.id]: lab14Devices,
+  [lab15.id]: lab15Devices,
+  [lab16.id]: lab16Devices,
 };
 
 const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
@@ -74,6 +80,11 @@ const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
   [lab10.id]: { slug: "ch15-ip-routing-ai-fabrics", label: "Chapter 15: IP Routing for AI/ML Fabrics" },
   [lab11.id]: { slug: "ch15-ip-routing-ai-fabrics", label: "Chapter 15: IP Routing for AI/ML Fabrics" },
   [lab14.id]: { slug: "ch22-segment-routing-ai", label: "Chapter 22: Segment Routing for AI Fabrics" },
+  [lab15.id]: { slug: "ch23-ai-networking-security", label: "Chapter 23: AI Networking Security" },
+  [lab16.id]: {
+    slug: "ch24-spectrum-x-architecture",
+    label: "Chapter 24: Spectrum-X Architecture and the AI Factory Platform",
+  },
 };
 
 type LabId = keyof typeof LABS;
