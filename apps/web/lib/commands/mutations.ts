@@ -5,6 +5,13 @@ import { lab2 } from "@/data/labs/lab2-congestion";
 import { lab3 } from "@/data/labs/lab3-uneven-spine";
 import { lab4 } from "@/data/labs/lab4-topology-sizing";
 import { lab5 } from "@/data/labs/lab5-nccl-diagnosis";
+import { lab14 } from "@/data/labs/lab14-srv6-te-path-steering";
+import {
+  applyRouteMapSwp14,
+  configureRouteMapDscp10,
+  configureSegmentList,
+  configureSrtePolicy,
+} from "@/lib/commands/lab14Handlers";
 import { useLabStore } from "@/store/labStore";
 
 const LAB_CONFIGS = {
@@ -13,6 +20,7 @@ const LAB_CONFIGS = {
   [lab3.id]: lab3,
   [lab4.id]: lab4,
   [lab5.id]: lab5,
+  [lab14.id]: lab14,
 };
 
 export function runMutation(command: string): CommandResult {
@@ -159,6 +167,14 @@ export function runMutation(command: string): CommandResult {
         conceptId: "rocev2",
         type: "success",
       };
+    case "configure segment-list":
+      return configureSegmentList();
+    case "configure sr-te policy":
+      return configureSrtePolicy();
+    case "configure route-map dscp10":
+      return configureRouteMapDscp10();
+    case "apply route-map swp1-4":
+      return applyRouteMapSwp14();
     case "help":
       return {
         output: `Available commands:

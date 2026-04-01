@@ -31,7 +31,9 @@ function levenshteinDistance(source: string, target: string): number {
 export function classifyCommand(input: string): ClassifiedCommand {
   const trimmed = input.trim();
   const normalized = trimmed.toLowerCase();
-  const exactMatch = KNOWN_COMMANDS.find((command) => command === trimmed);
+  const exactMatch = KNOWN_COMMANDS.find(
+    (command) => command.toLowerCase() === normalized,
+  );
 
   if (exactMatch) {
     return {
@@ -45,7 +47,7 @@ export function classifyCommand(input: string): ClassifiedCommand {
   let closestDistance = Number.POSITIVE_INFINITY;
 
   for (const command of KNOWN_COMMANDS) {
-    const distance = levenshteinDistance(trimmed, command);
+    const distance = levenshteinDistance(normalized, command.toLowerCase());
 
     if (distance < closestDistance) {
       closestDistance = distance;

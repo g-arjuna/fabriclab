@@ -33,6 +33,10 @@ export interface TopologyState {
   proposalACalculated?: boolean
   proposalBCalculated?: boolean
   recommendationMade?: boolean
+  srtePolicyActive?: boolean
+  segmentListConfigured?: boolean
+  routeMapApplied?: boolean
+  isisAdjVerified?: boolean
 }
 
 export interface LabState {

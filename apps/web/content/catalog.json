@@ -842,7 +842,7 @@
         "Traffic engineering"
       ],
       "description": "Steer checkpoint-to-storage traffic onto a dedicated SRv6-TE path so collective traffic keeps the uncongested spine pool.",
-      "previewSummary": "A future simulator lab on DSCP-aware SRv6 path steering for checkpoint traffic in a shared AI fabric.",
+      "previewSummary": "Build and verify a DSCP-aware SRv6 path that moves checkpoint traffic off the shared NCCL spine pool.",
       "defaultPublished": false,
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,

@@ -22,6 +22,7 @@ import { lab8, lab8Devices } from "@/data/labs/lab8-pfc-priority-mismatch";
 import { lab9, lab9Devices } from "@/data/labs/lab9-errdisable-recovery";
 import { lab10, lab10Devices } from "@/data/labs/lab10-ecmp-hotspot";
 import { lab11, lab11Devices } from "@/data/labs/lab11-bgp-path-failure";
+import { lab14, lab14Devices } from "@/data/labs/lab14-srv6-te-path-steering";
 import { isComplete } from "@/lib/labEngine";
 import { formatConditionLabel } from "@/lib/formatters";
 import { useLabStore } from "@/store/labStore";
@@ -40,6 +41,7 @@ const LABS = {
   [lab9.id]: lab9,
   [lab10.id]: lab10,
   [lab11.id]: lab11,
+  [lab14.id]: lab14,
 };
 
 const LAB_DEVICES = {
@@ -55,6 +57,7 @@ const LAB_DEVICES = {
   [lab9.id]: lab9Devices,
   [lab10.id]: lab10Devices,
   [lab11.id]: lab11Devices,
+  [lab14.id]: lab14Devices,
 };
 
 const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
@@ -70,6 +73,7 @@ const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
   [lab9.id]: { slug: "ch9-optics-cabling", label: "Chapter 9: Optics & Cabling" },
   [lab10.id]: { slug: "ch15-ip-routing-ai-fabrics", label: "Chapter 15: IP Routing for AI/ML Fabrics" },
   [lab11.id]: { slug: "ch15-ip-routing-ai-fabrics", label: "Chapter 15: IP Routing for AI/ML Fabrics" },
+  [lab14.id]: { slug: "ch22-segment-routing-ai", label: "Chapter 22: Segment Routing for AI Fabrics" },
 };
 
 type LabId = keyof typeof LABS;

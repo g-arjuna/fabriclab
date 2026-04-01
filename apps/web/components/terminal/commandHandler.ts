@@ -10,6 +10,7 @@ import { lab8, lab8Devices } from "@/data/labs/lab8-pfc-priority-mismatch";
 import { lab9, lab9Devices } from "@/data/labs/lab9-errdisable-recovery";
 import { lab10, lab10Devices } from "@/data/labs/lab10-ecmp-hotspot";
 import { lab11, lab11Devices } from "@/data/labs/lab11-bgp-path-failure";
+import { lab14, lab14Devices } from "@/data/labs/lab14-srv6-te-path-steering";
 import { calculateOversubscriptionA, calculateOversubscriptionB } from "@/lib/commands/calculateOversubscription";
 import { compareProposals } from "@/lib/commands/compareProposals";
 import { ibstat } from "@/lib/commands/ibstat";
@@ -21,6 +22,28 @@ import {
   showRocePriorityMismatch,
 } from "@/lib/commands/lab8Handlers";
 import { ethtoolStatsEth2, noShutdown, replaceOpticRail2 } from "@/lib/commands/lab9Handlers";
+import {
+  ping6Spine02,
+  ping6Spine03,
+  ping6StorageSid,
+  showInterfaceCountersSpine01,
+  showIpPolicy,
+  showIpRouteVrfStorage,
+  showIsisNeighbor,
+  showIsisSrv6Node,
+  showMtu,
+  showRouteMapSteerCheckpoint,
+  showSegmentRoutingSrv6Sid,
+  showSegmentRoutingSrv6SidStorage,
+  showSrtePolicy,
+  showSrteSegmentList,
+  showSrv6PacketsSpine01,
+  showTopologyLab14,
+  tcpdumpSrhSwp1Spine01,
+  tcpdumpSrhSwp1Spine02,
+  traceroute6CheckpointDscp10,
+  traceroute6NcclDscp26,
+} from "@/lib/commands/lab14Handlers";
 import { ncclDebugTransport } from "@/lib/commands/ncclDebugTransport";
 import { recommendProposalA, recommendProposalB } from "@/lib/commands/recommendProposal";
 import { runMutation } from "@/lib/commands/mutations";
@@ -62,6 +85,7 @@ const LAB_CONFIGS: Record<string, LabConfig> = {
   [lab9.id]: lab9,
   [lab10.id]: lab10,
   [lab11.id]: lab11,
+  [lab14.id]: lab14,
 };
 
 const LAB_DEVICES: Record<string, LabDevice[]> = {
@@ -77,6 +101,7 @@ const LAB_DEVICES: Record<string, LabDevice[]> = {
   [lab9.id]: lab9Devices,
   [lab10.id]: lab10Devices,
   [lab11.id]: lab11Devices,
+  [lab14.id]: lab14Devices,
 };
 
 const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
@@ -92,6 +117,7 @@ const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
   [lab9.id]: [...new Set(lab9Devices.map((device) => device.type))],
   [lab10.id]: [...new Set(lab10Devices.map((device) => device.type))],
   [lab11.id]: [...new Set(lab11Devices.map((device) => device.type))],
+  [lab14.id]: [...new Set(lab14Devices.map((device) => device.type))],
 };
 
 const LAB_CHAPTER_LINKS: Record<string, { slug: string; label: string }> = {
@@ -129,6 +155,24 @@ function showRoceByLab(): CommandResult {
     return showRocePriorityMismatch();
   }
   return showRoce();
+}
+
+function showSegmentRoutingSrv6SidByDevice(): CommandResult {
+  const activeDeviceId = useLabStore.getState().activeDeviceId;
+  return activeDeviceId === "leaf-storage"
+    ? showSegmentRoutingSrv6SidStorage()
+    : showSegmentRoutingSrv6Sid();
+}
+
+function showSrv6PacketsByDevice(): CommandResult {
+  return showSrv6PacketsSpine01();
+}
+
+function tcpdumpSrhByDevice(): CommandResult {
+  const activeDeviceId = useLabStore.getState().activeDeviceId;
+  return activeDeviceId === "spine-02"
+    ? tcpdumpSrhSwp1Spine02()
+    : tcpdumpSrhSwp1Spine01();
 }
 
 function ethtoolStatsByLab(): CommandResult {
@@ -458,6 +502,9 @@ function markCondition(key: string): void {
 
 function showTopologyByLab(): CommandResult {
   const store = useLabStore.getState();
+  if (store.lab.labId === lab14.id) {
+    return showTopologyLab14();
+  }
   if (store.lab.labId === lab11.id && store.activeDeviceId === "workstation") {
     markCondition("failureScopeChecked");
     return {
@@ -480,6 +527,10 @@ function showInterfaceCountersByLab(): CommandResult {
   const store = useLabStore.getState();
   const labId = store.lab.labId;
   const activeDeviceId = store.activeDeviceId;
+
+  if (labId === lab14.id && activeDeviceId === "spine-01") {
+    return showInterfaceCountersSpine01();
+  }
 
   if (labId === lab7.id || (store.topology as any).pauseStorm) {
     return showInterfaceCountersPauseStorm();
@@ -840,12 +891,22 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "show bgp route 10.2.0.0/16 after": showBgpRouteLeaf2After,
   "show ip route 10.4.0.0/16": showIpRouteLeaf4,
   "show ip route 10.2.0.0/16": showIpRouteLeaf2,
+  "show ip route vrf STORAGE": showIpRouteVrfStorage,
   "show bgp neighbors 10.0.0.1": showBgpNeighborSpineBToLeaf1,
   "show bgp neighbors 10.0.0.2": showBgpNeighborsSpineAtoSpineB,
   "show bgp link-bandwidth": showBgpLinkBandwidth,
   "show proposal a": showProposalA,
   "show proposal b": showProposalB,
   "show topology": showTopologyByLab,
+  "show isis neighbor": showIsisNeighbor,
+  "show isis srv6 node": showIsisSrv6Node,
+  "show segment-routing srv6 sid": showSegmentRoutingSrv6SidByDevice,
+  "show sr-te segment-list": showSrteSegmentList,
+  "show sr-te policy": showSrtePolicy,
+  "show ip policy": showIpPolicy,
+  "show route-map STEER-CHECKPOINT": showRouteMapSteerCheckpoint,
+  "show mtu": showMtu,
+  "show srv6 packets": showSrv6PacketsByDevice,
   "show rdma links": showRdmaLinks,
   "show switch port rail0": () => showSwitchPort("rail0"),
   "show switch port rail1": () => showSwitchPort("rail1"),
@@ -937,6 +998,12 @@ For per-port counters on this switch, use:
   "replace optic rail2": replaceOpticRail2,
   "no shutdown": noShutdown,
   "reseat connector leaf-rail5 swp7": reseatConnector,
+  "traceroute6 checkpoint dscp10": traceroute6CheckpointDscp10,
+  "traceroute6 nccl dscp26": traceroute6NcclDscp26,
+  "ping6 spine02 sid": ping6Spine02,
+  "ping6 spine03 sid": ping6Spine03,
+  "ping6 storage sid": ping6StorageSid,
+  "tcpdump srh swp1": tcpdumpSrhByDevice,
   ping: () => ({
     output: `ping: ICMP reachability is not the diagnostic tool here.
 
@@ -1085,6 +1152,7 @@ export function handleCommand(
       effectiveDeviceType === "spine-switch"
         && activeLabId !== lab10.id
         && activeLabId !== lab11.id
+        && !(activeLabId === lab14.id && store.activeDeviceId === "spine-01")
         ? showSpineCounters
         : showInterfaceCountersByLab
     )

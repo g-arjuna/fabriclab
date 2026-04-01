@@ -47,6 +47,12 @@ export function formatConditionLabel(key: string): string {
     opticReplaced: "Optical transceiver replaced",
     portReenabled: "Port re-enabled with no shutdown",
     railVerified: "Rail recovery verified on both ends",
+    isisAdjVerified: "IS-IS adjacency and SID reachability verified",
+    segmentListConfigured: "Segment list configured",
+    srtePolicyActive: "SR-TE policy active",
+    routeMapApplied: "Route-map applied to swp1-4",
+    tracerouteVerified: "Traceroute confirmed SR-TE path",
+    spine01Clean: "Spine-01 clean of checkpoint SRH",
   };
 
   return labels[key] ?? key;

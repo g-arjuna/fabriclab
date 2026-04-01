@@ -22,6 +22,7 @@ const SUPPORTED_LAB_IDS = new Set([
   "lab9-errdisable-recovery",
   "lab10-ecmp-hotspot",
   "lab11-bgp-path-failure",
+  "lab14-srv6-te-path-steering",
 ]);
 
 function LabLoadingState() {
