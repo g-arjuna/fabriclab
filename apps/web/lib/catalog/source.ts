@@ -7,7 +7,8 @@ export type CatalogPartKey =
   | "foundations"
   | "fabric-operations"
   | "infrastructure"
-  | "scale-architecture";
+  | "scale-architecture"
+  | "advanced-networking";
 
 export type SourceCatalogItem = {
   kind: CatalogKind;
@@ -77,6 +78,11 @@ export const PARTS = [
     title: "Part 4 - Scale and Architecture",
     description: "Requires Part 3 - Ch 12-16",
   },
+  {
+    key: "advanced-networking" as const,
+    title: "Part 5 - Advanced Networking",
+    description: "Requires Part 4 - Ch 22-23",
+  },
 ];
 
 export function getSourceCatalogItem(kind: CatalogKind, slug: string): SourceCatalogItem | null {
@@ -90,4 +96,3 @@ export function getSourceChapters(): SourceCatalogItem[] {
 export function getSourceLabs(): SourceCatalogItem[] {
   return SOURCE_LABS.slice();
 }
-

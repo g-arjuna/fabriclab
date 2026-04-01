@@ -159,6 +159,7 @@ function tagClasses(tag: string) {
   if (tag === "Foundations") return "bg-slate-800 text-slate-300";
   if (tag === "Operations") return "bg-blue-950 text-blue-300";
   if (tag === "Infrastructure") return "bg-emerald-950 text-emerald-300";
+  if (tag === "Advanced") return "bg-rose-950 text-rose-300";
   return "bg-purple-950 text-purple-300";
 }
 
@@ -166,6 +167,7 @@ function partTag(partKey?: string) {
   if (partKey === "foundations") return "Foundations";
   if (partKey === "fabric-operations") return "Operations";
   if (partKey === "infrastructure") return "Infrastructure";
+  if (partKey === "advanced-networking") return "Advanced";
   return "Architecture";
 }
 

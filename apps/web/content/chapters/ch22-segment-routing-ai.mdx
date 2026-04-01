@@ -1,0 +1,751 @@
+---
+title: "Segment Routing for AI Fabrics"
+chapterNumber: 22
+slug: "ch22-segment-routing-ai"
+description: "A practitioner's guide to deploying SRv6, SR-TE, EVPN+SRv6, and IS-IS Flex-Algo in production AI data centre fabrics — covering SID architecture, uSID compression, traffic engineering for GPU collectives, multi-tenant design, and operational troubleshooting."
+published: true
+prev: "ch21-congestion-control-deep-dive"
+next: "ch23-ai-networking-security"
+---
+
+import SRv6PacketHeaderViz from '@/components/visualizations/ch22/SRv6PacketHeaderViz'
+import SRv6SIDViz from '@/components/visualizations/ch22/SRv6SIDViz'
+import SRTEPolicyViz from '@/components/visualizations/ch22/SRTEPolicyViz'
+import EVPNSRv6Viz from '@/components/visualizations/ch22/EVPNSRv6Viz'
+import FlexAlgoPathViz from '@/components/visualizations/ch22/FlexAlgoPathViz'
+
+## Act 1 — Why Segment Routing for AI Fabrics
+
+You have a problem that ECMP cannot solve cleanly.
+
+In a standard fat-tree AI fabric running ECMP, all flows between a source and destination
+are distributed across available spine paths by hashing the 5-tuple (src IP, dst IP, src port,
+dst port, protocol). This works well for a mix of many small flows. It fails for GPU workloads
+in two specific and common ways.
+
+### The elephant flow collision problem
+
+A 400GbE link carries roughly 47 GB/s of sustained throughput. An NCCL All-Reduce on 512 GPUs
+generates synchronised bursts where all GPU pairs transmit simultaneously. The 5-tuple hash
+is deterministic — given the same src/dst pair with the same port, the same spine is always
+selected. In an 8-spine fat-tree, the probability that two GPU pairs hash to the same spine
+is 1/8 per pair. At 512 GPUs with 256 flows, statistically 32 flows will share each spine.
+But the hash is not perfectly uniform in practice — entropy in NCCL port selection and flow
+sizes creates hot spines carrying 40–60 flows while others carry 10–20.
+
+The consequence: one congested spine becomes the bottleneck for all GPU pairs hashing to it.
+The congestion control algorithm (Chapter 21) can reduce their send rate, but it cannot
+move the flow to a less-loaded spine. ECMP's hash is static per flow.
+
+### The elephant-and-mouse coexistence problem
+
+AI fabrics carry two fundamentally different traffic types simultaneously:
+
+- **Training collectives** (NCCL All-Reduce, All-to-All): latency-sensitive, bursty,
+  sub-millisecond synchronisation requirements, typically 200–512 byte to 4 KB messages
+- **Checkpoint-to-storage** (periodic model saves, dataset loading): throughput-hungry,
+  latency-insensitive, message sizes 100 MB–10 GB, long-lived flows
+
+When these two traffic types share the same spine pool under ECMP, the checkpoint flow
+becomes an elephant that occupies spine bandwidth needed by the collective. PFC pause
+propagation from the elephant's queue depth can spill into the collective's priority class.
+The collective's All-Reduce stalls. Training iteration time increases.
+
+### What Segment Routing provides
+
+Segment Routing (SR) allows the **source node or the headend switch** to encode an explicit
+forwarding path directly in the packet header — without requiring any per-flow state in the
+core of the network. The path is carried as an ordered list of **SIDs (Segment Identifiers)**
+in the packet itself. Every switch in the path reads the next SID and forwards accordingly.
+No MPLS signalling, no RSVP-TE reservation, no stateful tunnels.
+
+```
+Traditional TE (RSVP-TE):
+  Controller → signals reservation → every switch in path stores flow state
+  When traffic stops: teardown signalling required
+  Scale: per-flow state in every switch = O(N×F) state
+
+Segment Routing TE:
+  Headend encodes SID list in packet header
+  Core switches: stateless, read next SID and forward
+  Scale: per-policy state only at headend = O(P) state
+```
+
+For AI fabrics specifically, SR provides three capabilities that ECMP cannot:
+
+1. **Explicit path steering per traffic class**: checkpoint flows go over spines 4-8,
+   collective flows go over spines 1-3. No interference.
+2. **Flow rebalancing without rerouting**: when a new training job starts, the controller
+   can assign it to an underutilised path segment without touching running flows.
+3. **Multi-tenant path isolation**: Tenant A's training traffic follows SRv6 paths through
+   VRF A's allocated segments; Tenant B is completely separated without VLAN proliferation.
+
+---
+
+## Act 2 — SRv6 Architecture, Packet Format, and uSID Compression
+
+Segment Routing can run over two data planes: MPLS (SR-MPLS) and IPv6 (SRv6). In modern
+AI data centres, SRv6 is the preferred choice because:
+- The fabric is already IPv6 (or dual-stack) for scale reasons
+- SRv6 SIDs are IPv6 addresses — they leverage existing routing infrastructure
+- uSID compression eliminates the overhead concern for short path lengths
+- EVPN+SRv6 integration is native (no separate MPLS signalling plane)
+
+### The SRv6 Segment Routing Header (SRH)
+
+An SRv6 packet is a standard IPv6 packet with an optional **SRH (Segment Routing Header)**
+extension header inserted between the IPv6 header and the upper-layer protocol (UDP/TCP).
+
+```
+IPv6 Packet with SRH:
+
+┌─────────────────────────────────────────────────────┐
+│  IPv6 Header (40 bytes)                             │
+│  Destination: current active SID (next hop)         │
+│  Next Header: 43 (Routing Header)                   │
+├─────────────────────────────────────────────────────┤
+│  SRH (Segment Routing Header)                       │
+│  ├── Next Header: 17 (UDP) or 41 (IPv6 in IPv6)    │
+│  ├── Hdr Ext Len: (N×2) - 1  (N = number of SIDs) │
+│  ├── Routing Type: 4                                │
+│  ├── Segments Left: pointer to active SID           │
+│  ├── Last Entry: index of last SID                  │
+│  ├── Flags: 0                                       │
+│  ├── Tag: 0                                         │
+│  ├── Segment List[0]: last SID (destination)        │
+│  ├── Segment List[1]: second-to-last SID            │
+│  └── Segment List[N-1]: first SID (inserted last)  │
+├─────────────────────────────────────────────────────┤
+│  Original payload (UDP/TCP/RDMA over UDP)           │
+└─────────────────────────────────────────────────────┘
+```
+
+The SID list is stored in **reverse order**: the first hop to visit is at index [N-1],
+the final destination is at index [0]. The `Segments Left` pointer starts at N-1 and
+decrements at each hop. Each hop sets the IPv6 Destination Address to the next SID,
+which causes the next router to forward to that address.
+
+Each SID is 128 bits (a full IPv6 address). A 4-SID path (leaf → spine → spine → leaf)
+adds 4 × 16 = 64 bytes of SRH overhead plus the 8-byte SRH fixed header = 72 bytes total.
+For a 9000-byte jumbo frame MTU, this is less than 1% overhead. For small messages (512 bytes),
+it is 14%. This motivated uSID compression.
+
+<SRv6PacketHeaderViz />
+
+### SRv6 SID structure: locator and function
+
+Every SRv6 SID consists of two parts:
+
+```
+SID = Locator (prefix) + Function (local opcode)
+
+Example:
+  2001:db8:leaf1::/48  = Locator for leaf-01
+  Function 1           = End (route to this node)
+  Function 2           = End.X (exit via specific interface)
+  Function 3           = End.DT4 (decapsulate and IPv4 table lookup)
+
+Full SID: 2001:db8:leaf1::1  = leaf-01's End SID
+          2001:db8:leaf1::2  = leaf-01's End.X for swp1 toward spine
+```
+
+The **Endpoint behaviors** define what a router does when it becomes the active segment:
+
+| Behavior | Description | Use in AI fabrics |
+|----------|-------------|-------------------|
+| **End** | Route to this node (pure transit) | Spine waypoint: "traverse spine-2" |
+| **End.X** | Cross-connect to adjacency X | Explicit link selection: "exit via swp3" |
+| **End.DT4** | Decapsulate + IPv4 lookup in VRF | Tenant egress: "deliver to VRF A's table" |
+| **End.DT6** | Decapsulate + IPv6 lookup in VRF | Same for IPv6 tenant traffic |
+| **End.DX4** | Decapsulate + forward to adjacent IPv4 | Last-hop to host |
+
+The locator is announced into IS-IS (or BGP) as a normal IPv6 prefix. Any router learning
+the locator knows how to reach that node — meaning SRv6 SIDs are automatically routable
+without additional configuration on transit routers. This is fundamentally different from
+MPLS, which requires LDP or RSVP-TE signalling across every transit node.
+
+<SRv6SIDViz />
+
+### uSID compression: 16-bit micro-segments
+
+The **uSID (micro-SID)** format packs multiple segment identifiers into a single 128-bit IPv6
+address, using 16 bits per micro-segment. This reduces SRH overhead dramatically for
+short paths.
+
+```
+Standard SRv6: 4 SIDs × 16 bytes = 64 bytes of SID list
+uSID format:    4 micro-SIDs × 2 bytes = 8 bytes packed in 1 SID
+
+uSID IPv6 address layout (example):
+  FC00: 0001: 0002: 0003: 0004: 0000: 0000: 0000
+  └─ Carrier prefix
+         └─ µSID 1 (node 1)
+                  └─ µSID 2 (node 2)
+                           └─ µSID 3 (node 3)
+                                    └─ µSID 4 (destination)
+                                             └─ (end-of-path, zeroes)
+```
+
+Each switch processes its µSID (the leftmost non-zero 16-bit block after the carrier prefix)
+and shifts the address left by 16 bits before forwarding. The IPv6 destination address itself
+carries the remaining path — no SRH needed for paths that fit within one 128-bit address.
+
+**In a 2-tier AI fabric** (leaf → spine → leaf = 3 hops), a single uSID address carries the
+complete path with zero SRH overhead. This makes uSID very attractive for the common case
+in AI cluster design.
+
+---
+
+## Act 3 — SRv6 on Spectrum-X: Cumulus Linux, FRR, and NVUE
+
+Spectrum-X leaf and spine switches run Cumulus Linux 5.x with FRR (Free Range Routing) as
+the routing daemon. Configuring SRv6 involves three layers: the OS, FRR (for IS-IS and BGP),
+and the ASIC (hardware forwarding of SRH packets).
+
+### Hardware support: Spectrum-4 ASIC
+
+The Spectrum-4 ASIC (SN5600 and SN5400 switches) supports SRv6 SRH processing in hardware:
+- SRH parsing at line rate (no software slow path)
+- SID endpoint processing: End, End.X, End.DT4/6 in hardware
+- uSID shift operation in hardware
+- SRH insertion at the headend (first switch in the SR domain)
+
+This is critical. Some earlier ASIC generations handled SRH in a software slow-path, capping
+throughput at ~1 Gbps for SR-encapsulated traffic. On Spectrum-4, SRv6 forwarding is at full
+51.2 Tbps capacity.
+
+### Configuring SRv6 locators and SIDs (FRR + NVUE)
+
+The recommended configuration path on Cumulus Linux 5.x uses FRR's vtysh for IS-IS/BGP and
+NVUE for interface-level configuration:
+
+```bash
+# Step 1: Enable IPv6 forwarding and SRv6 in the kernel
+sysctl -w net.ipv6.conf.all.forwarding=1
+sysctl -w net.ipv6.conf.all.seg6_enabled=1
+
+# Step 2: Configure SRv6 locator in FRR
+vtysh
+router isis FABRIC
+  segment-routing srv6
+   locator LEAF01
+    prefix 2001:db8:0:leaf01::/64
+    block-len 40
+    node-len 24
+    func-bits 16
+  !
+!
+
+# Step 3: Assign End SID for this node
+segment-routing
+ srv6
+  locators
+   locator LEAF01
+    prefix 2001:db8:0:leaf01::/64 block-len 40 node-len 24 func-bits 16
+    behavior usid
+   !
+  !
+ !
+!
+
+# Step 4: Enable SRv6 in BGP (for EVPN+SRv6)
+router bgp 65001
+  address-family ipv4 unicast
+    segment-routing srv6
+     locator LEAF01
+  !
+  address-family l2vpn evpn
+    advertise-all-vni
+    segment-routing srv6
+     locator LEAF01
+  !
+!
+```
+
+```bash
+# Verify SRv6 locator and SID assignment:
+vtysh -c "show segment-routing srv6 locator"
+# Expected output:
+# Locator:
+#   Name: LEAF01
+#   Prefix: 2001:db8:0:leaf01::/64
+#   Status: Up
+#   Chunks: 1 (allocated)
+
+vtysh -c "show segment-routing srv6 sid"
+# Expected output:
+# SID              Context          Owner  State
+# 2001:db8:0:leaf01::1    End              IS-IS  Up
+# 2001:db8:0:leaf01::2    End.X(swp1)      IS-IS  Up
+# 2001:db8:0:leaf01::100  End.DT4(vrf RED) BGP    Up
+```
+
+```bash
+# Verify SRH processing is hardware-accelerated:
+cl-resource-query | grep srv6
+# Shows ASIC SRv6 table utilisation
+
+# NVUE: check SRv6 global state
+nv show router segment-routing srv6
+# Shows enabled, locator name, SID count
+```
+
+### IS-IS SRv6 distribution
+
+SRv6 locators are distributed as IPv6 prefixes in IS-IS. Every switch in the fabric learns
+every other switch's locator automatically — no static routes needed. When a spine switch
+advertises `2001:db8:0:spine02::/64`, every leaf knows how to reach spine-02 and its SIDs
+become reachable.
+
+```bash
+# Verify IS-IS is advertising the SRv6 locator:
+vtysh -c "show isis database detail" | grep -A5 "SRv6"
+# Shows TLV 27 (SRv6 Capabilities) and TLV 267 (SRv6 Locator)
+
+# Verify the locator prefix appears in the route table:
+ip -6 route show | grep "2001:db8:0:spine"
+# Each leaf switch should show routes to all spine locators
+```
+
+---
+
+## Act 4 — SR-TE for AI Workloads: Steering Collectives and Elephants
+
+SR-TE (Traffic Engineering with Segment Routing) is the practical mechanism for the use
+case described in Act 1: steering different traffic types onto different spine paths.
+
+### The AI fabric SR-TE model
+
+In an AI fabric, the headend is typically the **leaf switch** (ToR switch connected to GPU
+nodes). The leaf switch classifies traffic by DSCP or source/destination prefix and
+encapsulates it with a pre-programmed SID list.
+
+```
+GPU node → leaf-01 (headend) → SRv6 encapsulation → path through spine-2/3 → leaf-08 → storage
+                                                                ↑
+                                          SID list: [spine02::End, spine03::End, leaf08::End.DT4]
+```
+
+The GPU node itself does not need to be SRv6-capable. The leaf switch performs the
+encapsulation and decapsulation. This is called **SR-TE with headend encapsulation**.
+
+### Configuring an SR-TE policy
+
+An SR-TE policy defines:
+- **Endpoint**: the final destination (the decap point)
+- **Color**: a tag that identifies the intent (e.g., "low-latency path")
+- **Candidate paths**: one or more SID lists, with preference values
+
+```bash
+# FRR configuration for SR-TE policy on leaf-01:
+vtysh
+segment-routing
+ traffic-eng
+  policy CHECKPOINT-STORAGE
+   color 100 endpoint 2001:db8:0:leaf08::1
+   candidate-path preference 100 explicit segment-list CHECKPOINT-PATH
+   !
+  !
+  segment-list CHECKPOINT-PATH
+   index 10 mpls label 0 ipv6 2001:db8:0:spine02::1    # End SID for spine-02
+   index 20 mpls label 0 ipv6 2001:db8:0:spine03::1    # End SID for spine-03
+   index 30 mpls label 0 ipv6 2001:db8:0:leaf08::100   # End.DT4 SID for storage VRF
+  !
+ !
+!
+
+# Verify the policy is active:
+vtysh -c "show sr-te policy"
+# Expected:
+# Policy CHECKPOINT-STORAGE
+#   Endpoint: 2001:db8:0:leaf08::1
+#   Color: 100
+#   Status: Active
+#   Binding SID: 2001:db8:0:leaf01::200   ← auto-assigned
+#   Candidate-paths: 1 active
+```
+
+### DSCP-to-SR-policy mapping: the integration point
+
+NCCL marks outbound packets with DSCP 26 (RoCE traffic, priority 3). Checkpoint-to-storage
+traffic is typically unmarked or uses DSCP 10 (AF11). The leaf switch maps incoming DSCP
+values to SR-TE policies using a route policy:
+
+```bash
+# FRR route-map for DSCP-based SR-TE steering:
+route-map STEER-TO-SRTE permit 10
+  match ip dscp 10                         # Match checkpoint traffic (DSCP 10)
+  set sr-te color 100                      # Assign to SR-TE policy color 100
+!
+route-map STEER-TO-SRTE permit 20
+  match ip dscp 26                         # Match RoCE training traffic
+  # No set action = follow normal ECMP (no SR-TE steering)
+!
+
+# Apply to the ingress interface (toward GPU nodes):
+interface swp1
+  ip policy route-map STEER-TO-SRTE
+!
+
+# Verify steering is working under load:
+vtysh -c "show sr-te policy detail" | grep -i "packets\|bytes"
+# Shows traffic counters per SR-TE policy
+```
+
+The critical property: **NCCL requires no changes**. NCCL already marks DSCP 26 by default
+(or configurable via `NCCL_NET_OVERHEAD_DSCP`). The network layer reads that DSCP and makes
+the path decision. Application-transparent traffic engineering is one of SR-TE's most
+operationally valuable properties.
+
+<SRTEPolicyViz />
+
+### Binding SIDs: simplifying the SID list
+
+For a complex path with 6 SIDs, distributing the full SID list to every headend that needs
+it is operationally expensive. **Binding SIDs (BSIDs)** solve this. A BSID is a single SID
+that the headend pushes onto the packet. When the packet reaches the BSID owner, it expands
+the BSID into the full SID list.
+
+```
+Without BSID:  leaf-01 → [spine02, spine03, leaf08::DT4]  ← 3 SIDs
+With BSID:     leaf-01 → [leaf08::BSID-200]               ← 1 SID
+               When packet reaches leaf-08, it sees BSID-200 and steers accordingly
+```
+
+In large AI fabrics with 32+ leaf switches, using BSIDs means you only manage the full SID
+list in one place (the endpoint leaf). All headends use the BSID. This dramatically simplifies
+Day-2 operations when paths change.
+
+---
+
+## Act 5 — EVPN + SRv6 for Multi-Tenant AI
+
+Chapter 15 covered EVPN-VXLAN for multi-tenancy. EVPN+SRv6 replaces VXLAN with SRv6
+as the underlay transport, and the combination is increasingly the preferred design for
+new GPU cloud infrastructure deployments.
+
+### The EVPN-VXLAN problem at scale
+
+EVPN-VXLAN requires each leaf to:
+1. Maintain a VTEP (VXLAN Tunnel Endpoint) for every remote leaf
+2. Encapsulate every tenant frame in a VXLAN header (8 bytes) inside a UDP/IP header (28 bytes)
+3. Perform encapsulation and decapsulation at every leaf-to-leaf boundary
+
+For a 64-leaf SuperPOD, each leaf maintains 63 VTEP tunnels. Under high-availability scenarios,
+the VTEP table state must be replicated and verified. The 36-byte VXLAN/UDP/IP encapsulation
+reduces effective MTU for the inner payload.
+
+### EVPN+SRv6: the simplification
+
+In EVPN+SRv6, the tenant route (RT-5, IP prefix route) carries an **SRv6 VPN SID** as its
+next-hop instead of a VTEP IP address. The SID encodes both the destination (which leaf to
+reach) and the tenant context (which VRF to deliver into). No VXLAN headers, no VTEPs.
+
+```
+EVPN-VXLAN route announcement:
+  RT-5: 10.100.1.0/24
+    Next-hop: VTEP 192.168.1.5       ← The VTEP IP of the remote leaf
+    VXLAN VNI: 1000                  ← Carried separately
+
+EVPN+SRv6 route announcement:
+  RT-5: 10.100.1.0/24
+    Next-hop: 2001:db8:0:leaf05::100 ← This IS the SID (End.DT4 in VRF RED)
+                                       No VTEP, no VNI — SID encodes everything
+```
+
+When traffic is forwarded to 10.100.1.0/24 from leaf-01, leaf-01 encapsulates it with an
+IPv6 outer header destined to `2001:db8:0:leaf05::100`. The Spectrum-4 ASIC on leaf-05
+sees this destination matches its local End.DT4 SID for VRF RED, decapsulates, and performs
+an IPv4 lookup in VRF RED. No VXLAN header, no VNI lookup — the SID carries it all.
+
+<EVPNSRv6Viz />
+
+### EVPN+SRv6 configuration walkthrough
+
+```bash
+# On leaf-01: configure EVPN+SRv6 for Tenant RED
+router bgp 65001
+  address-family l2vpn evpn
+    advertise-all-vni
+    segment-routing srv6
+     locator LEAF01                   # Use leaf-01's SRv6 locator
+  !
+!
+
+# Assign End.DT4 SID to VRF RED:
+router bgp 65001
+  vrf RED
+    address-family ipv4 unicast
+      segment-routing srv6
+       locator LEAF01
+       sid-allocation per-vrf         # One SID per VRF (vs per-prefix)
+    !
+  !
+!
+
+# Verify EVPN routes are carrying SRv6 VPN SIDs:
+vtysh -c "show bgp l2vpn evpn route type 5"
+# Expected:
+# Route Distinguisher: 65001:100
+#   *> 10.100.1.0/24 via 2001:db8:0:leaf03::100
+#      SRv6 VPN SID: 2001:db8:0:leaf03::100 (End.DT4/VRF RED)
+#      Path: 65001 65003
+```
+
+### Multi-tenant traffic separation with SRv6 + GBP
+
+When combined with GBP (Group-Based Policy, Chapter 27), SRv6 provides both path isolation
+and security policy enforcement. The SRv6 path carries traffic to the correct VRF; GBP at
+the egress leaf enforces whether the source EPG (Endpoint Group) is allowed to communicate
+with the destination EPG. The two mechanisms are complementary and operate at different layers.
+
+---
+
+## Act 6 — Troubleshooting SR Fabrics
+
+SR adds a new class of operational problems that require new diagnostic tools and mental models.
+
+### The three categories of SR failure
+
+**Category 1: SID not reachable** — The headend cannot resolve the SID to a forwarding
+entry. This happens when the locator prefix is not being distributed by IS-IS or BGP.
+
+```bash
+# Symptom: traffic is black-holed at the headend
+# Diagnosis:
+ip -6 route show 2001:db8:0:spine02::/64
+# If no route exists: IS-IS is not distributing the locator
+
+vtysh -c "show isis database detail leaf01" | grep SRv6
+# Check if SRv6 Capabilities TLV is present
+
+vtysh -c "show isis srv6 node"
+# Shows all SRv6 nodes discovered by IS-IS
+
+# Fix: verify IS-IS adjacency and SRv6 is enabled in IS-IS config
+vtysh -c "show isis neighbor"
+```
+
+**Category 2: SRH MTU violation** — The SRH adds bytes to every packet, reducing the
+effective MTU for the payload. If the fabric is configured for 9000-byte jumbo frames
+and an SRH with 3 SIDs adds 56 bytes, packets > 8944 bytes will be dropped silently.
+
+```bash
+# Calculate the effective MTU reduction:
+# SRH overhead = 8 (fixed) + (N × 16) bytes
+# For N=3 SIDs: 8 + 48 = 56 bytes
+# Effective payload MTU = 9000 - 56 = 8944 bytes
+
+# Verify MTU on all links in the SR domain:
+nv show interface swp1 | grep mtu
+ip link show | grep mtu
+
+# Check for MTU-related drops (ICMP too big messages):
+tcpdump -i any icmp6 and 'icmp6[0] == 2'  # ICMPv6 Packet Too Big
+
+# Fix: either reduce application MTU or increase fabric MTU to 9100+
+# NVUE: set larger MTU
+nv set interface swp1 link mtu 9216
+nv config apply
+```
+
+**Category 3: SID function mismatch** — The headend inserts an End.X SID for an interface
+that no longer exists, or uses an End.DT4 SID with the wrong VRF mapping.
+
+```bash
+# Symptom: traffic arrives at wrong node or gets dropped at egress
+# Diagnosis: trace the path
+
+# Step 1: Capture the SRH on the sender
+tcpdump -i eth0 -v | grep -A10 "Routing: SRH"
+# Shows the SID list in the outbound packet
+
+# Step 2: Traceroute with SRH visible
+traceroute6 -n 2001:db8:0:leaf08::1
+# Each hop shows which SID is active
+
+# Step 3: Verify the endpoint SID is correctly programmed on the remote leaf
+ssh leaf-08 vtysh -c "show segment-routing srv6 sid" | grep "End.DT4"
+# Confirm the SID exists and maps to the correct VRF
+
+# Step 4: Check SRv6 forwarding table:
+ip -6 route show table local | grep "seg6"
+# Shows locally-active SID endpoints
+```
+
+### WJH (What Just Happened) for SRv6 drops
+
+On Spectrum-4 switches, WJH (Chapter 29) captures hardware-level drop events including
+SRv6-specific drops. Key WJH SRv6 drop reasons:
+
+```bash
+# Run WJH and filter for SRv6 events:
+# (wjhd must be running — typically via DOCA or Docker)
+docker exec wjhd wjh-util show --type forwarding | grep -i srv6
+
+# Common SRv6 drop reasons:
+# SRV6_SID_NOT_LOCAL   = Packet arrived with SID that doesn't match any local SID
+# SRV6_SRH_INVALID     = SRH is malformed (bad segment list length)
+# SRV6_NEXT_HEADER_ERR = After SRH processing, next header is unexpected
+```
+
+### `srinfo` utility
+
+The `srinfo` tool (available on Cumulus Linux) provides a summary view of the SR state:
+
+```bash
+srinfo
+# Output:
+# SRv6 Node:     leaf-01
+# Locator:       2001:db8:0:leaf01::/64
+# Active SIDs:   4
+# IS-IS peers:   6
+# BGP neighbors: 8
+# SR-TE policies:3 active, 0 down
+# Binding SIDs:  2
+
+# Per-policy detail:
+srinfo policy CHECKPOINT-STORAGE
+# Shows: SID list, candidate path preference, active/backup, byte/packet counters
+```
+
+---
+
+## Act 7 — IS-IS Flex-Algo for SR: Two Fabrics in One
+
+IS-IS Flex-Algo (RFC 9350) is a mechanism that runs multiple independent forwarding
+topologies within a single IS-IS domain. Each Flex-Algo defines its own:
+- **Metric type**: IGP metric, TE delay metric, or hop count
+- **Link inclusion/exclusion rules**: only traverse links with specific TE attributes
+- **SID space**: dedicated SIDs for each algorithm
+
+For AI fabrics, Flex-Algo creates two logical overlays on the same physical infrastructure:
+
+```
+Algorithm 0 (default):  Shortest-path by IGP metric → NCCL collective traffic
+Algorithm 128:          Minimum latency (TE delay metric) → latency-sensitive flows
+Algorithm 129:          Maximum bandwidth links only → checkpoint/storage flows
+```
+
+All three run simultaneously on the same physical switches. No separate hardware needed.
+
+<FlexAlgoPathViz />
+
+### Flex-Algo configuration
+
+```bash
+# Define Flex-Algo 128 (minimum latency) in IS-IS:
+vtysh
+router isis FABRIC
+  flex-algo 128
+   advertise-definition
+   metric-type delay                  # Use TE delay metric (requires RTTM)
+   !
+  !
+!
+
+# Define Flex-Algo 129 (maximum bandwidth):
+router isis FABRIC
+  flex-algo 129
+   advertise-definition
+   metric-type te-default
+   exclude-any link-attribute admin-group 128  # Exclude links marked as "slow"
+   !
+  !
+!
+
+# Assign SIDs to Flex-Algo:
+segment-routing
+ srv6
+  locators
+   locator LEAF01-ALGO128            # Separate locator for Algo 128
+    prefix 2001:db8:128:leaf01::/64
+    algorithm 128
+   !
+   locator LEAF01-ALGO129            # Separate locator for Algo 129
+    prefix 2001:db8:129:leaf01::/64
+    algorithm 129
+   !
+  !
+ !
+!
+```
+
+```bash
+# Verify Flex-Algo participation:
+vtysh -c "show isis flex-algo"
+# Expected:
+# Algorithm  Definition Owner  Metric-Type  Prefix-Metric
+# 0          Local      Self   igp          No
+# 128        Local      Self   delay        No
+# 129        Local      Self   te-default   No
+
+# Verify algorithm-specific routes exist in the table:
+vtysh -c "show isis route algorithm 128"
+# Shows routes computed by Algo 128 topology (latency-minimised)
+
+vtysh -c "show isis route algorithm 129"
+# Shows routes computed by Algo 129 topology (bandwidth-prioritised)
+```
+
+### Assigning traffic to Flex-Algo paths
+
+SR-TE policies use algorithm-specific SIDs to steer traffic:
+
+```bash
+# SR-TE policy for latency-sensitive NCCL traffic (Flex-Algo 128):
+segment-routing
+ traffic-eng
+  policy NCCL-LATENCY
+   color 128 endpoint 2001:db8:0:leaf08::1
+   candidate-path preference 100 explicit segment-list NCCL-ALGO128-PATH
+   !
+  !
+  segment-list NCCL-ALGO128-PATH
+   # Use Algo-128 SIDs (latency-minimised path):
+   index 10 ipv6 2001:db8:128:spine01::1   # spine-01 Algo-128 End SID
+   index 20 ipv6 2001:db8:128:leaf08::100  # leaf-08 Algo-128 End.DT4
+  !
+ !
+!
+```
+
+### The operational value: zero-overhead topology slicing
+
+The most important property of Flex-Algo is that it costs nothing in terms of hardware
+resources. You are not deploying separate physical fabrics or reserving dedicated bandwidth.
+The Flex-Algo IS-IS computation runs independently for each algorithm; each produces a
+separate SPF tree; each SID set maps to that tree. The physical links are shared but the
+logical forwarding decisions are separated.
+
+For an AI fabric operator, this means:
+- **During training jobs**: Flex-Algo 128 (latency) routes collective traffic over the
+  lowest-latency paths (typically the paths with fewest active flows)
+- **During checkpoint/storage phases**: Flex-Algo 129 (bandwidth) routes bulk storage
+  traffic over the highest-bandwidth links, avoiding the latency-sensitive paths
+- **During maintenance**: a link can be temporarily excluded from Algo 128 by setting its
+  TE delay attribute to infinity, without removing it from the default topology
+
+---
+
+## Chapter Summary
+
+Segment Routing for AI fabrics is a toolkit for deterministic traffic separation. The key
+practitioner takeaways:
+
+- **SRv6 SIDs are routable IPv6 addresses** — no separate signalling protocol needed.
+  IS-IS distributes locators; any node can reach any SID using normal IPv6 forwarding.
+- **uSID compression** eliminates most of the SRH overhead concern. For 2-tier AI fabrics,
+  a single uSID address carries the full path with zero additional headers.
+- **SR-TE maps application DSCP to fabric paths** — NCCL traffic follows latency-optimised
+  spines, checkpoint traffic follows throughput-optimised spines, with no application changes.
+- **EVPN+SRv6 simplifies multi-tenant design** — the VPN SID encodes both destination and
+  tenant context. No VTEPs, no VNI management, no VXLAN overhead.
+- **Flex-Algo runs multiple topology overlays on one physical fabric** — latency-optimised
+  and bandwidth-optimised paths coexist without separate hardware.
+- **MTU discipline is non-negotiable** — always size fabric MTU for SRH overhead
+  (add 56 bytes minimum for a 3-SID path) or use uSID to eliminate the overhead entirely.
+
+Lab 14 gives you hands-on practice configuring and verifying an SR-TE policy that steers
+checkpoint traffic off the collective's spine path — the exact scenario AI fabric engineers
+encounter when mixed workloads share an infrastructure.

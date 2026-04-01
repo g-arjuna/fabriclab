@@ -184,6 +184,12 @@ import {
   FabricComparisonMatrixViz,
   ProductionDebugMapViz,
 } from "@/components/visualisations/AlternativeComparisons"
+// === Ch22 -- Segment Routing for AI Fabrics ===
+import SRv6PacketHeaderViz from "@/components/visualisations/SRv6PacketHeaderViz"
+import SRv6SIDViz from "@/components/visualisations/SRv6SIDViz"
+import SRTEPolicyViz from "@/components/visualisations/SRTEPolicyViz"
+import EVPNSRv6Viz from "@/components/visualisations/EVPNSRv6Viz"
+import FlexAlgoPathViz from "@/components/visualisations/FlexAlgoPathViz"
 
 // === Legacy components (no longer in active chapters, kept for reference) ===
 // ServerRackViz, NICCardViz, DGXNodeViz, HardwareComparison
@@ -355,4 +361,10 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   HPCCINTPacketViz,
   TIMELYGradientViz,
   CCAlgorithmComparisonViz,
+  // Ch22
+  SRv6PacketHeaderViz,
+  SRv6SIDViz,
+  SRTEPolicyViz,
+  EVPNSRv6Viz,
+  FlexAlgoPathViz,
 }
