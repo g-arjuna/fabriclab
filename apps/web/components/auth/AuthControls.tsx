@@ -41,7 +41,7 @@ export function AuthControls({ compact = false }: AuthControlsProps) {
   }
 
   return (
-    <div className={`flex items-center ${compact ? "gap-2" : "gap-3"}`}>
+    <div className={`flex flex-wrap items-center ${compact ? "gap-2" : "gap-3"}`}>
       <Link
         href="/account"
         className="rounded-full border border-white/10 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 transition hover:border-white/20 hover:text-white"

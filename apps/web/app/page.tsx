@@ -1,7 +1,8 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
-import { AuthControls } from "@/components/auth/AuthControls";
 import { TerminalPreview } from "@/components/landing/TerminalPreview";
+import { PublicTopNav } from "@/components/layout/PublicTopNav";
 import { getHomepageCatalog } from "@/lib/catalog/homepage";
 import { SOURCE_LABS } from "@/lib/catalog/source";
 
@@ -26,7 +27,74 @@ const personas = [
   },
 ];
 
+const studioHighlights = [
+  {
+    title: "Built for diagnosis",
+    body: "The UI is organized around the decisions an operator makes under pressure: identify the signal, validate the fabric state, then choose the next command.",
+  },
+  {
+    title: "Readable on smaller screens",
+    body: "Dense desktop clusters have been broken into calmer, touch-friendly sections so phone users can still browse chapters, labs, and discussion without fighting the layout.",
+  },
+  {
+    title: "Exciting, not noisy",
+    body: "The page keeps the glow and terminal energy, but the visual hierarchy now gives each section room to breathe instead of stacking everything at once.",
+  },
+];
+
+const learningLoop = [
+  {
+    title: "Structured chapters",
+    body: "Connect hardware, transport behavior, congestion control, and operator workflow in one guided read.",
+    accent: "border-white/10 bg-slate-900/70",
+    icon: <BookIcon />,
+  },
+  {
+    title: "Stateful CLI labs",
+    body: "Commands read live lab state, so the simulator reacts to the exact fault you are tracing.",
+    accent: "border-cyan-400/25 bg-cyan-400/10 shadow-[0_24px_80px_rgba(34,211,238,0.12)]",
+    icon: <TerminalIcon />,
+  },
+  {
+    title: "Community feedback",
+    body: "Leave chapter notes, lab corrections, and platform issues right where the technical context lives.",
+    accent: "border-white/10 bg-slate-900/70",
+    icon: <BrainNetworkIcon />,
+  },
+];
+
+const communityValues = [
+  {
+    title: "Comment where the issue appears",
+    body: "Leave technical corrections, lab glitches, and operator notes directly on the relevant chapter or lab page.",
+  },
+  {
+    title: "Contribute through the repo",
+    body: "Fix a chapter, add a lab, or improve a visualisation through focused pull requests on GitHub.",
+  },
+  {
+    title: "Free to read, forever",
+    body: "Every chapter and lab is free to access. Sign in only when you want synced progress or discussion tools.",
+  },
+];
+
 const homepageLabCount = SOURCE_LABS.length;
+
+function SurfaceCard({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-5 shadow-[0_22px_70px_rgba(2,6,23,0.35)] backdrop-blur sm:p-6 ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
 
 function GitHubIcon() {
   return (
@@ -103,10 +171,10 @@ function ChapterIcon({ tag }: { tag: string }) {
 }
 
 function tagClasses(tag: string) {
-  if (tag === "Foundations") return "bg-slate-800 text-slate-400";
-  if (tag === "Operations") return "bg-blue-950 text-blue-400";
-  if (tag === "Infrastructure") return "bg-green-950 text-green-400";
-  return "bg-purple-950 text-purple-400";
+  if (tag === "Foundations") return "bg-slate-800 text-slate-300";
+  if (tag === "Operations") return "bg-blue-950 text-blue-300";
+  if (tag === "Infrastructure") return "bg-emerald-950 text-emerald-300";
+  return "bg-purple-950 text-purple-300";
 }
 
 function partTag(partKey?: string) {
@@ -118,7 +186,7 @@ function partTag(partKey?: string) {
 
 export default async function Home() {
   const chapters = await getHomepageCatalog();
-  const publishedCount = chapters.filter((c) => c.isPublished).length;
+  const publishedCount = chapters.filter((chapter) => chapter.isPublished).length;
 
   const homepageChapterCards = chapters.map((chapter) => ({
     id: `Chapter ${chapter.number}`,
@@ -129,113 +197,166 @@ export default async function Home() {
     href: chapter.isPublished ? chapter.href : "/curriculum",
   }));
 
+  const heroStats = [
+    { value: `${publishedCount}`, label: "published chapters" },
+    { value: `${homepageLabCount}`, label: "scenario labs" },
+    { value: "Free", label: "public access model" },
+  ];
+
+  const gapStats = [
+    { value: `${homepageLabCount}`, label: "scenario labs available in the simulator catalog" },
+    { value: `${publishedCount}`, label: "chapters currently published in the open catalog" },
+  ];
+
   return (
     <main className="bg-[#020617] text-slate-100">
-      <nav className="fixed inset-x-0 top-0 z-50 h-16 border-b border-white/8 bg-slate-950/65 backdrop-blur-xl">
-        <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="font-mono text-sm uppercase tracking-[0.32em] text-cyan-400">FABRICLAB</span>
-            <span className="text-slate-600">/</span>
-            <span className="rounded-full border border-white/10 bg-slate-900 px-2 py-0.5 text-[10px] uppercase tracking-[0.28em] text-slate-400">
-              Community beta
-            </span>
-          </Link>
+      <PublicTopNav />
 
-          <div className="flex items-center gap-6">
-            <Link href="/curriculum" className="text-sm text-slate-400 transition hover:text-slate-200">
-              Curriculum
-            </Link>
-            <Link href="/lab" className="text-sm text-slate-400 transition hover:text-slate-200">
-              Labs
-            </Link>
-            <Link href="/community" className="text-sm text-slate-400 transition hover:text-slate-200">
-              Community
-            </Link>
-            <Link
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-sm text-slate-400 transition hover:text-slate-200"
-            >
-              <GitHubIcon />
-              GitHub
-            </Link>
-            <AuthControls compact />
-            <Link
-              href="/learn/ch0-hardware-foundations"
-              className="rounded-full bg-cyan-400 px-4 py-1.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-            >
-              Start learning
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      <section
-        className="relative flex min-h-screen items-center overflow-hidden px-6 pb-16 pt-28"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(56,189,248,0.15), transparent), #020617",
-        }}
-      >
+      <section className="relative overflow-hidden">
         <div
-          className="absolute inset-0 opacity-60"
+          className="absolute inset-0"
           style={{
-            backgroundImage: "radial-gradient(circle, rgba(148,163,184,0.15) 1px, transparent 1px)",
-            backgroundSize: "32px 32px",
+            background:
+              "radial-gradient(circle at top left, rgba(34,211,238,0.18), transparent 36%), radial-gradient(circle at 80% 20%, rgba(59,130,246,0.14), transparent 26%), linear-gradient(180deg, rgba(2,6,23,0.96), rgba(2,6,23,1))",
           }}
         />
-        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-slate-950/50 to-transparent" />
+        <div
+          className="absolute inset-0 opacity-35"
+          style={{
+            backgroundImage: "radial-gradient(circle, rgba(148,163,184,0.18) 1px, transparent 1px)",
+            backgroundSize: "26px 26px",
+          }}
+        />
 
-        <div className="relative mx-auto flex w-full max-w-7xl flex-col items-center text-center">
-          <p className="text-xs uppercase tracking-[0.4em] text-slate-500">
-            OPEN PLATFORM / HPC NETWORKING / COMMUNITY REVIEWED
-          </p>
-          <h1 className="mt-8 text-5xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl">
-            <span className="block">Master the fabric</span>
-            <span className="mt-2 block text-cyan-400">that runs AI.</span>
-          </h1>
-          <p className="mt-6 max-w-2xl text-center text-lg leading-8 text-slate-400">
-            InfiniBand. RoCEv2. RDMA. Congestion control. Scale-out fabric design. Learn AI and HPC
-            networking through interactive chapters, stateful labs, and a simulator built for network
-            engineers — free, open, and community reviewed.
-          </p>
+        <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-10 sm:px-6 sm:pb-20 sm:pt-14 lg:pb-24 lg:pt-18">
+          <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+            <div className="max-w-3xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-xs uppercase tracking-[0.28em] text-cyan-200">
+                <span className="h-2 w-2 rounded-full bg-cyan-300" />
+                Open platform for AI fabric engineers
+              </div>
 
-          <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
-            <Link
-              href="/learn/ch0-hardware-foundations"
-              className="rounded-full bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-            >
-              Open Chapter 0
-            </Link>
-            <Link
-              href="/curriculum"
-              className="rounded-full border border-white/20 px-6 py-3 text-sm text-slate-300 transition hover:border-white/40"
-            >
-              Explore the curriculum
-            </Link>
-            <Link
-              href="/community"
-              className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-6 py-3 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
-            >
-              Join the community
-            </Link>
+              <h1 className="mt-6 text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-7xl">
+                Learn the fabric
+                <span className="mt-2 block text-cyan-400">that keeps AI clusters alive.</span>
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+                InfiniBand. RoCEv2. RDMA. Congestion control. Scale-out fabric design. FabricLab
+                teaches AI and HPC networking through interactive chapters, stateful labs, and a
+                simulator built for network engineers.
+              </p>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <Link
+                  href="/learn/ch0-hardware-foundations"
+                  className="inline-flex items-center justify-center rounded-full bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Start with Chapter 0
+                </Link>
+                <Link
+                  href="/curriculum"
+                  className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm text-slate-200 transition hover:border-white/30 hover:bg-white/8"
+                >
+                  Browse the curriculum
+                </Link>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-400">
+                <Link
+                  href="/community"
+                  className="inline-flex items-center gap-2 text-cyan-300 transition hover:text-cyan-200"
+                >
+                  Join the discussion
+                  <span>{"->"}</span>
+                </Link>
+                <Link
+                  href={GITHUB_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 transition hover:text-slate-200"
+                >
+                  <GitHubIcon />
+                  View the repo
+                </Link>
+              </div>
+
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                {heroStats.map((stat) => (
+                  <SurfaceCard key={stat.label} className="p-4 sm:p-5">
+                    <p className="text-2xl font-semibold text-white sm:text-3xl">{stat.value}</p>
+                    <p className="mt-2 text-sm text-slate-400">{stat.label}</p>
+                  </SurfaceCard>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative">
+              <SurfaceCard className="overflow-hidden border-cyan-400/15 bg-[linear-gradient(180deg,rgba(7,17,31,0.82),rgba(2,6,23,0.96))] p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.4rem] border border-white/8 bg-slate-950/70 px-4 py-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
+                      Inside the simulator
+                    </p>
+                    <p className="mt-1 text-sm text-slate-300">
+                      Diagnose a fabric issue without leaving the page.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs uppercase tracking-[0.24em] text-cyan-200">
+                    Live state
+                  </span>
+                </div>
+
+                <TerminalPreview />
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[1.3rem] border border-white/8 bg-slate-950/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                      What changes on mobile
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-slate-300">
+                      Primary actions stay visible, card widths collapse cleanly, and sections no
+                      longer depend on sideways scrolling.
+                    </p>
+                  </div>
+                  <div className="rounded-[1.3rem] border border-white/8 bg-slate-950/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                      Why it matters
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-slate-300">
+                      The experience feels more like a guided instrument panel and less like a wall
+                      of stacked chrome.
+                    </p>
+                  </div>
+                </div>
+              </SurfaceCard>
+            </div>
           </div>
-
-          <TerminalPreview />
-
-          <p className="mt-8 animate-bounce text-xs text-slate-600">scroll to explore</p>
         </div>
       </section>
 
-      <section className="bg-slate-950 py-24">
-        <div className="mx-auto grid max-w-7xl gap-16 px-6 lg:grid-cols-2">
-          <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">THE GAP</p>
-            <h2 className="mt-4 text-4xl font-semibold text-white">
+      <section className="border-y border-white/6 bg-slate-950/70 py-14 sm:py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <div className="grid gap-4 lg:grid-cols-3">
+            {studioHighlights.map((item) => (
+              <SurfaceCard key={item.title} className="h-full bg-slate-900/55">
+                <p className="text-xs uppercase tracking-[0.26em] text-slate-500">Why it feels better</p>
+                <h2 className="mt-3 text-xl font-semibold text-white">{item.title}</h2>
+                <p className="mt-3 text-sm leading-7 text-slate-400">{item.body}</p>
+              </SurfaceCard>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 sm:py-20 lg:py-24">
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_0.92fr] lg:gap-14">
+          <div className="max-w-3xl">
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">The gap</p>
+            <h2 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">
               There is no Packet Tracer for HPC networking.
             </h2>
-            <div className="mt-6 space-y-6 text-base leading-8 text-slate-300">
+            <div className="mt-5 space-y-5 text-base leading-8 text-slate-300">
               <p>
                 Network engineers who can troubleshoot BGP, reason about ECMP, and design VxLAN
                 fabrics still walk into AI data centers and find an unfamiliar world. The knowledge
@@ -250,80 +371,82 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="grid gap-6">
-            {[
-              { value: "400G", label: "per GPU rail in a modern AI training fabric" },
-              { value: "0", label: "packet drops tolerated in healthy RDMA training flows" },
-              { value: String(publishedCount), label: "chapters published in the open catalog" },
-            ].map((stat) => (
-              <div
-                key={stat.value}
-                className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50"
-              >
-                <div className="border-l-2 border-cyan-400 pl-5">
-                  <p className="text-4xl font-semibold text-cyan-400">{stat.value}</p>
-                  <p className="mt-2 text-sm text-slate-400">{stat.label}</p>
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+            {gapStats.map((stat) => (
+              <SurfaceCard key={stat.label} className="h-full">
+                <div className="border-l-2 border-cyan-400 pl-4">
+                  <p className="text-3xl font-semibold text-cyan-300 sm:text-4xl">{stat.value}</p>
+                  <p className="mt-2 text-sm leading-7 text-slate-400">{stat.label}</p>
                 </div>
-              </div>
+              </SurfaceCard>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="py-24">
-        <div className="mx-auto max-w-7xl px-6">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">CURRICULUM</p>
-          <h2 className="mt-4 text-4xl font-semibold text-white">
-            A structured path from hardware to protocol.
-          </h2>
-          <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-400">
-            {chapters.length} chapters. {homepageLabCount} scenario labs. One simulator. All chapters
-            are free to read — sign in to track your progress and join the discussion.
-          </p>
+      <section className="bg-slate-950/70 py-16 sm:py-20 lg:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Curriculum</p>
+              <h2 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">
+                A structured path from hardware to protocol.
+              </h2>
+              <p className="mt-4 text-base leading-8 text-slate-400 sm:text-lg">
+                {chapters.length} chapters. {homepageLabCount} scenario labs. One simulator. All
+                chapters are free to read. Sign in when you want synced progress and discussion.
+              </p>
+            </div>
+            <Link
+              href="/curriculum"
+              className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm text-slate-200 transition hover:border-white/30 hover:bg-white/8"
+            >
+              Open the full curriculum
+            </Link>
+          </div>
 
-          <div className="mt-10 flex gap-6 overflow-x-auto pb-4 lg:grid lg:grid-cols-3 lg:overflow-visible">
+          <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {homepageChapterCards.map((card) => {
               const cardContent = (
                 <>
                   <div className="flex items-start justify-between gap-4">
                     <ChapterIcon tag={card.tag} />
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider ${tagClasses(card.tag)}`}>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.24em] ${tagClasses(card.tag)}`}>
                       {card.tag}
                     </span>
                   </div>
-                  <p className="mt-6 text-sm text-slate-500">{card.id}</p>
+                  <p className="mt-5 text-sm text-slate-500">{card.id}</p>
                   <h3 className="mt-2 text-xl font-semibold text-white">{card.title}</h3>
                   <p className="mt-4 text-sm leading-7 text-slate-400">{card.description}</p>
-                  <div className="mt-6 flex items-center gap-2 text-sm">
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        card.isPublished ? "bg-green-500" : "bg-amber-400"
-                      }`}
-                    />
-                    <span className={card.isPublished ? "text-green-400" : "text-amber-300"}>
-                      {card.isPublished ? "Available" : "Coming soon"}
-                    </span>
+                  <div className="mt-6 flex items-center justify-between gap-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          card.isPublished ? "bg-emerald-400" : "bg-amber-400"
+                        }`}
+                      />
+                      <span className={card.isPublished ? "text-emerald-300" : "text-amber-300"}>
+                        {card.isPublished ? "Available now" : "Coming soon"}
+                      </span>
+                    </div>
+                    <span className="text-slate-500">{card.isPublished ? "Read" : "Preview"}</span>
                   </div>
                 </>
               );
 
+              const className =
+                "rounded-[1.75rem] border border-white/10 bg-slate-900/70 p-6 shadow-[0_22px_70px_rgba(2,6,23,0.35)] transition hover:border-white/20";
+
               if (card.isPublished) {
                 return (
-                  <Link
-                    key={card.id}
-                    href={card.href}
-                    className="min-w-[280px] rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50 transition hover:border-white/20"
-                  >
+                  <Link key={card.id} href={card.href} className={className}>
                     {cardContent}
                   </Link>
                 );
               }
 
               return (
-                <div
-                  key={card.id}
-                  className="min-w-[280px] rounded-2xl border border-white/8 bg-slate-900 p-6 opacity-85 shadow-2xl shadow-slate-950/50"
-                >
+                <div key={card.id} className={`${className} opacity-90`}>
                   {cardContent}
                 </div>
               );
@@ -332,145 +455,135 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="bg-slate-950 py-24">
-        <div className="mx-auto max-w-7xl px-6">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">HOW IT WORKS</p>
-          <h2 className="mt-4 text-4xl font-semibold text-white">Three systems. One learning loop.</h2>
-
-          <div className="mt-10 grid gap-8 lg:grid-cols-3">
-            <div className="rounded-2xl border border-white/8 bg-slate-900 p-8 shadow-2xl shadow-slate-950/50">
-              <BookIcon />
-              <h3 className="mt-6 text-2xl font-semibold text-white">Structured chapters</h3>
-              <p className="mt-4 text-base leading-8 text-slate-400">
-                Each chapter connects physical hardware, transport behavior, congestion control, and
-                operator workflow into one narrative with visual support.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-cyan-500/30 bg-slate-900 p-8 shadow-2xl shadow-cyan-950/25 ring-1 ring-cyan-500/20">
-              <TerminalIcon />
-              <h3 className="mt-6 text-2xl font-semibold text-white">Stateful CLI labs</h3>
-              <p className="mt-4 text-base leading-8 text-slate-400">
-                The simulator is not static text. Commands read live lab state, so outputs change as
-                you diagnose faults, fix configuration, or recover links.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/8 bg-slate-900 p-8 shadow-2xl shadow-slate-950/50">
-              <BrainNetworkIcon />
-              <h3 className="mt-6 text-2xl font-semibold text-white">Community feedback loop</h3>
-              <p className="mt-4 text-base leading-8 text-slate-400">
-                Readers can comment directly on chapters and labs, report technical errors, and
-                help sharpen the curriculum — without waiting for a closed release cycle.
-              </p>
-            </div>
+      <section className="py-16 sm:py-20 lg:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <div className="max-w-3xl">
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">How it works</p>
+            <h2 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">
+              Three systems. One learning loop.
+            </h2>
           </div>
-        </div>
-      </section>
 
-      <section className="py-24">
-        <div className="mx-auto max-w-7xl px-6">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">WHO THIS IS FOR</p>
-          <h2 className="mt-4 text-4xl font-semibold text-white">
-            Built by a network engineer, for network engineers.
-          </h2>
-
-          <div className="mt-10 grid gap-6 md:grid-cols-2">
-            {personas.map((persona) => (
+          <div className="mt-10 grid gap-4 lg:grid-cols-3">
+            {learningLoop.map((item) => (
               <div
-                key={persona.title}
-                className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50"
+                key={item.title}
+                className={`rounded-[1.9rem] border p-6 sm:p-8 ${item.accent}`}
               >
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-white">
-                  {persona.title}
-                </h3>
-                <p className="mt-2 text-sm leading-7 text-slate-400">{persona.body}</p>
+                {item.icon}
+                <h3 className="mt-6 text-2xl font-semibold text-white">{item.title}</h3>
+                <p className="mt-4 text-base leading-8 text-slate-400">{item.body}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="bg-slate-950 py-24">
-        <div className="mx-auto max-w-7xl px-6">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">COMMUNITY</p>
-          <h2 className="mt-4 text-4xl font-semibold text-white">
-            Open source. Community reviewed. Always free.
-          </h2>
-          <div className="mt-10 grid gap-6 lg:grid-cols-3">
-            <div className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
-              <h3 className="text-xl font-semibold text-white">Comment where the issue appears</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-400">
-                Leave technical corrections, lab glitches, and operator notes directly on the
-                relevant chapter or lab page. Feedback lives next to the content it improves.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
-              <h3 className="text-xl font-semibold text-white">Contribute through the repo</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-400">
-                The platform is fully open source. Fix a chapter, add a lab, or improve a
-                visualisation — all via pull request on GitHub.
-              </p>
-              <Link
-                href={GITHUB_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 text-sm text-cyan-400 transition hover:text-cyan-300"
-              >
-                <GitHubIcon />
-                g-arjuna/fabriclab
-              </Link>
-            </div>
-            <div className="rounded-2xl border border-white/8 bg-slate-900 p-6 shadow-2xl shadow-slate-950/50">
-              <h3 className="text-xl font-semibold text-white">Free to read, forever</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-400">
-                Every chapter and lab is free to access. Sign in only if you want to track
-                progress, join discussions, or contribute feedback. No paywalls.
-              </p>
-            </div>
+      <section className="bg-slate-950/70 py-16 sm:py-20 lg:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <div className="max-w-3xl">
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Who this is for</p>
+            <h2 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">
+              Built by a network engineer, for network engineers.
+            </h2>
+          </div>
+
+          <div className="mt-10 grid gap-4 md:grid-cols-2">
+            {personas.map((persona) => (
+              <SurfaceCard key={persona.title} className="h-full">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-200">
+                  {persona.title}
+                </h3>
+                <p className="mt-3 text-sm leading-7 text-slate-400">{persona.body}</p>
+              </SurfaceCard>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="py-24">
-        <div className="mx-auto max-w-7xl px-6">
+      <section className="py-16 sm:py-20 lg:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Community</p>
+              <h2 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">
+                Open source. Community reviewed. Always free.
+              </h2>
+            </div>
+            <Link
+              href="/community"
+              className="inline-flex items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-400/10 px-5 py-3 text-sm text-cyan-200 transition hover:border-cyan-400/35 hover:text-cyan-100"
+            >
+              Visit the community hub
+            </Link>
+          </div>
+
+          <div className="mt-10 grid gap-4 lg:grid-cols-3">
+            {communityValues.map((value) => (
+              <SurfaceCard key={value.title} className="h-full">
+                <h3 className="text-xl font-semibold text-white">{value.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-400">{value.body}</p>
+                {value.title === "Contribute through the repo" ? (
+                  <Link
+                    href={GITHUB_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-5 inline-flex items-center gap-2 text-sm text-cyan-300 transition hover:text-cyan-200"
+                  >
+                    <GitHubIcon />
+                    g-arjuna/fabriclab
+                  </Link>
+                ) : null}
+              </SurfaceCard>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="pb-20 pt-8 sm:pb-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div
-            className="mx-auto max-w-3xl rounded-3xl border border-cyan-500/20 p-12 text-center shadow-2xl shadow-slate-950/50"
+            className="overflow-hidden rounded-[2rem] border border-cyan-400/20 p-6 shadow-[0_26px_80px_rgba(2,6,23,0.4)] sm:p-8 lg:p-12"
             style={{
               background:
-                "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(56,189,248,0.08), transparent), #0f172a",
+                "radial-gradient(circle at top, rgba(34,211,238,0.12), transparent 36%), linear-gradient(180deg, rgba(15,23,42,0.95), rgba(2,6,23,0.98))",
             }}
           >
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">START LEARNING</p>
-            <h2 className="mt-4 text-4xl font-semibold text-white">
-              Learn the fabric in the open.
-            </h2>
-            <p className="mt-4 text-lg leading-8 text-slate-400">
-              Every chapter is free to read. Sign in to track your progress, join chapter
-              discussions, and keep your learning history in one place.
-            </p>
-            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Link
-                href="/learn/ch0-hardware-foundations"
-                className="rounded-full bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-              >
-                Open Chapter 0
-              </Link>
-              <Link
-                href="/lab"
-                className="rounded-full border border-white/20 px-6 py-3 text-sm text-slate-300 transition hover:border-white/40"
-              >
-                Go to the labs
-              </Link>
-              <Link
-                href={GITHUB_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-6 py-3 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
-              >
-                <GitHubIcon />
-                View on GitHub
-              </Link>
+            <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
+              <div className="max-w-3xl">
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Start learning</p>
+                <h2 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">
+                  Learn the fabric in the open.
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-300 sm:text-lg">
+                  Every chapter is free to read. Sign in to track your progress, join chapter
+                  discussions, and keep your learning history in one place.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                <Link
+                  href="/learn/ch0-hardware-foundations"
+                  className="inline-flex items-center justify-center rounded-full bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Open Chapter 0
+                </Link>
+                <Link
+                  href="/lab"
+                  className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm text-slate-200 transition hover:border-white/30 hover:bg-white/8"
+                >
+                  Go to the labs
+                </Link>
+                <Link
+                  href={GITHUB_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-6 py-3 text-sm text-cyan-200 transition hover:border-cyan-400/35 hover:text-cyan-100"
+                >
+                  <GitHubIcon />
+                  View on GitHub
+                </Link>
+              </div>
             </div>
           </div>
         </div>

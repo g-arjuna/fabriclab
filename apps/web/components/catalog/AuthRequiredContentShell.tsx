@@ -50,8 +50,8 @@ export function AuthRequiredContentShell({
   return (
     <main className="min-h-screen bg-[#020617] text-slate-100">
       <nav className="sticky top-0 z-40 border-b border-white/8 bg-[#020617]/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
-          <div className="flex items-center gap-4">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex min-w-0 items-center gap-4">
             <Link
               href={backHref}
               className="font-mono text-sm uppercase tracking-[0.28em] text-cyan-400 transition hover:text-cyan-300"
@@ -59,15 +59,17 @@ export function AuthRequiredContentShell({
               FABRICLAB
             </Link>
             <span className="text-slate-700">/</span>
-            <span className="max-w-[240px] truncate text-sm text-slate-400">{item.title}</span>
+            <span className="max-w-[220px] truncate text-sm text-slate-400 sm:max-w-[280px]">
+              {item.title}
+            </span>
           </div>
           <AuthControls compact />
         </div>
       </nav>
 
-      <div className="mx-auto max-w-5xl px-6 py-12">
+      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12">
         <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{getEyebrow(kind)}</p>
-        <h1 className="mt-4 text-4xl font-semibold text-white">{item.title}</h1>
+        <h1 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">{item.title}</h1>
         <div className="mt-4 flex flex-wrap gap-3">
           <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-300">
             {item.durationLabel}
@@ -79,8 +81,8 @@ export function AuthRequiredContentShell({
           ) : null}
         </div>
 
-        <div className="mt-10 grid gap-6 lg:grid-cols-[1.35fr_0.85fr]">
-          <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-8 shadow-2xl shadow-slate-950/40">
+        <div className="mt-10 grid gap-5 lg:grid-cols-[1.35fr_0.85fr]">
+          <section className="rounded-[1.9rem] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/40 sm:p-8">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
               What you&apos;ll get after sign-in
             </p>
@@ -97,7 +99,7 @@ export function AuthRequiredContentShell({
             </div>
           </section>
 
-          <aside className="rounded-3xl border border-white/10 bg-[#020b16] p-8 shadow-2xl shadow-slate-950/40">
+          <aside className="rounded-[1.9rem] border border-white/10 bg-[#020b16] p-6 shadow-2xl shadow-slate-950/40 sm:p-8">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Continue</p>
             <h2 className="mt-4 text-2xl font-semibold text-white">Use your FabricLab account</h2>
             <p className="mt-4 text-sm leading-7 text-slate-400">

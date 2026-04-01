@@ -33,7 +33,7 @@ export function NotificationPreferencesPanel() {
   }
 
   return (
-    <div className="rounded-2xl border border-white/8 bg-[#020b16] p-6 md:col-span-2">
+    <div className="rounded-[1.7rem] border border-white/8 bg-slate-900/70 p-6 md:col-span-2">
       <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Notifications</p>
       <h2 className="mt-3 text-xl font-semibold text-white">Email preferences</h2>
       <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
@@ -89,7 +89,7 @@ export function NotificationPreferencesPanel() {
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs leading-6 text-slate-500">
               {preferences?.email
                 ? `Emails will be sent to ${preferences.email}.`

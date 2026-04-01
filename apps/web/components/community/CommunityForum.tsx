@@ -22,7 +22,7 @@ function formatDate(value: string) {
 
 function ThreadCard({ thread }: { thread: CommunityForumThread }) {
   return (
-    <article className="rounded-2xl border border-white/8 bg-[#020b16] p-5 transition hover:border-white/15">
+    <article className="rounded-[1.5rem] border border-white/8 bg-[#020b16] p-5 transition hover:border-white/15">
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
         <span className="rounded-full border border-white/10 px-2.5 py-1 uppercase tracking-[0.24em] text-cyan-300">
           General
@@ -39,10 +39,10 @@ function ThreadCard({ thread }: { thread: CommunityForumThread }) {
       <p className="mt-3 line-clamp-4 whitespace-pre-line text-sm leading-7 text-slate-400">
         {thread.body}
       </p>
-      <div className="mt-5 flex flex-wrap gap-3">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <Link
           href={`/community/${thread.id}`}
-          className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
+          className="inline-flex items-center justify-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300 transition hover:border-cyan-500/50 hover:text-cyan-200"
         >
           Open discussion
         </Link>
@@ -51,7 +51,7 @@ function ThreadCard({ thread }: { thread: CommunityForumThread }) {
             href={thread.github_issue_url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+            className="inline-flex items-center justify-center rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
           >
             GitHub issue
           </a>
@@ -203,10 +203,12 @@ export function CommunityForum() {
   }
 
   return (
-    <section className="mt-14 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-      <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-8">
+    <section className="mt-14 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="rounded-[1.9rem] border border-white/10 bg-slate-900/70 p-6 sm:p-8">
         <p className="text-xs uppercase tracking-[0.28em] text-slate-500">General forum</p>
-        <h2 className="mt-3 text-3xl font-semibold text-white">Discuss the platform beyond one page</h2>
+        <h2 className="mt-3 text-2xl font-semibold text-white sm:text-3xl">
+          Discuss the platform beyond one page
+        </h2>
         <p className="mt-4 text-sm leading-7 text-slate-400">
           Start broader conversations here when the topic spans multiple chapters or labs: roadmap
           ideas, missing concepts, realism gaps, onboarding pain points, or architectural
@@ -247,7 +249,7 @@ export function CommunityForum() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-slate-900/70 p-8">
+      <div className="rounded-[1.9rem] border border-white/10 bg-slate-900/70 p-6 sm:p-8">
         <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Start a thread</p>
         <h2 className="mt-3 text-2xl font-semibold text-white">Open a broader discussion</h2>
         <p className="mt-4 text-sm leading-7 text-slate-400">
@@ -290,11 +292,11 @@ export function CommunityForum() {
                   onChange={(event) => setOpenGitHubIssue(event.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-cyan-400 focus:ring-cyan-400"
                 />
-                <span>
-                  <span className="block font-medium text-slate-200">Also open GitHub issue</span>
-                  <span className="mt-1 block text-xs leading-6 text-slate-500">
-                    {githubIssueMirrorAvailable
-                      ? "If enabled, FabricLab will mirror this discussion into the GitHub issue tracker for easier maintainer follow-up."
+                  <span>
+                    <span className="block font-medium text-slate-200">Also open GitHub issue</span>
+                    <span className="mt-1 block text-xs leading-6 text-slate-500">
+                      {githubIssueMirrorAvailable
+                        ? "If enabled, FabricLab will mirror this discussion into the GitHub issue tracker for easier maintainer follow-up."
                       : "The issue tracker is linked publicly, but automatic GitHub issue mirroring is not configured on the server yet."}
                   </span>
                 </span>
@@ -306,21 +308,23 @@ export function CommunityForum() {
                   onChange={(event) => setNotifyThreadActivity(event.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-white/20 bg-slate-900 text-cyan-400 focus:ring-cyan-400"
                 />
-                <span>
-                  <span className="block font-medium text-slate-200">Email me about replies to this discussion</span>
-                  <span className="mt-1 block text-xs leading-6 text-slate-500">
-                    This updates your FabricLab discussion-reply notification preference for future threads too.
+                  <span>
+                    <span className="block font-medium text-slate-200">
+                      Email me about replies to this discussion
+                    </span>
+                    <span className="mt-1 block text-xs leading-6 text-slate-500">
+                      This updates your FabricLab discussion-reply notification preference for future threads too.
+                    </span>
                   </span>
-                </span>
-              </label>
-              <div className="flex items-center justify-between gap-3">
+                </label>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs leading-6 text-slate-500">
                   Keep titles specific so the same thread can become an actionable issue without being renamed.
                 </p>
                 <button
                   type="submit"
                   disabled={posting}
-                  className="rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center justify-center rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {posting ? "Creating..." : "Create thread"}
                 </button>

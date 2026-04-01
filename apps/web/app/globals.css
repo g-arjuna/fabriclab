@@ -18,8 +18,9 @@ body {
   min-height: 100vh;
   background: #07111f;
   color: #e2e8f0;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
-    Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: "Avenir Next", "Segoe UI", "Trebuchet MS", sans-serif;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
 }
 
 .chapter-prose p {
