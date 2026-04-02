@@ -205,7 +205,6 @@ export function LabExperience({ labId }: { labId: string }) {
   const completeLab = useLabStore((state) => state.completeLab);
   const setActiveDevice = useLabStore((state) => state.setActiveDevice);
   const openDeviceSession = useLabStore((state) => state.openDeviceSession);
-  const deviceSessions = useLabStore((state) => state.deviceSessions);
   const labState = useLabStore((state) => state.lab);
   const markLabComplete = useProgressStore((state) => state.markLabComplete);
   const [topologyExpanded, setTopologyExpanded] = useState(false);
@@ -219,10 +218,6 @@ export function LabExperience({ labId }: { labId: string }) {
   const sourceChapter = LAB_SOURCE_CHAPTERS[activeLab.id];
   const hasSolution = LABS_WITH_SOLUTION_REPLAYS.has(activeLab.id);
   const isLabComplete = useLabStore((state) => isComplete(state.lab, activeLab));
-  const hasTerminalHistory = useMemo(
-    () => Object.values(deviceSessions).some((session) => session.history.length > 0),
-    [deviceSessions],
-  );
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
@@ -261,12 +256,6 @@ export function LabExperience({ labId }: { labId: string }) {
     window.addEventListener("device-selected", handler as EventListener);
     return () => window.removeEventListener("device-selected", handler as EventListener);
   }, [openDeviceSession, setActiveDevice]);
-
-  useEffect(() => {
-    if (hasTerminalHistory) {
-      setWorkspaceFocus("terminal");
-    }
-  }, [hasTerminalHistory]);
 
   useEffect(() => {
     if (isLabComplete && !labState.isComplete) {
@@ -432,14 +421,14 @@ export function LabExperience({ labId }: { labId: string }) {
             style={{
               gridTemplateRows:
                 workspaceFocus === "topology"
-                  ? "minmax(420px, 1.8fr) minmax(260px, 0.9fr)"
+                  ? "minmax(280px, 1.25fr) minmax(220px, 0.9fr)"
                   : "220px minmax(0, 1fr)",
             }}
           >
             <div
               className="relative min-h-0 transition-[height] duration-300 ease-out"
             >
-              <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-wrap items-center gap-2">
+              <div className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/80 p-1.5 shadow-lg backdrop-blur-sm">
                 <button
                   type="button"
                   onClick={() =>
@@ -447,14 +436,18 @@ export function LabExperience({ labId }: { labId: string }) {
                       current === "topology" ? "terminal" : "topology",
                     )
                   }
-                  className="pointer-events-auto rounded-full border border-white/10 bg-slate-900/90 px-3 py-1.5 text-[11px] font-medium text-slate-200 shadow-lg backdrop-blur transition hover:border-white/20 hover:text-white"
+                  className={`rounded-full px-4 py-2 text-xs font-medium transition ${
+                    workspaceFocus === "topology"
+                      ? "bg-slate-800 text-white hover:bg-slate-700"
+                      : "text-slate-300 hover:bg-white/5 hover:text-white"
+                  }`}
                 >
                   {workspaceFocus === "topology" ? "Start lab" : "Review topology"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setTopologyExpanded(true)}
-                  className="pointer-events-auto flex items-center gap-1 rounded-full border border-cyan-400/20 bg-slate-900/90 px-3 py-1.5 text-[11px] font-medium text-cyan-200 shadow-lg backdrop-blur transition hover:border-cyan-300/30 hover:text-white"
+                  className="flex items-center gap-1.5 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-xs font-medium text-cyan-200 transition hover:border-cyan-300/35 hover:bg-cyan-400/15 hover:text-white"
                   title="Open enlarged topology"
                 >
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -478,7 +471,6 @@ export function LabExperience({ labId }: { labId: string }) {
               <MultiDeviceTerminal
                 devices={activeDevices}
                 labTitle={activeLab.title}
-                onSessionInteract={() => setWorkspaceFocus("terminal")}
               />
             </div>
           </div>

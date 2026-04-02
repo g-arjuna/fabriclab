@@ -11,7 +11,6 @@ import type { DeviceType, LabDevice } from '@/types'
 interface Props {
   devices: LabDevice[]
   labTitle: string
-  onSessionInteract?: () => void
 }
 
 const DEVICE_THEME: Record<
@@ -50,12 +49,10 @@ function DeviceTerminalPane({
   device,
   isVisible,
   labTitle,
-  onCommandSubmit,
 }: {
   device: LabDevice
   isVisible: boolean
   labTitle: string
-  onCommandSubmit?: () => void
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const termRef = useRef<XTerm | null>(null)
@@ -126,7 +123,6 @@ function DeviceTerminalPane({
           terminal.write('\r\n')
 
           if (input.length > 0) {
-            onCommandSubmit?.()
             appendToDeviceHistory(device.id, {
               type: 'input',
               text: input,
@@ -179,7 +175,7 @@ function DeviceTerminalPane({
       fitAddonRef.current = null
       initialised.current = false
     }
-  }, [appendToDeviceHistory, device, labTitle, onCommandSubmit, theme])
+  }, [appendToDeviceHistory, device, labTitle, theme])
 
   useEffect(() => {
     if (isVisible && fitAddonRef.current) {
@@ -207,7 +203,7 @@ function coloriseOutput(output: string): string {
     .join('\r\n')
 }
 
-export function MultiDeviceTerminal({ devices, labTitle, onSessionInteract }: Props) {
+export function MultiDeviceTerminal({ devices, labTitle }: Props) {
   const activeDeviceId = useLabStore((state) => state.activeDeviceId)
   const deviceSessions = useLabStore((state) => state.deviceSessions)
   const setActiveDevice = useLabStore((state) => state.setActiveDevice)
@@ -247,7 +243,6 @@ export function MultiDeviceTerminal({ devices, labTitle, onSessionInteract }: Pr
                   openDeviceSession(device.id)
                 }
                 setActiveDevice(device.id)
-                onSessionInteract?.()
               }}
               className="flex flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-all"
               style={{
@@ -302,7 +297,6 @@ export function MultiDeviceTerminal({ devices, labTitle, onSessionInteract }: Pr
                 device={device}
                 isVisible={activeDeviceId === sessionId}
                 labTitle={labTitle}
-                onCommandSubmit={onSessionInteract}
               />
             </div>
           )
