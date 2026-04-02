@@ -205,18 +205,24 @@ export function LabExperience({ labId }: { labId: string }) {
   const completeLab = useLabStore((state) => state.completeLab);
   const setActiveDevice = useLabStore((state) => state.setActiveDevice);
   const openDeviceSession = useLabStore((state) => state.openDeviceSession);
+  const deviceSessions = useLabStore((state) => state.deviceSessions);
   const labState = useLabStore((state) => state.lab);
   const markLabComplete = useProgressStore((state) => state.markLabComplete);
   const [topologyExpanded, setTopologyExpanded] = useState(false);
   const [solutionOpen, setSolutionOpen] = useState(false);
   const [showDesktopPrompt, setShowDesktopPrompt] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [workspaceFocus, setWorkspaceFocus] = useState<"topology" | "terminal">("topology");
 
   const activeLab = useMemo(() => LABS[labId as LabId] ?? lab1, [labId]);
   const activeDevices = useMemo(() => LAB_DEVICES[activeLab.id] ?? [], [activeLab.id]);
   const sourceChapter = LAB_SOURCE_CHAPTERS[activeLab.id];
   const hasSolution = LABS_WITH_SOLUTION_REPLAYS.has(activeLab.id);
   const isLabComplete = useLabStore((state) => isComplete(state.lab, activeLab));
+  const hasTerminalHistory = useMemo(
+    () => Object.values(deviceSessions).some((session) => session.history.length > 0),
+    [deviceSessions],
+  );
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
@@ -227,6 +233,11 @@ export function LabExperience({ labId }: { labId: string }) {
     if (window.matchMedia("(max-width: 1023px)").matches) {
       setShowDesktopPrompt(true);
     }
+  }, [activeLab.id]);
+
+  useEffect(() => {
+    setWorkspaceFocus("topology");
+    setTopologyExpanded(false);
   }, [activeLab.id]);
 
   useEffect(() => {
@@ -245,10 +256,17 @@ export function LabExperience({ labId }: { labId: string }) {
       const customEvent = event as CustomEvent<{ deviceId: string }>;
       openDeviceSession(customEvent.detail.deviceId);
       setActiveDevice(customEvent.detail.deviceId);
+      setWorkspaceFocus("terminal");
     };
     window.addEventListener("device-selected", handler as EventListener);
     return () => window.removeEventListener("device-selected", handler as EventListener);
   }, [openDeviceSession, setActiveDevice]);
+
+  useEffect(() => {
+    if (hasTerminalHistory) {
+      setWorkspaceFocus("terminal");
+    }
+  }, [hasTerminalHistory]);
 
   useEffect(() => {
     if (isLabComplete && !labState.isComplete) {
@@ -410,29 +428,56 @@ export function LabExperience({ labId }: { labId: string }) {
           </aside>
 
           <div className="flex flex-1 flex-col overflow-hidden">
-            <div className="relative flex-shrink-0" style={{ height: "220px" }}>
-              <div className="h-full">
-                <TopologyView compact />
+            <div
+              className="relative flex-shrink-0 transition-[height] duration-300 ease-out"
+              style={{
+                height:
+                  workspaceFocus === "topology"
+                    ? "clamp(320px, 42vh, 460px)"
+                    : "220px",
+              }}
+            >
+              <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setWorkspaceFocus((current) =>
+                      current === "topology" ? "terminal" : "topology",
+                    )
+                  }
+                  className="pointer-events-auto rounded-full border border-white/10 bg-slate-900/90 px-3 py-1.5 text-[11px] font-medium text-slate-200 shadow-lg backdrop-blur transition hover:border-white/20 hover:text-white"
+                >
+                  {workspaceFocus === "topology" ? "Start lab" : "Review topology"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTopologyExpanded(true)}
+                  className="pointer-events-auto flex items-center gap-1 rounded-full border border-cyan-400/20 bg-slate-900/90 px-3 py-1.5 text-[11px] font-medium text-cyan-200 shadow-lg backdrop-blur transition hover:border-cyan-300/30 hover:text-white"
+                  title="Open enlarged topology"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M1 1h4M1 1v4M11 1h-4M11 1v4M1 11h4M1 11v-4M11 11h-4M11 11v-4"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  Zoom
+                </button>
               </div>
 
-              <button
-                onClick={() => setTopologyExpanded(true)}
-                className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-slate-900/80 px-2 py-1 text-[10px] text-slate-400 backdrop-blur transition hover:text-white"
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path
-                    d="M1 1h4M1 1v4M11 1h-4M11 1v4M1 11h4M1 11v-4M11 11h-4M11 11v-4"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                Zoom
-              </button>
+              <div className="h-full">
+                <TopologyView compact={workspaceFocus !== "topology"} />
+              </div>
             </div>
 
             <div className="flex-1 overflow-hidden">
-              <MultiDeviceTerminal devices={activeDevices} labTitle={activeLab.title} />
+              <MultiDeviceTerminal
+                devices={activeDevices}
+                labTitle={activeLab.title}
+                onSessionInteract={() => setWorkspaceFocus("terminal")}
+              />
             </div>
           </div>
         </div>

@@ -9,7 +9,7 @@ export type CatalogPartKey =
   | "infrastructure"
   | "scale-architecture"
   | "advanced-networking"
-  | "ncp-ain-platform";
+  | "platform-integration";
 
 export type SourceCatalogItem = {
   kind: CatalogKind;
@@ -85,8 +85,8 @@ export const PARTS = [
     description: "Requires Part 4 - Ch 22-23",
   },
   {
-    key: "ncp-ain-platform" as const,
-    title: "Part 6 - NCP-AIN Platform Chapters",
+    key: "platform-integration" as const,
+    title: "Part 6 - Platform Integration",
     description: "Requires Part 5 - Ch 24+",
   },
 ];

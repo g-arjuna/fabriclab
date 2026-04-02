@@ -618,8 +618,8 @@
       "href": "/learn/ch24-spectrum-x-architecture",
       "durationMinutes": 45,
       "durationLabel": "45 min",
-      "partKey": "ncp-ain-platform",
-      "partTitle": "Part 6 - NCP-AIN Platform Chapters",
+      "partKey": "platform-integration",
+      "partTitle": "Part 6 - Platform Integration",
       "partDescription": "Requires Part 5 - Ch 24+",
       "tags": [
         "Spectrum-X",
@@ -646,8 +646,8 @@
       "href": "/learn/ch25-roce-configuration-operations",
       "durationMinutes": 55,
       "durationLabel": "55 min",
-      "partKey": "ncp-ain-platform",
-      "partTitle": "Part 6 - NCP-AIN Platform Chapters",
+      "partKey": "platform-integration",
+      "partTitle": "Part 6 - Platform Integration",
       "partDescription": "Requires Part 5 - Ch 24+",
       "tags": [
         "RoCEv2",
