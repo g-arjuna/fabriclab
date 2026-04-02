@@ -314,7 +314,7 @@ export default function DCQCNStateMachineViz() {
       </svg>
 
       {/* Current stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
         {[
           { label: 'TX Rate', value: `${currentRate.toFixed(1)} Gbps`, color: '#76e5b5' },
           { label: 'Alpha (α)', value: currentAlpha.toFixed(4), color: '#f87171' },

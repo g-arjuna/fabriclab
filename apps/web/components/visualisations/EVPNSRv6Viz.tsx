@@ -153,7 +153,7 @@ export default function EVPNSRv6Viz() {
       </div>
 
       {/* Step selector */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {STEPS.map(s => (
           <button key={s.id} onClick={() => setStep(s.id)}
             style={{
@@ -169,10 +169,10 @@ export default function EVPNSRv6Viz() {
       </div>
 
       {/* Side-by-side comparison */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginBottom: 16 }}>
         {/* VXLAN panel */}
         <div style={{ background: '#161928', border: '1px solid #7c3aed44', borderRadius: 10, padding: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#a78bfa' }}>EVPN-VXLAN</span>
             {vContent.packetBytes > 0 && (
               <span style={{ fontSize: 10, background: '#4a1d96', color: '#c4b5fd', borderRadius: 4, padding: '2px 7px' }}>
@@ -194,7 +194,7 @@ export default function EVPNSRv6Viz() {
 
         {/* SRv6 panel */}
         <div style={{ background: '#121e12', border: '1px solid #34d39944', borderRadius: 10, padding: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#34d399' }}>EVPN+SRv6</span>
             {sContent.packetBytes > 0 && (
               <span style={{ fontSize: 10, background: '#064e3b', color: '#6ee7b7', borderRadius: 4, padding: '2px 7px' }}>
@@ -217,7 +217,7 @@ export default function EVPNSRv6Viz() {
 
       {/* Summary comparison table */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+        <table style={{ width: '100%', minWidth: 620, borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #2a2d3e' }}>
               <th style={{ padding: '6px 8px', textAlign: 'left', color: '#7c8db5', fontWeight: 400 }}>Property</th>

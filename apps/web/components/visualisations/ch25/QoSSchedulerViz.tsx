@@ -84,7 +84,7 @@ export default function QoSSchedulerViz() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 11, color: '#f87171', marginBottom: 8, letterSpacing: '0.08em', borderBottom: '1px solid #2a2d3e', paddingBottom: 4 }}>
             STRICT PRIORITY (served first)

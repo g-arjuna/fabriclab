@@ -32,7 +32,7 @@ export function GPUFormFactorViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">GPU form factors: SXM vs PCIe</div>
       <div className="mb-4 text-xs text-slate-600">Toggle to compare connectivity paths and bandwidth in each form factor</div>
 
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
         {(["sxm", "pcie"] as Mode[]).map(m => (
           <button
             key={m}
@@ -53,7 +53,7 @@ export function GPUFormFactorViz() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px", marginBottom: "16px" }}>
         {[
           {
             label: "GPU-to-GPU bandwidth",
@@ -97,8 +97,8 @@ export function GPUFormFactorViz() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         {paths.map((p, i) => (
-          <div key={i} style={{ background: "#1e293b", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "12px", borderLeft: `3px solid ${p.color}` }}>
-            <div style={{ flex: 1 }}>
+          <div key={i} style={{ background: "#1e293b", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "12px", borderLeft: `3px solid ${p.color}`, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 240px" }}>
               <span style={{ fontSize: "13px", fontWeight: 500, color: "#B4B2A9" }}>{p.from}</span>
               <span style={{ fontSize: "12px", color: "#5F5E5A", margin: "0 6px" }}>→ via {p.via} →</span>
               <span style={{ fontSize: "13px", fontWeight: 500, color: "#B4B2A9" }}>{p.to}</span>

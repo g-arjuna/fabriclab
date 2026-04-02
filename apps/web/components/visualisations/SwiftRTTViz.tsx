@@ -128,7 +128,7 @@ export default function SwiftRTTViz() {
       </div>
 
       {/* Controls */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 16 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 11, color: '#7c8db5' }}>TARGET DELAY: {targetDelayUs.toFixed(1)} µs</span>
           <input type="range" min={1} max={20} step={0.5} value={targetDelayUs}

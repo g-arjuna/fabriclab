@@ -95,7 +95,7 @@ export default function RoCEPrereqChecklistViz() {
         RoCE Pre-Flight Prerequisites Checklist
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, height: 8, background: '#161928', borderRadius: 4, overflow: 'hidden' }}>
           <div style={{
             height: '100%',
@@ -140,7 +140,7 @@ export default function RoCEPrereqChecklistViz() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>{item.label}</div>
                   <div style={{ fontSize: 11, color: '#7c8db5', marginTop: 2 }}>{item.short}</div>
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button onClick={e => { e.stopPropagation(); toggle(item.id, 'pass') }}
                     style={{
                       padding: '3px 10px', borderRadius: 5, fontSize: 11, cursor: 'pointer',
@@ -160,7 +160,7 @@ export default function RoCEPrereqChecklistViz() {
               {isSelected && (
                 <div style={{ borderTop: `1px solid ${borderColor}`, padding: '12px 14px', background: '#0d0f18' }}>
                   <div style={{ fontSize: 11, color: '#7c8db5', marginBottom: 6 }}>VERIFY WITH:</div>
-                  <div style={{ background: '#161928', border: '1px solid #2a2d3e', borderRadius: 6, padding: '6px 10px', fontSize: 12, color: '#76e5b5', marginBottom: 10 }}>
+                  <div style={{ background: '#161928', border: '1px solid #2a2d3e', borderRadius: 6, padding: '6px 10px', fontSize: 12, color: '#76e5b5', marginBottom: 10, overflowX: 'auto' }}>
                     $ {item.command}
                   </div>
                   {item.status === 'fail' ? (

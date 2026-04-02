@@ -119,56 +119,54 @@ export function NVMeOFCapsuleViz() {
       </div>
 
       {/* Flow diagram */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-        {/* Initiator box */}
-        <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 16px", textAlign: "center", minWidth: 100, border: "1px solid #334155" }}>
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>INITIATOR</div>
-          <div style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>DGX H100</div>
-          <div style={{ fontSize: 10, color: "#94a3b8" }}>CX7 Slot1/2</div>
-        </div>
+      <div style={{ overflowX: "auto", paddingBottom: 6, marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 520 }}>
+          <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 16px", textAlign: "center", minWidth: 100, border: "1px solid #334155" }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>INITIATOR</div>
+            <div style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>DGX H100</div>
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>CX7 Slot1/2</div>
+          </div>
 
-        {/* Arrow area */}
-        <div style={{ flex: 1, position: "relative", height: 60 }}>
-          {/* SQE arrow */}
-          {active === "sqe" && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-              <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
-              <div style={{ fontSize: 11, color: phase.color, fontWeight: 700, whiteSpace: "nowrap" }}>
-                RDMA SEND (SQE) --&gt;
-              </div>
-              <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
-            </div>
-          )}
-          {active === "data" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <div style={{ flex: 1, height: 2, background: "#64748b", borderRadius: 1 }} />
-                <div style={{ fontSize: 10, color: "#64748b" }}>&lt;-- RDMA READ request (target pulls)</div>
-                <div style={{ flex: 1, height: 2, background: "#64748b", borderRadius: 1 }} />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <div style={{ flex: 1, position: "relative", height: 60 }}>
+            {active === "sqe" && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
-                <div style={{ fontSize: 10, color: phase.color, fontWeight: 700 }}>RDMA Read Response frames --&gt;</div>
+                <div style={{ fontSize: 11, color: phase.color, fontWeight: 700, whiteSpace: "nowrap" }}>
+                  RDMA SEND (SQE) --&gt;
+                </div>
                 <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
               </div>
-            </div>
-          )}
-          {active === "cqe" && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-              <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
-              <div style={{ fontSize: 11, color: phase.color, fontWeight: 700, whiteSpace: "nowrap" }}>
-                &lt;-- RDMA SEND (CQE)
+            )}
+            {active === "data" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <div style={{ flex: 1, height: 2, background: "#64748b", borderRadius: 1 }} />
+                  <div style={{ fontSize: 10, color: "#64748b" }}>&lt;-- RDMA READ request (target pulls)</div>
+                  <div style={{ flex: 1, height: 2, background: "#64748b", borderRadius: 1 }} />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
+                  <div style={{ fontSize: 10, color: phase.color, fontWeight: 700 }}>RDMA Read Response frames --&gt;</div>
+                  <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
+                </div>
               </div>
-              <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
-            </div>
-          )}
-        </div>
+            )}
+            {active === "cqe" && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
+                <div style={{ fontSize: 11, color: phase.color, fontWeight: 700, whiteSpace: "nowrap" }}>
+                  &lt;-- RDMA SEND (CQE)
+                </div>
+                <div style={{ flex: 1, height: 2, background: phase.color, borderRadius: 1 }} />
+              </div>
+            )}
+          </div>
 
-        {/* Target box */}
-        <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 16px", textAlign: "center", minWidth: 100, border: "1px solid #334155" }}>
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>TARGET</div>
-          <div style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>Storage</div>
-          <div style={{ fontSize: 10, color: "#94a3b8" }}>Appliance</div>
+          <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 16px", textAlign: "center", minWidth: 100, border: "1px solid #334155" }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>TARGET</div>
+            <div style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>Storage</div>
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>Appliance</div>
+          </div>
         </div>
       </div>
 
@@ -203,12 +201,12 @@ export function NVMeOFCapsuleViz() {
               flexShrink: 0,
             }} />
             <div style={{ flex: 1 }}>
-              <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{layer.name}</span>
+              <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600, wordBreak: "break-word" }}>{layer.name}</span>
               {hovered === i && (
                 <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3 }}>{layer.detail}</div>
               )}
             </div>
-            <div style={{ fontSize: 12, color: layer.color, fontFamily: "monospace", fontWeight: 700, minWidth: 80, textAlign: "right" }}>
+            <div style={{ fontSize: 12, color: layer.color, fontFamily: "monospace", fontWeight: 700, minWidth: 72, textAlign: "right" }}>
               {layer.bytes}
             </div>
           </div>

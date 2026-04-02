@@ -47,7 +47,7 @@ export function DragonFlyTopologyViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">Dragonfly topology</div>
       <div className="mb-4 text-xs text-slate-600">Local all-to-all cliques + sparse global links. Toggle to see direct vs adaptive routing (Group A → Group C).</div>
 
-      <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
         {(["direct", "adaptive"] as const).map(m => (
           <button
             key={m}
@@ -67,7 +67,8 @@ export function DragonFlyTopologyViz() {
         ))}
       </div>
 
-      <svg width="100%" viewBox="0 0 680 460" style={{ display: "block" }}>
+      <div className="overflow-x-auto pb-2">
+      <svg width="100%" viewBox="0 0 680 460" style={{ display: "block", minWidth: 680 }}>
         <defs>
           <marker id="df-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
             <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -163,8 +164,9 @@ export function DragonFlyTopologyViz() {
           </text>
         )}
       </svg>
+      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginTop: "12px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px", marginTop: "12px" }}>
         {[
           { label: "Intra-group", value: "All-to-all", note: "Short cables, low cost", color: "#9FE1CB" },
           { label: "Inter-group", value: "1 link/pair", note: "Bottleneck for AllReduce", color: "#F0997B" },

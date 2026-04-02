@@ -97,7 +97,7 @@ export function ThreeFabricMapViz() {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         <button
           onClick={() => setShowFailure(!showFailure)}
           style={{
@@ -112,7 +112,7 @@ export function ThreeFabricMapViz() {
       </div>
 
       {/* Fabric cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 20 }}>
         {FABRICS.map((fab) => (
           <div
             key={fab.id}
@@ -155,7 +155,7 @@ export function ThreeFabricMapViz() {
         return (
           <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, borderLeft: `3px solid ${fab.color}` }}>
             <div style={{ fontSize: 13, color: fab.color, fontWeight: 700, marginBottom: 12 }}>{fab.label} -- Detail</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
               {fab.props.map((p) => (
                 <div key={p.k} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
                   <div style={{ fontSize: 10, color: "#475569", minWidth: 100 }}>{p.k}</div>

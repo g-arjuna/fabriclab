@@ -90,7 +90,7 @@ export function DGXNetworkInterfacesViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">DGX H100 -- four network identities</div>
       <div className="mb-5 text-xs text-slate-600">Click each network to see its hardware, stack, and role.</div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginBottom: 20 }}>
         {identities.map((id) => (
           <button
             key={id.id}
@@ -114,7 +114,7 @@ export function DGXNetworkInterfacesViz() {
 
       <div style={{ background: sel.bg, border: `1px solid ${sel.border}`, borderRadius: 12, padding: "16px 18px" }}>
         <div style={{ fontSize: 14, fontWeight: 500, color: "#e2e8f0", marginBottom: 14 }}>{sel.label}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 12 }}>
           {[
             { label: "Hardware", value: sel.hw },
             { label: "Ports", value: sel.ports },
@@ -125,14 +125,14 @@ export function DGXNetworkInterfacesViz() {
           ].map((row) => (
             <div key={row.label}>
               <div style={{ fontSize: 10, color: "#64748b" }}>{row.label}</div>
-              <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: row.label === "Linux device" || row.label === "IP example" ? "monospace" : "inherit" }}>{row.value}</div>
+              <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: row.label === "Linux device" || row.label === "IP example" ? "monospace" : "inherit", lineHeight: 1.6, wordBreak: "break-word" }}>{row.value}</div>
             </div>
           ))}
         </div>
 
         <div style={{ borderTop: `1px solid ${sel.border}30`, paddingTop: 10, marginBottom: 10 }}>
           <div style={{ fontSize: 10, color: "#64748b", marginBottom: 4 }}>Software stack</div>
-          <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace", lineHeight: 1.6 }}>{sel.stack}</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace", lineHeight: 1.6, wordBreak: "break-word" }}>{sel.stack}</div>
         </div>
 
         <div style={{
@@ -147,7 +147,7 @@ export function DGXNetworkInterfacesViz() {
           Linux kernel involved in data path: <strong>{sel.kernelInvolved ? "Yes" : "No -- hardware bypass"}</strong>
         </div>
 
-        <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.7 }}>{sel.detail}</div>
+        <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.7, wordBreak: "break-word" }}>{sel.detail}</div>
       </div>
     </div>
   )

@@ -31,7 +31,7 @@ export function MultiTenancyFabricViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">EVPN-VXLAN multi-tenancy + MIG/SR-IOV</div>
       <div className="mb-5 text-xs text-slate-600">Select a tenant to trace its isolation path through the network and server layers.</div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
         <button onClick={() => setSel("all")} style={{ flex: 1, padding: "7px 0", background: sel === "all" ? "#1e293b" : "transparent", border: `1px solid ${sel === "all" ? "#475569" : "#334155"}`, borderRadius: 8, color: sel === "all" ? "#e2e8f0" : "#64748b", fontSize: 11, cursor: "pointer" }}>All tenants</button>
         {tenants.map((t) => (
           <button key={t.id} onClick={() => setSel(t.id)} style={{ flex: 1, padding: "7px 0", background: sel === t.id ? t.color : "transparent", border: `1px solid ${sel === t.id ? t.border : "#334155"}`, borderRadius: 8, color: sel === t.id ? "#fff" : "#64748b", fontSize: 11, cursor: "pointer", transition: "all 0.2s" }}>
@@ -41,7 +41,8 @@ export function MultiTenancyFabricViz() {
       </div>
 
       {/* Fabric diagram */}
-      <svg width="100%" viewBox="0 0 580 240" style={{ display: "block", marginBottom: 14 }}>
+      <div className="overflow-x-auto pb-2">
+      <svg width="100%" viewBox="0 0 580 240" style={{ display: "block", marginBottom: 14, minWidth: 580 }}>
         {/* Spine (route reflector) */}
         <rect x="220" y="20" width="140" height="44" rx="6" fill="#1e293b" stroke="#475569" strokeWidth="0.5"/>
         <text x="290" y="38" textAnchor="middle" fill="#e2e8f0" fontSize="11" fontWeight="500">Spine (EVPN RR)</text>
@@ -91,11 +92,12 @@ export function MultiTenancyFabricViz() {
         <text x="495" y="228" textAnchor="middle" fill="#475569" fontSize="9">MIG + SR-IOV VFs</text>
         <line x1="495" y1="190" x2="495" y2="205" stroke="#334155" strokeWidth="0.5"/>
       </svg>
+      </div>
 
       {selTenant && (
         <div style={{ background: selTenant.bg, border: `1px solid ${selTenant.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: "#e2e8f0", marginBottom: 8 }}>{selTenant.name} isolation stack</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
             {[
               { label: "Network VNI", value: selTenant.vni },
               { label: "Access VLAN", value: selTenant.vlan },
@@ -124,7 +126,7 @@ export function MultiTenancyFabricViz() {
           <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>
             VXLAN GBP adds a 16-bit Group-Based Policy tag to the VXLAN header alongside the VNI. Two servers in the same VNI with different GBP tags cannot communicate — the ingress leaf switch enforces the tag-based ACL at the data plane, before the packet enters the fabric. This enables sub-tenant isolation (per-job GPU groups within Tenant A) without requiring a separate VNI or VLAN per job.
           </div>
-          <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <div style={{ flex: 1, background: "#111827", borderRadius: 6, padding: "8px 10px" }}>
               <div style={{ fontSize: 10, color: "#64748b" }}>GBP tag 0x0001</div>
               <div style={{ fontSize: 11, color: "#93c5fd" }}>Job A — GPU group 0–7</div>

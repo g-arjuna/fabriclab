@@ -109,7 +109,7 @@ export function PCIeBandwidthViz() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "16px" }}>
         <div style={{ background: "#1e293b", borderRadius: "10px", padding: "14px" }}>
           <div style={{ fontSize: "11px", color: "#5F5E5A", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
             {pcie.label} — {pcie.bwPerDir} GB/s per direction

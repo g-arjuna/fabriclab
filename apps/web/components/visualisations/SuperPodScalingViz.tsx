@@ -67,8 +67,8 @@ export function SuperPodScalingViz() {
       </div>
 
       {/* Topology diagram */}
-      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 20 }}>
-        <svg viewBox={`0 0 720 ${100 + podCount * 90}`} style={{ width: "100%", height: "auto" }}>
+      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 20, overflowX: "auto" }}>
+        <svg viewBox={`0 0 720 ${100 + podCount * 90}`} style={{ width: "100%", height: "auto", minWidth: 720 }}>
           {/* Super-spine */}
           <rect x={270} y={10} width={180} height={60} rx={8}
             fill="#292524" stroke="#a78bfa" strokeWidth={2} />
@@ -142,7 +142,7 @@ export function SuperPodScalingViz() {
       </div>
 
       {/* Route table comparison */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
             <div style={{ fontSize: 11, color: "#f87171", fontWeight: 700 }}>Without summarisation</div>
@@ -174,7 +174,7 @@ export function SuperPodScalingViz() {
         <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700, marginBottom: 5, textTransform: "uppercase" }}>
           Aggregate route config (on leaf switches, suppresses /32s toward super-spine)
         </div>
-        <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.7 }}>{pods.slice(0, 1).map((p) =>
+        <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.7, overflowX: "auto" }}>{pods.slice(0, 1).map((p) =>
 `# leaf-01 in ${p.name}: aggregate compute prefix before advertising to super-spine
 nv set vrf default router bgp address-family ipv4-unicast aggregate-route ${p.summaryCompute} summary-only
 nv config apply

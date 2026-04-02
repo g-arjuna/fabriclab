@@ -163,7 +163,7 @@ export default function GPUCommPatternViz() {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={() => setArEnabled(!arEnabled)} style={{
           padding: '4px 12px', borderRadius: 6, fontSize: 11,
           border: `1px solid ${arEnabled ? '#76e5b5' : '#f87171'}`,
@@ -189,7 +189,8 @@ export default function GPUCommPatternViz() {
         </button>
       </div>
 
-      <svg viewBox="0 0 600 300" style={{ width: '100%', maxWidth: 600, display: 'block', background: '#0d0f18', borderRadius: 8 }}>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <svg viewBox="0 0 600 300" style={{ width: '100%', minWidth: 600, maxWidth: 600, display: 'block', background: '#0d0f18', borderRadius: 8 }}>
         {/* Ring lines */}
         {Array.from({ length: N_GPUS }, (_, i) => {
           const p1 = gpuPos(i)
@@ -260,10 +261,11 @@ export default function GPUCommPatternViz() {
           {collective === 'alltoall' && `All-to-All · ${N_GPUS * (N_GPUS - 1)} simultaneous flows`}
           {collective === 'incast' && `Incast barrier · all GPUs → GPU 0 · congestion risk`}
         </text>
-      </svg>
+        </svg>
+      </div>
 
       {/* Metrics */}
-      <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
         <div style={{ background: '#161928', border: '1px solid #2a2d3e', borderRadius: 8, padding: '8px 14px', flex: 1 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: congColor }}>{congestionLevel.toFixed(0)}%</div>
           <div style={{ fontSize: 10, color: '#7c8db5' }}>Leaf buffer pressure</div>

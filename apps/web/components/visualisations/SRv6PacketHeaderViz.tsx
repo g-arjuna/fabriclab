@@ -121,7 +121,7 @@ export default function SRv6PacketHeaderViz() {
             <span style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa' }}>IPv6 Header</span>
             <span style={{ fontSize: 10, color: '#4a5568' }}>40 bytes</span>
           </div>
-          <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, fontSize: 11 }}>
+          <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 4, fontSize: 11 }}>
             <div>
               <span style={{ color: '#4a5568' }}>Next Header: </span>
               <span style={{ color: '#fbbf24' }}>{uSIDMode ? '43 (no SRH)' : '43 (SRH)'}</span>
@@ -154,7 +154,7 @@ export default function SRv6PacketHeaderViz() {
               <span style={{ fontSize: 10, color: '#4a5568' }}>{srhTotal} bytes</span>
             </div>
             {/* Fixed fields */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, fontSize: 10, marginBottom: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 4, fontSize: 10, marginBottom: 8 }}>
               {[
                 { f: 'Routing Type', v: '4' },
                 { f: 'Segments Left', v: segmentsLeft.toString(), highlight: true },
@@ -245,7 +245,7 @@ export default function SRv6PacketHeaderViz() {
       </div>
 
       {/* Overhead summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
         {[
           { label: 'SRH Overhead', value: `${overhead} bytes`, color: overhead > 100 ? '#f87171' : '#76e5b5' },
           { label: 'Effective MTU', value: `${9000 - 40 - overhead} bytes`, color: '#60a5fa' },

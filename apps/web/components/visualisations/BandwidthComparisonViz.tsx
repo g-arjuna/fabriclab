@@ -86,7 +86,7 @@ export function BandwidthComparisonViz() {
       </p>
 
       {/* Mode toggle */}
-      <div style={{ display: "flex", background: "#0f172a", borderRadius: 8, padding: 3, gap: 3, marginBottom: 20, width: "fit-content" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", background: "#0f172a", borderRadius: 8, padding: 3, gap: 3, marginBottom: 20, width: "fit-content", maxWidth: "100%" }}>
         {([["per-gpu", "Per GPU"], ["cluster", "256-GPU Cluster"]] as [Mode, string][]).map(([m, label]) => (
           <button key={m}
             onClick={() => setMode(m)}
@@ -112,7 +112,7 @@ export function BandwidthComparisonViz() {
           return (
             <div key={e.label} style={{ cursor: "pointer" }}
               onClick={() => setExpanded(isExp ? null : e.label)}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6, marginBottom: 3 }}>
                 <div>
                   <span style={{ fontSize: 12, color: "#e2e8f0" }}>{e.label}</span>
                   <span style={{ fontSize: 10, color: "#475569", marginLeft: 8 }}>{e.sublabel}</span>
@@ -151,7 +151,7 @@ export function BandwidthComparisonViz() {
       {/* Log scale note */}
       <div style={{
         marginTop: 14, background: "#0f172a", borderRadius: 8,
-        padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8,
       }}>
         <span style={{ fontSize: 11, color: "#475569" }}>
           ⚠ Logarithmic scale — each grid division = 10× difference

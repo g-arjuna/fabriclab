@@ -52,7 +52,7 @@ export default function ECNThresholdViz() {
       <div style={{ fontSize: 13, color: '#7c8db5', marginBottom: 4, letterSpacing: '0.08em' }}>INTERACTIVE</div>
       <div style={{ fontSize: 17, fontWeight: 700, color: '#60a5fa', marginBottom: 16 }}>ECN Threshold Tuning â€” Marking Probability vs Queue Depth</div>
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 11, color: '#7c8db5', marginBottom: 4 }}>Link BW: <span style={{ color: '#e2e8f0' }}>{bwGbps} Gbps</span></div>
           <input type="range" min={100} max={400} step={100} value={bwGbps} onChange={e => setBwGbps(Number(e.target.value))} style={{ width: '100%', accentColor: '#60a5fa' }} />
@@ -63,13 +63,13 @@ export default function ECNThresholdViz() {
         </div>
       </div>
 
-      <div style={{ background: '#161928', border: '1px solid #2a2d3e', borderRadius: 8, padding: '8px 14px', marginBottom: 14, fontSize: 12, display: 'flex', gap: 24 }}>
+      <div style={{ background: '#161928', border: '1px solid #2a2d3e', borderRadius: 8, padding: '8px 14px', marginBottom: 14, fontSize: 12, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <div>BDP = <span style={{ color: '#fbbf24' }}>{bdpKb} KB</span></div>
         <div>BDP/4 = <span style={{ color: '#76e5b5' }}>{bdpOver4} KB</span> <span style={{ color: '#7c8db5' }}>(recommended min_threshold base)</span></div>
       </div>
 
-      <div style={{ marginBottom: 14 }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block' }}>
+      <div style={{ marginBottom: 14, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: W, maxWidth: W, display: 'block' }}>
           {[0, 25, 50, 75, 100].map(pct => (
             <g key={pct}>
               <line x1={20} y1={toSvgY(pct)} x2={W - 20} y2={toSvgY(pct)} stroke="#2a2d3e" strokeWidth={0.5} />
@@ -88,7 +88,7 @@ export default function ECNThresholdViz() {
         </svg>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 11, color: '#fbbf24', marginBottom: 4 }}>min_threshold: <span style={{ color: '#e2e8f0' }}>{minThresh} KB</span></div>
           <input type="range" min={50} max={4096} step={50} value={minThresh} onChange={e => { const v = Number(e.target.value); setMinThresh(v); if (v >= maxThresh) setMaxThresh(v + 200) }} style={{ width: '100%', accentColor: '#fbbf24' }} />

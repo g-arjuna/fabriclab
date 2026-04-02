@@ -96,36 +96,38 @@ export function IPMIProtocolViz() {
         <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, textTransform: "uppercase" }}>
           IPMI Message Format (over UDP/LAN)
         </div>
-        <div style={{ display: "flex", gap: 2, height: 36, borderRadius: 4, overflow: "hidden" }}>
-          {[
-            { label: "Session Hdr", bytes: "10 B", color: "#334155" },
-            { label: "Auth Code", bytes: "16 B", color: "#374151" },
-            { label: "NetFn (6b) + LUN (2b)", bytes: "1 B", color: "#6366f1" },
-            { label: "Checksum 1", bytes: "1 B", color: "#334155" },
-            { label: "Command", bytes: "1 B", color: "#0ea5e9" },
-            { label: "Data", bytes: "0-N B", color: "#22c55e" },
-            { label: "Checksum 2", bytes: "1 B", color: "#334155" },
-          ].map((f, i) => (
-            <div key={i} style={{
-              flex: f.label.includes("Data") ? 3 : f.label.includes("Auth") ? 2 : 1,
-              background: f.color,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRight: "1px solid #0f172a",
-            }}>
-              <div style={{ fontSize: 9, color: "#e2e8f0", fontWeight: 600, textAlign: "center", padding: "0 2px" }}>{f.label}</div>
-              <div style={{ fontSize: 8, color: "#94a3b8" }}>{f.bytes}</div>
-            </div>
-          ))}
+        <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+          <div style={{ display: "flex", gap: 2, height: 36, borderRadius: 4, overflow: "hidden", minWidth: 520 }}>
+            {[
+              { label: "Session Hdr", bytes: "10 B", color: "#334155" },
+              { label: "Auth Code", bytes: "16 B", color: "#374151" },
+              { label: "NetFn (6b) + LUN (2b)", bytes: "1 B", color: "#6366f1" },
+              { label: "Checksum 1", bytes: "1 B", color: "#334155" },
+              { label: "Command", bytes: "1 B", color: "#0ea5e9" },
+              { label: "Data", bytes: "0-N B", color: "#22c55e" },
+              { label: "Checksum 2", bytes: "1 B", color: "#334155" },
+            ].map((f, i) => (
+              <div key={i} style={{
+                flex: f.label.includes("Data") ? 3 : f.label.includes("Auth") ? 2 : 1,
+                background: f.color,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRight: "1px solid #0f172a",
+              }}>
+                <div style={{ fontSize: 9, color: "#e2e8f0", fontWeight: 600, textAlign: "center", padding: "0 2px" }}>{f.label}</div>
+                <div style={{ fontSize: 8, color: "#94a3b8" }}>{f.bytes}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Transport selector */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8, textTransform: "uppercase" }}>Transport</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
           {(["lan", "kcs"] as Transport[]).map((t) => (
             <button key={t} onClick={() => setTransport(t)} style={{
               padding: "6px 14px", borderRadius: 6,

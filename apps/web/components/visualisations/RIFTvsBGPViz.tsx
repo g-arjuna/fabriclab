@@ -14,7 +14,7 @@ export function RIFTvsBGPViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">BGP vs RIFT — topology awareness</div>
       <div className="mb-5 text-xs text-slate-600">Switch views to see what each protocol knows about the fabric at the leaf node.</div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <button
           onClick={() => setView("bgp")}
           style={{ flex: 1, padding: "8px 0", background: view === "bgp" ? "#185FA5" : "transparent", border: `1px solid ${view === "bgp" ? "#185FA5" : "#334155"}`, borderRadius: 8, color: view === "bgp" ? "#fff" : "#94a3b8", fontSize: 12, cursor: "pointer" }}
@@ -29,7 +29,8 @@ export function RIFTvsBGPViz() {
         </button>
       </div>
 
-      <svg width="100%" viewBox="0 0 580 300" style={{ display: "block", marginBottom: 12 }}>
+      <div className="overflow-x-auto pb-2">
+      <svg width="100%" viewBox="0 0 580 300" style={{ display: "block", marginBottom: 12, minWidth: 580 }}>
         {/* Leaf1 — always visible, always knows local */}
         <rect x="20" y="200" width="80" height="48" rx="6" fill={view === "bgp" ? "#0c3260" : "#4a1b0c"} stroke={view === "bgp" ? "#378ADD" : "#D85A30"} strokeWidth="1"/>
         <text x="60" y="220" textAnchor="middle" fill="#e2e8f0" fontSize="11" fontWeight="500">Leaf 1</text>
@@ -89,8 +90,9 @@ export function RIFTvsBGPViz() {
           <text x="370" y="255" textAnchor="middle" fill="#fb923c" fontSize="10">Spine utilisation, far-leaf adjacencies — all known.</text>
         )}
       </svg>
+      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
         {[
           { label: "Propagation model", bgp: "Path-vector (reachability only)", rift: "Northbound link-state, southbound distance-vector" },
           { label: "Convergence on failure", bgp: "Multiple BGP round-trips (~100ms+)", rift: "Link-state propagation (<10ms typical)" },

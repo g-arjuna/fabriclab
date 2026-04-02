@@ -99,7 +99,7 @@ export function StorageFrameAnatomyViz() {
       </div>
 
       {/* Frame type selector */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         {(["send", "write"] as FrameType[]).map((t) => (
           <button
             key={t}
@@ -122,21 +122,23 @@ export function StorageFrameAnatomyViz() {
       </div>
 
       {/* Visual byte bar */}
-      <div style={{ display: "flex", height: 16, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
-        {fields.map((f, i) => (
-          <div
-            key={i}
-            onClick={() => setSelected(selected === i ? null : i)}
-            style={{
-              flex: f.size > 100 ? 100 : f.size,
-              background: selected === i ? f.color : f.color + "88",
-              cursor: "pointer",
-              transition: "background 0.1s",
-              borderRight: "1px solid #0f172a",
-            }}
-            title={`${f.name} (${f.size}B)`}
-          />
-        ))}
+      <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+        <div style={{ display: "flex", height: 16, borderRadius: 4, overflow: "hidden", marginBottom: 6, minWidth: 480 }}>
+          {fields.map((f, i) => (
+            <div
+              key={i}
+              onClick={() => setSelected(selected === i ? null : i)}
+              style={{
+                flex: f.size > 100 ? 100 : f.size,
+                background: selected === i ? f.color : f.color + "88",
+                cursor: "pointer",
+                transition: "background 0.1s",
+                borderRight: "1px solid #0f172a",
+              }}
+              title={`${f.name} (${f.size}B)`}
+            />
+          ))}
+        </div>
       </div>
       <div style={{ fontSize: 10, color: "#334155", marginBottom: 16, textAlign: "right" }}>
         bar width proportional to byte count (data payload capped)
@@ -163,7 +165,7 @@ export function StorageFrameAnatomyViz() {
           >
             <div style={{ width: 10, height: 10, borderRadius: 2, background: f.color, flexShrink: 0, marginTop: 1 }} />
             <div style={{ flex: 1, fontSize: 12, color: selected === i ? "#e2e8f0" : "#94a3b8" }}>{f.name}</div>
-            <div style={{ fontSize: 11, color: f.color, minWidth: 80, textAlign: "right", fontWeight: 600 }}>
+            <div style={{ fontSize: 11, color: f.color, minWidth: 72, textAlign: "right", fontWeight: 600 }}>
               {f.value.length > 18 ? f.value.slice(0, 16) + ".." : f.value}
             </div>
             <div style={{ fontSize: 11, color: "#475569", minWidth: 50, textAlign: "right" }}>

@@ -29,7 +29,7 @@ export function ServerPrefixViz() {
       </div>
 
       {/* Mode toggle */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         <button onClick={() => setMode("correct")} style={{
           padding: "7px 18px", borderRadius: 6,
           border: `1px solid ${mode === "correct" ? "#22c55e" : "#334155"}`,
@@ -53,8 +53,8 @@ export function ServerPrefixViz() {
       {mode === "correct" ? (
         <>
           {/* Fabric diagram with /32 flows */}
-          <div style={{ background: "#1e293b", borderRadius: 10, padding: 14, marginBottom: 16 }}>
-            <svg viewBox="0 0 680 260" style={{ width: "100%", height: "auto" }}>
+          <div style={{ background: "#1e293b", borderRadius: 10, padding: 14, marginBottom: 16, overflowX: "auto" }}>
+            <svg viewBox="0 0 680 260" style={{ width: "100%", height: "auto", minWidth: 680 }}>
               {/* Spines */}
               {[0, 1].map((i) => (
                 <g key={i}>
@@ -151,7 +151,7 @@ export function ServerPrefixViz() {
 
           <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
             <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 700, marginBottom: 5, textTransform: "uppercase" }}>BGP table on Leaf-01</div>
-            <pre style={{ margin: 0, fontSize: 11, color: "#4ade80", lineHeight: 1.7 }}>{`B>  10.10.1.5/32 [20/0] via fe80::spine01, swp33 weight 1
+            <pre style={{ margin: 0, fontSize: 11, color: "#4ade80", lineHeight: 1.7, overflowX: "auto" }}>{`B>  10.10.1.5/32 [20/0] via fe80::spine01, swp33 weight 1
                         via fe80::spine01, swp34 weight 1
 B>  10.10.1.6/32 [20/0] via fe80::spine01, swp33 weight 1
                         via fe80::spine01, swp34 weight 1
@@ -176,10 +176,10 @@ B>  10.10.1.6/32 [20/0] via fe80::spine01, swp33 weight 1
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
             <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
               <div style={{ fontSize: 11, color: "#f87171", fontWeight: 700, marginBottom: 6 }}>BGP table with /24 -- ambiguous</div>
-              <pre style={{ margin: 0, fontSize: 11, color: "#fca5a5", lineHeight: 1.65 }}>{`# On spine-01: receives SAME prefix from two different leaves
+              <pre style={{ margin: 0, fontSize: 11, color: "#fca5a5", lineHeight: 1.65, overflowX: "auto" }}>{`# On spine-01: receives SAME prefix from two different leaves
 B   10.10.1.0/24 [20/0] via fe80::leaf01, swp1
 B   10.10.1.0/24 [20/0] via fe80::leaf02, swp2
 # Both leaves claim the whole /24 -- no way to know which DGX is where
@@ -187,7 +187,7 @@ B   10.10.1.0/24 [20/0] via fe80::leaf02, swp2
             </div>
             <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
               <div style={{ fontSize: 11, color: "#22c55e", fontWeight: 700, marginBottom: 6 }}>BGP table with /32 -- precise</div>
-              <pre style={{ margin: 0, fontSize: 11, color: "#4ade80", lineHeight: 1.65 }}>{`# On spine-01: each server IP uniquely owned by one leaf
+              <pre style={{ margin: 0, fontSize: 11, color: "#4ade80", lineHeight: 1.65, overflowX: "auto" }}>{`# On spine-01: each server IP uniquely owned by one leaf
 B   10.10.1.1/32 via fe80::leaf01  # DGX-01 eth0 -> Leaf-01
 B   10.10.1.2/32 via fe80::leaf02  # DGX-02 eth0 -> Leaf-02
 # Unambiguous. Traffic always reaches the correct leaf.`}</pre>

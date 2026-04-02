@@ -54,7 +54,8 @@ export function MIGNetworkViz() {
         ))}
       </div>
 
-      <svg width="100%" viewBox="0 0 680 320" style={{ display: "block", marginBottom: "16px" }}>
+      <div className="overflow-x-auto pb-2">
+      <svg width="100%" viewBox="0 0 680 320" style={{ display: "block", marginBottom: "16px", minWidth: 680 }}>
         <defs>
           <marker id="mig-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
             <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -157,8 +158,9 @@ export function MIGNetworkViz() {
           Each VF: separate MAC, RoCEv2 QP space, bandwidth limit
         </text>
       </svg>
+      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "10px", marginBottom: "12px" }}>
         {[
           { label: "MIG instances", value: String(prof.count) },
           { label: "SM per instance", value: `${prof.smPct}%` },

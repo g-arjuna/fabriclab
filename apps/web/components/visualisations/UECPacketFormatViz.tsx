@@ -62,7 +62,7 @@ export function UECPacketFormatViz() {
 
   return (
     <div style={{ background: "#0f172a", borderRadius: 12, padding: "24px", fontFamily: "monospace", color: "#e2e8f0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
         <div style={{ fontSize: 13, color: "#94a3b8" }}>UET packet format vs RoCEv2 BTH -- byte-level comparison</div>
         <div style={{ display: "flex", gap: 6 }}>
           {(["frames", "compare"] as const).map(v => (
@@ -77,7 +77,7 @@ export function UECPacketFormatViz() {
       </div>
 
       {view === "frames" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
           {renderFrame(ROCEV2_FIELDS, "RoCEv2")}
           {renderFrame(UEC_FIELDS, "UEC / UET")}
         </div>
@@ -85,22 +85,26 @@ export function UECPacketFormatViz() {
 
       {view === "compare" && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.5fr", gap: 2, marginBottom: 6 }}>
-            <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, padding: "4px 10px" }}>RoCEv2 BTH</div>
-            <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, padding: "4px 10px" }}>UEC UET header</div>
-            <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, padding: "4px 10px" }}>Why it changed</div>
-          </div>
-          {FIELD_COMPARE.map((row, i) => (
-            <div key={i} style={{
-              display: "grid", gridTemplateColumns: "1fr 1fr 1.5fr",
-              background: i % 2 === 0 ? "#1e293b" : "#0f172a",
-              borderRadius: 5, marginBottom: 2,
-            }}>
-              <div style={{ padding: "8px 10px", fontSize: 11, color: "#fca5a5", borderRight: "1px solid #334155" }}>{row.rocev2}</div>
-              <div style={{ padding: "8px 10px", fontSize: 11, color: "#fde68a", borderRight: "1px solid #334155" }}>{row.uec}</div>
-              <div style={{ padding: "8px 10px", fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>{row.why}</div>
+          <div style={{ overflowX: "auto", paddingBottom: 6 }}>
+            <div style={{ minWidth: 620 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.5fr", gap: 2, marginBottom: 6 }}>
+                <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, padding: "4px 10px" }}>RoCEv2 BTH</div>
+                <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, padding: "4px 10px" }}>UEC UET header</div>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, padding: "4px 10px" }}>Why it changed</div>
+              </div>
+              {FIELD_COMPARE.map((row, i) => (
+                <div key={i} style={{
+                  display: "grid", gridTemplateColumns: "1fr 1fr 1.5fr",
+                  background: i % 2 === 0 ? "#1e293b" : "#0f172a",
+                  borderRadius: 5, marginBottom: 2,
+                }}>
+                  <div style={{ padding: "8px 10px", fontSize: 11, color: "#fca5a5", borderRight: "1px solid #334155" }}>{row.rocev2}</div>
+                  <div style={{ padding: "8px 10px", fontSize: 11, color: "#fde68a", borderRight: "1px solid #334155" }}>{row.uec}</div>
+                  <div style={{ padding: "8px 10px", fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>{row.why}</div>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
       )}
 

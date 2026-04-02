@@ -106,49 +106,52 @@ export function GDSPathViz() {
       </div>
 
       {/* Column headers */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 100px", gap: 8, marginBottom: 10 }}>
-        <div style={{ fontSize: 11, color: "#64748b" }}>SOFTWARE / HARDWARE LAYER</div>
-        <div style={{ fontSize: 11, color: "#f87171", textAlign: "center" }}>HOST CPU PATH</div>
-        <div style={{ fontSize: 11, color: "#22c55e", textAlign: "center" }}>GDS PATH</div>
-      </div>
+      <div style={{ overflowX: "auto", paddingBottom: 6 }}>
+        <div style={{ minWidth: 520 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 100px", gap: 8, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: "#64748b" }}>SOFTWARE / HARDWARE LAYER</div>
+            <div style={{ fontSize: 11, color: "#f87171", textAlign: "center" }}>HOST CPU PATH</div>
+            <div style={{ fontSize: 11, color: "#22c55e", textAlign: "center" }}>GDS PATH</div>
+          </div>
 
-      {/* Layer rows */}
-      {LAYERS.map((layer, i) => (
-        <div
-          key={i}
-          onClick={() => setSelected(selected === i ? null : i)}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 100px 100px",
-            gap: 8,
-            alignItems: "center",
-            padding: "8px 10px",
-            borderRadius: 6,
-            cursor: "pointer",
-            background: selected === i ? "#1e293b" : "transparent",
-            border: `1px solid ${selected === i ? layer.color + "55" : "transparent"}`,
-            marginBottom: 3,
-            transition: "all 0.1s",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: 2, background: layer.color, flexShrink: 0 }} />
-            <div style={{ fontSize: 12, color: selected === i ? "#e2e8f0" : "#94a3b8", fontWeight: selected === i ? 600 : 400 }}>
-              {layer.name}
+          {LAYERS.map((layer, i) => (
+            <div
+              key={i}
+              onClick={() => setSelected(selected === i ? null : i)}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 100px 100px",
+                gap: 8,
+                alignItems: "center",
+                padding: "8px 10px",
+                borderRadius: 6,
+                cursor: "pointer",
+                background: selected === i ? "#1e293b" : "transparent",
+                border: `1px solid ${selected === i ? layer.color + "55" : "transparent"}`,
+                marginBottom: 3,
+                transition: "all 0.1s",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 8, height: 8, borderRadius: 2, background: layer.color, flexShrink: 0 }} />
+                <div style={{ fontSize: 12, color: selected === i ? "#e2e8f0" : "#94a3b8", fontWeight: selected === i ? 600 : 400 }}>
+                  {layer.name}
+                </div>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                {layer.present.cpu
+                  ? <span style={{ color: "#f87171", fontSize: 14 }}>YES</span>
+                  : <span style={{ color: "#334155", fontSize: 14 }}>--</span>}
+              </div>
+              <div style={{ textAlign: "center" }}>
+                {layer.present.gds
+                  ? <span style={{ color: "#22c55e", fontSize: 14 }}>YES</span>
+                  : <span style={{ color: "#334155", fontSize: 14 }}>--</span>}
+              </div>
             </div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            {layer.present.cpu
-              ? <span style={{ color: "#f87171", fontSize: 14 }}>YES</span>
-              : <span style={{ color: "#334155", fontSize: 14 }}>--</span>}
-          </div>
-          <div style={{ textAlign: "center" }}>
-            {layer.present.gds
-              ? <span style={{ color: "#22c55e", fontSize: 14 }}>YES</span>
-              : <span style={{ color: "#334155", fontSize: 14 }}>--</span>}
-          </div>
+          ))}
         </div>
-      ))}
+      </div>
 
       {/* Detail panel */}
       {selectedLayer && (
@@ -172,7 +175,7 @@ export function GDSPathViz() {
       )}
 
       {/* PCIe crossing summary */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 20 }}>
         <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
           <div style={{ fontSize: 11, color: "#f87171", fontWeight: 700, marginBottom: 6 }}>Host CPU Path -- PCIe crossings</div>
           <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.7 }}>

@@ -270,7 +270,7 @@ export function RedfishAPIViz() {
         <div style={{ fontSize: 15, fontWeight: 600, color: "#f1f5f9" }}>Resource Tree Explorer</div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
         {/* Tree sidebar */}
         <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 0", overflowY: "auto", maxHeight: 480 }}>
           {TREE_ORDER.map((id) => {

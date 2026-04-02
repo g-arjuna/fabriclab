@@ -102,7 +102,7 @@ export function AllReduceOnTorusViz() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", marginBottom: "20px" }}>
         <div style={{ background: "#1e293b", borderRadius: "10px", padding: "14px" }}>
           <div style={{ fontSize: "11px", color: "#5F5E5A", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>Max hop count (AllReduce worst case)</div>
           <HopBar label="Fat-tree" hops={ftHops} maxHops={maxHops} color="#9FE1CB" bg="#0F6E56" />
@@ -124,7 +124,7 @@ export function AllReduceOnTorusViz() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px", marginBottom: "16px" }}>
         {[
           { label: "Torus fault tolerance", value: "Limited", note: "Few alternate paths", color: "#F0997B" },
           { label: "Fat-tree fault tolerance", value: "High", note: "ECMP + adaptive routing", color: "#9FE1CB" },

@@ -230,7 +230,7 @@ export function StorageDiagnosticsViz() {
           {/* Expanded detail */}
           {expanded === i && (
             <div style={{ padding: "0 14px 12px 14px", borderTop: "1px solid #334155" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginTop: 10 }}>
                 <div style={{ background: "#0f172a", borderRadius: 6, padding: "8px 10px", borderLeft: "3px solid #22c55e" }}>
                   <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 700, marginBottom: 4 }}>GOOD OUTPUT</div>
                   <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.6 }}>{cmd.good}</div>

@@ -118,10 +118,10 @@ export function NVLinkGenerationViz() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px", marginBottom: "16px" }}>
         <div style={{ background: "#1e293b", borderRadius: "10px", padding: "14px" }}>
           <div style={{ fontSize: "11px", color: "#5F5E5A", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>NVLink {g.nvlinkGen} — GPU interconnect</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px", marginBottom: "12px" }}>
             {[
               { label: "Links per GPU", value: String(g.linksPerGPU) },
               { label: "BW per link", value: `${g.bwPerLink} GB/s` },
@@ -141,7 +141,7 @@ export function NVLinkGenerationViz() {
 
         <div style={{ background: "#1e293b", borderRadius: "10px", padding: "14px" }}>
           <div style={{ fontSize: "11px", color: "#5F5E5A", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>NVSwitch {g.nvswitchGen}th gen — node fabric</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px", marginBottom: "12px" }}>
             {[
               { label: "Agg. switch BW", value: `${(g.nvswitchAgg / 1000).toFixed(1)} Tb/s` },
               { label: "GPUs per node", value: String(g.gpusPerNode) },

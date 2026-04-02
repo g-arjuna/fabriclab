@@ -83,17 +83,19 @@ export function QueuePairMechanicsViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">Queue pair mechanics -- RDMA Write pipeline</div>
       <div className="mb-5 text-xs text-slate-600">Step through the journey from NCCL to GPU HBM. Zero CPU instructions touch the data.</div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6, marginBottom: 20, alignItems: "center" }}>
-        <div style={nodeStyle(a.gpu, "#9333EA", "#2e1065")}>GPU<br/><span style={{ fontSize: 9, fontWeight: 400 }}>HBM + NCCL</span></div>
-        <div style={nodeStyle(a.sq, "#185FA5", "#0c3260")}>Send Queue<br/><span style={{ fontSize: 9, fontWeight: 400 }}>WQE ring buffer</span></div>
-        <div style={nodeStyle(a.hca, "#0F6E56", "#0a2e22")}>ConnectX-7<br/><span style={{ fontSize: 9, fontWeight: 400 }}>HCA firmware</span></div>
-        <div style={nodeStyle(a.wire, "#854F0B", "#2a1a06")}>Fabric<br/><span style={{ fontSize: 9, fontWeight: 400 }}>400G PAM-4</span></div>
-        <div style={nodeStyle(a.rq, "#0F6E56", "#0a2e22")}>Remote HCA<br/><span style={{ fontSize: 9, fontWeight: 400 }}>Recv Queue</span></div>
-        <div style={nodeStyle(a.remotegpu, "#9333EA", "#2e1065")}>Remote GPU<br/><span style={{ fontSize: 9, fontWeight: 400 }}>HBM target</span></div>
+      <div style={{ overflowX: "auto", paddingBottom: 6, marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(92px, 1fr))", gap: 6, alignItems: "center", minWidth: 600 }}>
+          <div style={nodeStyle(a.gpu, "#9333EA", "#2e1065")}>GPU<br/><span style={{ fontSize: 9, fontWeight: 400 }}>HBM + NCCL</span></div>
+          <div style={nodeStyle(a.sq, "#185FA5", "#0c3260")}>Send Queue<br/><span style={{ fontSize: 9, fontWeight: 400 }}>WQE ring buffer</span></div>
+          <div style={nodeStyle(a.hca, "#0F6E56", "#0a2e22")}>ConnectX-7<br/><span style={{ fontSize: 9, fontWeight: 400 }}>HCA firmware</span></div>
+          <div style={nodeStyle(a.wire, "#854F0B", "#2a1a06")}>Fabric<br/><span style={{ fontSize: 9, fontWeight: 400 }}>400G PAM-4</span></div>
+          <div style={nodeStyle(a.rq, "#0F6E56", "#0a2e22")}>Remote HCA<br/><span style={{ fontSize: 9, fontWeight: 400 }}>Recv Queue</span></div>
+          <div style={nodeStyle(a.remotegpu, "#9333EA", "#2e1065")}>Remote GPU<br/><span style={{ fontSize: 9, fontWeight: 400 }}>HBM target</span></div>
+        </div>
       </div>
 
       <div style={{ background: "#1e293b", borderRadius: 10, padding: "14px 16px", marginBottom: 14, minHeight: 110 }}>
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 6 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 6 }}>
           <div style={{ background: "#0c3260", border: "1px solid #378ADD", borderRadius: 5, padding: "2px 8px", fontSize: 10, color: "#93c5fd", flexShrink: 0 }}>Phase {step + 1}/7</div>
           <div style={{ fontSize: 12, fontWeight: 500, color: "#e2e8f0" }}>{s.phase}</div>
         </div>
@@ -107,7 +109,7 @@ export function QueuePairMechanicsViz() {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0} style={{ flex: 1, padding: "8px 0", background: "transparent", border: "1px solid #334155", borderRadius: 8, color: step === 0 ? "#334155" : "#94a3b8", fontSize: 12, cursor: step === 0 ? "not-allowed" : "pointer" }}>{"<- Previous"}</button>
         <button onClick={() => setStep(Math.min(steps.length - 1, step + 1))} disabled={step === steps.length - 1} style={{ flex: 1, padding: "8px 0", background: "transparent", border: "1px solid #334155", borderRadius: 8, color: step === steps.length - 1 ? "#334155" : "#94a3b8", fontSize: 12, cursor: step === steps.length - 1 ? "not-allowed" : "pointer" }}>{"Next ->"}</button>
       </div>

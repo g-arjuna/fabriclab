@@ -206,7 +206,7 @@ export function TorusEvolutionViz() {
             <div style={{ fontSize: "14px", color: "#B4B2A9" }}>{d.desc}</div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px", marginBottom: "16px" }}>
             {[
               { label: "Dimensions", value: String(d.dim) },
               { label: "Links / node", value: String(d.linksPerNode) },

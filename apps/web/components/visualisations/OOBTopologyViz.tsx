@@ -74,8 +74,8 @@ export function OOBTopologyViz() {
       </div>
 
       {/* Topology SVG */}
-      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16 }}>
-        <svg viewBox="0 0 720 400" style={{ width: "100%", height: "auto" }}>
+      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, overflowX: "auto" }}>
+        <svg viewBox="0 0 720 400" style={{ width: "100%", height: "auto", minWidth: 720 }}>
           {/* SN2201 OOB switch -- center */}
           <rect x={270} y={150} width={180} height={100} rx={8}
             fill="#292524" stroke="#f59e0b" strokeWidth={2} />
@@ -176,7 +176,7 @@ export function OOBTopologyViz() {
       </div>
 
       {/* Port count table */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginTop: 16 }}>
         {[
           { label: "BMC ports (8 DGX)", count: "8 ports", color: bmc_color, note: "swp1-8, VLAN 10" },
           { label: "Switch mgmt0 (5 switches)", count: "5 ports", color: sw_color, note: "swp9-13, VLAN 20" },

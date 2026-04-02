@@ -41,7 +41,7 @@ export function BGPDPFViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">BGP DPF — logical fabric coloring</div>
       <div className="mb-5 text-xs text-slate-600">Select a tenant to trace its dedicated path through the colored logical fabric.</div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         {(["none", "critical", "bulk"] as Tenant[]).map((t) => (
           <button
             key={t}
@@ -63,7 +63,8 @@ export function BGPDPFViz() {
         ))}
       </div>
 
-      <svg width="100%" viewBox="0 0 580 280" style={{ display: "block", marginBottom: 16 }}>
+      <div className="overflow-x-auto pb-2">
+      <svg width="100%" viewBox="0 0 580 280" style={{ display: "block", marginBottom: 16, minWidth: 580 }}>
         {/* Leaf1 */}
         <rect x="20" y="110" width="80" height="60" rx="6" fill="#1e293b" stroke="#475569" strokeWidth="0.5"/>
         <text x="60" y="136" textAnchor="middle" fill="#e2e8f0" fontSize="11" fontWeight="500">Leaf 1</text>
@@ -110,6 +111,7 @@ export function BGPDPFViz() {
         <rect x="20" y="250" width="10" height="10" rx="2" fill="#1D9E75"/>
         <text x="36" y="260" fill="#94a3b8" fontSize="10">Gray fabric (Tenant B — bulk)</text>
       </svg>
+      </div>
 
       <button
         onClick={() => setShowMapping(!showMapping)}

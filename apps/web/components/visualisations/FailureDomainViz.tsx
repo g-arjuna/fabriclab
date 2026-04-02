@@ -150,7 +150,8 @@ export default function FailureDomainViz() {
         ))}
       </div>
 
-      <svg viewBox={`0 0 ${SV_W} ${SV_H}`} style={{ width: '100%', maxWidth: SV_W, display: 'block', background: '#0d0f18', borderRadius: 8 }}>
+      <div style={{ overflowX: 'auto', borderRadius: 8 }}>
+      <svg viewBox={`0 0 ${SV_W} ${SV_H}`} style={{ width: '100%', minWidth: SV_W, maxWidth: SV_W, display: 'block', background: '#0d0f18', borderRadius: 8 }}>
         {/* Wires DGX → leaf1 */}
         {Array.from({ length: DGX_COUNT }, (_, i) => {
           const y = getDGXY(i) + 10
@@ -286,9 +287,10 @@ export default function FailureDomainViz() {
           </g>
         )}
       </svg>
+      </div>
 
       {/* Metrics */}
-      <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
         <div style={{ background: '#161928', border: '1px solid #2a2d3e', borderRadius: 8, padding: '8px 14px', flex: 1 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: bwColor }}>{simState.bwPct.toFixed(0)}%</div>
           <div style={{ fontSize: 10, color: '#7c8db5' }}>Training BW available</div>

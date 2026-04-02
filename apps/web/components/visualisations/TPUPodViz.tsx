@@ -70,7 +70,7 @@ export function TPUPodViz() {
         The amber node is the active TPU. Toggle to see how communication differs between convolutional and transformer workloads.
       </div>
 
-      <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
         {MODES.map(m => (
           <button
             key={m}
@@ -90,7 +90,8 @@ export function TPUPodViz() {
         ))}
       </div>
 
-      <svg width="100%" viewBox={`0 0 680 ${viewH}`} style={{ display: "block" }}>
+      <div className="overflow-x-auto pb-2">
+      <svg width="100%" viewBox={`0 0 680 ${viewH}`} style={{ display: "block", minWidth: 680 }}>
         {/* Torus links */}
         {nodes.map(n => {
           const neighbours = [
@@ -169,6 +170,7 @@ export function TPUPodViz() {
           </>
         )}
       </svg>
+      </div>
 
       <div style={{ marginTop: "12px", padding: "10px 14px", background: "#1e293b", borderRadius: "8px", fontSize: "12px", color: "#5F5E5A", borderLeft: `2px solid ${mode === "Convolution (local comm)" ? "#1D9E75" : "#D85A30"}` }}>
         {mode === "Convolution (local comm)"

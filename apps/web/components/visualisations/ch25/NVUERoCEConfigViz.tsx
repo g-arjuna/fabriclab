@@ -102,7 +102,7 @@ export default function NVUERoCEConfigViz() {
       <div style={{ fontSize: 13, color: '#7c8db5', marginBottom: 4, letterSpacing: '0.08em' }}>INTERACTIVE</div>
       <div style={{ fontSize: 17, fontWeight: 700, color: '#60a5fa', marginBottom: 16 }}>NVUE RoCE Configuration Walkthrough</div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
         {(['shorthand', 'manual'] as Mode[]).map(m => (
           <button key={m} onClick={() => { setMode(m); setActiveStep(null) }}
             style={{
@@ -142,7 +142,7 @@ export default function NVUERoCEConfigViz() {
                 }}>{idx + 1}</div>
                 <div onClick={() => setActiveStep(isActive ? null : step.id)}
                   style={{
-                    flex: 1, background: '#161928',
+                    flex: 1, minWidth: 0, background: '#161928',
                     border: `1px solid ${isActive ? step.color : '#2a2d3e'}`,
                     borderRadius: 8, padding: '8px 12px', cursor: 'pointer',
                     transition: 'border-color 0.2s',

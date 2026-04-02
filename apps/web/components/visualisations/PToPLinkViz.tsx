@@ -43,7 +43,7 @@ export function PToPLinkViz() {
       </div>
 
       {/* Mode selector */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         {(["unnumbered", "numbered"] as LinkMode[]).map((m) => (
           <button key={m} onClick={() => setMode(m)} style={{
             padding: "7px 18px", borderRadius: 6,
@@ -60,8 +60,8 @@ export function PToPLinkViz() {
       {mode === "unnumbered" && (
         <>
           {/* Link diagram */}
-          <div style={{ background: "#1e293b", borderRadius: 10, padding: 14, marginBottom: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+          <div style={{ background: "#1e293b", borderRadius: 10, padding: 14, marginBottom: 16, overflowX: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 0, minWidth: 620 }}>
               <div style={{ background: "#312e81", border: "2px solid #6366f1", borderRadius: 8, padding: "10px 16px", textAlign: "center" }}>
                 <div style={{ fontSize: 11, color: "#a5b4fc", fontWeight: 700 }}>leaf-01</div>
                 <div style={{ fontSize: 9, color: "#475569" }}>BGP ASN 4200000001</div>
@@ -111,9 +111,9 @@ export function PToPLinkViz() {
                   { label: "Step 3: Flip bit 7", value: EUI64_EXAMPLE.step3, color: "#f59e0b" },
                   { label: "Result link-local", value: EUI64_EXAMPLE.result, color: "#22c55e" },
                 ].map((row) => (
-                  <div key={row.label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                  <div key={row.label} style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
                     <div style={{ fontSize: 10, color: "#475569", minWidth: 130 }}>{row.label}</div>
-                    <div style={{ fontSize: 11, color: row.color, fontFamily: "monospace" }}>{row.value}</div>
+                    <div style={{ fontSize: 11, color: row.color, fontFamily: "monospace", wordBreak: "break-word" }}>{row.value}</div>
                   </div>
                 ))}
               </div>
@@ -157,7 +157,7 @@ export function PToPLinkViz() {
             <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, textTransform: "uppercase" }}>
               /30 vs /31 for P2P links
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
               {[
                 {
                   label: "/30 (avoid)", color: "#f87171",
@@ -201,7 +201,7 @@ export function PToPLinkViz() {
 
           <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
             <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>Numbered link config (Cumulus NVUE)</div>
-            <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.7 }}>{`# On leaf-01: assign /31 to uplink interface
+              <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.7, overflowX: "auto" }}>{`# On leaf-01: assign /31 to uplink interface
 nv set interface swp33 ip address 10.10.5.0/31
 
 # On spine-01: assign far end of same /31

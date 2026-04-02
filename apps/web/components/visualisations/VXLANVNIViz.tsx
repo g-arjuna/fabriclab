@@ -106,28 +106,30 @@ export function VXLANVNIViz() {
           </div>
         </div>
 
-        <div style={{ background: "#1e293b", borderRadius: 8, overflow: "hidden" }}>
-          <div style={{
-            display: "grid", gridTemplateColumns: "120px 70px 80px 80px 130px 60px",
-            gap: 0, padding: "6px 12px", background: "#334155",
-          }}>
-            {["Tenant", "VLAN", "L2 VNI", "L3 VNI", "Subnet", "GPUs"].map((h) => (
-              <div key={h} style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase" }}>{h}</div>
+        <div style={{ background: "#1e293b", borderRadius: 8, overflowX: "auto" }}>
+          <div style={{ minWidth: 560 }}>
+            <div style={{
+              display: "grid", gridTemplateColumns: "120px 70px 80px 80px 130px 60px",
+              gap: 0, padding: "6px 12px", background: "#334155",
+            }}>
+              {["Tenant", "VLAN", "L2 VNI", "L3 VNI", "Subnet", "GPUs"].map((h) => (
+                <div key={h} style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase" }}>{h}</div>
+              ))}
+            </div>
+            {EXAMPLE_TENANTS.map((t, i) => (
+              <div key={i} style={{
+                display: "grid", gridTemplateColumns: "120px 70px 80px 80px 130px 60px",
+                padding: "7px 12px", background: i % 2 === 0 ? "#0f172a" : "transparent",
+              }}>
+                <div style={{ fontSize: 11, color: "#e2e8f0" }}>{t.name}</div>
+                <div style={{ fontSize: 11, color: "#f59e0b" }}>{t.vlan_l2}</div>
+                <div style={{ fontSize: 11, color: "#6366f1" }}>{t.vni_l2}</div>
+                <div style={{ fontSize: 11, color: "#0ea5e9" }}>{t.vni_l3}</div>
+                <div style={{ fontSize: 11, color: "#22c55e" }}>{t.subnet}</div>
+                <div style={{ fontSize: 11, color: "#94a3b8" }}>{t.nodes}</div>
+              </div>
             ))}
           </div>
-          {EXAMPLE_TENANTS.map((t, i) => (
-            <div key={i} style={{
-              display: "grid", gridTemplateColumns: "120px 70px 80px 80px 130px 60px",
-              padding: "7px 12px", background: i % 2 === 0 ? "#0f172a" : "transparent",
-            }}>
-              <div style={{ fontSize: 11, color: "#e2e8f0" }}>{t.name}</div>
-              <div style={{ fontSize: 11, color: "#f59e0b" }}>{t.vlan_l2}</div>
-              <div style={{ fontSize: 11, color: "#6366f1" }}>{t.vni_l2}</div>
-              <div style={{ fontSize: 11, color: "#0ea5e9" }}>{t.vni_l3}</div>
-              <div style={{ fontSize: 11, color: "#22c55e" }}>{t.subnet}</div>
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>{t.nodes}</div>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -159,7 +161,7 @@ export function VXLANVNIViz() {
         <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
           EVPN VXLAN Config on Cumulus (for VNI {vni_l2})
         </div>
-        <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.7 }}>{`# Map VLAN to VNI
+        <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.7, overflowX: "auto" }}>{`# Map VLAN to VNI
 nv set bridge domain br_default vlan ${vlan_id} vni ${vni_l2}
 
 # Create tenant VRF with L3 VNI

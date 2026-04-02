@@ -24,7 +24,7 @@ export function UFMManagementPlaneViz() {
       </div>
 
       {/* Channel selectors */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         <button onClick={() => setActive(active === "ib" ? null : "ib")} style={{
           padding: "6px 14px", borderRadius: 6,
           border: `1px solid ${active === "ib" ? "#a78bfa" : "#334155"}`,
@@ -46,8 +46,8 @@ export function UFMManagementPlaneViz() {
       </div>
 
       {/* Diagram */}
-      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 20 }}>
-        <svg viewBox="0 0 700 300" style={{ width: "100%", height: "auto" }}>
+      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 20, overflowX: "auto" }}>
+        <svg viewBox="0 0 700 300" style={{ width: "100%", height: "auto", minWidth: 700 }}>
 
           {/* UFM Server -- center */}
           <rect x={260} y={100} width={180} height={100} rx={8}
@@ -145,7 +145,7 @@ export function UFMManagementPlaneViz() {
       </div>
 
       {/* Failure modes */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
           <div style={{ fontSize: 11, color: "#a78bfa", fontWeight: 700, marginBottom: 6 }}>If OOB network is down</div>
           <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.65 }}>

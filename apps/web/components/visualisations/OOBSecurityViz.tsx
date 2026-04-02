@@ -189,7 +189,7 @@ export function OOBSecurityViz() {
                   <div style={{ fontSize: 11, color: "#fca5a5" }}>{item.risk}</div>
                 </div>
                 {item.cmd && (
-                  <div style={{ background: "#0f172a", borderRadius: 4, padding: "6px 10px", fontSize: 10, color: "#22c55e" }}>
+                  <div style={{ background: "#0f172a", borderRadius: 4, padding: "6px 10px", fontSize: 10, color: "#22c55e", overflowX: "auto" }}>
                     $ {item.cmd}
                   </div>
                 )}

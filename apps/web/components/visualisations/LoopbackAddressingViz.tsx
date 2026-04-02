@@ -64,7 +64,7 @@ export function LoopbackAddressingViz() {
       </div>
 
       {/* Mode tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         {(["scheme", "vtep", "config"] as Mode[]).map((m) => (
           <button key={m} onClick={() => setMode(m)} style={{
             padding: "6px 14px", borderRadius: 6,
@@ -85,25 +85,27 @@ export function LoopbackAddressingViz() {
             <div style={{ fontSize: 10, color: "#64748b", marginBottom: 10 }}>
               10.10.0.0/24 -- BasePOD 1 switch loopbacks (256 addresses, click a segment)
             </div>
-            <div style={{ display: "flex", height: 32, borderRadius: 5, overflow: "hidden", gap: 2 }}>
-              {SWITCH_TYPES.map((st, i) => (
-                <div
-                  key={st.type}
-                  onClick={() => setSelected(st.type)}
-                  style={{
-                    flex: i === 4 ? 1 : 2,
-                    background: selected === st.type ? st.color : st.color + "55",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer", transition: "background 0.15s",
-                    fontSize: 9, color: "#e2e8f0", fontWeight: 700,
-                  }}
-                  title={st.label}
-                >
-                  {st.range}
+            <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+              <div style={{ display: "flex", height: 32, borderRadius: 5, overflow: "hidden", gap: 2, minWidth: 560 }}>
+                {SWITCH_TYPES.map((st, i) => (
+                  <div
+                    key={st.type}
+                    onClick={() => setSelected(st.type)}
+                    style={{
+                      flex: i === 4 ? 1 : 2,
+                      background: selected === st.type ? st.color : st.color + "55",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer", transition: "background 0.15s",
+                      fontSize: 9, color: "#e2e8f0", fontWeight: 700,
+                    }}
+                    title={st.label}
+                  >
+                    {st.range}
+                  </div>
+                ))}
+                <div style={{ flex: 5, background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#334155" }}>
+                  .80 - .255 RESERVED
                 </div>
-              ))}
-              <div style={{ flex: 5, background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#334155" }}>
-                .80 - .255 RESERVED
               </div>
             </div>
           </div>
@@ -126,12 +128,12 @@ export function LoopbackAddressingViz() {
           {sel && (
             <div style={{ background: "#1e293b", borderRadius: 8, padding: "12px 16px", borderLeft: `3px solid ${sel.color}` }}>
               <div style={{ fontSize: 12, color: sel.color, fontWeight: 700, marginBottom: 8 }}>{sel.label} -- {sel.range}</div>
-              <pre style={{ margin: 0, fontSize: 12, color: "#4ade80", lineHeight: 1.7 }}>{sel.example}</pre>
+              <pre style={{ margin: 0, fontSize: 12, color: "#4ade80", lineHeight: 1.7, overflowX: "auto" }}>{sel.example}</pre>
             </div>
           )}
 
           {/* /32 rationale */}
-          <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
             <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
               <div style={{ fontSize: 11, color: "#22c55e", fontWeight: 700, marginBottom: 5 }}>Why /32 not /24 for loopbacks?</div>
               <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.65 }}>
@@ -155,7 +157,7 @@ export function LoopbackAddressingViz() {
 
       {mode === "vtep" && (
         <>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
             {VTEP_OPTIONS.map((v) => (
               <button key={v.id} onClick={() => setVtepOption(v.id)} style={{
                 padding: "6px 14px", borderRadius: 6,
@@ -172,7 +174,7 @@ export function LoopbackAddressingViz() {
           {vtep && (
             <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, borderLeft: `3px solid ${vtep.color}` }}>
               <div style={{ fontSize: 13, color: vtep.color, fontWeight: 700, marginBottom: 12 }}>{vtep.label}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 700, marginBottom: 5, textTransform: "uppercase" }}>Advantages</div>
                   {vtep.pros.map((p, i) => (
@@ -193,7 +195,7 @@ export function LoopbackAddressingViz() {
                 </div>
               </div>
               <div style={{ background: "#0f172a", borderRadius: 5, padding: "8px 10px", marginBottom: 10 }}>
-                <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.6 }}>{vtep.config}</pre>
+                <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.6, overflowX: "auto" }}>{vtep.config}</pre>
               </div>
               <div style={{ fontSize: 11, color: "#64748b" }}>
                 <span style={{ color: "#475569" }}>Use when: </span>{vtep.when}
@@ -208,7 +210,7 @@ export function LoopbackAddressingViz() {
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>Cumulus Linux NVUE -- full loopback config for leaf-01 (BasePOD 1)</div>
             <div style={{ background: "#1e293b", borderRadius: 8, padding: "12px 14px" }}>
-              <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.75 }}>{`# Set the loopback /32
+              <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.75, overflowX: "auto" }}>{`# Set the loopback /32
 nv set interface lo ip address 10.10.0.1/32
 
 # Configure BGP with loopback as router-ID
@@ -239,7 +241,7 @@ nv show nve vxlan
           <div>
             <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>Verifying remote loopbacks are reachable via BGP</div>
             <div style={{ background: "#1e293b", borderRadius: 8, padding: "12px 14px" }}>
-              <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.75 }}>{`# From leaf-01: ping spine-01 loopback
+              <pre style={{ margin: 0, fontSize: 11, color: "#22c55e", lineHeight: 1.75, overflowX: "auto" }}>{`# From leaf-01: ping spine-01 loopback
 ping -c 3 10.10.0.16
 
 # Check BGP table for loopback routes

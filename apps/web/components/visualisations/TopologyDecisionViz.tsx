@@ -106,7 +106,7 @@ export function TopologyDecisionViz() {
       </div>
 
       {/* Workload profile */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginBottom: "16px" }}>
         <div style={{ background: "#1e293b", borderRadius: "8px", padding: "10px 12px" }}>
           <div style={{ fontSize: "11px", color: "#5F5E5A", marginBottom: "3px" }}>Communication pattern</div>
           <div style={{ fontSize: "14px", fontWeight: 500, color: "#B4B2A9" }}>{w.pattern}</div>
@@ -140,7 +140,7 @@ export function TopologyDecisionViz() {
       </div>
 
       {/* Quick comparison strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginTop: "12px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "8px", marginTop: "12px" }}>
         {[
           { label: "Fat-tree wins when", value: "All-to-all dominates", color: "#B5D4F4" },
           { label: "Torus wins when", value: "Nearest-neighbour dominates", color: "#9FE1CB" },

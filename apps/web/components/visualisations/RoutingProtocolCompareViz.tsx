@@ -98,7 +98,7 @@ export function RoutingProtocolCompareViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">Routing protocol comparison</div>
       <div className="mb-5 text-xs text-slate-600">Click a protocol to see detail. Bar = score 1–5 for each AI fabric dimension.</div>
 
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         {protocols.map((p) => (
           <button
             key={p.id}

@@ -87,7 +87,7 @@ export function UECSwitchCapabilitiesViz() {
 
       {/* Feature x Switch matrix */}
       <div style={{ overflowX: "auto", marginBottom: 20 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table style={{ width: "100%", minWidth: 680, borderCollapse: "collapse" }}>
           <thead>
             <tr>
               <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, color: "#64748b", width: 180 }}>Feature</th>
@@ -137,7 +137,7 @@ export function UECSwitchCapabilitiesViz() {
       {/* Detail panel */}
       {active && (
         <div style={{ background: "#1e293b", borderRadius: 8, padding: 18, borderLeft: `4px solid ${TIER_COLORS[active.tier as keyof typeof TIER_COLORS]}` }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{active.label}</span>
             <span style={{
               background: TIER_COLORS[active.tier as keyof typeof TIER_COLORS] + "22",
@@ -148,7 +148,7 @@ export function UECSwitchCapabilitiesViz() {
           </div>
           <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7, marginBottom: 12 }}>{active.desc}</div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
             <div>
               <div style={{ fontSize: 10, color: "#475569", marginBottom: 6 }}>Sample config:</div>
               <pre style={{

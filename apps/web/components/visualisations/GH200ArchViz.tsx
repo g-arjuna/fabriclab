@@ -16,7 +16,7 @@ export function GH200ArchViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">GH200 Grace Hopper Superchip architecture</div>
       <div className="mb-4 text-xs text-slate-600">Compare conventional DGX H100 CPU-GPU interconnect vs GH200 NVLink-C2C die-to-die path</div>
 
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
         {(["dgx", "gh200"] as View[]).map(v => (
           <button
             key={v}
@@ -38,7 +38,8 @@ export function GH200ArchViz() {
 
       {view === "dgx" && (
         <>
-          <svg width="100%" viewBox="0 0 680 300" style={{ display: "block", marginBottom: "16px" }}>
+          <div className="overflow-x-auto pb-2">
+          <svg width="100%" viewBox="0 0 680 300" style={{ display: "block", marginBottom: "16px", minWidth: 680 }}>
             <defs>
               <marker id="ga-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M2 1L8 5L2 9" fill="none" stroke="#185FA5" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -83,8 +84,9 @@ export function GH200ArchViz() {
             <text x="340" y="166" textAnchor="middle" fontSize="11" fill="#888780">cudaMemcpy required for host-device transfers</text>
             <text x="340" y="184" textAnchor="middle" fontSize="11" fill="#888780">GPU-GPU: NVLink 4 @ 900 GB/s (bypasses CPU)</text>
           </svg>
+          </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>
             {[
               { label: "CPU→GPU bandwidth", value: "63 GB/s", note: "PCIe Gen 5 ceiling", color: "#F0997B" },
               { label: "GPU→GPU bandwidth", value: "900 GB/s", note: "NVLink 4 (bypasses CPU)", color: "#9FE1CB" },
@@ -102,7 +104,8 @@ export function GH200ArchViz() {
 
       {view === "gh200" && (
         <>
-          <svg width="100%" viewBox="0 0 680 300" style={{ display: "block", marginBottom: "16px" }}>
+          <div className="overflow-x-auto pb-2">
+          <svg width="100%" viewBox="0 0 680 300" style={{ display: "block", marginBottom: "16px", minWidth: 680 }}>
             <defs>
               <marker id="gb-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M2 1L8 5L2 9" fill="none" stroke="#EF9F27" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -134,8 +137,9 @@ export function GH200ArchViz() {
             <text x="340" y="212" textAnchor="middle" fontSize="11" fill="#888780">Combined address space: 480 GB LPDDR5X + 96 GB HBM3 ≈ 576 GB</text>
             <text x="340" y="232" textAnchor="middle" fontSize="11" fill="#888780">DGX GH200: 256 superchips, NVLink Switch fabric, 144 TB total memory</text>
           </svg>
+          </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>
             {[
               { label: "CPU→GPU bandwidth", value: "900 GB/s", note: "NVLink-C2C (coherent)", color: "#9FE1CB" },
               { label: "Addressable memory", value: "~576 GB", note: "Unified CPU+GPU space", color: "#FAC775" },

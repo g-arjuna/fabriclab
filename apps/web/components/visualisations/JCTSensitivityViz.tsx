@@ -109,7 +109,7 @@ export default function JCTSensitivityViz() {
       </div>
 
       {/* Controls */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 11, color: '#7c8db5' }}>GPU COUNT: {gpuCount.toLocaleString()}</span>
           <input
@@ -253,7 +253,7 @@ export default function JCTSensitivityViz() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
           gap: 10,
           marginBottom: 16,
         }}

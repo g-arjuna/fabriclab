@@ -91,7 +91,7 @@ export function ScaleUpTopologyViz() {
       </p>
 
       {/* Scale selector */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {([8, 16, 32] as Scale[]).map(s => (
           <button key={s}
             onClick={() => { setScale(s); setHighlighted(null) }}
@@ -111,7 +111,8 @@ export function ScaleUpTopologyViz() {
       </div>
 
       {/* SVG diagram */}
-      <svg viewBox={`0 0 ${W} 290`} style={{ width: "100%", maxWidth: W }}>
+      <div className="overflow-x-auto pb-2">
+      <svg viewBox={`0 0 ${W} 290`} style={{ width: "100%", maxWidth: W, minWidth: W }}>
         {/* Spine → leaf links */}
         {spineXs.map((sx, si) =>
           leafXs.map((lx, li) => {
@@ -212,9 +213,10 @@ export function ScaleUpTopologyViz() {
           {cfg.allToAll} all-to-all · {cfg.hbmPool} unified HBM
         </text>
       </svg>
+      </div>
 
       {/* Stats row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginTop: 12 }}>
         {[
           { label: "DGX nodes", value: `${cfg.nodes}` },
           { label: "Total GPUs", value: `${cfg.gpus}` },

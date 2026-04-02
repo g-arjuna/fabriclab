@@ -71,7 +71,7 @@ export default function ScalableUnitViz() {
       </div>
 
       {/* Tab */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         {(['topology', 'basepad'] as const).map(t => (
           <button key={t} onClick={() => setView(t)} style={{
             padding: '4px 14px', borderRadius: 6, border: '1px solid #2a2d3e',
@@ -102,7 +102,8 @@ export default function ScalableUnitViz() {
             ))}
           </div>
 
-          <svg viewBox="0 0 560 340" style={{ width: '100%', maxWidth: 560, display: 'block' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <svg viewBox="0 0 560 340" style={{ width: '100%', minWidth: 560, maxWidth: 560, display: 'block' }}>
             {/* Draw wires from DGX to leaf1 */}
             {Array.from({ length: 8 }, (_, i) => {
               const dgxY = getDGXY(i) + DGX_H / 2
@@ -235,7 +236,8 @@ export default function ScalableUnitViz() {
               fontSize={8} fontFamily="'JetBrains Mono',monospace" textAnchor="middle">
               BasePOD
             </text>
-          </svg>
+            </svg>
+          </div>
 
           {/* Failure impact summary */}
           {failedSwitch !== 'none' && (
@@ -285,7 +287,8 @@ export default function ScalableUnitViz() {
 
       {view === 'basepad' && (
         <div>
-          <svg viewBox="0 0 600 200" style={{ width: '100%', maxWidth: 600, display: 'block' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <svg viewBox="0 0 600 200" style={{ width: '100%', minWidth: 600, maxWidth: 600, display: 'block' }}>
             {/* 4 SUs arranged in a row */}
             {[0, 1, 2, 3].map(su => {
               const sx = 20 + su * 140
@@ -328,7 +331,8 @@ export default function ScalableUnitViz() {
                 </text>
               </g>
             ))}
-          </svg>
+            </svg>
+          </div>
           <div style={{ marginTop: 10, fontSize: 11, color: '#7c8db5', lineHeight: 1.7 }}>
             <strong style={{ color: '#e2e8f0' }}>BasePOD = 4 × Scalable Units</strong><br />
             32 DGX nodes · 8 SN5600 leaf switches · 4 SN4600C storage switches · 4 SN5600 spine switches<br />

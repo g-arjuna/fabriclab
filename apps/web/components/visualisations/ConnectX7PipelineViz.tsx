@@ -114,31 +114,33 @@ export function ConnectX7PipelineViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">ConnectX-7 packet construction pipeline</div>
       <div className="mb-5 text-xs text-slate-600">7 firmware stages from WQE to wire. Select a stage to inspect fields.</div>
 
-      <div style={{ display: "flex", gap: 0, marginBottom: 20, borderRadius: 8, overflow: "hidden", border: "1px solid #334155" }}>
-        {stages.map((st, i) => (
-          <button
-            key={st.id}
-            onClick={() => setStage(i)}
-            style={{
-              flex: 1,
-              padding: "8px 4px",
-              background: stage === i ? colors[i] : "#1e293b",
-              border: "none",
-              borderRight: i < stages.length - 1 ? "1px solid #334155" : "none",
-              cursor: "pointer",
-              fontSize: 9,
-              color: stage === i ? "#fff" : "#475569",
-              fontWeight: stage === i ? 500 : 400,
-              transition: "all 0.15s",
-              lineHeight: 1.3,
-            }}
-          >
-            {st.id}. {st.name.split(" ")[0]}
-          </button>
-        ))}
+      <div style={{ overflowX: "auto", paddingBottom: 6, marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 0, borderRadius: 8, overflow: "hidden", border: "1px solid #334155", minWidth: 560 }}>
+          {stages.map((st, i) => (
+            <button
+              key={st.id}
+              onClick={() => setStage(i)}
+              style={{
+                flex: 1,
+                padding: "8px 6px",
+                background: stage === i ? colors[i] : "#1e293b",
+                border: "none",
+                borderRight: i < stages.length - 1 ? "1px solid #334155" : "none",
+                cursor: "pointer",
+                fontSize: 9,
+                color: stage === i ? "#fff" : "#475569",
+                fontWeight: stage === i ? 500 : 400,
+                transition: "all 0.15s",
+                lineHeight: 1.3,
+              }}
+            >
+              {st.id}. {st.name.split(" ")[0]}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, marginBottom: 14 }}>
         <div style={{ background: "#1e293b", borderRadius: 10, padding: "12px 14px" }}>
           <div style={{ fontSize: 10, color: "#64748b", marginBottom: 8 }}>Stage {s.id} -- {s.name}</div>
           <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.6, marginBottom: 10 }}>{s.desc}</div>
@@ -147,9 +149,9 @@ export function ConnectX7PipelineViz() {
         <div style={{ background: "#111827", borderRadius: 10, padding: "12px 14px" }}>
           <div style={{ fontSize: 10, color: "#64748b", marginBottom: 8 }}>Fields at this stage</div>
           {s.fields.map((f) => (
-            <div key={f.k} style={{ display: "flex", gap: 8, marginBottom: 5 }}>
+            <div key={f.k} style={{ display: "flex", gap: 8, marginBottom: 5, alignItems: "baseline", flexWrap: "wrap" }}>
               <span style={{ fontSize: 10, color: "#475569", fontFamily: "monospace", minWidth: 110 }}>{f.k}:</span>
-              <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "monospace" }}>{f.v}</span>
+              <span style={{ fontSize: 10, color: "#94a3b8", fontFamily: "monospace", lineHeight: 1.6, wordBreak: "break-word" }}>{f.v}</span>
             </div>
           ))}
         </div>

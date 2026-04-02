@@ -176,7 +176,7 @@ export default function FlexAlgoPathViz() {
       </div>
 
       {/* Algorithm selector */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         {(Object.entries(ALGO_CONFIG) as [string, typeof ALGO_CONFIG[0]][]).map(([id, cfg]) => (
           <button key={id} onClick={() => setAlgo(Number(id) as AlgoId)}
             style={{
@@ -192,7 +192,7 @@ export default function FlexAlgoPathViz() {
       </div>
 
       {/* Flow selector */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11, color: '#7c8db5', alignSelf: 'center' }}>Flow:</span>
         {FLOWS.map(f => (
           <button key={f.id} onClick={() => setSelectedFlow(f.id)}
@@ -208,7 +208,8 @@ export default function FlexAlgoPathViz() {
       </div>
 
       {/* SVG fabric */}
-      <svg viewBox="0 0 620 360" style={{ width: '100%', maxWidth: 620, display: 'block', marginBottom: 14, background: '#090b12', borderRadius: 8 }}>
+      <div style={{ overflowX: 'auto', borderRadius: 8, marginBottom: 14 }}>
+      <svg viewBox="0 0 620 360" style={{ width: '100%', minWidth: 620, maxWidth: 620, display: 'block', background: '#090b12', borderRadius: 8 }}>
         {/* Links */}
         {LINKS.map((link, i) => {
           const a = NODE_MAP.get(link.a)!
@@ -270,9 +271,10 @@ export default function FlexAlgoPathViz() {
           )
         })}
       </svg>
+      </div>
 
       {/* Algorithm info + path stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 12 }}>
         <div style={{ background: '#161928', border: `1px solid ${ac.color}44`, borderRadius: 8, padding: '10px 12px' }}>
           <div style={{ fontSize: 10, color: '#7c8db5', marginBottom: 4 }}>Algorithm metric</div>
           <div style={{ fontSize: 11, color: ac.color, marginBottom: 6 }}>{ac.metric}</div>
@@ -284,7 +286,7 @@ export default function FlexAlgoPathViz() {
           <div style={{ fontSize: 12, color: ac.color, fontWeight: 700, marginBottom: 6 }}>
             {path.join(' → ')}
           </div>
-          <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
+          <div style={{ display: 'flex', gap: 12, fontSize: 11, flexWrap: 'wrap' }}>
             <span><span style={{ color: '#7c8db5' }}>Total latency: </span><span style={{ color: ac.color }}>{pathLatency.toFixed(1)}µs</span></span>
             <span><span style={{ color: '#7c8db5' }}>Min BW: </span><span style={{ color: ac.color }}>{pathMinBW}G</span></span>
           </div>

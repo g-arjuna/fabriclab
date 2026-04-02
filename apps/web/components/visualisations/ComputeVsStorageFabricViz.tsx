@@ -94,7 +94,7 @@ export function ComputeVsStorageFabricViz() {
       </div>
 
       {/* Controls */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 18, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 18, alignItems: "center", flexWrap: "wrap" }}>
         <button
           onClick={() => setShowRisks(!showRisks)}
           style={{
@@ -114,58 +114,59 @@ export function ComputeVsStorageFabricViz() {
       </div>
 
       {/* Header row */}
-      <div style={{ display: "grid", gridTemplateColumns: "150px 1fr 1fr", gap: 8, marginBottom: 8, padding: "0 10px" }}>
-        <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase" }}>Dimension</div>
-        <div style={{ fontSize: 10, color: "#6366f1", textTransform: "uppercase" }}>Compute Fabric</div>
-        <div style={{ fontSize: 10, color: "#0ea5e9", textTransform: "uppercase" }}>Storage Fabric</div>
-      </div>
-
-      {/* Data rows */}
-      {ROWS.map((row, i) => (
-        <div
-          key={i}
-          style={{
-            marginBottom: 4,
-            borderRadius: 8,
-            overflow: "hidden",
-            border: `1px solid ${expanded === i ? "#334155" : "transparent"}`,
-            transition: "border 0.15s",
-          }}
-        >
-          {/* Row header */}
-          <div
-            onClick={() => setExpanded(expanded === i ? null : i)}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "150px 1fr 1fr",
-              gap: 8,
-              padding: "8px 10px",
-              cursor: "pointer",
-              background: expanded === i ? "#1e293b" : "#0f172a",
-              transition: "background 0.1s",
-            }}
-          >
-            <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{row.dim}</div>
-            <div style={{ fontSize: 11, color: "#a5b4fc", lineHeight: 1.4 }}>{row.compute}</div>
-            <div style={{ fontSize: 11, color: "#7dd3fc", lineHeight: 1.4 }}>{row.storage}</div>
+      <div style={{ overflowX: "auto", paddingBottom: 6 }}>
+        <div style={{ minWidth: 620 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "150px 1fr 1fr", gap: 8, marginBottom: 8, padding: "0 10px" }}>
+            <div style={{ fontSize: 10, color: "#475569", textTransform: "uppercase" }}>Dimension</div>
+            <div style={{ fontSize: 10, color: "#6366f1", textTransform: "uppercase" }}>Compute Fabric</div>
+            <div style={{ fontSize: 10, color: "#0ea5e9", textTransform: "uppercase" }}>Storage Fabric</div>
           </div>
 
-          {/* Expanded detail */}
-          {expanded === i && (
-            <div style={{ background: "#1e293b", padding: "10px 12px", borderTop: "1px solid #334155" }}>
-              <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.65, marginBottom: row.risk && showRisks ? 10 : 0 }}>
-                {row.detail}
+          {ROWS.map((row, i) => (
+            <div
+              key={i}
+              style={{
+                marginBottom: 4,
+                borderRadius: 8,
+                overflow: "hidden",
+                border: `1px solid ${expanded === i ? "#334155" : "transparent"}`,
+                transition: "border 0.15s",
+              }}
+            >
+              <div
+                onClick={() => setExpanded(expanded === i ? null : i)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "150px 1fr 1fr",
+                  gap: 8,
+                  padding: "8px 10px",
+                  cursor: "pointer",
+                  background: expanded === i ? "#1e293b" : "#0f172a",
+                  transition: "background 0.1s",
+                }}
+              >
+                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{row.dim}</div>
+                <div style={{ fontSize: 11, color: "#a5b4fc", lineHeight: 1.4 }}>{row.compute}</div>
+                <div style={{ fontSize: 11, color: "#7dd3fc", lineHeight: 1.4 }}>{row.storage}</div>
               </div>
-              {row.risk && showRisks && (
-                <div style={{ background: "#7f1d1d22", borderRadius: 6, padding: "8px 10px", borderLeft: "3px solid #ef4444" }}>
-                  <div style={{ fontSize: 10, color: "#f87171", fontWeight: 700, marginBottom: 3 }}>MISCONFIGURATION RISK</div>
-                  <div style={{ fontSize: 11, color: "#fca5a5" }}>{row.risk}</div>
+
+              {expanded === i && (
+                <div style={{ background: "#1e293b", padding: "10px 12px", borderTop: "1px solid #334155" }}>
+                  <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.65, marginBottom: row.risk && showRisks ? 10 : 0 }}>
+                    {row.detail}
+                  </div>
+                  {row.risk && showRisks && (
+                    <div style={{ background: "#7f1d1d22", borderRadius: 6, padding: "8px 10px", borderLeft: "3px solid #ef4444" }}>
+                      <div style={{ fontSize: 10, color: "#f87171", fontWeight: 700, marginBottom: 3 }}>MISCONFIGURATION RISK</div>
+                      <div style={{ fontSize: 11, color: "#fca5a5" }}>{row.risk}</div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          ))}
         </div>
-      ))}
+      </div>
 
       {/* Key insight box */}
       <div style={{ marginTop: 16, background: "#1e293b", borderRadius: 8, padding: "12px 14px", borderLeft: "3px solid #f59e0b" }}>

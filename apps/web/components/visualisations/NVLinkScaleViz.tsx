@@ -24,7 +24,7 @@ export function NVLinkScaleViz() {
       </p>
 
       {/* Toggle */}
-      <div style={{ display: "flex", background: "#0f172a", borderRadius: 8, padding: 3, gap: 3, marginBottom: 20, width: "fit-content" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", background: "#0f172a", borderRadius: 8, padding: 3, gap: 3, marginBottom: 20, width: "fit-content", maxWidth: "100%" }}>
         {([["intra", "Intra-node NVLink"], ["switch", "NVLink Switch System"]] as [View, string][]).map(([v, label]) => (
           <button
             key={v}
@@ -48,7 +48,8 @@ export function NVLinkScaleViz() {
       {view === "intra" ? (
         /* ── Intra-node view ── */
         <div>
-          <svg viewBox="0 0 560 240" style={{ width: "100%", maxWidth: 560 }}>
+          <div className="overflow-x-auto pb-2">
+          <svg viewBox="0 0 560 240" style={{ width: "100%", maxWidth: 560, minWidth: 560 }}>
             {/* DGX chassis border */}
             <rect x={20} y={20} width={520} height={200} rx={12} ry={12}
               fill="none" stroke="#334155" strokeWidth={1.5} strokeDasharray="6,3" />
@@ -105,6 +106,7 @@ export function NVLinkScaleViz() {
               13.6 Tb/s all-to-all · 900 GB/s per GPU · 1 hop
             </text>
           </svg>
+          </div>
 
           <div style={{ background: "#1e1333", borderRadius: 10, padding: 12, marginTop: 8 }}>
             <p style={{ fontSize: 12, color: "#c4b5fd", margin: 0, lineHeight: 1.6 }}>
@@ -115,7 +117,8 @@ export function NVLinkScaleViz() {
       ) : (
         /* ── NVLink Switch view ── */
         <div>
-          <svg viewBox="0 0 560 280" style={{ width: "100%", maxWidth: 560 }}>
+          <div className="overflow-x-auto pb-2">
+          <svg viewBox="0 0 560 280" style={{ width: "100%", maxWidth: 560, minWidth: 560 }}>
             {/* Three DGX nodes */}
             {[0, 1, 2].map(n => (
               <g key={n}>
@@ -172,6 +175,7 @@ export function NVLinkScaleViz() {
               Same OSFP cables · firmware mode selects NVLink vs IB
             </text>
           </svg>
+          </div>
 
           <div style={{ background: "#1c1a04", borderRadius: 10, padding: 12, marginTop: 8 }}>
             <p style={{ fontSize: 12, color: "#fde68a", margin: 0, lineHeight: 1.6 }}>

@@ -124,7 +124,7 @@ export function NVLinkDiagnosticsViz() {
       </div>
 
       {/* Side-by-side panels */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10, marginBottom: 12 }}>
         {[
           { title: "InfiniBand / RoCEv2", side: scenario.ib, borderColor: "#3b82f6", bg: "#020f23" },
           { title: "NVLink Switch System", side: scenario.nvlink, borderColor: "#f59e0b", bg: "#100a00" },

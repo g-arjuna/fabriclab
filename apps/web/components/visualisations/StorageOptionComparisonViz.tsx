@@ -86,7 +86,7 @@ export default function StorageOptionComparisonViz() {
         AI Factory Storage Options — Bandwidth vs Latency
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={() => setShowRdmaOnly(!showRdmaOnly)} style={{
           padding: '4px 12px', borderRadius: 6, fontSize: 11,
           border: `1px solid ${showRdmaOnly ? '#60a5fa' : '#2a2d3e'}`,
@@ -107,7 +107,8 @@ export default function StorageOptionComparisonViz() {
         )}
       </div>
 
-      <svg viewBox="0 0 640 260" style={{ width: '100%', maxWidth: 640, display: 'block', background: '#0d0f18', borderRadius: 8 }}>
+      <div style={{ overflowX: 'auto', borderRadius: 8 }}>
+      <svg viewBox="0 0 640 260" style={{ width: '100%', minWidth: 640, maxWidth: 640, display: 'block', background: '#0d0f18', borderRadius: 8 }}>
         {/* Grid lines */}
         {[0, 100, 200, 300, 400, 500, 600, 700].map(bw => (
           <g key={bw}>
@@ -174,13 +175,14 @@ export default function StorageOptionComparisonViz() {
           )
         })}
       </svg>
+      </div>
 
       {activeOpt && (
         <div style={{
           marginTop: 12, background: '#161928',
           border: `1px solid ${activeOpt.color}40`, borderRadius: 8, padding: '12px 16px',
         }}>
-          <div style={{ display: 'flex', gap: 16, marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 16, marginBottom: 8, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: activeOpt.color }}>{activeOpt.label}</div>
               <div style={{ fontSize: 11, color: '#7c8db5', marginTop: 2 }}>{activeOpt.protocol}</div>

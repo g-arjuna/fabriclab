@@ -70,12 +70,14 @@ export default function RoCEVerificationFlowViz() {
       <div style={{ fontSize: 13, color: '#7c8db5', marginBottom: 4, letterSpacing: '0.08em' }}>INTERACTIVE</div>
       <div style={{ fontSize: 17, fontWeight: 700, color: '#60a5fa', marginBottom: 16 }}>RoCE Verification Test Sequence</div>
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {STEPS.map(s => (
-          <button key={s.id} onClick={() => setActiveStep(s.id)} style={{ flex: 1, padding: '6px 4px', borderRadius: 6, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit', background: activeStep === s.id ? '#60a5fa' : '#161928', border: `1px solid ${activeStep === s.id ? '#60a5fa' : '#2a2d3e'}`, color: activeStep === s.id ? '#0f1117' : '#7c8db5', fontWeight: activeStep === s.id ? 700 : 400, textAlign: 'center' }}>
-            {s.id}. {s.tool}
-          </button>
-        ))}
+      <div style={{ overflowX: 'auto', paddingBottom: 6, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 6, minWidth: 520 }}>
+          {STEPS.map(s => (
+            <button key={s.id} onClick={() => setActiveStep(s.id)} style={{ flex: 1, padding: '6px 4px', borderRadius: 6, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit', background: activeStep === s.id ? '#60a5fa' : '#161928', border: `1px solid ${activeStep === s.id ? '#60a5fa' : '#2a2d3e'}`, color: activeStep === s.id ? '#0f1117' : '#7c8db5', fontWeight: activeStep === s.id ? 700 : 400, textAlign: 'center' }}>
+              {s.id}. {s.tool}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ background: '#161928', border: '1px solid #2a2d3e', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
@@ -83,13 +85,13 @@ export default function RoCEVerificationFlowViz() {
         <div style={{ fontSize: 12, color: '#76e5b5' }}><span style={{ color: '#7c8db5' }}>dgx-01:~$ </span>{step.command}</div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <button onClick={() => setShowPass(true)} style={{ flex: 1, padding: '6px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', background: showPass ? '#0d2a1f' : '#161928', border: `1px solid ${showPass ? '#76e5b5' : '#2a2d3e'}`, color: showPass ? '#76e5b5' : '#7c8db5' }}>âœ“ Pass Output</button>
         <button onClick={() => setShowPass(false)} style={{ flex: 1, padding: '6px', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', background: !showPass ? '#2a0f0f' : '#161928', border: `1px solid ${!showPass ? '#f87171' : '#2a2d3e'}`, color: !showPass ? '#f87171' : '#7c8db5' }}>âœ— Fail Output</button>
       </div>
 
       <div style={{ background: '#0d0f18', border: `1px solid ${showPass ? '#76e5b5' : '#f87171'}`, borderRadius: 8, padding: '12px 14px', marginBottom: 12 }}>
-        <pre style={{ margin: 0, fontSize: 11, color: showPass ? '#76e5b5' : '#f87171', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{showPass ? step.passOutput : step.failOutput}</pre>
+        <pre style={{ margin: 0, fontSize: 11, color: showPass ? '#76e5b5' : '#f87171', whiteSpace: 'pre-wrap', overflowX: 'auto', lineHeight: 1.7 }}>{showPass ? step.passOutput : step.failOutput}</pre>
       </div>
 
       <div style={{ background: '#161928', border: `1px solid ${showPass ? '#76e5b5' : '#f87171'}`, borderRadius: 8, padding: '10px 14px', marginBottom: 10 }}>
@@ -97,7 +99,7 @@ export default function RoCEVerificationFlowViz() {
         <div style={{ fontSize: 12, color: '#e2e8f0', lineHeight: 1.6 }}>{showPass ? step.passNote : step.failNote}</div>
       </div>
 
-      <div style={{ display: 'flex', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 11, color: '#7c8db5' }}>Metric: <span style={{ color: '#e2e8f0' }}>{step.metric}</span></div>
         <div style={{ fontSize: 11, color: '#7c8db5' }}>Pass: <span style={{ color: '#76e5b5' }}>{step.passThreshold}</span></div>
       </div>

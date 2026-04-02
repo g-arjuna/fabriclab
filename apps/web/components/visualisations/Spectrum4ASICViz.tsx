@@ -81,7 +81,7 @@ export default function Spectrum4ASICViz() {
       </div>
 
       {/* Tab switcher */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         {(['diagram', 'compare'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '4px 14px', borderRadius: 6, border: '1px solid #2a2d3e',
@@ -97,7 +97,8 @@ export default function Spectrum4ASICViz() {
 
       {tab === 'diagram' && (
         <>
-          <svg viewBox="0 0 700 280" style={{ width: '100%', maxWidth: 700, display: 'block' }}>
+          <div style={{ overflowX: 'auto' }}>
+          <svg viewBox="0 0 700 280" style={{ width: '100%', minWidth: 700, maxWidth: 700, display: 'block' }}>
             {/* Background chip outline */}
             <rect x={10} y={30} width={680} height={220} rx={16}
               fill="#161928" stroke="#2a2d3e" strokeWidth={1.5} />
@@ -138,6 +139,7 @@ export default function Spectrum4ASICViz() {
               )
             })}
           </svg>
+          </div>
 
           {activeBlock && (
             <div style={{
@@ -163,7 +165,7 @@ export default function Spectrum4ASICViz() {
       {tab === 'compare' && (
         <div>
           <div style={{
-            display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr',
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: 1, background: '#2a2d3e', borderRadius: 8, overflow: 'hidden',
           }}>
             {['Metric', 'Spectrum-4', 'Tomahawk 4'].map(h => (

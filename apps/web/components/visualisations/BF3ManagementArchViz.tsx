@@ -88,7 +88,7 @@ export function BF3ManagementArchViz() {
       </div>
 
       {/* Platform toggle */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         {(["h100", "b200"] as Platform[]).map((p) => (
           <button key={p} onClick={() => { setPlatform(p); setSelected(null); }} style={{
             padding: "7px 20px", borderRadius: 6,
@@ -114,8 +114,8 @@ export function BF3ManagementArchViz() {
       )}
 
       {/* Block diagram */}
-      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 16 }}>
-        <svg viewBox={`0 0 660 ${platform === "h100" ? 330 : 370}`} style={{ width: "100%", height: "auto" }}>
+      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 16, overflowX: "auto" }}>
+        <svg viewBox={`0 0 660 ${platform === "h100" ? 330 : 370}`} style={{ width: "100%", height: "auto", minWidth: 660 }}>
           {/* Platform label */}
           <text x={330} y={16} textAnchor="middle" fill="#475569" fontSize={11}>
             DGX {platform.toUpperCase()} -- Component Stack
@@ -177,7 +177,7 @@ export function BF3ManagementArchViz() {
             {selectedBlock.detail}
           </div>
           {selectedBlock.cmd && (
-            <div style={{ background: "#0f172a", borderRadius: 4, padding: "6px 10px", fontSize: 11, color: "#22c55e" }}>
+            <div style={{ background: "#0f172a", borderRadius: 4, padding: "6px 10px", fontSize: 11, color: "#22c55e", overflowX: "auto" }}>
               $ {selectedBlock.cmd}
             </div>
           )}

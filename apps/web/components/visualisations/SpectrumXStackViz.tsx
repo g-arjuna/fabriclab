@@ -140,7 +140,7 @@ export default function SpectrumXStackViz() {
               }}
             >
               <span style={{ fontSize: 18, minWidth: 24 }}>{layer.icon}</span>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: highlighted ? layer.color : '#4a5568' }}>
                   {layer.label}
                 </div>

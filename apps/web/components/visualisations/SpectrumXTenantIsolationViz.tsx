@@ -91,7 +91,7 @@ nv config apply`
       {/* Controls */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         {/* Tenant tabs */}
-        <div style={{ display: 'flex', border: '1px solid #2a2d3e', borderRadius: 6, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', border: '1px solid #2a2d3e', borderRadius: 6, overflow: 'hidden', flexWrap: 'wrap' }}>
           {(['A', 'B'] as Tenant[]).map(t => (
             <button key={t} onClick={() => setActiveTenant(t)}
               style={{
@@ -151,8 +151,9 @@ nv config apply`
       )}
 
       {/* Fabric SVG */}
+      <div style={{ overflowX: 'auto', borderRadius: 8, marginBottom: 12 }}>
       <svg viewBox={`0 0 ${W} ${H}`}
-        style={{ width: '100%', maxWidth: W, display: 'block', marginBottom: 12, background: '#090b12', borderRadius: 8 }}>
+        style={{ width: '100%', minWidth: W, maxWidth: W, display: 'block', background: '#090b12', borderRadius: 8 }}>
 
         {/* Background links */}
         {/* TenantA → Leaf01 */}
@@ -234,6 +235,7 @@ nv config apply`
         <text x={158} y={80} fontSize={8} fill={TA} opacity={0.6}>VRF_A</text>
         <text x={158} y={262} fontSize={8} fill={TB} opacity={0.6}>VRF_B</text>
       </svg>
+      </div>
 
       {/* NVUE config panel */}
       {showConfig && (

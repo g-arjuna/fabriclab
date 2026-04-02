@@ -105,12 +105,14 @@ export default function RoCEScenarioTroubleshootViz() {
       <div style={{ fontSize: 13, color: '#7c8db5', marginBottom: 4, letterSpacing: '0.08em' }}>DECISION TOOL</div>
       <div style={{ fontSize: 17, fontWeight: 700, color: '#60a5fa', marginBottom: 16 }}>RoCE Misconfiguration Scenario Troubleshooter</div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {SCENARIOS.map(s => (
-          <button key={s.id} onClick={() => { setActiveScenario(s.id); setShowFix(false) }} style={{ flex: 1, padding: '8px 6px', borderRadius: 8, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', background: activeScenario === s.id ? s.color : '#161928', border: `1px solid ${activeScenario === s.id ? s.color : '#2a2d3e'}`, color: activeScenario === s.id ? '#0f1117' : '#7c8db5', fontWeight: activeScenario === s.id ? 700 : 400, textAlign: 'center', lineHeight: 1.3 }}>
-            Scenario {s.id}<br /><span style={{ fontSize: 9 }}>{s.label.split(' ').slice(0, 2).join(' ')}</span>
-          </button>
-        ))}
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8, minWidth: 560 }}>
+          {SCENARIOS.map(s => (
+            <button key={s.id} onClick={() => { setActiveScenario(s.id); setShowFix(false) }} style={{ flex: 1, padding: '8px 6px', borderRadius: 8, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', background: activeScenario === s.id ? s.color : '#161928', border: `1px solid ${activeScenario === s.id ? s.color : '#2a2d3e'}`, color: activeScenario === s.id ? '#0f1117' : '#7c8db5', fontWeight: activeScenario === s.id ? 700 : 400, textAlign: 'center', lineHeight: 1.3 }}>
+              Scenario {s.id}<br /><span style={{ fontSize: 9 }}>{s.label.split(' ').slice(0, 2).join(' ')}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ background: '#161928', border: '1px solid #2a2d3e', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>

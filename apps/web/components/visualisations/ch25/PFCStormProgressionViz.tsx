@@ -64,7 +64,7 @@ export default function PFCStormProgressionViz() {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 14, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 14, marginBottom: 14, alignItems: 'stretch', flexWrap: 'wrap' }}>
         <div style={{ width: 80, background: '#161928', border: '1px solid #2a2d3e', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
           <div style={{ fontSize: 10, color: '#7c8db5', textAlign: 'center' }}>TC3 Queue</div>
           <div style={{ flex: 1, width: 30, background: '#0d0f18', borderRadius: 4, overflow: 'hidden', position: 'relative', minHeight: 100, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
@@ -83,7 +83,7 @@ export default function PFCStormProgressionViz() {
             <div style={{ fontSize: 12, color: '#e2e8f0', lineHeight: 1.6 }}>{phase.description}</div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {[
               { label: 'ECN Marking', active: phase.ecnActive, color: '#60a5fa' },
               { label: 'PFC Active', active: phase.pfcActive, color: '#f97316' },
@@ -107,7 +107,7 @@ export default function PFCStormProgressionViz() {
 
       {isStormPath && phaseIdx < 6 && <div style={{ background: '#2a0f0f', border: '1px solid #f87171', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 11, color: '#f87171' }}>âš  This path occurs when ECN is misconfigured. With correct ECN (min_threshold=500KB), DCQCN rate-limits senders at Phase 3 and the queue never reaches xoff.</div>}
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={() => setPhaseIdx(i => Math.max(0, i - 1))} disabled={phaseIdx === 0} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 12, cursor: phaseIdx === 0 ? 'not-allowed' : 'pointer', background: '#161928', border: '1px solid #2a2d3e', color: phaseIdx === 0 ? '#4a5568' : '#e2e8f0', fontFamily: 'inherit' }}>â† Prev</button>
         <button onClick={() => setAutoPlay(a => !a)} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 12, cursor: 'pointer', background: autoPlay ? '#f97316' : '#161928', border: `1px solid ${autoPlay ? '#f97316' : '#2a2d3e'}`, color: autoPlay ? '#0f1117' : '#e2e8f0', fontFamily: 'inherit', fontWeight: autoPlay ? 700 : 400 }}>{autoPlay ? 'â¸ Pause' : 'â–¶ Auto-Play'}</button>
         <button onClick={() => setPhaseIdx(i => Math.min(PHASES.length - 1, i + 1))} disabled={phaseIdx === PHASES.length - 1} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 12, cursor: phaseIdx === PHASES.length - 1 ? 'not-allowed' : 'pointer', background: '#161928', border: '1px solid #2a2d3e', color: phaseIdx === PHASES.length - 1 ? '#4a5568' : '#e2e8f0', fontFamily: 'inherit' }}>Next â†’</button>

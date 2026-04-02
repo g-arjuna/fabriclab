@@ -130,7 +130,7 @@ export default function UFMCyberAIViz() {
 
       {/* Summary bar */}
       <div style={{
-        display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center',
+        display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap',
         background: '#161928', borderRadius: 8, padding: '8px 14px',
       }}>
         <span style={{ fontSize: 11, color: '#7c8db5' }}>Active events:</span>
@@ -149,7 +149,8 @@ export default function UFMCyberAIViz() {
       </div>
 
       {/* Time series chart */}
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: W, display: 'block', marginBottom: 12 }}>
+      <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: W, maxWidth: W, display: 'block' }}>
         {/* Grid */}
         {[0, 20, 40, 60, 80].map(v => (
           <g key={v}>
@@ -200,6 +201,7 @@ export default function UFMCyberAIViz() {
           error rate
         </text>
       </svg>
+      </div>
 
       {/* Event detail */}
       {selectedEvent && !selectedEvent.acknowledged && (
@@ -208,7 +210,7 @@ export default function UFMCyberAIViz() {
           border: `1px solid ${SEV_COLOR[selectedEvent.severity]}`,
           borderRadius: 10, padding: '14px 16px', marginBottom: 10,
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             <div>
               <span style={{
                 fontSize: 9, fontWeight: 700, color: SEV_COLOR[selectedEvent.severity],

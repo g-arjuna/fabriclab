@@ -111,7 +111,7 @@ export default function RDMAThreatModelViz() {
       </div>
 
       {/* Mode toggle */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
         {(['attack', 'protect'] as const).map(m => (
           <button key={m} onClick={() => setMode(m)}
             style={{
@@ -127,7 +127,7 @@ export default function RDMAThreatModelViz() {
       </div>
 
       {/* Stack diagram */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Layer stack */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {/* RDMA path arrow */}
@@ -201,7 +201,7 @@ export default function RDMAThreatModelViz() {
         border: `1px solid ${ENFORCEMENT_COLOR[selectedLayer.enforcement]}44`,
         borderRadius: 10, padding: '14px 16px',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
           <div>
             <span style={{ fontSize: 12, fontWeight: 700, color: ENFORCEMENT_COLOR[selectedLayer.enforcement] }}>
               {selectedLayer.label}
@@ -251,7 +251,7 @@ export default function RDMAThreatModelViz() {
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 10, color: '#7c8db5' }}>
+      <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 10, color: '#7c8db5', flexWrap: 'wrap' }}>
         {Object.entries(ENFORCEMENT_COLOR).map(([k, c]) => (
           <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: c, display: 'inline-block' }} />

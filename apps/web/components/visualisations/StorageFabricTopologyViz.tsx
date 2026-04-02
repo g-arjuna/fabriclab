@@ -69,8 +69,8 @@ export function StorageFabricTopologyViz() {
       </div>
 
       {/* Topology SVG */}
-      <div style={{ background: "#1e293b", borderRadius: 10, padding: 20, marginBottom: 20 }}>
-        <svg viewBox="0 0 720 320" style={{ width: "100%", height: "auto" }}>
+      <div style={{ background: "#1e293b", borderRadius: 10, padding: 20, marginBottom: 20, overflowX: "auto" }}>
+        <svg viewBox="0 0 720 320" style={{ width: "100%", height: "auto", minWidth: 720 }}>
           {/* DGX nodes -- left column */}
           {DGX_NODES.map((dgx, i) => {
             const y = 30 + i * 70;
@@ -176,7 +176,7 @@ export function StorageFabricTopologyViz() {
       </div>
 
       {/* Oversubscription explanation */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
         <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
           <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, marginBottom: 6 }}>Oversubscription maths</div>
           <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.7 }}>

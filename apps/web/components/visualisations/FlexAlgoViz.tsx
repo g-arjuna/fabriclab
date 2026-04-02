@@ -35,7 +35,7 @@ export function FlexAlgoViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">IS-IS Flex Algo — logical routing planes</div>
       <div className="mb-5 text-xs text-slate-600">Select an algorithm to see which spines participate based on their constraint values.</div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
         {algos.map((a) => (
           <button
             key={a.id}
@@ -57,7 +57,8 @@ export function FlexAlgoViz() {
         ))}
       </div>
 
-      <svg width="100%" viewBox="0 0 580 260" style={{ display: "block", marginBottom: 16 }}>
+      <div className="overflow-x-auto pb-2">
+      <svg width="100%" viewBox="0 0 580 260" style={{ display: "block", marginBottom: 16, minWidth: 580 }}>
         {/* Leaf nodes */}
         <rect x="20" y="180" width="70" height="44" rx="6" fill="#1e293b" stroke="#475569" strokeWidth="0.5"/>
         <text x="55" y="198" textAnchor="middle" fill="#e2e8f0" fontSize="10" fontWeight="500">Leaf 1</text>
@@ -96,10 +97,11 @@ export function FlexAlgoViz() {
           {algo === 0 ? "All spines participate (no constraint)" : algo === 128 ? "Only spines with delay < 5μs qualify (SpineA, SpineB)" : "Only spines with BW > 300G qualify (SpineA, SpineB)"}
         </text>
       </svg>
+      </div>
 
       <div style={{ background: "#1e293b", borderRadius: 10, padding: "12px 14px", borderLeft: `3px solid ${cfg.border}` }}>
         <div style={{ fontSize: 12, fontWeight: 500, color: "#e2e8f0", marginBottom: 8 }}>{cfg.name}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
           <div>
             <div style={{ fontSize: 10, color: "#64748b" }}>Metric type</div>
             <div style={{ fontSize: 11, color: "#94a3b8" }}>{cfg.metric}</div>

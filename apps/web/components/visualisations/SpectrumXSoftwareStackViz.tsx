@@ -112,7 +112,8 @@ export default function SpectrumXSoftwareStackViz() {
         Spectrum-X Software Stack — Component Interactions
       </div>
 
-      <svg viewBox="0 0 680 280" style={{ width: '100%', maxWidth: 680, display: 'block' }}>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <svg viewBox="0 0 680 280" style={{ width: '100%', minWidth: 680, maxWidth: 680, display: 'block' }}>
         {/* Arrows */}
         {ARROWS.map(({ from, to, label }) => {
           const f = getCenter(from)
@@ -181,7 +182,8 @@ export default function SpectrumXSoftwareStackViz() {
             </g>
           )
         })}
-      </svg>
+        </svg>
+      </div>
 
       {activeComp && (
         <div style={{

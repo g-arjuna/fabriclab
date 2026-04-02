@@ -181,7 +181,8 @@ export default function SRTEPolicyViz() {
       </div>
 
       {/* SVG fabric */}
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxWidth: W, display: 'block', marginBottom: 14, background: '#090b12', borderRadius: 8 }}>
+      <div style={{ overflowX: 'auto', borderRadius: 8, marginBottom: 14 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', minWidth: W, maxWidth: W, display: 'block', background: '#090b12', borderRadius: 8 }}>
         {/* Background links: leaves to all spines */}
         {GPU_LEAVES.map(leaf =>
           SPINE_X.map((sx, si) => (
@@ -260,9 +261,10 @@ export default function SRTEPolicyViz() {
         <text x={60} y={290} fontSize={10} fill="#f97316" textAnchor="middle">Rack B</text>
         <text x={320} y={20} fontSize={10} fill="#7c8db5" textAnchor="middle">Spine Layer</text>
       </svg>
+      </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
         {[
           { label: 'Spine-01: Collective', value: stats.spine1CollectivePkts, color: '#34d399' },
           {

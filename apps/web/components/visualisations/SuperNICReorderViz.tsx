@@ -154,7 +154,7 @@ export default function SuperNICReorderViz() {
       </div>
 
       {/* Mode selector */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         {(['cx7', 'bf3'] as const).map(m => (
           <button key={m} onClick={() => { setMode(m); reset() }} style={{
             padding: '5px 14px', borderRadius: 6, border: '1px solid #2a2d3e',
@@ -169,7 +169,8 @@ export default function SuperNICReorderViz() {
       </div>
 
       {/* Canvas */}
-      <svg viewBox="0 0 660 200" style={{ width: '100%', maxWidth: 660, display: 'block', background: '#0d0f18', borderRadius: 8 }}>
+      <div style={{ overflowX: 'auto', borderRadius: 8 }}>
+      <svg viewBox="0 0 660 200" style={{ width: '100%', minWidth: 660, maxWidth: 660, display: 'block', background: '#0d0f18', borderRadius: 8 }}>
         {/* Labels */}
         <text x={40} y={20} fill="#7c8db5" fontSize={9} fontFamily="'JetBrains Mono',monospace">SENDER (GPU)</text>
         <text x={300} y={20} fill="#7c8db5" fontSize={9} fontFamily="'JetBrains Mono',monospace" textAnchor="middle">NETWORK (AR sprayed)</text>
@@ -244,6 +245,7 @@ export default function SuperNICReorderViz() {
           </g>
         ))}
       </svg>
+      </div>
 
       {/* Stats */}
       <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
@@ -263,7 +265,7 @@ export default function SuperNICReorderViz() {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         <button onClick={launch} disabled={running} style={{
           padding: '6px 18px', borderRadius: 6, border: '1px solid #76e5b5',
           background: running ? '#161928' : '#76e5b520', color: running ? '#4a5568' : '#76e5b5',

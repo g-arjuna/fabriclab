@@ -53,8 +53,8 @@ export function SwitchMgmtVsDataViz() {
       </div>
 
       {/* Switch diagram */}
-      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 20 }}>
-        <svg viewBox="0 0 680 280" style={{ width: "100%", height: "auto" }}>
+      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 20, overflowX: "auto" }}>
+        <svg viewBox="0 0 680 280" style={{ width: "100%", height: "auto", minWidth: 680 }}>
           {/* Cumulus Linux switch chassis */}
           <rect x={220} y={60} width={240} height={160} rx={10}
             fill="#0f172a" stroke="#334155" strokeWidth={2} />
@@ -166,7 +166,7 @@ export function SwitchMgmtVsDataViz() {
       </div>
 
       {/* VRF explanation */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 14px" }}>
           <div style={{ fontSize: 11, color: "#6366f1", fontWeight: 700, marginBottom: 6 }}>vrf mgmt -- what it means</div>
           <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.65 }}>

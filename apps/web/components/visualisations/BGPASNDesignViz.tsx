@@ -76,7 +76,7 @@ export function BGPASNDesignViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">BGP ASN design — failure behavior</div>
       <div className="mb-5 text-xs text-slate-600">Toggle spine ASN design and simulate link failures to see the routing impact.</div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         <button
           onClick={() => setMode("same")}
           style={{ flex: 1, padding: "8px 0", background: mode === "same" ? "#185FA5" : "transparent", border: `1px solid ${mode === "same" ? "#185FA5" : "#334155"}`, borderRadius: 8, color: mode === "same" ? "#fff" : "#94a3b8", fontSize: 12, cursor: "pointer" }}
@@ -91,7 +91,8 @@ export function BGPASNDesignViz() {
         </button>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 20 }}>
+      <div className="overflow-x-auto pb-2">
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 20, minWidth: 420 }}>
         <div style={{ display: "flex", gap: 40 }}>
           <div style={nodeStyle(true, "#185FA5")}>Leaf1{"\n"}ASN 65001<br/><span style={{ fontSize: 10, fontWeight: 400, color: "#93c5fd" }}>Server1</span></div>
           <div style={{ width: 40 }} />
@@ -117,8 +118,9 @@ export function BGPASNDesignViz() {
           </div>
         )}
       </div>
+      </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {(["none", "one", "two"] as FailureState[]).map((f) => (
           <button
             key={f}

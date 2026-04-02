@@ -117,8 +117,8 @@ export function BMCArchitectureViz() {
       </div>
 
       {/* SVG diagram */}
-      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 20 }}>
-        <svg viewBox="0 0 560 230" style={{ width: "100%", height: "auto" }}>
+      <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 20, overflowX: "auto" }}>
+        <svg viewBox="0 0 560 230" style={{ width: "100%", height: "auto", minWidth: 560 }}>
           {/* BMC SoC boundary */}
           <rect x={10} y={8} width={390} height={175} rx={8}
             fill="#1e293b" stroke="#334155" strokeWidth={1.5} strokeDasharray="5 3" />
@@ -193,7 +193,7 @@ export function BMCArchitectureViz() {
             {selectedComp.detail}
           </div>
           {selectedComp.cmd && (
-            <div style={{ background: "#0f172a", borderRadius: 4, padding: "6px 10px", fontSize: 11, color: "#22c55e" }}>
+            <div style={{ background: "#0f172a", borderRadius: 4, padding: "6px 10px", fontSize: 11, color: "#22c55e", overflowX: "auto" }}>
               $ {selectedComp.cmd}
             </div>
           )}

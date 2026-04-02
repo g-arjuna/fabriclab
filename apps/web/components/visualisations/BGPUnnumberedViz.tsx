@@ -79,7 +79,8 @@ export function BGPUnnumberedViz() {
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">eBGP unnumbered (RFC 5549)</div>
       <div className="mb-5 text-xs text-slate-600">Step through how a BGP session forms with no IPv4 link addressing.</div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center", marginBottom: 16 }}>
+      <div className="overflow-x-auto pb-2">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center", marginBottom: 16, minWidth: 460 }}>
         <div style={{ background: "#1e293b", borderRadius: 10, padding: "12px 14px", border: "1px solid #334155" }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: "#93c5fd", marginBottom: 6 }}>Leaf1</div>
           <div style={{ fontSize: 11, color: "#64748b", fontFamily: "monospace", lineHeight: 1.6 }}>ASN 65001{"\n"}{s.leaf}</div>
@@ -100,11 +101,12 @@ export function BGPUnnumberedViz() {
           <div style={{ fontSize: 11, color: "#64748b", fontFamily: "monospace", lineHeight: 1.6 }}>ASN 65000{"\n"}{s.spine}</div>
         </div>
       </div>
+      </div>
 
       {s.msg && (
         <div style={{ background: mc.bg, border: `1px solid ${mc.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 14 }}>
           <div style={{ fontSize: 10, color: mc.border, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Message on wire</div>
-          <pre style={{ fontSize: 11, color: mc.text, fontFamily: "monospace", margin: 0, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{s.msg}</pre>
+          <pre style={{ fontSize: 11, color: mc.text, fontFamily: "monospace", margin: 0, lineHeight: 1.7, whiteSpace: "pre-wrap", overflowX: "auto" }}>{s.msg}</pre>
         </div>
       )}
 
@@ -115,7 +117,7 @@ export function BGPUnnumberedViz() {
         <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>{s.desc}</div>
       </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={() => setStep(Math.max(0, step - 1))}
           disabled={step === 0}

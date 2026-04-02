@@ -136,7 +136,7 @@ export default function PKeyMembershipViz() {
         communication is permitted or denied.
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginBottom: 16 }}>
         {/* Node list */}
         <div>
           <div style={{ fontSize: 11, color: '#7c8db5', marginBottom: 8 }}>Nodes</div>
@@ -244,7 +244,7 @@ export default function PKeyMembershipViz() {
         <div style={{ fontSize: 11, fontWeight: 700, color: selNode.color, marginBottom: 8 }}>
           {selNode.label} — smpquery pkeys output
         </div>
-        <pre style={{ fontSize: 10, color: '#94a3b8', margin: 0, lineHeight: 1.7 }}>
+        <pre style={{ fontSize: 10, color: '#94a3b8', margin: 0, lineHeight: 1.7, overflowX: 'auto' }}>
 {`PKeys table for ${selNode.label} (GUID ${selNode.guid}):
 ${selNode.partitions.map((p, i) =>
   `Pkey[${i}] ${p.pkey}    ← ${p.name} partition, ${p.type} membership`

@@ -120,7 +120,7 @@ export function UECDeploymentReadinessViz() {
 
   return (
     <div style={{ background: "#0f172a", borderRadius: 12, padding: "24px", fontFamily: "monospace", color: "#e2e8f0" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
         <div style={{ fontSize: 13, color: "#94a3b8" }}>UEC silicon availability -- March 2026</div>
         <div style={{ display: "flex", gap: 6 }}>
           {(["all", "nic", "switch"] as const).map(f => (

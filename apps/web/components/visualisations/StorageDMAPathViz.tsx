@@ -142,7 +142,7 @@ export function StorageDMAPathViz() {
       </div>
 
       {/* Mode toggle */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
         {(["cpu", "gds"] as PathMode[]).map((m) => (
           <button
             key={m}
@@ -169,6 +169,7 @@ export function StorageDMAPathViz() {
         display: "flex",
         gap: 8,
         alignItems: "center",
+        flexWrap: "wrap",
         marginBottom: 20,
         padding: "8px 12px",
         borderRadius: 6,
@@ -207,7 +208,7 @@ export function StorageDMAPathViz() {
                   marginBottom: 4,
                   transition: "background 0.15s",
                 }} />
-                <div style={{ fontSize: 9, color: selected === step.id ? step.color : "#475569", textAlign: "center", maxWidth: 60, lineHeight: 1.3 }}>
+                <div style={{ fontSize: 9, color: selected === step.id ? step.color : "#475569", textAlign: "center", maxWidth: 72, lineHeight: 1.3 }}>
                   {step.sub}
                 </div>
               </div>
@@ -240,10 +241,10 @@ export function StorageDMAPathViz() {
                 }}>
                   {ICON_LABELS[step.icon]}
                 </div>
-                <div style={{ fontSize: 10, color: selected === step.id ? step.color : "#94a3b8", textAlign: "center", maxWidth: 60, lineHeight: 1.3, fontWeight: selected === step.id ? 700 : 400 }}>
+                <div style={{ fontSize: 10, color: selected === step.id ? step.color : "#94a3b8", textAlign: "center", maxWidth: 72, lineHeight: 1.3, fontWeight: selected === step.id ? 700 : 400 }}>
                   {step.label}
                 </div>
-                <div style={{ fontSize: 9, color: "#475569", textAlign: "center", maxWidth: 60 }}>{step.sub}</div>
+                <div style={{ fontSize: 9, color: "#475569", textAlign: "center", maxWidth: 72 }}>{step.sub}</div>
               </div>
             )}
           </div>
