@@ -1,0 +1,156 @@
+---
+title: "Lab 18 â€” ECN Threshold Tuning Under Load"
+labNumber: 18
+slug: "lab18-ecn-threshold-tuning"
+difficulty: "intermediate"
+estimatedMinutes: 35
+pairedChapter: "ch25-roce-configuration-operations"
+published: true
+---
+
+import LabTerminal from '@/components/lab/LabTerminal'
+import LabHint from '@/components/lab/LabHint'
+import LabCheck from '@/components/lab/LabCheck'
+import LabAnswerBox from '@/components/lab/LabAnswerBox'
+
+## Scenario
+
+The RoCE Day-Zero configuration has been applied (Lab 17). The training team reports that a 128-GPU allreduce job is running at 60% of expected throughput, despite single-flow ib_write_bw testing clean at 46.8 GB/s. The cluster monitoring dashboard shows `tx_ecn_marked_pkts = 0` on all leaf switch ports, even under confirmed multi-flow congestion.
+
+Your task: diagnose why DCQCN is not engaging, find the root cause in the ECN configuration, apply the fix, and verify ECN marking resumes under load.
+
+**Devices:**
+
+| Device | Type | Prompt |
+|---|---|---|
+| leaf-01 | SN5600 leaf switch | `leaf-01#` |
+| dgx-node-01 | DGX H100 | `dgx-01:~$` |
+
+---
+
+## Task 1 â€” Inspect Current ECN Threshold
+
+Check the current ECN profile and identify whether the thresholds are within the buffer capacity of TC3 on leaf-01.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+nv show qos ecn profile roce
+</LabTerminal>
+
+You will observe an incorrect threshold value. Note it down.
+
+<LabHint level={1}>
+Look at the Min Threshold value in bytes. Compare it against the TC3 buffer capacity shown by `cl-resource-query`. If min_threshold > available TC3 buffer, ECN can never mark.
+</LabHint>
+
+<LabCheck taskId="thresholdInspected" passCriteria="ECN profile inspected and threshold value noted" />
+
+---
+
+## Task 2 â€” Query Buffer Capacity and Identify the Problem
+
+Run the resource query to determine how much buffer TC3 actually has. Compare against the configured ECN threshold.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+cl-resource-query
+</LabTerminal>
+
+Expected output (relevant section):
+```
+  Total lossless buffer carved: 6291456 bytes (6 MB)
+
+  ECN Profile: roce
+    min-threshold: 10485760 bytes (10 MB)  <- EXCEEDS lossless buffer
+    max-threshold: 31457280 bytes (30 MB)  <- EXCEEDS lossless buffer
+```
+
+The ECN min_threshold (10 MB) exceeds the TC3 lossless buffer (6 MB). The queue fills to its limit and triggers PFC before ECN ever marks a packet. DCQCN never fires.
+
+<LabHint level={2}>
+The lossless buffer is 6 MB. The ECN min_threshold is 10 MB. Since the queue can never physically reach 10 MB, ECN marking is never satisfied. PFC fires at the xoff threshold instead.
+</LabHint>
+
+<LabCheck taskId="problemIdentified" passCriteria="Identified that ECN min_threshold (10 MB) exceeds TC3 buffer capacity (6 MB)" />
+
+---
+
+## Task 3 â€” Fix the ECN Threshold
+
+Apply the correct ECN thresholds: min_threshold = 500 KB (500000 bytes), max_threshold = 1.5 MB (1500000 bytes).
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+nv set qos ecn profile roce min-threshold 500000
+nv set qos ecn profile roce max-threshold 1500000
+nv config apply
+nv config save
+</LabTerminal>
+
+Verify the fix was applied:
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+nv show qos ecn profile roce
+</LabTerminal>
+
+Expected output after fix:
+```
+Profile: roce
+  Min Threshold:  500000 bytes (488 KB)
+  Max Threshold:  1500000 bytes (1.46 MB)
+  Mark Probability: linear
+  Mode: ECN only (no drops)
+```
+
+<LabHint level={1}>
+If `nv config apply` fails, check that max-threshold is greater than min-threshold. The ASIC requires max > min.
+</LabHint>
+
+<LabCheck taskId="thresholdFixed" passCriteria="ECN min-threshold set to 500000, max-threshold to 1500000, config applied" />
+
+---
+
+## Task 4 â€” Verify ECN Marking Under Load
+
+Generate multi-flow traffic and confirm `tx_ecn_marked_pkts` increments.
+
+<LabTerminal nodeId="dgx-node-01" prompt="dgx-01:~$">
+ib_write_bw -d mlx5_0 --iters 10000 --size 65536 192.168.100.2 &
+ib_write_bw -d mlx5_1 --iters 10000 --size 65536 192.168.100.2 &
+ib_write_bw -d mlx5_2 --iters 10000 --size 65536 192.168.100.2 &
+ib_write_bw -d mlx5_3 --iters 10000 --size 65536 192.168.100.2 &
+</LabTerminal>
+
+Then check ECN counters on leaf-01 while load is running:
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+ethtool -S swp1 | grep ecn
+</LabTerminal>
+
+Expected output (counters incrementing confirms ECN active):
+```
+  tx_ecn_marked_pkts:   4829  (and rising on each check)
+```
+
+<LabHint level={1}>
+If tx_ecn_marked_pkts is still 0, confirm traffic is hitting swp1. Check `nv show interface swp1 counters`.
+</LabHint>
+
+<LabHint level={2}>
+Also verify that DSCP trust is active: `nv show interface swp1 qos | grep Trust`. If Trust shows "none", DSCP 26 traffic is not being mapped to TC3.
+</LabHint>
+
+<LabCheck taskId="ecnMarkingVerified" passCriteria="tx_ecn_marked_pkts incrementing under multi-flow load" />
+
+---
+
+## Debrief
+
+This lab demonstrates one of the most common RoCE deployment defects: an ECN min_threshold configured above the physical buffer capacity of the lossless queue.
+
+**Why this happens:** Operators sometimes copy ECN thresholds from non-RoCE deployments where thresholds are sized for large buffers on core routers. On an AI fabric leaf with a carved 6 MB lossless pool, those thresholds are meaningless.
+
+**The diagnostic sequence:** Compare `nv show qos ecn profile roce` (threshold) against `cl-resource-query` (actual buffer). If min_threshold > lossless buffer capacity, ECN never fires. This two-command comparison is the fastest path to diagnosing Scenario A from Chapter 25.
+
+**Impact at scale:** In a 128-GPU cluster with 16 leaf switches, this defect was silently running on all 16 switches. Single-flow testing passed because single-flow never congests the queue enough to hit even the misconfigured threshold.
+
+<LabAnswerBox questionId="lab18-reflect">
+You have fixed the ECN threshold on leaf-01 in this lab. In a production 16-leaf cluster, how would you apply and verify this fix across all 16 switches efficiently? What tooling does NVIDIA provide for cluster-wide NVUE configuration management? What single command would you run on each switch to confirm ECN is marking before calling the incident resolved?
+</LabAnswerBox>

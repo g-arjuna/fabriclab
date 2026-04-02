@@ -1,0 +1,404 @@
+---
+title: "RoCE Configuration and Operations on Spectrum-X"
+chapterNumber: 25
+slug: "ch25-roce-configuration-operations"
+description: "End-to-end RoCE configuration on Spectrum-X: prerequisites checklist, NVUE configuration walkthrough, QoS architecture, ECN and PFC tuning, verification with ib_write_bw, CloudAI benchmarking, and common misconfiguration scenarios."
+published: true
+prev: "ch24-spectrum-x-architecture"
+next: "ch26-adaptive-routing-spectrum-x"
+estimatedMinutes: 55
+---
+
+## Act 1 â€” RoCE Prerequisites Checklist
+
+Before a single RDMA byte flows across your Spectrum-X fabric, six conditions must hold simultaneously â€” and they must be verified in the order listed. Miss any one, and your RoCE traffic either silently degrades or fails outright without a clear error message.
+
+**The ordered prerequisite checklist:**
+
+**1. MTU = 9000 bytes end-to-end (jumbo frames)**
+This is the non-negotiable foundation. RoCEv2 sends large messages split across back-to-back full-size frames. If any hop â€” NIC, leaf, spine, storage leaf â€” uses a default MTU of 1500 bytes, the effective bandwidth collapses to ~13% of theoretical. Worse, it's silent: `ib_write_bw` will run without error and report a BDP-limited number. Every interface participating in the RoCE path must be set to 9000 or 9216 bytes.
+
+**2. DSCP trust boundary configured**
+The NIC stamps RoCEv2 frames with DSCP 26 (binary `011010`). The leaf switch must trust this value and map it to Traffic Class 3 (TC3). If the switch overwrites DSCP values â€” the default on most platforms â€” all RoCE traffic lands in TC0 (the lossy default queue) and receives no PFC protection. Configure `nv set interface swp1-32 qos trust dscp` before anything else.
+
+**3. PFC enabled on priority 3**
+Priority Flow Control (PFC) provides the lossless channel. Priority 3 maps to TC3 where DSCP 26 lands. Enabling PFC on priority 3 allows the switch to send IEEE 802.1Qbb PAUSE frames to the upstream NIC when the TC3 queue approaches its headroom limit. Without this, any congestion episode drops RDMA frames, which triggers Go-Back-N retransmissions and latency spikes on the order of milliseconds.
+
+**4. ECN enabled on egress queues for TC3**
+Explicit Congestion Notification is the primary congestion signal for DCQCN (DC Quantized Congestion Notification). When TC3 queue depth exceeds `min_threshold`, the Spectrum-4 ASIC marks the ECN bits in the IP header of outgoing frames at wire speed â€” no CPU involvement. The receiving NIC generates a Congestion Notification Packet (CNP) and returns it to the sender, which then rate-limits. ECN prevents the queue from filling to the level where PFC would trigger, making PFC the last-resort backstop rather than the primary mechanism. See Chapter 5 for PFC/ECN fundamentals and Chapter 21 for DCQCN parameter deep-dive.
+
+**5. Lossless queue carved from lossy budget**
+The Spectrum-4 ASIC has 48 MB of packet buffer shared across all ports and queues. TC3 must have guaranteed headroom â€” buffer reserved to absorb in-flight frames while a PFC PAUSE propagates upstream and takes effect. Formula: `headroom = (cable_propagation_delay + switch_processing_delay) Ã— link_rate`. At 400GbE with a 5m DAC cable, this is approximately 100 KB per port. If the lossless queue is not explicitly carved from the lossy budget, buffer overflow in a congestion event will cause the switch to drop lossless frames before PFC triggers â€” defeating the purpose.
+
+**6. CNP DSCP 48 trusted as TC6**
+Congestion Notification Packets must be trusted as DSCP 48, mapped to TC6. TC6 is configured as Strict Priority and is **never** PFC-paused. This is critical: if CNP packets hit a PFC pause, the DCQCN feedback loop breaks. The congested queue that DCQCN is trying to drain is the same queue that holds CNP packets if you misconfigure the trust map. A CNP stuck in a paused queue means the sender never receives the rate-reduction signal, and the congested queue fills until PFC fires, creating a deadlock.
+
+**Common Day-1 mistakes:**
+- MTU mismatch: set on the DGX NIC but not on the leaf switch uplinks
+- DSCP mismatch: switch in `dscp` trust mode but the DSCP-to-TC map not applied, so DSCP 26 lands in TC0
+- PFC on wrong priority: PFC enabled on priority 0 (the default in some templates) instead of priority 3
+- ECN threshold above buffer: `min_threshold` set to 10 MB on a switch with 48 MB total, meaning ECN never marks
+
+<RoCEPrereqChecklistViz />
+
+## Act 2 â€” NVUE RoCE Configuration Step-by-Step
+
+Cumulus Linux 5.x ships NVUE (NVIDIA User Experience), a unified configuration API and CLI. For RoCE, NVUE provides both a shorthand command that applies all recommended defaults in a single line, and a manual path that gives per-parameter control. Understanding both is required for the NCP-AIN exam.
+
+**The RoCE shorthand (recommended for Day 0):**
+
+```bash
+leaf-01# nv set interface swp1-32 qos roce
+leaf-01# nv config apply
+leaf-01# nv config save
+```
+
+The `qos roce` shorthand applies the full NVIDIA-recommended RoCE QoS profile to the specified interfaces in one operation:
+- Sets DSCP trust on all specified ports
+- Maps DSCP 26 â†’ TC3 (lossless, PFC priority 3)
+- Maps DSCP 48 â†’ TC6 (CNP, SP, never paused)
+- Enables PFC on priority 3
+- Applies ECN thresholds: `min_threshold=1.5MB`, `max_threshold=3MB`
+- Sets TC3 scheduling to Strict Priority
+- Sets TC6 scheduling to Strict Priority (highest)
+- Sets TC0 scheduling to DWRR weight 16 (lossy default)
+
+**Verification after shorthand:**
+
+```bash
+leaf-01# nv show qos roce
+                    operational  applied
+------------------  -----------  -------
+enable              on           on
+roce-mode           lossy        lossy
+
+leaf-01# nv show interface swp1 qos
+QoS Interface swp1
+  Trust:  dscp
+  Traffic Class Summary:
+    TC0  DSCP:0-25,27-47,49-63  Mode: DWRR  Weight:16  PFC:off  ECN:off
+    TC3  DSCP:26               Mode: SP     PFC:on    ECN:on   Lossless:yes
+    TC6  DSCP:48               Mode: SP     PFC:off   ECN:off  Lossless:no
+
+leaf-01# nv show qos trust dscp-map
+DSCP  TC   Description
+----  ---  -----------
+26    3    RoCEv2 training traffic (lossless)
+48    6    Congestion Notification Packet (SP)
+46    5    NCCL high-priority collectives
+10    1    Checkpoint-to-storage
+0-9   0    Default lossy
+```
+
+**Manual QoS path (for custom thresholds):**
+
+```bash
+# Step 1: Set DSCP trust on each interface
+leaf-01# nv set interface swp1-32 qos trust dscp
+
+# Step 2: Set DSCP-to-TC mapping
+leaf-01# nv set qos map dscp 26 traffic-class 3
+leaf-01# nv set qos map dscp 48 traffic-class 6
+
+# Step 3: Enable PFC on priority 3 only
+leaf-01# nv set interface swp1-32 qos pfc priority 3
+leaf-01# nv set interface swp1-32 qos pfc enable on
+
+# Step 4: Set ECN thresholds for TC3
+leaf-01# nv set qos ecn profile roce min-threshold 500000
+leaf-01# nv set qos ecn profile roce max-threshold 1500000
+leaf-01# nv set interface swp1-32 qos egress-queue-mapping traffic-class 3 ecn on
+
+# Step 5: Apply and save
+leaf-01# nv config apply
+leaf-01# nv config save
+```
+
+**What shorthand sets vs manual:** The shorthand applies NVIDIA-recommended defaults validated across DGX reference deployments. The manual path gives control over ECN thresholds, DSCP map additions (DSCP 46 for NCCL, DSCP 10 for checkpoint), and scheduling weights for DWRR classes. For production deployments with NCCL traffic, the manual path is preferred because DSCP 46 is not in the shorthand default map.
+
+**TCAM resource verification:**
+```bash
+leaf-01# cl-resource-query
+  TCAM Resource Usage:
+  ACL entries:     1024 / 16384 (6.25%)
+  QoS entries:     48   / 512   (9.37%)
+  DSCP map:        8    / 64    (12.5%)
+  Forwarding:      2048 / 32768 (6.25%)
+```
+
+<NVUERoCEConfigViz />
+
+## Act 3 â€” QoS Architecture on Spectrum-X
+
+The Spectrum-4 ASIC implements 8 Traffic Classes (TC0â€“TC7) and 8 PFC priorities (0â€“7). Each TC has an independent scheduling discipline, buffer allocation, and ECN/PFC policy. The mapping between DSCP values (set by NICs in the IP header), switch priorities (used by 802.1p/PFC), and traffic classes (internal ASIC queues) must be consistent across every node in the fabric.
+
+**Standard AI fabric QoS mapping:**
+
+| Traffic Class | DSCP | Scheduling | PFC | ECN | Description |
+|---|---|---|---|---|---|
+| TC0 | 0â€“25, 27â€“47, 49â€“63 | DWRR weight=16 | off | off | Default lossy (TCP, storage management) |
+| TC1 | 10 | DWRR weight=8 | off | off | Checkpoint-to-storage |
+| TC3 | 26 | SP | **on** | **on** | RoCEv2 AI training (lossless) |
+| TC5 | 46 | DWRR weight=32 | off | off | NCCL high-priority collectives |
+| TC6 | 48 | **SP highest** | **off** | off | CNP feedback (must never pause) |
+
+**Scheduling disciplines:**
+
+*Strict Priority (SP):* The SP queue is always served before any DWRR queue. TC6 at SP-highest means CNP packets are dequeued before any other traffic class, every single scheduling cycle. TC3 at SP means RoCEv2 training frames are always served before TC0 lossy traffic.
+
+*Deficit Weighted Round Robin (DWRR):* Used for lossy queues (TC0, TC1, TC5). Each queue gets bandwidth proportional to its configured weight. A TC0 weight of 16 and TC5 weight of 32 means NCCL traffic gets twice the lossy bandwidth of default TCP traffic in a congestion scenario.
+
+**Why CNP must be SP and never PFC-paused:**
+This is one of the most examined topics in the NCP-AIN. The DCQCN mechanism works as follows: the switch marks ECN bits on TC3 frames â†’ the receiving NIC detects the CE mark â†’ the NIC generates a CNP and sends it back to the sender â†’ the sender's NIC rate-limiter reduces the injection rate. If CNP (TC6) is in the same queue as RoCEv2 data (TC3), or if PFC is enabled on TC6, the following deadlock occurs: TC3 fills â†’ PFC fires â†’ pause propagates upstream â†’ the upstream switch also pauses â†’ CNP packets generated by the downstream NIC cannot drain because the return path is paused. DCQCN never fires the rate-limiter. TC3 stays full. Deadlock is complete.
+
+**Buffer resource query:**
+```bash
+leaf-01# cl-resource-query
+  Per-port buffer headroom (TC3, lossless):
+    swp1:  headroom=98304 bytes  xoff=81920  xon=32768
+    swp2:  headroom=98304 bytes  xoff=81920  xon=32768
+  Total lossless buffer carved: 6.25 MB / 48 MB
+  Lossy buffer remaining: 41.75 MB
+
+leaf-01# nv show qos scheduler
+TC   Discipline  Weight  Priority
+---  ----------  ------  --------
+0    DWRR        16      -
+1    DWRR        8       -
+3    SP          -       2
+5    DWRR        32      -
+6    SP          -       3  (highest)
+```
+
+<QoSSchedulerViz />
+
+## Act 4 â€” ECN Configuration and Tuning
+
+ECN marking on Spectrum-4 happens entirely in hardware at wire speed. When a packet arrives on an ingress port destined for TC3, the ASIC checks the current TC3 egress queue depth against two thresholds: `min_threshold` and `max_threshold`. Between these thresholds, marking probability rises linearly from 0% to 100%. Above `max_threshold`, every packet is marked.
+
+**WRED vs pure ECN:**
+WRED (Weighted Random Early Detection) both marks *and* drops packets in the congestion zone â€” it was designed for TCP, which relies on dropped packets as a congestion signal. For RoCEv2 with DCQCN, the correct mode is **pure ECN**: mark only, never drop in the lossless queue. Cumulus Linux default for RoCE is pure ECN on TC3.
+
+**ECN threshold sizing:**
+
+The standard sizing rule is: `min_threshold â‰ˆ BDP/4`
+
+Where `BDP = bandwidth Ã— RTT` (bandwidth-delay product).
+
+At 400GbE (50 GB/s) with a fabric RTT of 1.6Âµs:
+```
+BDP = 50,000,000,000 bytes/s Ã— 0.0000016 s = 80,000 bytes = ~80 KB
+BDP/4 = 20 KB
+```
+
+In practice, most Spectrum-X deployments use `min_threshold = 500 KB` and `max_threshold = 1.5 MB`. The reasoning: a single DGX H100 node runs 8 RoCEv2 flows simultaneously (one per ConnectX-7 port). With 8 concurrent flows, queue build-up can be 8Ã— per-flow. Too-low thresholds cause ECN to fire on transient micro-bursts. Too-high thresholds mean ECN never fires and PFC becomes the only congestion mechanism.
+
+**Verification commands:**
+```bash
+leaf-01# nv show qos ecn profile roce
+Profile: roce
+  Min Threshold:  500000 bytes (488 KB)
+  Max Threshold:  1500000 bytes (1.46 MB)
+  Mark Probability: linear
+  Mode: ECN only (no drops)
+  Applied to:     TC3 egress on all RoCE interfaces
+
+leaf-01# ethtool -S swp1 | grep ecn
+  tx_ecn_marked_pkts:     2847392
+  rx_ecn_ce_pkts:         0
+```
+
+<ECNThresholdViz />
+
+## Act 5 â€” PFC Configuration and Storm Prevention
+
+PFC operates on IEEE 802.3x PAUSE frame mechanics extended to per-priority operation by IEEE 802.1Qbb. When a switch's TC3 egress queue depth crosses the `xoff` threshold, the switch generates a priority-specific PAUSE frame and sends it to the upstream link partner.
+
+**Per-priority enable/disable â€” critical rule:**
+Only TC3 (RoCEv2) should be lossless. Enabling PFC on multiple priorities causes buffer starvation cascades. The correct configuration: `PFC on priority 3 only. All other priorities: PFC disabled.`
+
+**PFC watchdog â€” deadlock detection:**
+The PFC watchdog monitors how long each lossless queue has been continuously paused. Default timer on Cumulus Linux: 200ms. If TC3 remains in a PAUSE state for longer than 200ms, the watchdog fires.
+
+Two watchdog actions:
+- **Drop mode** (correct for RoCEv2): The watchdog starts dropping frames from the paused queue, breaking the deadlock at the cost of retransmissions.
+- **Forward mode**: Not recommended for RoCEv2 because it defeats the lossless guarantee.
+
+```bash
+# Configure PFC watchdog
+leaf-01# nv set interface swp1-32 qos pfc watchdog action drop
+leaf-01# nv set interface swp1-32 qos pfc watchdog timeout 200
+
+# Verify PFC counters
+leaf-01# nv show interface swp1 counters pfc
+Interface swp1 PFC Counters:
+  Priority 3:
+    TX pause frames:       142
+    RX pause frames:       0
+    Pause duration (ms):   12.4 avg / 38.1 max
+    Watchdog fires:        0
+  Priority 0-2,4-7:       not enabled
+```
+
+**PFC headroom calculation:**
+With a 5m passive DAC cable between DGX H100 and leaf switch:
+```
+cable propagation delay:    5m Ã— 5ns/m = 25ns
+switch processing delay:    ~300ns (Spectrum-4 cut-through)
+total: ~325ns
+
+headroom = 325ns Ã— 400Gbps = 325e-9 Ã— 400e9 = 130,000 bits = ~16 KB
+```
+
+```bash
+# NIC-side PFC verification (DGX node)
+dgx-01:~$ ethtool -S mlx5_0 | grep pfc
+  rx_pfc_xon_frames_priority_3:   142
+  rx_pfc_xoff_frames_priority_3:  142
+  tx_pfc_xon_frames_priority_3:   0
+  tx_pfc_xoff_frames_priority_3:  0
+```
+
+<PFCStormProgressionViz />
+
+## Act 6 â€” End-to-End RoCE Verification
+
+After applying the full RoCE configuration, verification requires two InfiniBand performance benchmarks: `ib_write_bw` for throughput and `ib_write_lat` for latency.
+
+**Expected performance at 400GbE:**
+
+| Metric | Expected value | Fail threshold |
+|---|---|---|
+| ib_write_bw | â‰¥ 46.8 GB/s (99.5% line rate) | < 40 GB/s: MTU issue |
+| ib_write_lat median | â‰¤ 0.9Âµs | > 2Âµs: QoS misconfiguration |
+| ib_write_lat p99 | â‰¤ 1.2Âµs | > 5Âµs: PFC storm or retransmit |
+
+**Running ib_write_bw:**
+
+```bash
+# On dgx-node-02 (server):
+dgx-02:~$ ib_write_bw -d mlx5_0 --iters 5000 --size 65536
+
+# On dgx-node-01 (client):
+dgx-01:~$ ib_write_bw -d mlx5_0 --iters 5000 --size 65536 192.168.100.2
+
+-------------------------------------------------------------------
+ #bytes     #iterations    BW peak[GB/sec]    BW average[GB/sec]
+ 65536      5000             46.92              46.81
+-------------------------------------------------------------------
+```
+
+**QP state machine â€” what breaks each transition:**
+
+```
+RESET â†’ INIT:   ibv_modify_qp() fails if protection domain wrong
+INIT â†’ RTR:     MTU negotiation failure (path MTU < message size) â€” silent BW loss
+RTR â†’ RTS:      timeout if remote QP not in RTR state (ordering issue)
+```
+
+**Basic connectivity test:**
+```bash
+dgx-01:~$ ibv_rc_pingpong -d mlx5_0 -g 0 192.168.100.2
+  8192000 bytes in 0.003 seconds = 24530.27 Mbit/sec
+
+dgx-01:~$ ibv_devinfo -d mlx5_0
+hca_id: mlx5_0
+  state:              PORT_ACTIVE (4)
+  max_mtu:            4096 (5)
+  active_mtu:         4096 (5)
+  link_layer:         Ethernet
+  active_speed:       400 Gb/sec
+```
+
+<RoCEVerificationFlowViz />
+
+## Act 7 â€” CloudAI Benchmark for Performance Baselining
+
+The NVIDIA CloudAI benchmark is the industry-standard acceptance test for Spectrum-X deployments.
+
+**What CloudAI measures:**
+
+| Test | Metric | Pass threshold (per port) |
+|---|---|---|
+| All-reduce bandwidth | Aggregate BW across all GPUs | â‰¥ 380 GB/s (8-GPU DGX) |
+| All-to-all bandwidth | Incast stress test | â‰¥ 360 GB/s |
+| Point-to-point | Single-flow line rate | â‰¥ 46.5 GB/s |
+| Latency distribution | p50, p99, p999 | p99 â‰¤ 2Âµs, p999 â‰¤ 10Âµs |
+| Fairness | CV (coefficient of variation) | CV < 5% across flows |
+
+**Running the benchmark:**
+```bash
+dgx-01:~$ cloudai --mode run \
+  --system-config configs/spectrum-x-8node.toml \
+  --test-scenario configs/tests/nccl-all-reduce.toml
+
+[cloudai] All-reduce BW: 382.1 GB/s avg (CV=0.6%) â€” PASS
+[cloudai] Baseline stored: /results/cloudai/baseline-2024-01-15.json
+```
+
+**Comparison against baseline:**
+```bash
+dgx-01:~$ cloudai --mode compare \
+  --baseline /results/cloudai/baseline-2024-01-15.json \
+  --current /results/cloudai/run-2024-01-22.json
+
+[cloudai] All-reduce BW: 382.1 â†’ 383.4 GB/s (+0.3%) â€” OK
+[cloudai] p99 latency:   1.21  â†’ 1.18 Âµs   (-2.5%) â€” OK
+[cloudai] Overall: NO REGRESSION DETECTED
+```
+
+## Act 8 â€” Common RoCE Misconfiguration Scenarios (Exam Prep)
+
+**Scenario A: DCQCN not triggering**
+
+*Symptom:* Single-flow ib_write_bw OK. Multi-flow degrades to ~12 GB/s per flow. `tx_ecn_marked_pkts=0` despite congestion.
+
+*Root cause:* ECN `min_threshold` set above TC3 buffer capacity. Queue fills to physical limit and PFC fires before ECN marks. DCQCN loop never fires.
+
+*Fix:*
+```bash
+leaf-01# nv set qos ecn profile roce min-threshold 500000
+leaf-01# nv set qos ecn profile roce max-threshold 1500000
+leaf-01# nv config apply
+```
+
+**Scenario B: PFC deadlock (watchdog fires)**
+
+*Symptom:* Throughput drops to zero within 200ms. Watchdog counter increments.
+
+*Root cause:* ECN not configured. PFC fires continuously. CNP stuck in paused queue. DCQCN loop broken. Deadlock.
+
+*Fix:* Apply ECN configuration. ECN prevents queue fill-up, eliminating continuous PFC.
+
+**Scenario C: Low ib_write_bw despite healthy links**
+
+*Symptom:* BW ~12 GB/s instead of 46 GB/s. QP transitions without error.
+
+*Root cause:* MTU mismatch â€” Ethernet MTU is 1500 bytes. IB negotiates to 1024-byte path MTU.
+
+*Fix:*
+```bash
+dgx-01:~$ ip link set eth0 mtu 9000
+leaf-01# nv set interface swp1-32 link mtu 9000
+leaf-01# nv config apply
+```
+
+**Scenario D: CNP storm**
+
+*Symptom:* `tx_ecn_marked_pkts` extremely high (millions/second). BW oscillates 30â€“46 GB/s every 2â€“3 seconds. Classic sawtooth pattern.
+
+*Root cause:* ECN `min_threshold` too low (e.g., 4 KB). Every micro-burst triggers marking on every packet. DCQCN over-reacts, rate-limits to near-zero, traffic drains, repeats.
+
+*Fix:* Raise `min_threshold` to 500000 (500 KB).
+
+<RoCEScenarioTroubleshootViz />
+
+---
+
+## Chapter Summary
+
+RoCE on Spectrum-X is not a single configuration command â€” it is a coordinated stack of six interdependent prerequisites, each with a specific failure mode if misconfigured. The correct deployment sequence is: MTU first, DSCP trust second, PFC on priority 3 only, ECN thresholds sized to BDP/4 (practical: 500KB min / 1.5MB max), lossless headroom carved from the 48 MB Spectrum-4 buffer, and CNP on TC6 SP with PFC disabled. The NVUE `qos roce` shorthand applies all defaults in one line, but production deployments require manual control for NCCL DSCP 46 traffic and custom threshold tuning.
+
+Verification requires `ib_write_bw` â‰¥ 46.8 GB/s, `ib_write_lat` p99 â‰¤ 1.2Âµs, and CloudAI all-reduce â‰¥ 95% of line rate before a deployment is signed off. The four common failure scenarios â€” ECN not marking, PFC deadlock, MTU mismatch, CNP storm â€” each have a specific counter signature and a specific fix. Mastering the counter-to-root-cause mapping is the fastest path through the NCP-AIN Spectrum Networking section.
+
+**Next chapter:** Chapter 26 covers Adaptive Routing and Per-Packet Spraying on Spectrum-X.

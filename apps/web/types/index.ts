@@ -64,6 +64,24 @@ export interface TopologyState {
   storagePortsExpected?: number
   leaf02MtuCurrent?: number
   storage01MtuCurrent?: number
+  roceShorthandApplied?: boolean
+  dscpTrustVerified?: boolean
+  ecnThresholdsVerified?: boolean
+  pfcConfigVerified?: boolean
+  bwVerified?: boolean
+  latencyVerified?: boolean
+  configApplied?: boolean
+  mtu?: number
+  ecnMinThreshold?: number
+  ecnMaxThreshold?: number
+  ibWriteBwResult?: number | null
+  ibWriteLatP99?: number | null
+  ecnMarkingActive?: boolean
+  thresholdInspected?: boolean
+  problemIdentified?: boolean
+  thresholdFixed?: boolean
+  ecnMarkingVerified?: boolean
+  losslessBufferBytes?: number
 }
 
 export interface LabState {

@@ -8,6 +8,8 @@ import { lab5 } from "@/data/labs/lab5-nccl-diagnosis";
 import { lab14 } from "@/data/labs/lab14-srv6-te-path-steering";
 import { lab15 } from "@/data/labs/lab15-rdma-rkey-exposure";
 import { lab16 } from "@/data/labs/lab16-spectrum-x-platform-audit";
+import { lab17 } from "@/data/labs/lab17-roce-day-zero-config";
+import { lab18 } from "@/data/labs/lab18-ecn-threshold-tuning";
 import {
   applyRouteMapSwp14,
   configureRouteMapDscp10,
@@ -19,6 +21,16 @@ import {
   ibvRegMrRotate,
   rkeyScan,
 } from "@/lib/commands/lab15Handlers";
+import {
+  handleNvConfigApply,
+  handleNvConfigSave,
+  handleNvSetRoce,
+} from "@/lib/commands/lab17Handlers";
+import {
+  handleLab18ConfigApply,
+  handleLab18SetEcnMax,
+  handleLab18SetEcnMin,
+} from "@/lib/commands/lab18Handlers";
 import { useLabStore } from "@/store/labStore";
 
 const LAB_CONFIGS = {
@@ -30,6 +42,8 @@ const LAB_CONFIGS = {
   [lab14.id]: lab14,
   [lab15.id]: lab15,
   [lab16.id]: lab16,
+  [lab17.id]: lab17,
+  [lab18.id]: lab18,
 };
 
 export function runMutation(command: string): CommandResult {
@@ -184,6 +198,16 @@ export function runMutation(command: string): CommandResult {
       return configureRouteMapDscp10();
     case "apply route-map swp1-4":
       return applyRouteMapSwp14();
+    case "nv set interface swp1-32 qos roce":
+      return handleNvSetRoce();
+    case "nv config apply":
+      return store.lab.labId === lab18.id ? handleLab18ConfigApply() : handleNvConfigApply();
+    case "nv config save":
+      return handleNvConfigSave();
+    case "nv set qos ecn profile roce min-threshold 500000":
+      return handleLab18SetEcnMin();
+    case "nv set qos ecn profile roce max-threshold 1500000":
+      return handleLab18SetEcnMax();
     case "enable gid filter":
       return enableGidFilter();
     case "ibv_reg_mr rotate":

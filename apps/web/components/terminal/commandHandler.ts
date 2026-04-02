@@ -13,6 +13,8 @@ import { lab11, lab11Devices } from "@/data/labs/lab11-bgp-path-failure";
 import { lab14, lab14Devices } from "@/data/labs/lab14-srv6-te-path-steering";
 import { lab15, lab15Devices } from "@/data/labs/lab15-rdma-rkey-exposure";
 import { lab16, lab16Devices } from "@/data/labs/lab16-spectrum-x-platform-audit";
+import { lab17, lab17Devices } from "@/data/labs/lab17-roce-day-zero-config";
+import { lab18, lab18Devices } from "@/data/labs/lab18-ecn-threshold-tuning";
 import { calculateOversubscriptionA, calculateOversubscriptionB } from "@/lib/commands/calculateOversubscription";
 import { compareProposals } from "@/lib/commands/compareProposals";
 import { ibstat } from "@/lib/commands/ibstat";
@@ -73,6 +75,36 @@ import {
   handleNvShowRouterBgp,
   handleNvVersion,
 } from "@/lib/commands/lab16Handlers";
+import {
+  handleClResourceQuery,
+  handleEthtoolMlx5Grep,
+  handleEthtoolSwp1Ecn,
+  handleIbvDevinfo,
+  handleIbvRcPingpong,
+  handleIbWriteBw,
+  handleIbWriteLat,
+  handleIpLinkShow,
+  handleNvConfigApply,
+  handleNvConfigSave,
+  handleNvSetRoce,
+  handleNvShowInterfaceCountersPfc,
+  handleNvShowInterfaceQos,
+  handleNvShowQosEcnProfile,
+  handleNvShowQosPfc,
+  handleNvShowQosRoce,
+  handleNvShowQosScheduler,
+  handleNvShowQosTrustDscpMap,
+} from "@/lib/commands/lab17Handlers";
+import {
+  handleLab18ClResourceQuery,
+  handleLab18ConfigApply,
+  handleLab18EthtoolSwp1Ecn,
+  handleLab18IbWriteBwMulti,
+  handleLab18SetEcnMax,
+  handleLab18SetEcnMin,
+  handleLab18ShowEcnProfile,
+  handleLab18ShowInterfaceCounters,
+} from "@/lib/commands/lab18Handlers";
 import { ncclDebugTransport } from "@/lib/commands/ncclDebugTransport";
 import { recommendProposalA, recommendProposalB } from "@/lib/commands/recommendProposal";
 import { runMutation } from "@/lib/commands/mutations";
@@ -117,6 +149,8 @@ const LAB_CONFIGS: Record<string, LabConfig> = {
   [lab14.id]: lab14,
   [lab15.id]: lab15,
   [lab16.id]: lab16,
+  [lab17.id]: lab17,
+  [lab18.id]: lab18,
 };
 
 const LAB_DEVICES: Record<string, LabDevice[]> = {
@@ -135,6 +169,8 @@ const LAB_DEVICES: Record<string, LabDevice[]> = {
   [lab14.id]: lab14Devices,
   [lab15.id]: lab15Devices,
   [lab16.id]: lab16Devices,
+  [lab17.id]: lab17Devices,
+  [lab18.id]: lab18Devices,
 };
 
 const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
@@ -153,6 +189,8 @@ const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
   [lab14.id]: [...new Set(lab14Devices.map((device) => device.type))],
   [lab15.id]: [...new Set(lab15Devices.map((device) => device.type))],
   [lab16.id]: [...new Set(lab16Devices.map((device) => device.type))],
+  [lab17.id]: [...new Set(lab17Devices.map((device) => device.type))],
+  [lab18.id]: [...new Set(lab18Devices.map((device) => device.type))],
 };
 
 const LAB_CHAPTER_LINKS: Record<string, { slug: string; label: string }> = {
@@ -168,6 +206,8 @@ const LAB_CHAPTER_LINKS: Record<string, { slug: string; label: string }> = {
   [lab9.id]: { slug: "ch9-optics-cabling", label: "Chapter 9: Optics & Cabling" },
   [lab10.id]: { slug: "ch15-ip-routing-ai-fabrics", label: "Chapter 15: IP Routing for AI/ML Fabrics" },
   [lab11.id]: { slug: "ch15-ip-routing-ai-fabrics", label: "Chapter 15: IP Routing for AI/ML Fabrics" },
+  [lab17.id]: { slug: "ch25-roce-configuration-operations", label: "Chapter 25: RoCE Configuration and Operations on Spectrum-X" },
+  [lab18.id]: { slug: "ch25-roce-configuration-operations", label: "Chapter 25: RoCE Configuration and Operations on Spectrum-X" },
 };
 
 function showActiveLeafSwitchPort(): CommandResult {
@@ -214,6 +254,24 @@ function showUfmEventsByLab(): CommandResult {
   return useLabStore.getState().lab.labId === lab15.id
     ? showUfmEventsLab15()
     : showUfmEvents();
+}
+
+function showQosEcnProfileByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab18.id
+    ? handleLab18ShowEcnProfile()
+    : handleNvShowQosEcnProfile();
+}
+
+function showClResourceQueryByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab18.id
+    ? handleLab18ClResourceQuery()
+    : handleClResourceQuery();
+}
+
+function showEthtoolSwp1EcnByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab18.id
+    ? handleLab18EthtoolSwp1Ecn()
+    : handleEthtoolSwp1Ecn();
 }
 
 function showNvInterfaceByDevice(): CommandResult {
@@ -989,10 +1047,41 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "ibv_devinfo -d mlx5_0 -i 1": ibvDevInfoGid,
   "show gid filter": showGidFilter,
   "show mr info after": showMrInfoAfter,
-  "ibv_devinfo -d mlx5_0": ibvDevInfoTenantB,
+  "ibv_devinfo -d mlx5_0": () =>
+    useLabStore.getState().lab.labId === lab17.id || useLabStore.getState().lab.labId === lab18.id
+      ? handleIbvDevinfo()
+      : ibvDevInfoTenantB(),
   "ibv_rc_pingpong -d mlx5_0 -g 1": ibvRcPingpong,
-  "show qos trust dscp-map": showQosTrustDscpMap,
-  "nv show interface swp1 qos": nvShowInterfaceSwp1Qos,
+  "ibv_rc_pingpong -d mlx5_0 -g 0 192.168.100.2": handleIbvRcPingpong,
+  "show qos trust dscp-map": () =>
+    useLabStore.getState().lab.labId === lab17.id || useLabStore.getState().lab.labId === lab18.id
+      ? handleNvShowQosTrustDscpMap()
+      : showQosTrustDscpMap(),
+  "nv show interface swp1 qos": () =>
+    useLabStore.getState().lab.labId === lab17.id || useLabStore.getState().lab.labId === lab18.id
+      ? handleNvShowInterfaceQos()
+      : nvShowInterfaceSwp1Qos(),
+  "nv set interface swp1-32 qos roce": () => runMutation("nv set interface swp1-32 qos roce"),
+  "nv config apply": () => runMutation("nv config apply"),
+  "nv config save": () => runMutation("nv config save"),
+  "nv show qos roce": handleNvShowQosRoce,
+  "nv show qos ecn profile roce": showQosEcnProfileByLab,
+  "nv show qos pfc": handleNvShowQosPfc,
+  "nv show qos scheduler": handleNvShowQosScheduler,
+  "nv show interface swp1 counters pfc": handleNvShowInterfaceCountersPfc,
+  "cl-resource-query": showClResourceQueryByLab,
+  "ethtool -S swp1 | grep ecn": showEthtoolSwp1EcnByLab,
+  "ib_write_bw -d mlx5_0 --iters 5000 --size 65536 192.168.100.2": handleIbWriteBw,
+  "ib_write_lat -d mlx5_0 --iters 10000 192.168.100.2": handleIbWriteLat,
+  "ip link show eth0": handleIpLinkShow,
+  "ethtool -S mlx5_0 | grep -E 'ecn|pfc|retry'": handleEthtoolMlx5Grep,
+  "nv set qos ecn profile roce min-threshold 500000": () => runMutation("nv set qos ecn profile roce min-threshold 500000"),
+  "nv set qos ecn profile roce max-threshold 1500000": () => runMutation("nv set qos ecn profile roce max-threshold 1500000"),
+  "ib_write_bw -d mlx5_0 --iters 10000 --size 65536 192.168.100.2 &": handleLab18IbWriteBwMulti,
+  "ib_write_bw -d mlx5_1 --iters 10000 --size 65536 192.168.100.2 &": handleLab18IbWriteBwMulti,
+  "ib_write_bw -d mlx5_2 --iters 10000 --size 65536 192.168.100.2 &": handleLab18IbWriteBwMulti,
+  "ib_write_bw -d mlx5_3 --iters 10000 --size 65536 192.168.100.2 &": handleLab18IbWriteBwMulti,
+  "nv show interface swp1 counters": handleLab18ShowInterfaceCounters,
   "show gvmi table": showGvmiTable,
   "show ufm pkey table": showUfmPkeyTable,
   "nv --version": handleNvVersion,

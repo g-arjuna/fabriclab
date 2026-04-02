@@ -637,6 +637,33 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch24-spectrum-x-architecture"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch25-roce-configuration-operations",
+      "number": 25,
+      "title": "RoCE Configuration and Operations on Spectrum-X",
+      "href": "/learn/ch25-roce-configuration-operations",
+      "durationMinutes": 55,
+      "durationLabel": "55 min",
+      "partKey": "ncp-ain-platform",
+      "partTitle": "Part 6 - NCP-AIN Platform Chapters",
+      "partDescription": "Requires Part 5 - Ch 24+",
+      "tags": [
+        "RoCEv2",
+        "Spectrum-X",
+        "NVUE",
+        "PFC",
+        "ECN",
+        "DCQCN",
+        "QoS"
+      ],
+      "description": "Configure RoCEv2 end to end on Spectrum-X: prerequisites, NVUE Day-0 workflow, QoS architecture, ECN/PFC tuning, and production verification.",
+      "previewSummary": "Turn the Spectrum-X hardware baseline into a functioning RoCE fabric with the exact QoS, ECN, and verification workflow operators use in production.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch25-roce-configuration-operations"
     }
   ],
   "labs": [
@@ -943,6 +970,51 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch24-spectrum-x-architecture"
+    },
+    {
+      "kind": "lab",
+      "slug": "lab17-roce-day-zero-config",
+      "number": 17,
+      "title": "RoCE Day-Zero Configuration",
+      "href": "/lab?lab=lab17-roce-day-zero-config",
+      "durationMinutes": 45,
+      "durationLabel": "45 min",
+      "tags": [
+        "RoCEv2",
+        "Spectrum-X",
+        "NVUE",
+        "PFC",
+        "ECN",
+        "Verification"
+      ],
+      "description": "Apply the Day-0 Spectrum-X RoCE QoS profile, verify DSCP trust and PFC/ECN state, and validate the fabric with ib_write_bw and ib_write_lat.",
+      "previewSummary": "Run the RoCE bring-up workflow operators use before a new Spectrum-X training fabric is accepted.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch25-roce-configuration-operations"
+    },
+    {
+      "kind": "lab",
+      "slug": "lab18-ecn-threshold-tuning",
+      "number": 18,
+      "title": "ECN Threshold Tuning Under Load",
+      "href": "/lab?lab=lab18-ecn-threshold-tuning",
+      "durationMinutes": 35,
+      "durationLabel": "35 min",
+      "tags": [
+        "ECN",
+        "DCQCN",
+        "Spectrum-X",
+        "QoS",
+        "Troubleshooting"
+      ],
+      "description": "Diagnose a broken ECN profile, compare thresholds to the carved lossless buffer, then restore DCQCN marking under multi-flow load.",
+      "previewSummary": "A tuning lab focused on the classic Spectrum-X defect where ECN thresholds sit above the physical lossless buffer budget.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch25-roce-configuration-operations"
     }
   ]
 }

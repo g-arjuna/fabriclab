@@ -25,6 +25,8 @@ import { lab11, lab11Devices } from "@/data/labs/lab11-bgp-path-failure";
 import { lab14, lab14Devices } from "@/data/labs/lab14-srv6-te-path-steering";
 import { lab15, lab15Devices } from "@/data/labs/lab15-rdma-rkey-exposure";
 import { lab16, lab16Devices } from "@/data/labs/lab16-spectrum-x-platform-audit";
+import { lab17, lab17Devices } from "@/data/labs/lab17-roce-day-zero-config";
+import { lab18, lab18Devices } from "@/data/labs/lab18-ecn-threshold-tuning";
 import { isComplete } from "@/lib/labEngine";
 import { formatConditionLabel } from "@/lib/formatters";
 import { useLabStore } from "@/store/labStore";
@@ -46,6 +48,8 @@ const LABS = {
   [lab14.id]: lab14,
   [lab15.id]: lab15,
   [lab16.id]: lab16,
+  [lab17.id]: lab17,
+  [lab18.id]: lab18,
 };
 
 const LAB_DEVICES = {
@@ -64,6 +68,8 @@ const LAB_DEVICES = {
   [lab14.id]: lab14Devices,
   [lab15.id]: lab15Devices,
   [lab16.id]: lab16Devices,
+  [lab17.id]: lab17Devices,
+  [lab18.id]: lab18Devices,
 };
 
 const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
@@ -84,6 +90,14 @@ const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
   [lab16.id]: {
     slug: "ch24-spectrum-x-architecture",
     label: "Chapter 24: Spectrum-X Architecture and the AI Factory Platform",
+  },
+  [lab17.id]: {
+    slug: "ch25-roce-configuration-operations",
+    label: "Chapter 25: RoCE Configuration and Operations on Spectrum-X",
+  },
+  [lab18.id]: {
+    slug: "ch25-roce-configuration-operations",
+    label: "Chapter 25: RoCE Configuration and Operations on Spectrum-X",
   },
 };
 

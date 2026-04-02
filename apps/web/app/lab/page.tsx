@@ -25,6 +25,8 @@ const SUPPORTED_LAB_IDS = new Set([
   "lab14-srv6-te-path-steering",
   "lab15-rdma-rkey-exposure",
   "lab16-spectrum-x-platform-audit",
+  "lab17-roce-day-zero-config",
+  "lab18-ecn-threshold-tuning",
 ]);
 
 function LabLoadingState() {

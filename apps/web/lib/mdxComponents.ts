@@ -204,6 +204,14 @@ import SpectrumXSoftwareStackViz from "@/components/visualisations/SpectrumXSoft
 import GPUCommPatternViz from "@/components/visualisations/GPUCommPatternViz"
 import StorageOptionComparisonViz from "@/components/visualisations/StorageOptionComparisonViz"
 import FailureDomainViz from "@/components/visualisations/FailureDomainViz"
+// === Ch25 -- RoCE Configuration and Operations on Spectrum-X ===
+import RoCEPrereqChecklistViz from "@/components/visualisations/ch25/RoCEPrereqChecklistViz"
+import NVUERoCEConfigViz from "@/components/visualisations/ch25/NVUERoCEConfigViz"
+import QoSSchedulerViz from "@/components/visualisations/ch25/QoSSchedulerViz"
+import ECNThresholdViz from "@/components/visualisations/ch25/ECNThresholdViz"
+import PFCStormProgressionViz from "@/components/visualisations/ch25/PFCStormProgressionViz"
+import RoCEVerificationFlowViz from "@/components/visualisations/ch25/RoCEVerificationFlowViz"
+import RoCEScenarioTroubleshootViz from "@/components/visualisations/ch25/RoCEScenarioTroubleshootViz"
 
 // === Legacy components (no longer in active chapters, kept for reference) ===
 // ServerRackViz, NICCardViz, DGXNodeViz, HardwareComparison
@@ -395,4 +403,12 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   GPUCommPatternViz,
   StorageOptionComparisonViz,
   FailureDomainViz,
+  // Ch25
+  RoCEPrereqChecklistViz,
+  NVUERoCEConfigViz,
+  QoSSchedulerViz,
+  ECNThresholdViz,
+  PFCStormProgressionViz,
+  RoCEVerificationFlowViz,
+  RoCEScenarioTroubleshootViz,
 }

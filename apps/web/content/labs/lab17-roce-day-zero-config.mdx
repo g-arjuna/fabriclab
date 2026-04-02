@@ -1,0 +1,211 @@
+---
+title: "Lab 17 â€” RoCE Day-Zero Configuration"
+labNumber: 17
+slug: "lab17-roce-day-zero-config"
+difficulty: "intermediate"
+estimatedMinutes: 45
+pairedChapter: "ch25-roce-configuration-operations"
+published: true
+---
+
+import LabTerminal from '@/components/lab/LabTerminal'
+import LabHint from '@/components/lab/LabHint'
+import LabCheck from '@/components/lab/LabCheck'
+import LabAnswerBox from '@/components/lab/LabAnswerBox'
+
+## Scenario
+
+The Spectrum-X leaf pair has passed the bring-up audit (Lab 16) â€” links are up, BGP sessions established, and the fabric is forwarding. Now the cluster owner has handed you the Day-0 RoCE requirements for the 32-GPU DGX H100 cluster attached to leaf-01 and leaf-02.
+
+**Cluster owner requirements:**
+- DSCP 26 trusted and mapped to TC3 (lossless) on all DGX-facing ports
+- PFC enabled on priority 3 only (all other priorities: lossy)
+- ECN min_threshold = 500 KB, max_threshold = 1.5 MB on TC3 egress
+- CNP (DSCP 48) mapped to TC6, Strict Priority, PFC disabled
+- MTU = 9216 bytes on all inter-node paths
+- Performance acceptance: ib_write_bw >= 46 GB/s, ib_write_lat p99 <= 2us
+
+You will apply the configuration using the NVUE shorthand on both leaf switches, verify each component of the QoS stack, then run RDMA performance benchmarks from dgx-node-01 to confirm the fabric is RoCE-ready.
+
+**Devices:**
+
+| Device | Type | Hardware | Prompt |
+|---|---|---|---|
+| leaf-01 | Leaf switch | SN5600 (Spectrum-4) | `leaf-01#` |
+| leaf-02 | Leaf switch | SN5600 (Spectrum-4) | `leaf-02#` |
+| dgx-node-01 | GPU server | DGX H100 (ConnectX-7) | `dgx-01:~$` |
+
+---
+
+## Task 1 â€” Apply RoCE Shorthand Configuration
+
+Apply the NVUE RoCE shorthand to all 32 DGX-facing ports on both leaf switches.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+nv set interface swp1-32 qos roce
+nv config apply
+nv config save
+</LabTerminal>
+
+<LabHint level={1}>
+The `qos roce` keyword applies all RoCE QoS defaults to the specified interface range. Run the same commands on leaf-02 after leaf-01 is complete.
+</LabHint>
+
+<LabCheck taskId="roceShorthandApplied" passCriteria="qos roce applied and config saved on both leaf-01 and leaf-02" />
+
+---
+
+## Task 2 â€” Verify DSCP Trust Map
+
+Confirm that DSCP 26 is mapped to TC3 (lossless) and DSCP 48 is mapped to TC6 (CNP).
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+nv show qos trust dscp-map
+</LabTerminal>
+
+Expected output confirms DSCP 26 -> TC3 and DSCP 48 -> TC6:
+
+```
+DSCP  TC   Description
+----  ---  -----------
+26    3    RoCEv2 training traffic (lossless)
+48    6    Congestion Notification Packet (SP)
+0-9   0    Default lossy
+```
+
+<LabHint level={1}>
+If DSCP 26 does not appear in the map, the shorthand may not have been applied to the correct interface range.
+</LabHint>
+
+<LabHint level={2}>
+Run `nv show interface swp1 qos` â€” if Trust shows "none" instead of "dscp", re-run `nv set interface swp1-32 qos trust dscp` followed by `nv config apply`.
+</LabHint>
+
+<LabCheck taskId="dscpTrustVerified" passCriteria="DSCP 26 mapped to TC3, DSCP 48 mapped to TC6 in dscp-map output" />
+
+---
+
+## Task 3 â€” Verify ECN Thresholds
+
+Confirm the ECN profile for RoCE shows min_threshold = 500 KB and max_threshold = 1.5 MB on TC3 egress queues.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+nv show qos ecn profile roce
+</LabTerminal>
+
+Expected output:
+```
+Profile: roce
+  Min Threshold:  500000 bytes (488 KB)
+  Max Threshold:  1500000 bytes (1.46 MB)
+  Mark Probability: linear
+  Mode: ECN only (no drops)
+  Applied to:     TC3 egress on all RoCE interfaces
+```
+
+<LabHint level={1}>
+If Min Threshold shows a value > 1 MB, ECN thresholds are too high â€” DCQCN will not trigger under normal load.
+</LabHint>
+
+<LabHint level={3}>
+To set thresholds manually: `nv set qos ecn profile roce min-threshold 500000` and `nv set qos ecn profile roce max-threshold 1500000`, then `nv config apply`.
+</LabHint>
+
+<LabCheck taskId="ecnThresholdsVerified" passCriteria="ECN profile shows min=500000 and max=1500000 on TC3" />
+
+---
+
+## Task 4 â€” Verify PFC on Priority 3 Only
+
+Confirm PFC is enabled on priority 3 and disabled on all other priorities.
+
+<LabTerminal nodeId="leaf-01" prompt="leaf-01#">
+nv show qos pfc
+</LabTerminal>
+
+Expected output:
+```
+PFC Configuration:
+  Priority 0:  disabled
+  Priority 1:  disabled
+  Priority 2:  disabled
+  Priority 3:  ENABLED  (lossless -- RoCEv2)
+  Priority 4:  disabled
+  Priority 5:  disabled
+  Priority 6:  disabled  (TC6 is SP but NOT PFC-paused -- CNP must flow freely)
+  Priority 7:  disabled
+```
+
+<LabHint level={1}>
+TC6 (CNP) must have PFC disabled even though it is Strict Priority. If TC6 shows PFC enabled, DCQCN feedback breaks.
+</LabHint>
+
+<LabCheck taskId="pfcConfigVerified" passCriteria="PFC enabled on priority 3 only, all other priorities show PFC disabled" />
+
+---
+
+## Task 5 â€” Run ib_write_bw Bandwidth Test
+
+From dgx-node-01, run ib_write_bw against dgx-node-02. Confirm >= 46 GB/s.
+
+<LabTerminal nodeId="dgx-node-01" prompt="dgx-01:~$">
+ib_write_bw -d mlx5_0 --iters 5000 --size 65536 192.168.100.2
+</LabTerminal>
+
+Expected pass output:
+```
+-------------------------------------------------------------------
+ #bytes  #iterations  BW peak[GB/sec]  BW average[GB/sec]
+ 65536   5000           46.92            46.81
+-------------------------------------------------------------------
+```
+
+If BW average shows ~12 GB/s: MTU mismatch. Check `ip link show eth0 | grep mtu` on both DGX nodes.
+
+<LabHint level={1}>
+If ib_write_bw shows significantly less than 46 GB/s, run `ibv_devinfo -d mlx5_0 | grep active_mtu`. If active_mtu is not 4096 (5), the Ethernet MTU is still at 1500. Fix: `ip link set eth0 mtu 9000` on both DGX nodes.
+</LabHint>
+
+<LabCheck taskId="bwVerified" passCriteria="ib_write_bw average >= 46 GB/s" />
+
+---
+
+## Task 6 â€” Run ib_write_lat Latency Test
+
+Run ib_write_lat with 10000 iterations. Confirm median <= 0.9us and p99 <= 2us.
+
+<LabTerminal nodeId="dgx-node-01" prompt="dgx-01:~$">
+ib_write_lat -d mlx5_0 --iters 10000 192.168.100.2
+</LabTerminal>
+
+Expected pass output:
+```
+-------------------------------------------------------------------
+ #bytes #iters  t_min[us]  t_max[us]  t_typical[us]  t_99p[us]
+ 2      10000   0.81        4.23       0.87            1.19
+-------------------------------------------------------------------
+```
+
+<LabHint level={1}>
+High p99 latency with low p50 is the signature of occasional PFC pause events. Check watchdog fires: `nv show interface swp1 counters pfc`.
+</LabHint>
+
+<LabCheck taskId="latencyVerified" passCriteria="ib_write_lat p99 <= 2us" />
+
+---
+
+## Debrief
+
+You have completed a full RoCE Day-0 configuration sequence on a Spectrum-X leaf pair.
+
+**Configuration order matters.** MTU must be set before QoS trust, and QoS trust before PFC/ECN. Applying ECN without DSCP trust means the lossless queue is never populated with RoCEv2 traffic.
+
+**The shorthand vs manual trade-off.** The `qos roce` shorthand is sufficient for a homogeneous DGX-only cluster. Mixed workloads require the manual path to add DSCP 46 for NCCL and DSCP 10 for checkpointing.
+
+**ib_write_bw is the acceptance gate.** 46.8 GB/s confirms: MTU correct, DSCP trust correct, lossless queue operating, no retransmissions.
+
+**ECN is the primary mechanism; PFC is the safety net.** A fabric where PFC fires frequently (high `rx_pfc_xoff_frames`) is a fabric where ECN is misconfigured.
+
+<LabAnswerBox questionId="lab17-reflect">
+After completing this lab, explain in your own words why TC6 (CNP) must be Strict Priority and must never be PFC-paused. What happens to the DCQCN feedback loop if CNP packets are held in a PFC-paused queue? How does this lead to the deadlock scenario described in Chapter 25?
+</LabAnswerBox>
