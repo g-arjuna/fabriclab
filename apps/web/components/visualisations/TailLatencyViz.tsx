@@ -49,7 +49,7 @@ export function TailLatencyViz() {
       </p>
 
       {/* Sliders */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+      <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
         {[
           {
             label: "GPU count",
@@ -95,7 +95,7 @@ export function TailLatencyViz() {
 
       {/* Math display */}
       <div style={{ background: "#020617", borderRadius: 10, padding: 14, marginBottom: 16, fontFamily: "ui-monospace, monospace" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {/* Single server */}
           <div>
             <p style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
@@ -117,7 +117,7 @@ export function TailLatencyViz() {
           </div>
 
           {/* Cluster */}
-          <div style={{ borderLeft: "1px solid #1e293b", paddingLeft: 16 }}>
+          <div className="border-t border-slate-800 pt-4 md:border-l md:border-t-0 md:pl-4 md:pt-0">
             <p style={{ fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
               {gpuCount}-GPU cluster — {totalOps.toLocaleString()} total ops
             </p>

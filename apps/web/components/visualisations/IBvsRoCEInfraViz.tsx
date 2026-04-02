@@ -74,8 +74,9 @@ export function IBvsRoCEInfraViz() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl bg-[#0a0f1a] border border-white/10 overflow-hidden">
-        <table className="w-full text-xs">
+      <div className="rounded-xl border border-white/10 bg-[#0a0f1a]">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-xs">
           <thead>
             <tr className="border-b border-white/10">
               <th className="text-left p-3 text-slate-500 font-medium w-1/3">Layer / aspect</th>
@@ -105,7 +106,8 @@ export function IBvsRoCEInfraViz() {
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {/* Legend */}

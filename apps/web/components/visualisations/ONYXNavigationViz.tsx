@@ -68,7 +68,7 @@ export function ONYXNavigationViz() {
         ))}
       </div>
       <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: info.color + "22", border: `1px solid ${info.color}44` }}>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
           <code className="font-mono text-sm text-cyan-300 bg-[#0a0f1a] px-3 py-1.5 rounded-lg">{info.prompt} _</code>
           <span className="text-xs text-slate-500">{mode} mode</span>
         </div>
@@ -87,7 +87,7 @@ export function ONYXNavigationViz() {
           <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Example commands in this mode</div>
           <div className="space-y-1">
             {info.exampleCommands.map(cmd => (
-              <div key={cmd} className="font-mono text-xs text-slate-300">{cmd}</div>
+              <div key={cmd} className="font-mono text-xs text-slate-300 break-all">{cmd}</div>
             ))}
           </div>
         </div>

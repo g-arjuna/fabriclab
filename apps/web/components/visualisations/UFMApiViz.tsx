@@ -159,7 +159,7 @@ export function UFMApiViz() {
       </div>
 
       {/* Main panel */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="grid gap-4 lg:grid-cols-2">
         {/* Left: endpoint info */}
         <div style={{ background: "#0f172a", borderRadius: 12, padding: 16 }}>
           {/* Method + path */}
@@ -244,6 +244,7 @@ export function UFMApiViz() {
               color: "#fcd34d",
               margin: 0,
               whiteSpace: "pre-wrap",
+              overflowWrap: "anywhere",
             }}>
               {`curl -sk -u admin:pass \\\n  https://ufm-host${ep.path}`}
             </pre>

@@ -132,7 +132,8 @@ export function OpticsRoadmapViz() {
       </p>
 
       {/* Timeline row */}
-      <div className="relative mb-6">
+      <div className="relative mb-6 overflow-x-auto">
+        <div className="min-w-[560px]">
         {/* connecting line */}
         <div className="absolute top-6 left-0 right-0 h-px bg-slate-700 z-0" />
         <div className="relative z-10 flex items-start justify-between gap-1">
@@ -172,6 +173,7 @@ export function OpticsRoadmapViz() {
             )
           })}
         </div>
+        </div>
       </div>
 
       {/* Legend */}
@@ -194,7 +196,7 @@ export function OpticsRoadmapViz() {
         className="rounded-xl p-4 transition-all"
         style={{ backgroundColor: sel.color + "33", border: `1px solid ${sel.border}44` }}
       >
-        <div className="flex items-start justify-between mb-3">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <span
               className="text-2xl font-black font-mono"
@@ -212,7 +214,7 @@ export function OpticsRoadmapViz() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
+        <div className="mb-3 grid gap-3 text-xs sm:grid-cols-2">
           {[
             { label: "DGX generation", value: sel.dgx },
             { label: "NIC", value: sel.nic },

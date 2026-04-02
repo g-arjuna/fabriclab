@@ -89,9 +89,9 @@ export function EnterpriseBaselineViz() {
 
       <div className="flex flex-col gap-4 lg:flex-row">
         {/* Server diagram */}
-        <div className="flex-shrink-0 space-y-1">
+        <div className="w-full max-w-[280px] flex-shrink-0 space-y-1">
           <div className="mb-1 text-xs text-slate-500">Server (2U)</div>
-          <div className="rounded-xl border border-slate-700 bg-slate-950 p-3 space-y-1" style={{ width: 280 }}>
+          <div className="space-y-1 rounded-xl border border-slate-700 bg-slate-950 p-3">
             {COMPONENTS.slice(0, 4).map(comp => (
               <button
                 key={comp.id}
@@ -125,7 +125,6 @@ export function EnterpriseBaselineViz() {
             onClick={() => setSelected(selected?.id === "switch" ? null : COMPONENTS[4])}
             className="w-full rounded-xl px-3 py-3 text-left text-xs transition-all hover:brightness-125"
             style={{
-              width: 280,
               backgroundColor: selected?.id === "switch" ? "#1e1b4b" : "#0f0a2e",
               border: `1px solid ${selected?.id === "switch" ? "#818cf8" : "#4338ca"}`,
             }}

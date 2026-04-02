@@ -91,7 +91,7 @@ export function NVLinkViz() {
             </text>
           </svg>
 
-          <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+          <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
             <div className="rounded-xl bg-slate-800 p-3">
               <div className="text-slate-400 mb-1">Per GPU bandwidth</div>
               <div className="text-green-300 font-bold text-base">900 GB/s</div>
@@ -126,7 +126,7 @@ export function NVLinkViz() {
               { label: "NVLink gen4 — H100 (2022)", bw: "900 GB/s", pct: 100, color: "#15803d" },
             ].map(row => (
               <div key={row.label} className="flex items-center gap-3 text-xs">
-                <span className="w-44 text-slate-400 flex-shrink-0">{row.label}</span>
+                <span className="w-32 flex-shrink-0 text-slate-400 sm:w-44">{row.label}</span>
                 <div className="flex-1 h-5 rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full rounded-full flex items-center pl-2"
                     style={{ width: `${row.pct}%`, backgroundColor: row.color, minWidth: 40 }}>

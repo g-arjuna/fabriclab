@@ -97,8 +97,8 @@ export function DiagnosticWorkflowViz() {
             {active === i && (
               <div className="ml-9 mt-3 space-y-2">
                 {phase.commands.map((c, j) => (
-                  <div key={j} className="flex items-start gap-3 text-xs">
-                    <code className="flex-shrink-0 font-mono text-cyan-300">{c.cmd}</code>
+                  <div key={j} className="flex flex-col gap-1 text-xs sm:flex-row sm:items-start sm:gap-3">
+                    <code className="font-mono break-all text-cyan-300 sm:flex-shrink-0">{c.cmd}</code>
                     <span className="text-slate-400">→ {c.question}</span>
                   </div>
                 ))}

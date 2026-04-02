@@ -177,7 +177,7 @@ export function NCCLLayerViz() {
               }`,
             }}
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <span
                   className="text-sm font-semibold"
@@ -187,7 +187,7 @@ export function NCCLLayerViz() {
                 >
                   {layer.label}
                 </span>
-                <span className="ml-3 text-[10px] text-slate-600">
+                <span className="mt-1 block text-[10px] text-slate-600 sm:ml-3 sm:mt-0 sm:inline">
                   {layer.sublabel}
                 </span>
               </div>
@@ -240,7 +240,7 @@ export function NCCLLayerViz() {
         </div>
         <div className="rounded-lg bg-[#0a0f1a] border border-white/8 p-3">
           <span className="text-[10px] text-slate-500">Real-world signature: </span>
-          <span className="text-xs text-slate-300">{selected.realWorldSignature}</span>
+          <span className="break-all text-xs text-slate-300">{selected.realWorldSignature}</span>
         </div>
       </div>
     </div>

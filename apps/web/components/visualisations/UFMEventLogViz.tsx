@@ -38,21 +38,23 @@ export function UFMEventLogViz() {
           <button
             key={i}
             onClick={() => setSelected(selected === i ? null : i)}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-mono transition-all"
+            className="flex w-full flex-col items-start gap-2 rounded-xl px-3 py-2 text-left text-xs font-mono transition-all sm:flex-row sm:items-center sm:gap-3"
             style={{
               backgroundColor: selected === i ? severityColors[e.severity] + "22" : "#0f172a",
               border: `1px solid ${selected === i ? severityColors[e.severity] + "66" : "#1e293b"}`,
             }}
           >
-            <span className="flex-shrink-0 text-[10px] text-slate-600">{e.time}</span>
-            <span
-              className="flex-shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold"
-              style={{ backgroundColor: severityColors[e.severity] + "33", color: severityColors[e.severity] }}
-            >
-              {e.severity}
-            </span>
-            <span className="flex-1 text-slate-300">{e.event}</span>
-            <span className="flex-shrink-0 text-[9px] text-slate-600">{e.component}</span>
+            <div className="flex items-center gap-3">
+              <span className="flex-shrink-0 text-[10px] text-slate-600">{e.time}</span>
+              <span
+                className="flex-shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold"
+                style={{ backgroundColor: severityColors[e.severity] + "33", color: severityColors[e.severity] }}
+              >
+                {e.severity}
+              </span>
+            </div>
+            <span className="text-slate-300 sm:flex-1">{e.event}</span>
+            <span className="text-[9px] text-slate-600 sm:flex-shrink-0">{e.component}</span>
           </button>
         ))}
       </div>
@@ -64,7 +66,7 @@ export function UFMEventLogViz() {
             border: `1px solid ${severityColors[events[selected].severity] + "33"}`,
           }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
             <span className="font-mono text-slate-400">{events[selected].time}</span>
             <span style={{ color: severityColors[events[selected].severity] }} className="font-semibold">
               {events[selected].event}

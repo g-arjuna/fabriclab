@@ -96,12 +96,12 @@ export function SimulatorExplainerViz() {
           {/* Visual demo of three terminal prompts */}
           <div className="space-y-2">
             {(Object.entries(deviceContexts) as [DeviceContext, typeof deviceContexts[DeviceContext]][]).map(([id, ctx]) => (
-              <div key={id} className="rounded-xl p-3 font-mono flex items-center gap-3"
+              <div key={id} className="rounded-xl p-3 font-mono flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3"
                 style={{ backgroundColor: ctx.bgColor, border: `1px solid ${ctx.promptColor}33` }}>
                 <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: ctx.promptColor }} />
                 <span style={{ color: ctx.promptColor }}>{ctx.prompt}</span>
                 <span className="text-slate-600">_</span>
-                <span className="ml-auto text-[9px] rounded-full px-2 py-0.5"
+                <span className="text-[9px] rounded-full px-2 py-0.5 sm:ml-auto"
                   style={{ backgroundColor: ctx.promptColor + "22", color: ctx.promptColor }}>
                   {ctx.label} · {ctx.os}
                 </span>
@@ -120,7 +120,7 @@ export function SimulatorExplainerViz() {
 
       {tab === "device_contexts" && (
         <div>
-          <div className="flex gap-2 mb-4">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row">
             {(Object.entries(deviceContexts) as [DeviceContext, typeof deviceContexts[DeviceContext]][]).map(([id, ctx]) => (
               <button key={id} onClick={() => setDeviceCtx(id)}
                 className="flex-1 rounded-xl px-3 py-2 text-xs transition-all text-center"
@@ -145,8 +145,8 @@ export function SimulatorExplainerViz() {
                   <span className="text-slate-500 ml-2">help</span>
                 </div>
                 {ctx.commands.map((c, i) => (
-                  <div key={i} className="flex items-start gap-3 rounded-xl px-3 py-2 bg-slate-800/50 text-xs">
-                    <code className="font-mono flex-shrink-0 mt-0.5" style={{ color: ctx.promptColor }}>{c.cmd}</code>
+                  <div key={i} className="flex flex-col gap-1 rounded-xl bg-slate-800/50 px-3 py-2 text-xs sm:flex-row sm:items-start sm:gap-3">
+                    <code className="mt-0.5 font-mono break-all sm:flex-shrink-0" style={{ color: ctx.promptColor }}>{c.cmd}</code>
                     <span className="text-slate-400 leading-5">{c.models}</span>
                   </div>
                 ))}

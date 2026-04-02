@@ -66,14 +66,14 @@ export function TopologySizingWorkflowViz() {
                 backgroundColor: isActive ? step.color + "44" : isDone ? step.color + "15" : "#0f172a",
                 border: `1px solid ${isActive ? step.border : isDone ? step.border + "44" : "#1e293b"}`,
               }}>
-              <div className="flex items-center gap-4 px-4 py-3">
+              <div className="flex items-center gap-3 px-4 py-3 sm:gap-4">
                 <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                   style={{ backgroundColor: isActive || isDone ? step.border : "#1e293b", color: "#fff" }}>
                   {isDone ? "OK" : step.id}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-white">{step.label}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5 font-mono">{step.formula}</div>
+                  <div className="mt-0.5 break-all font-mono text-[10px] text-slate-500">{step.formula}</div>
                 </div>
                 <span className="text-slate-600 text-xs flex-shrink-0">{isActive ? "v" : ">"}</span>
               </div>

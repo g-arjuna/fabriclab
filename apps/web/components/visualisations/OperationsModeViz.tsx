@@ -65,12 +65,12 @@ export function OperationsModeViz() {
         CLI vs GUI vs orchestrated — by operational phase
       </p>
 
-      <div className="flex gap-2 mb-5">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row">
         {days.map(d => (
           <button
             key={d.id}
             onClick={() => setDay(d.id)}
-            className="flex-1 rounded-xl px-3 py-2.5 text-sm transition-all text-center"
+            className="flex-1 rounded-xl px-3 py-2.5 text-center text-sm transition-all"
             style={{
               backgroundColor: day === d.id ? "#1e3a5f" : "#0f172a",
               border: `1px solid ${day === d.id ? "#60a5fa" : "#1e293b"}`,

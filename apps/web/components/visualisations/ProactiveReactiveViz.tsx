@@ -66,7 +66,7 @@ export function ProactiveReactiveViz() {
                 borderColor: isActive ? `${layer.color}66` : "#1e293b",
               }}
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.28em]" style={{ color: layer.color }}>
                     Layer {index + 1}
@@ -94,7 +94,7 @@ export function ProactiveReactiveViz() {
                     <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
                       Diagnostic counter
                     </p>
-                    <p className="mt-2 font-mono text-[11px] leading-6 text-slate-300">{layer.counter}</p>
+                    <p className="mt-2 break-all font-mono text-[11px] leading-6 text-slate-300">{layer.counter}</p>
                   </div>
                   <div className="rounded-xl border border-white/8 bg-slate-950/70 p-3">
                     <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
@@ -106,7 +106,7 @@ export function ProactiveReactiveViz() {
                     <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
                       Command to check
                     </p>
-                    <p className="mt-2 font-mono text-[11px] leading-6 text-slate-300">{layer.command}</p>
+                    <p className="mt-2 break-all font-mono text-[11px] leading-6 text-slate-300">{layer.command}</p>
                   </div>
                 </div>
               ) : null}

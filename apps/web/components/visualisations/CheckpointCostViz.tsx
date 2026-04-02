@@ -86,7 +86,7 @@ export function CheckpointCostViz() {
       </p>
 
       {/* Optimizer selector */}
-      <div className="flex gap-2 mb-4">
+      <div className="mb-4 flex flex-wrap gap-2">
         <span className="text-[10px] text-slate-500 self-center">Optimizer:</span>
         {(["adam", "sgd"] as const).map(o => (
           <button key={o} onClick={() => setOpt(o)}
@@ -126,7 +126,7 @@ export function CheckpointCostViz() {
       )}
 
       {/* Results grid */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         {results.map(r => (
           <div key={r.label} className="rounded-xl bg-slate-800/40 p-3">
             <div className="text-[9px] text-slate-500 mb-0.5">{r.label}</div>
@@ -139,7 +139,7 @@ export function CheckpointCostViz() {
       {/* Daily impact */}
       <div className="mt-3 rounded-xl bg-slate-800/60 border border-white/5 p-3">
         <div className="text-[9px] uppercase tracking-widest text-slate-600 mb-2">Daily cluster impact</div>
-        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="grid gap-2 text-center text-xs sm:grid-cols-3">
           <div>
             <div className="text-slate-500 text-[9px]">Failures/day</div>
             <div className="font-bold text-red-400">{fmt(failuresPerDay, 1)}</div>

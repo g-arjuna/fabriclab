@@ -18,9 +18,9 @@ export function FatTreeViz() {
       </p>
       <p className="mb-4 text-xs text-slate-600">k = switch radix (ports per switch)</p>
 
-      <div className="flex items-center gap-6 mb-5">
+      <div className="mb-5 flex items-center gap-6">
         <div className="flex-1">
-          <div className="flex items-center justify-between mb-2">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs text-slate-400">k (switch radix)</span>
             <span className="text-2xl font-bold text-white font-mono">{k}</span>
           </div>
@@ -48,7 +48,7 @@ export function FatTreeViz() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="mb-4 grid gap-2 sm:grid-cols-2">
         <button onClick={() => setHighlight(highlight === "bisection" ? null : "bisection")}
           className="rounded-xl p-3 text-xs transition-all text-left"
           style={{
@@ -73,9 +73,9 @@ export function FatTreeViz() {
         </button>
       </div>
 
-      <div className="rounded-xl bg-[#0a0f1a] border border-white/8 p-3 text-xs">
+      <div className="rounded-xl border border-white/8 bg-[#0a0f1a] p-3 text-xs">
         <div className="text-slate-500 mb-2">At k={k}, this fat-tree supports:</div>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-1 font-mono text-slate-300">
+        <div className="grid gap-x-8 gap-y-1 font-mono text-slate-300 sm:grid-cols-2">
           <span>Total servers:</span><span className="text-green-400">{servers.toLocaleString()}</span>
           <span>DGX H100 nodes (8 NICs):</span><span className="text-green-400">{Math.floor(servers / 8).toLocaleString()}</span>
           <span>Total GPUs:</span><span className="text-green-400">{(Math.floor(servers / 8) * 8).toLocaleString()}</span>

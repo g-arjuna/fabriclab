@@ -20,7 +20,9 @@ export function OversubscriptionCalculatorViz() {
       <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">
         Oversubscription calculator
       </p>
-      <p className="mb-5 text-xs text-slate-600">Adjust downlinks and uplinks per leaf switch to calculate oversubscription ratio</p>
+      <p className="mb-5 text-xs text-slate-600">
+        Adjust downlinks and uplinks per leaf switch to calculate oversubscription ratio
+      </p>
 
       <div className="space-y-4 mb-5">
         {[
@@ -49,7 +51,7 @@ export function OversubscriptionCalculatorViz() {
         <div className="text-sm font-semibold mt-1" style={{ color: ratingColor }}>{ratingLabel}</div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-xs mb-4">
+      <div className="mb-4 grid gap-2 text-xs sm:grid-cols-3">
         {[
           { l: "Total server bandwidth", v: `${(totalDownBw / 1000).toFixed(0)} Tb/s` },
           { l: "Total fabric uplink BW", v: `${(totalUpBw / 1000).toFixed(0)} Tb/s` },

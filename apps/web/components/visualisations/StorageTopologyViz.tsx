@@ -71,7 +71,7 @@ export function StorageTopologyViz() {
       </p>
 
       {/* Focus toggle */}
-      <div className="flex gap-2 mb-5">
+      <div className="mb-5 flex flex-wrap gap-2">
         {(["both", "compute", "storage"] as Focus[]).map(f => (
           <button key={f} onClick={() => setFocus(f)}
             className="px-3 py-1.5 rounded-lg text-[10px] font-medium transition-all"
@@ -87,8 +87,8 @@ export function StorageTopologyViz() {
       </div>
 
       {/* Topology diagram */}
-      <div className="rounded-xl bg-[#060d18] border border-white/8 p-4 mb-5">
-        <svg viewBox="0 0 560 220" className="w-full">
+      <div className="mb-5 overflow-x-auto rounded-xl border border-white/8 bg-[#060d18] p-4">
+        <svg viewBox="0 0 560 220" className="min-w-[560px]">
 
           {/* DGX node in center */}
           <rect x="220" y="85" width="120" height="50" rx="8"
@@ -180,7 +180,8 @@ export function StorageTopologyViz() {
       </div>
 
       {/* Comparison table */}
-      <div className="rounded-xl bg-slate-800/40 border border-white/5 overflow-hidden">
+      <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-800/40">
+        <div className="min-w-[560px] overflow-hidden">
         <div className="grid grid-cols-3 gap-0">
           <div className="p-2 text-[9px] text-slate-600 uppercase tracking-widest">Property</div>
           <div className="p-2 text-[9px] font-bold text-center" style={{ color: "#60a5fa" }}>Compute fabric</div>
@@ -220,6 +221,7 @@ export function StorageTopologyViz() {
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       <div className="mt-4 rounded-xl bg-slate-800/40 border border-white/5 p-3">

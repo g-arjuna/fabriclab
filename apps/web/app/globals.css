@@ -107,6 +107,26 @@ pre,
   scroll-margin-top: 7rem;
 }
 
+.chapter-prose pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chapter-prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chapter-prose th,
+.chapter-prose td {
+  white-space: nowrap;
+}
+
 /* Distinguish label-led teaching paragraphs from the surrounding body copy. */
 .chapter-prose p:has(> strong:first-child) {
   margin-top: 2.25rem;

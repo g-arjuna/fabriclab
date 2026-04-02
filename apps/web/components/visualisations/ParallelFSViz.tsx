@@ -46,7 +46,7 @@ export function ParallelFSViz() {
       </p>
 
       {/* FS type toggle */}
-      <div className="flex gap-2 mb-4">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         {(["beegfs", "weka"] as const).map(f => (
           <button
             key={f}
@@ -81,8 +81,8 @@ export function ParallelFSViz() {
       </div>
 
       {/* Stripe animation diagram */}
-      <div className="rounded-xl bg-[#060d18] border border-white/8 p-4 mb-5">
-        <svg viewBox="0 0 560 200" className="w-full">
+      <div className="mb-5 overflow-x-auto rounded-xl border border-white/8 bg-[#060d18] p-4">
+        <svg viewBox="0 0 560 200" className="min-w-[560px]">
 
           {/* DGX source nodes (3 shown) */}
           {[0, 1, 2].map(i => {
@@ -194,7 +194,7 @@ export function ParallelFSViz() {
       </button>
 
       {/* Throughput scaling */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="mb-4 grid gap-2 sm:grid-cols-3">
         {[
           { nodes: 1, label: "Single node", note: "I/O bottleneck" },
           { nodes: 8, label: "8 nodes", note: "BasePOD standard" },

@@ -71,7 +71,7 @@ export function StorageSeparationViz() {
       </p>
 
       {/* Scenario toggle */}
-      <div className="flex gap-2 mb-5">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row">
         {(["mixed", "separated"] as Scenario[]).map(s => (
           <button
             key={s}
@@ -95,8 +95,8 @@ export function StorageSeparationViz() {
       </div>
 
       {/* Topology diagram */}
-      <div className="rounded-xl bg-[#060d18] border border-white/8 p-4 mb-5">
-        <svg viewBox="0 0 560 200" className="w-full">
+      <div className="mb-5 overflow-x-auto rounded-xl border border-white/8 bg-[#060d18] p-4">
+        <svg viewBox="0 0 560 200" className="min-w-[560px]">
           {scenario === "mixed" ? (
             <>
               {/* Single switch */}
@@ -181,7 +181,7 @@ export function StorageSeparationViz() {
       </div>
 
       {/* Timeline stepper */}
-      <div className="flex gap-1.5 mb-3">
+      <div className="mb-3 grid grid-cols-2 gap-1.5 sm:flex">
         {events.map((e, i) => (
           <button
             key={e.id}
@@ -217,7 +217,7 @@ export function StorageSeparationViz() {
 
       {/* Traffic pattern comparison */}
       <div className="text-[9px] uppercase tracking-widest text-slate-600 mb-2">Traffic pattern mismatch</div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         {trafficProfiles.map(p => (
           <div
             key={p.name}

@@ -20,7 +20,9 @@ export function SwitchBufferViz() {
       <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">
         Switch buffer depth vs AllReduce burst size
       </p>
-      <p className="mb-5 text-xs text-slate-600">Adjust cluster size and synchronisation window to see if buffers are sufficient</p>
+      <p className="mb-5 text-xs text-slate-600">
+        Adjust cluster size and synchronisation window to see if buffers are sufficient
+      </p>
 
       <div className="space-y-4 mb-5">
         <div>
@@ -50,7 +52,7 @@ export function SwitchBufferViz() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
         {[
           { label: "Deep-buffer switch", example: "Spectrum-X SN5600", buffer: deepBufferMB, handles: deepHandles, color: deepHandles ? "#22c55e" : "#ef4444" },
           { label: "Shallow-buffer switch", example: "Broadcom Tomahawk-based", buffer: shallowBufferMB, handles: shallowHandles, color: shallowHandles ? "#22c55e" : "#ef4444" },
@@ -70,7 +72,7 @@ export function SwitchBufferViz() {
                   backgroundColor: sw.color,
                 }}/>
             </div>
-            <div className="text-sm font-semibold" style={{ color: sw.color }}>
+            <div className="break-words text-sm font-semibold" style={{ color: sw.color }}>
               {sw.handles
                 ? `✓ Buffer sufficient (${((sw.buffer / burstSizeMB) * 100).toFixed(0)}% headroom)`
                 : `✗ Buffer overflow — needs ${(burstSizeMB / sw.buffer).toFixed(1)}× more buffer or per-packet LB`}

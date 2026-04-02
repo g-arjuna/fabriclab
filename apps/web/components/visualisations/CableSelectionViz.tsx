@@ -168,7 +168,7 @@ export function CableSelectionViz() {
       {/* Speed selector */}
       <div className="mb-4">
         <div className="text-[9px] uppercase tracking-widest text-slate-600 mb-2">Port speed generation</div>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           {speedGens.map(g => (
             <button
               key={g.id}
@@ -214,7 +214,7 @@ export function CableSelectionViz() {
         className="rounded-xl p-4 mb-4 transition-all"
         style={{ backgroundColor: rec.color + "33", border: `2px solid ${rec.border}66` }}
       >
-        <div className="flex items-center gap-3 mb-3">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
           <div
             className="rounded-xl px-3 py-1.5 text-sm font-black font-mono"
             style={{ backgroundColor: rec.border + "33", color: rec.border }}
@@ -227,7 +227,7 @@ export function CableSelectionViz() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-xs mb-3 sm:grid-cols-4">
+        <div className="mb-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
           {[
             { l: "Max reach (400G)", v: rec.maxDist400G },
             { l: "Max reach (800G)", v: rec.maxDist800G },

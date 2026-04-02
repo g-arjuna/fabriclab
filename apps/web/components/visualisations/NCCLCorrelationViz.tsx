@@ -67,7 +67,7 @@ export function NCCLCorrelationViz() {
       </p>
       <p className="mb-4 text-xs text-slate-600">Select your symptom to see the exact diagnostic sequence</p>
 
-      <div className="grid grid-cols-2 gap-2 mb-5">
+      <div className="mb-5 grid gap-2 sm:grid-cols-2">
         {SYMPTOMS.map((sym) => (
           <button key={sym.id} onClick={() => setSelected(sym.id)}
             className="rounded-xl p-3 text-left transition-all"
@@ -96,7 +96,7 @@ export function NCCLCorrelationViz() {
           <div className="space-y-2">
             {d.steps.map((step) => (
               <div key={step.step} className="rounded-xl border border-white/8 overflow-hidden">
-                <div className="flex items-center gap-3 px-3 py-2 bg-slate-800/50">
+                <div className="flex items-center gap-3 bg-slate-800/50 px-3 py-2">
                   <div className="h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                     style={{ backgroundColor: s.color, color: s.border }}>
                     {step.step}
@@ -106,12 +106,12 @@ export function NCCLCorrelationViz() {
                 <div className="px-3 pb-3 pt-2 space-y-2">
                   <div className="rounded-lg bg-[#060d18] px-3 py-2 font-mono text-xs">
                     <span className="text-slate-600">{step.prompt} </span>
-                    <span className="text-cyan-300">{step.command}</span>
+                    <span className="break-all text-cyan-300">{step.command}</span>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2 text-[10px]">
                     <div>
                       <span className="text-slate-500">Look for: </span>
-                      <span className="text-amber-300 font-mono">{step.lookFor}</span>
+                      <span className="break-all text-amber-300 font-mono">{step.lookFor}</span>
                     </div>
                     <div>
                       <span className="text-slate-500">If found: </span>

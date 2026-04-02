@@ -72,7 +72,7 @@ export function LowEntropyFlowletsViz() {
               key={item.id}
               type="button"
               onClick={() => setActiveScenario(item.id)}
-              className="rounded-xl px-3 py-2 text-left text-xs transition"
+              className="w-full rounded-xl px-3 py-2 text-left text-xs transition sm:w-auto"
               style={{
                 backgroundColor: isActive ? "#13243b" : "#0f172a",
                 border: `1px solid ${isActive ? "#38bdf8" : "#1e293b"}`,
@@ -92,8 +92,8 @@ export function LowEntropyFlowletsViz() {
             ECMP distribution view
           </p>
 
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-            <div className="space-y-2">
+          <div className="flex flex-col gap-4 md:grid md:grid-cols-[1fr_auto_1fr] md:items-center">
+            <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
               {scenario.leftNodes.map((node) => (
                 <div
                   key={node}
@@ -107,8 +107,8 @@ export function LowEntropyFlowletsViz() {
             <div className="space-y-2">
               {scenario.spineUtil.map((util, index) => (
                 <div key={index} className="flex items-center gap-2">
-                  <span className="w-12 text-[10px] text-slate-500">Spine {index + 1}</span>
-                  <div className="h-10 w-24 overflow-hidden rounded-full bg-slate-800">
+                  <span className="w-14 text-[10px] text-slate-500">Spine {index + 1}</span>
+                  <div className="h-10 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-800 md:w-24 md:flex-none">
                     <div
                       className="flex h-full items-center justify-center text-[10px] font-semibold text-white transition-all duration-500"
                       style={{
@@ -123,7 +123,7 @@ export function LowEntropyFlowletsViz() {
               ))}
             </div>
 
-            <div className="space-y-2">
+            <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
               {scenario.rightNodes.map((node) => (
                 <div
                   key={node}
@@ -141,7 +141,7 @@ export function LowEntropyFlowletsViz() {
             </p>
             <div className="space-y-1">
               {scenario.tupleLines.map((line) => (
-                <p key={line} className="font-mono text-[11px] text-slate-300">
+                <p key={line} className="break-all font-mono text-[11px] text-slate-300">
                   {line}
                 </p>
               ))}

@@ -70,12 +70,14 @@ export function IBPortStatusViz() {
           </button>
         ))}
       </div>
-      <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-4 font-mono text-xs leading-6 text-slate-300 mb-4">
-        <div><span className="text-slate-500">Admin:</span> <span className="text-green-400">Up</span></div>
-        <div><span className="text-slate-500">Oper: </span> <span style={{ color: s.color }}>{state}</span></div>
-        <div><span className="text-slate-500">Width:</span> <span className={s.width !== "--" ? "text-green-400" : "text-slate-600"}>{s.width}</span></div>
-        <div><span className="text-slate-500">Speed:</span> <span className={s.speed !== "--" ? "text-green-400" : "text-slate-600"}>{s.speed}</span></div>
-        <div><span className="text-slate-500">PortGUID:</span> <span className="text-slate-400">{s.guidState}</span></div>
+      <div className="mb-4 overflow-x-auto rounded-xl border border-white/10 bg-[#0a0f1a] p-4 font-mono text-xs leading-6 text-slate-300">
+        <div className="min-w-[320px]">
+          <div><span className="text-slate-500">Admin:</span> <span className="text-green-400">Up</span></div>
+          <div><span className="text-slate-500">Oper: </span> <span style={{ color: s.color }}>{state}</span></div>
+          <div><span className="text-slate-500">Width:</span> <span className={s.width !== "--" ? "text-green-400" : "text-slate-600"}>{s.width}</span></div>
+          <div><span className="text-slate-500">Speed:</span> <span className={s.speed !== "--" ? "text-green-400" : "text-slate-600"}>{s.speed}</span></div>
+          <div><span className="text-slate-500">PortGUID:</span> <span className="text-slate-400">{s.guidState}</span></div>
+        </div>
       </div>
       <div className="space-y-2 text-xs" style={{ borderLeft: `3px solid ${s.color}`, paddingLeft: 12 }}>
         <p className="text-slate-300">{s.meaning}</p>

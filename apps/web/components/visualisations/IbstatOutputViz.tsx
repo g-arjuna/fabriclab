@@ -30,12 +30,13 @@ export function IbstatOutputViz() {
           </button>
         ))}
       </div>
-      <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-4 font-mono text-xs leading-6 text-slate-300 mb-4">
+      <div className="mb-4 overflow-x-auto rounded-xl border border-white/10 bg-[#0a0f1a] p-4 font-mono text-xs leading-6 text-slate-300">
+        <div className="min-w-[320px]">
         <div className="text-slate-500">CA &apos;mlx5_0&apos;</div>
         <div className="pl-4">CA type: MT4129</div>
         <div className="pl-4">Firmware version: 28.38.1002</div>
         <div className="pl-4 text-slate-500">Port 1:</div>
-        <div className="pl-8 flex gap-2">
+        <div className="flex gap-2 pl-8">
           <span className="text-slate-500">State:</span>
           <span style={{ color: detail.color }}>{state}</span>
         </div>
@@ -44,6 +45,7 @@ export function IbstatOutputViz() {
         <div className="pl-8">Base lid: <span className={lids[state] !== "0" ? "text-green-400" : "text-red-400"}>{lids[state]}</span></div>
         <div className="pl-8">SM lid: {state === "Down" ? <span className="text-red-400">0</span> : <span className="text-green-400">1</span>}</div>
         <div className="pl-8">Link layer: Ethernet</div>
+        </div>
       </div>
       <div className="rounded-xl p-4 space-y-2 text-xs" style={{ backgroundColor: detail.color + "11", border: `1px solid ${detail.color}33` }}>
         <div><span className="font-semibold" style={{ color: detail.color }}>Meaning: </span><span className="text-slate-300">{detail.meaning}</span></div>

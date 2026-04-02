@@ -63,7 +63,8 @@ export function IBCountersViz() {
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">show ib counters — click each counter type</p>
-      <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-4 font-mono text-[10px] leading-7 mb-4">
+      <div className="mb-4 overflow-x-auto rounded-xl border border-white/10 bg-[#0a0f1a] p-4 font-mono text-[10px] leading-7">
+        <div className="min-w-[520px]">
         <div className="text-slate-500 mb-2">IB Port Counters Summary — Switch QM9700-2</div>
         <div className="grid gap-1">
           <div className="grid grid-cols-6 text-slate-600 text-[9px] mb-1">
@@ -77,7 +78,7 @@ export function IBCountersViz() {
                 const actualVal = pi === 1 && ci === 0 ? 14827 : pi === 1 && ci === 1 ? 2 : pi === 2 && ci === 3 ? 47 : 0
                 return (
                   <button key={ci} onClick={() => setSelected(ci)}
-                    className={`text-left rounded px-1 transition-all ${selected === ci ? "bg-slate-800" : ""}`}
+                    className={`rounded px-1 text-left transition-all ${selected === ci ? "bg-slate-800" : ""}`}
                     style={{ color: actualVal > 0 ? "#ef4444" : "#4ade80" }}>
                     {actualVal.toLocaleString()}
                   </button>
@@ -86,10 +87,11 @@ export function IBCountersViz() {
             </div>
           ))}
         </div>
+        </div>
       </div>
       <div className="rounded-xl p-4 space-y-3 text-xs border border-white/10 bg-slate-800/50">
         <div className="font-mono text-sm text-cyan-300">{c.name}</div>
-        <div className="flex gap-4 text-[10px]">
+        <div className="flex flex-col gap-1 text-[10px] sm:flex-row sm:gap-4">
           <span className="text-green-400">Good: {c.goodValue}</span>
           <span className="text-amber-400">Watch: {c.warnValue}</span>
           <span className="text-red-400">Bad: {c.badValue}</span>

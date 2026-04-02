@@ -47,7 +47,7 @@ export function BasePodSuperPodViz() {
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">
         NVIDIA reference designs — BasePOD vs SuperPOD
       </p>
-      <div className="flex gap-2 mb-5">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row">
         {(["basepod", "superpod"] as PodView[]).map(v => (
           <button key={v} onClick={() => { setView(v); setDetail(null) }}
             className="flex-1 rounded-xl p-4 text-left transition-all"
@@ -65,7 +65,7 @@ export function BasePodSuperPodViz() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-4 text-xs">
+      <div className="mb-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
         {[
           { l: "Nodes", v: c.nodes },
           { l: "Total GPUs", v: c.gpus.toLocaleString() },
@@ -91,9 +91,9 @@ export function BasePodSuperPodViz() {
               backgroundColor: detail === item.label ? c.color + "33" : "#0f172a",
               border: `1px solid ${detail === item.label ? c.border + "66" : "#1e293b"}`,
             }}>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-slate-400">{item.label}</span>
-              <span className="font-semibold" style={{ color: c.border }}>{item.value}</span>
+              <span className="font-semibold sm:text-right" style={{ color: c.border }}>{item.value}</span>
             </div>
             {detail === item.label && (
               <p className="mt-2 text-slate-400 leading-5 border-t border-white/8 pt-2">

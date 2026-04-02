@@ -122,7 +122,7 @@ export function NCCLTestOutputViz() {
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
         {[
           { label: "Small tensors (<1MB)", note: "Latency-dominated. Low busbw is normal.", color: "#60a5fa" },
           { label: "Large tensors (>128MB)", note: "Bandwidth-dominated. Compare busbw to NIC line rate.", color: "#22c55e" },

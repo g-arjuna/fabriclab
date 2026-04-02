@@ -13,7 +13,7 @@ export function RODvsRUDViz() {
         Rail-optimised (ROD) vs rail-unified (RUD) wiring
       </p>
 
-      <div className="flex gap-2 mb-5">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row">
         {([["rod", "Rail-Optimised Design (ROD)", "One GPU per switch rail"], ["rud", "Rail-Unified Design (RUD)", "All GPUs per node share switches"]] as const).map(([id, label, sub]) => (
           <button key={id} onClick={() => setMode(id)}
             className="flex-1 rounded-xl p-3 text-left text-xs transition-all"
@@ -27,8 +27,8 @@ export function RODvsRUDViz() {
         ))}
       </div>
 
-      <div className="rounded-xl bg-[#060d18] border border-white/8 p-4 mb-4">
-        <svg viewBox="0 0 560 240" className="w-full">
+      <div className="mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#060d18] p-4">
+        <svg viewBox="0 0 560 240" className="min-w-[560px]">
           {Array.from({ length: gpusPerNode }, (_, rail) => {
             const x = 60 + rail * 120
             const color = ["#22c55e", "#60a5fa", "#a78bfa", "#f59e0b"][rail]
@@ -90,7 +90,7 @@ export function RODvsRUDViz() {
         </svg>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-xs">
+      <div className="grid gap-2 text-xs sm:grid-cols-2">
         {(mode === "rod" ? [
           { label: "AllReduce hops (intra-rail)", value: "1 switch hop — GPU 0 on Node A to GPU 0 on Node B goes through Rail 0 switch only. Spine not involved.", color: "#22c55e" },
           { label: "Fault isolation", value: "A failing rail affects GPU index N across all nodes. Diagnostic is unambiguous: 'Rail 3 is down' = GPU 3 on every node.", color: "#22c55e" },
