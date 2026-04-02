@@ -111,7 +111,7 @@ export function FiberTypesViz() {
       </p>
 
       {/* Scenario selector */}
-      <div className="grid grid-cols-3 gap-2 mb-5 sm:grid-cols-6">
+      <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {scenarios.map(s => {
           const isActive = s.id === activeScenario
           const isMmf = s.fiberChoice === "mmf"
@@ -149,7 +149,7 @@ export function FiberTypesViz() {
           border: `1px solid ${active.fiberChoice === "mmf" ? "#22c55e44" : "#60a5fa44"}`,
         }}
       >
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-xs">
+        <div className="grid gap-4 text-xs sm:grid-cols-2 lg:grid-cols-4">
           {[
             { l: "Distance", v: active.distance },
             { l: "Fiber type", v: active.grade },
@@ -166,7 +166,7 @@ export function FiberTypesViz() {
       </div>
 
       {/* Mode toggle */}
-      <div className="flex gap-2 mb-4">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         {(["mmf", "smf"] as FiberMode[]).map(m => (
           <button
             key={m}
@@ -184,8 +184,8 @@ export function FiberTypesViz() {
       </div>
 
       {/* Physical cross-section diagram */}
-      <div className="rounded-xl bg-[#060d18] border border-white/8 p-4 mb-4">
-        <svg viewBox="0 0 500 110" className="w-full">
+      <div className="mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#060d18] p-4">
+        <svg viewBox="0 0 500 110" className="min-w-[500px]">
           {mode === "mmf" ? (
             <>
               {/* MMF cross section - large core */}
@@ -255,7 +255,7 @@ export function FiberTypesViz() {
       </div>
 
       {/* Key takeaway */}
-      <div className="rounded-xl bg-slate-800/40 border border-white/5 p-3">
+      <div className="rounded-xl border border-white/5 bg-slate-800/40 p-3">
         <div className="text-[10px] text-slate-400 leading-4">
           <span className="font-semibold text-green-400">OM4 MMF</span> handles everything inside a data hall (≤100m). 
           Only cross to SMF when distance exceeds 100m. The fiber itself outlasts many transceiver generations — 

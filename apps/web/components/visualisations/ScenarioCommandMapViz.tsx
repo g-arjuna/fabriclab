@@ -66,7 +66,7 @@ export function ScenarioCommandMapViz() {
                     {s.commands.map((c, j) => (
                       <div key={j} className="flex items-center gap-1">
                         <span className="text-[9px] text-slate-600">{j + 1}.</span>
-                        <code className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-cyan-300">{c}</code>
+                        <code className="break-all rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-cyan-300">{c}</code>
                       </div>
                     ))}
                   </div>

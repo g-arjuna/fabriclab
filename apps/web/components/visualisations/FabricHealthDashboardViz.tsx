@@ -212,7 +212,7 @@ export function FabricHealthDashboardViz() {
 
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+      <div className="mb-1 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">Fabric Health Dashboard</p>
           <p className="text-xs text-slate-600">
@@ -243,7 +243,7 @@ export function FabricHealthDashboardViz() {
       </div>
 
       {/* Dashboard grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginTop: 16 }}>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {PANELS.map(panel => {
           const series = mode === "healthy" ? panel.healthy : panel.degrading
           const latest = series[series.length - 1].value
@@ -310,11 +310,8 @@ export function FabricHealthDashboardViz() {
         background: mode === "healthy" ? "#052e16" : "#450a0a",
         borderRadius: 8,
         padding: "8px 12px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
       }}>
-        <span style={{ fontSize: 12, color: mode === "healthy" ? "#86efac" : "#fca5a5", fontWeight: 600 }}>
+        <span style={{ display: "block", fontSize: 12, color: mode === "healthy" ? "#86efac" : "#fca5a5", fontWeight: 600 }}>
           {mode === "healthy"
             ? "● All panels within threshold — fabric healthy"
             : "● 4 panels in alert state — investigate IB fabric and GPU utilisation"}

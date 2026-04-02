@@ -167,7 +167,7 @@ export function AlertThresholdViz() {
       </div>
 
       {/* Signal / noise bars */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: "Faults caught", value: signal.trueDetected, color: "#22c55e", max: metric.trueEventRate },
           { label: "Faults missed", value: signal.trueMissed, color: "#ef4444", max: metric.trueEventRate },

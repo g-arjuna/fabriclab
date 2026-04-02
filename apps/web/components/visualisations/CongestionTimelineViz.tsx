@@ -49,7 +49,7 @@ export function CongestionTimelineViz() {
           <button
             key={s.id}
             onClick={() => setScenario(s.id)}
-            className="flex-1 rounded-xl px-3 py-2.5 text-left text-xs transition-all"
+            className="w-full rounded-xl px-3 py-2.5 text-left text-xs transition-all sm:flex-1"
             style={{
               backgroundColor: scenario === s.id ? s.color : "#0f172a",
               border: `1px solid ${scenario === s.id ? s.color : "#1e293b"}`,
@@ -84,13 +84,13 @@ export function CongestionTimelineViz() {
           return (
             <div
               key={i}
-              className="flex items-start gap-3 rounded-xl px-3 py-2.5 text-xs"
+              className="flex flex-col gap-2 rounded-xl px-3 py-2.5 text-xs sm:flex-row sm:items-start sm:gap-3"
               style={{ backgroundColor: `${bg}33`, border: `1px solid ${border}33` }}
             >
               <span className="w-20 flex-shrink-0 font-mono text-slate-500">{event.time}</span>
               <div className="flex-1">
                 <p className="leading-5 text-slate-300">{event.event}</p>
-                <p className="mt-1 font-mono text-[10px] text-slate-600">{event.counters}</p>
+                <p className="mt-1 break-all font-mono text-[10px] text-slate-600">{event.counters}</p>
               </div>
               {event.mechanism !== "—" && (
                 <span

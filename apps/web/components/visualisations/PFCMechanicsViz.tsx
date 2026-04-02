@@ -35,8 +35,8 @@ export function PFCMechanicsViz() {
       {view === "exchange" && (
         <div className="space-y-4 text-xs">
           <p className="text-slate-300 leading-6">A PAUSE frame is a 64-byte Ethernet frame sent by a switch to its upstream neighbour. It is link-local — destination MAC <code className="text-cyan-300">01:80:C2:00:00:01</code> is never forwarded beyond the immediate link. The exchange is always between two adjacent devices.</p>
-          <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-4">
-            <svg viewBox="0 0 500 200" className="w-full">
+          <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#0a0f1a] p-4">
+            <svg viewBox="0 0 500 200" className="min-w-[500px]">
               {/* DGX sender */}
               <rect x="10" y="70" width="100" height="60" rx="6" fill="#14532d33" stroke="#22c55e" strokeWidth="1.5"/>
               <text x="60" y="98" textAnchor="middle" fill="#e2e8f0" fontSize="9" fontWeight="600">DGX Node</text>
@@ -105,7 +105,7 @@ export function PFCMechanicsViz() {
               { speed: "100 GbE", quantaDuration: "5.12 ns", maxPause: "335 µs", maxHex: "0xFFFF" },
               { speed: "400 GbE", quantaDuration: "1.28 ns", maxPause: "83.9 µs", maxHex: "0xFFFF" },
             ].map(row => (
-              <div key={row.speed} className="flex items-center gap-3 rounded-xl bg-slate-800/50 px-4 py-2">
+              <div key={row.speed} className="flex flex-col gap-1 rounded-xl bg-slate-800/50 px-4 py-2 sm:flex-row sm:items-center sm:gap-3">
                 <span className="text-slate-300 font-semibold w-20 flex-shrink-0">{row.speed}</span>
                 <span className="text-slate-500 w-24 flex-shrink-0">{row.quantaDuration} / quanta</span>
                 <div className="flex-1 text-[10px]">
@@ -139,7 +139,7 @@ export function PFCMechanicsViz() {
               { cos: 7, label: "Network control", pfc: false, example: "Routing protocols" },
             ].map(row => (
               <div key={row.cos}
-                className="flex items-center gap-3 rounded-lg px-3 py-1.5 my-1 text-[10px]"
+                className="my-1 flex flex-col gap-1 rounded-lg px-3 py-1.5 text-[10px] sm:flex-row sm:items-center sm:gap-3"
                 style={{
                   backgroundColor: row.pfc ? "#14532d33" : "#0f172a",
                   border: `1px solid ${row.pfc ? "#22c55e44" : "#1e293b"}`,
@@ -160,8 +160,8 @@ export function PFCMechanicsViz() {
       {view === "headroom" && (
         <div className="space-y-4 text-xs">
           <p className="text-slate-300 leading-6">The switch does not wait until its buffer is completely full before sending a PAUSE frame. It sends the PAUSE at a threshold — the headroom — to absorb packets already in-flight when the pause is sent.</p>
-          <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-4">
-            <svg viewBox="0 0 400 180" className="w-full">
+          <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#0a0f1a] p-4">
+            <svg viewBox="0 0 400 180" className="min-w-[400px]">
               {/* Buffer rectangle */}
               <rect x="50" y="20" width="60" height="140" rx="3" fill="#1e293b" stroke="#475569" strokeWidth="1"/>
               <text x="80" y="175" textAnchor="middle" fill="#64748b" fontSize="7">Buffer</text>

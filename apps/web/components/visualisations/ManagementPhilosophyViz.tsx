@@ -51,12 +51,12 @@ export function ManagementPhilosophyViz() {
         Management philosophy — centralised vs distributed
       </p>
 
-      <div className="flex gap-2 mb-5">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row">
         {(["infiniband", "ethernet"] as Fabric[]).map(f => (
           <button
             key={f}
             onClick={() => setFabric(f)}
-            className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition-all text-left"
+            className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-left transition-all"
             style={{
               backgroundColor: fabric === f ? content[f].color : "#0f172a",
               border: `1px solid ${fabric === f ? content[f].border : "#1e293b"}`,
@@ -72,7 +72,7 @@ export function ManagementPhilosophyViz() {
       <div className="space-y-2 mb-4">
         {c.steps.map((step, i) => (
           <div key={i} className="flex items-start gap-3 text-xs">
-            <div className="flex items-center gap-2 flex-shrink-0 w-20">
+            <div className="flex w-16 flex-shrink-0 flex-col gap-1 sm:w-20 sm:flex-row sm:items-center sm:gap-2">
               <div className="h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold"
                 style={{ backgroundColor: c.color, border: `1px solid ${c.border}`, color: c.border }}>
                 {i + 1}

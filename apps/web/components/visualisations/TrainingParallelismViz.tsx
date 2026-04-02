@@ -81,7 +81,7 @@ export function TrainingParallelismViz() {
       </div>
 
       {/* GPU grid */}
-      <div className="flex flex-wrap gap-2 mb-5">
+      <div className="mb-5 flex flex-wrap gap-2">
         {gpuLabels[mode].map((label, i) => (
           <div
             key={i}
@@ -89,7 +89,7 @@ export function TrainingParallelismViz() {
             style={{
               backgroundColor: gpuColors[mode][i] ?? "#166534",
               border: "1px solid rgba(255,255,255,0.1)",
-              minWidth: 80,
+              minWidth: 68,
               height: 60,
             }}
           >
@@ -101,7 +101,7 @@ export function TrainingParallelismViz() {
         ))}
 
         {showArrow && (
-          <div className="flex items-center">
+          <div className="flex w-full justify-center pt-1 sm:w-auto sm:justify-start sm:pt-0">
             <div className="flex flex-col items-center gap-1">
               <svg width="40" height="40" viewBox="0 0 40 40">
                 <defs>

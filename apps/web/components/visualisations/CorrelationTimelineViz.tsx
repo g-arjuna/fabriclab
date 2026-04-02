@@ -112,6 +112,8 @@ export function CorrelationTimelineViz() {
         The layer that anomalies <em>first</em> is the root cause layer.
       </p>
 
+      <div className="overflow-x-auto">
+      <div className="min-w-[720px]">
       {/* T0 label */}
       <div style={{ display: "flex", gap: 16, marginBottom: 4, paddingLeft: 110 }}>
         <span style={{ fontSize: 10, color: "#475569" }}>T+0 min</span>
@@ -196,6 +198,8 @@ export function CorrelationTimelineViz() {
             T+{t}m
           </div>
         ))}
+      </div>
+      </div>
       </div>
 
       {/* Event detail panel */}

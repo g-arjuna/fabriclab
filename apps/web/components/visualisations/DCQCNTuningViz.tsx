@@ -82,9 +82,10 @@ export function DCQCNTuningViz() {
       </div>
 
       {/* Rate chart */}
-      <div className="rounded-xl bg-[#060d18] border border-white/8 p-3 mb-4">
+      <div className="mb-4 rounded-xl border border-white/8 bg-[#060d18] p-3">
         <div className="text-[10px] text-slate-500 mb-2">NIC injection rate over time (AllReduce burst every {burstPeriodMs}ms)</div>
-        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full">
+        <div className="overflow-x-auto">
+          <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="min-w-[480px]">
           {/* Grid lines */}
           {[0.25, 0.5, 0.75, 1.0].map(rate => (
             <line key={rate} x1={0} y1={getY(rate)} x2={svgWidth} y2={getY(rate)}
@@ -108,7 +109,8 @@ export function DCQCNTuningViz() {
           <text x={svgWidth - 2} y={svgHeight - 2} fill="#334155" fontSize="7" textAnchor="end">
             {"time -> "}{TOTAL_MS}ms
           </text>
-        </svg>
+          </svg>
+        </div>
         <div className="flex items-center gap-4 mt-2 text-[9px]">
           <div className="flex items-center gap-1.5">
             <div className="h-3 w-6 bg-blue-900/40"/>
@@ -134,7 +136,7 @@ export function DCQCNTuningViz() {
           </div>
           <div className="text-[10px] text-slate-600">of NIC line rate</div>
         </div>
-        <div className="rounded-xl p-3 col-span-2"
+        <div className="rounded-xl p-3 sm:col-span-2"
           style={{ backgroundColor: isProblematic ? "#78350f22" : "#14532d22", border: `1px solid ${isProblematic ? "#f59e0b33" : "#22c55e33"}` }}>
           <div className="text-xs font-semibold mb-1" style={{ color: isProblematic ? "#f59e0b" : "#22c55e" }}>
             {isProblematic ? "DCQCN over-reaction likely" : "DCQCN parameters healthy"}

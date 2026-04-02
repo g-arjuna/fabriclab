@@ -94,7 +94,7 @@ export function IncastCongestionViz() {
         </div>
         <div className="rounded-xl border border-white/10 bg-[#0a0f1a] p-3">
           <div className="mb-1.5 text-[10px] text-slate-500">show interface counters output</div>
-          <pre className="whitespace-pre font-mono text-[10px] leading-5 text-cyan-300">
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-5 text-cyan-300">
             {detail.counterValues}
           </pre>
         </div>

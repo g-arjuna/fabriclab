@@ -143,6 +143,27 @@ export default async function ChapterPage({ params, searchParams }: Props) {
             </div>
           )}
 
+          <div className="mb-6 lg:hidden">
+            <p className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-600">
+              Jump to section
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {allPages.map((chapterPage, index) => (
+                <Link
+                  key={chapterPage.index}
+                  href={`/learn/${chapter}?page=${index}`}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs transition ${
+                    index === pageIndex
+                      ? "bg-slate-700 text-slate-200"
+                      : "bg-slate-900 text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  {index + 1}. {chapterPage.shortTitle}
+                </Link>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-[28px] border border-white/8 bg-slate-950/22 px-4 py-5 shadow-[0_18px_46px_rgba(2,6,23,0.18)] sm:px-8 sm:py-8 md:px-9 md:py-9">
             <div
               className="chapter-prose prose prose-invert max-w-none
@@ -238,27 +259,6 @@ export default async function ChapterPage({ params, searchParams }: Props) {
                   <span className="text-slate-400">{"\u2192"}</span>
                 </Link>
               )}
-            </div>
-
-            <div className="mt-8 lg:hidden">
-              <p className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-600">
-                Jump to section
-              </p>
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {allPages.map((chapterPage, index) => (
-                  <Link
-                    key={chapterPage.index}
-                    href={`/learn/${chapter}?page=${index}`}
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs transition ${
-                      index === pageIndex
-                        ? "bg-slate-700 text-slate-200"
-                        : "bg-slate-900 text-slate-500 hover:text-slate-300"
-                    }`}
-                  >
-                    {index + 1}. {chapterPage.shortTitle}
-                  </Link>
-                ))}
-              </div>
             </div>
           </div>
 

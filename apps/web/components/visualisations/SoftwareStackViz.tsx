@@ -106,7 +106,7 @@ export function SoftwareStackViz() {
         What runs where — click each device
       </p>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 mb-5">
+      <div className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {devices.map(device => (
           <button
             key={device.id}
@@ -147,7 +147,9 @@ export function SoftwareStackViz() {
           </div>
           <div className="rounded-lg bg-black/20 p-3">
             <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">First commands</div>
-            <pre className="text-xs text-cyan-300 font-mono leading-5">{selected.firstCommand}</pre>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-all text-xs font-mono leading-5 text-cyan-300">
+              {selected.firstCommand}
+            </pre>
           </div>
         </div>
 

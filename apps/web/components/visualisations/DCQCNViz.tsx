@@ -63,7 +63,7 @@ export function DCQCNViz() {
         {detail.formula && (
           <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-4">
             <div className="text-[10px] text-slate-500 mb-1.5">Algorithm</div>
-            <pre className="text-cyan-300 font-mono text-[10px] leading-6 whitespace-pre-wrap">{detail.formula}</pre>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-6 text-cyan-300">{detail.formula}</pre>
           </div>
         )}
         <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-3">

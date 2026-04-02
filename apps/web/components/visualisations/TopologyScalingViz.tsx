@@ -25,10 +25,12 @@ export function TopologyScalingViz() {
       <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">
         How topology stages determine cluster scale
       </p>
-      <p className="mb-5 text-xs text-slate-600">Adjust switch radix to see how port count drives cluster capacity at each stage</p>
+      <p className="mb-5 text-xs text-slate-600">
+        Adjust switch radix to see how port count drives cluster capacity at each stage
+      </p>
 
       <div className="mb-5 rounded-xl bg-slate-800/50 p-4">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between gap-3">
           <span className="text-xs text-slate-400">Switch radix (ports per switch)</span>
           <span className="font-mono text-lg font-bold text-white">{radix}</span>
         </div>
@@ -41,7 +43,7 @@ export function TopologyScalingViz() {
         </div>
       </div>
 
-      <div className="mb-5 grid grid-cols-3 gap-2">
+      <div className="mb-5 grid gap-2 sm:grid-cols-3">
         {scenarios.map(s => (
           <button key={s.id} onClick={() => setStage(s.id)}
             className="rounded-xl p-3 text-left text-xs transition-all"
@@ -58,8 +60,8 @@ export function TopologyScalingViz() {
         ))}
       </div>
 
-      <div className="mb-4 rounded-xl border border-white/8 bg-[#060d18] p-4">
-        <svg viewBox="0 0 560 200" className="w-full">
+      <div className="mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#060d18] p-4">
+        <svg viewBox="0 0 560 200" className="min-w-[560px]">
           {stage === 1 && (
             <>
               <rect x="205" y="80" width="150" height="40" rx="6" fill="#1e3a5f" stroke="#60a5fa" strokeWidth="1.5"/>
@@ -209,7 +211,7 @@ export function TopologyScalingViz() {
         </svg>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-xs">
+      <div className="grid gap-2 text-xs sm:grid-cols-3">
         {[
           { label: "Downlinks per leaf", value: `${downlinks} x 400G` },
           { label: "Uplinks per leaf", value: `${uplinks} x 400G` },

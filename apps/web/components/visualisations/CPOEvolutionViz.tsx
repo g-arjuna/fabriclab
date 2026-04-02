@@ -160,7 +160,8 @@ export function CPOEvolutionViz() {
       </p>
 
       {/* Stage selector — horizontal arrow flow */}
-      <div className="relative mb-6">
+      <div className="relative mb-6 overflow-x-auto">
+        <div className="min-w-[560px]">
         <div className="absolute top-7 left-0 right-0 h-px bg-slate-700 z-0" />
         <div className="relative z-10 flex items-start justify-between gap-2">
           {stages.map((s, i) => (
@@ -194,12 +195,13 @@ export function CPOEvolutionViz() {
             </div>
           ))}
         </div>
+        </div>
       </div>
 
       {/* DSP location diagram */}
-      <div className="rounded-xl bg-[#060d18] border border-white/8 p-4 mb-5">
+      <div className="mb-5 overflow-x-auto rounded-xl border border-white/8 bg-[#060d18] p-4">
         <div className="text-[9px] uppercase tracking-widest text-slate-600 mb-3">DSP location in this architecture</div>
-        <svg viewBox="0 0 500 90" className="w-full">
+        <svg viewBox="0 0 500 90" className="min-w-[500px]">
           {/* Cable */}
           <rect x="10" y="30" width="80" height="30" rx="6"
             fill="#0f172a" stroke="#334155" strokeWidth="1.5" />
@@ -326,7 +328,7 @@ export function CPOEvolutionViz() {
       </div>
 
       {/* Detail tabs */}
-      <div className="flex gap-1 mb-3">
+      <div className="mb-3 flex flex-wrap gap-1">
         {([
           { k: "overview" as const, l: "What it is" },
           { k: "tradeoff" as const, l: "The tradeoff" },

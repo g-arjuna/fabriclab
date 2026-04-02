@@ -104,7 +104,7 @@ export function NCCLEnvVarViz() {
                   style={{ backgroundColor: pc.bg, color: pc.border }}>
                   {pc.label}
                 </span>
-                <code className="text-sm font-mono font-bold text-white flex-1 text-left">
+                <code className="flex-1 break-all text-left font-mono text-sm font-bold text-white">
                   {v.name}
                 </code>
                 <span className="text-xs text-slate-600 font-mono hidden sm:block">
@@ -120,13 +120,13 @@ export function NCCLEnvVarViz() {
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div className="rounded-lg bg-green-900/20 border border-green-500/20 p-3">
                       <div className="text-[10px] text-green-400 mb-1">Correct</div>
-                      <code className="text-green-300 font-mono text-[10px] leading-5 whitespace-pre-wrap">
+                      <code className="break-all text-green-300 font-mono text-[10px] leading-5 whitespace-pre-wrap">
                         {v.name}={v.correctExample}
                       </code>
                     </div>
                     <div className="rounded-lg bg-red-900/20 border border-red-500/20 p-3">
                       <div className="text-[10px] text-red-400 mb-1">Wrong (common mistake)</div>
-                      <code className="text-red-300 font-mono text-[10px] leading-5 whitespace-pre-wrap">
+                      <code className="break-all text-red-300 font-mono text-[10px] leading-5 whitespace-pre-wrap">
                         {v.name}={v.wrongExample}
                       </code>
                     </div>

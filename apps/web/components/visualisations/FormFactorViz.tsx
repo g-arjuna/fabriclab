@@ -150,12 +150,12 @@ export function FormFactorViz() {
                 border: `1px solid ${selected === f.id ? f.border : "#1e293b"}`,
               }}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <span className="text-xs font-bold" style={{ color: selected === f.id ? f.border : "#94a3b8" }}>
                     {f.name}
                   </span>
-                  <span className="ml-2 text-[10px] text-slate-500">{f.speed}</span>
+                  <span className="mt-1 block text-[10px] text-slate-500 sm:ml-2 sm:mt-0 sm:inline">{f.speed}</span>
                 </div>
                 {f.dgxUsed && (
                   <span className="text-[8px] rounded px-1.5 py-0.5 font-bold bg-blue-500/20 text-blue-400">
@@ -175,7 +175,7 @@ export function FormFactorViz() {
             className="rounded-xl p-4"
             style={{ backgroundColor: sel.color + "33", border: `1px solid ${sel.border}55` }}
           >
-            <div className="flex items-center gap-3 mb-3">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <span className="text-2xl font-black font-mono" style={{ color: sel.border }}>
                 {sel.speed}
               </span>
@@ -188,7 +188,7 @@ export function FormFactorViz() {
             </div>
 
             {/* Specs grid */}
-            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+            <div className="mb-3 grid gap-2 text-xs sm:grid-cols-2">
               {[
                 { l: "Lane configuration", v: sel.lanes },
                 { l: "Modulation", v: sel.modulation },

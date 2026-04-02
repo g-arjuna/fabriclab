@@ -102,19 +102,10 @@ export function AllReduceBarrierViz() {
       </p>
 
       {/* Phase label */}
-      <div style={{
-        background: "#0f172a",
-        borderRadius: 8,
-        padding: "8px 14px",
-        marginBottom: 16,
-        minHeight: 36,
-        display: "flex",
-        alignItems: "center",
-      }}>
+      <div className="mb-4 flex flex-col gap-2 rounded-lg bg-[#0f172a] px-3 py-3 sm:min-h-9 sm:flex-row sm:items-center sm:px-3.5 sm:py-2">
         <span style={{ fontSize: 12, color: "#94a3b8" }}>{phaseLabel[phase]}</span>
         {idleGPUs > 0 && (
           <span style={{
-            marginLeft: "auto",
             fontSize: 11,
             color: "#fbbf24",
             background: "#451a03",
@@ -129,7 +120,8 @@ export function AllReduceBarrierViz() {
       </div>
 
       {/* GPU lanes */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+      <div className="mb-4 overflow-x-auto">
+        <div style={{ display: "flex", minWidth: 520, flexDirection: "column", gap: 6 }}>
         {Array.from({ length: TOTAL_GPUS }, (_, i) => {
           const state = gpuState(i)
           const progress = gpuProgress(i)
@@ -194,12 +186,15 @@ export function AllReduceBarrierViz() {
             </div>
           )
         })}
+        </div>
       </div>
 
       {/* Barrier line label */}
-      <div style={{ display: "flex", paddingLeft: 62, marginBottom: 12 }}>
-        <div style={{ flex: 1, borderTop: "1px dashed #334155", marginTop: 4 }} />
+      <div className="mb-3 overflow-x-auto">
+        <div style={{ display: "flex", minWidth: 520, paddingLeft: 62 }}>
+          <div style={{ flex: 1, borderTop: "1px dashed #334155", marginTop: 4 }} />
         <span style={{ fontSize: 10, color: "#475569", marginLeft: 8 }}>← barrier</span>
+        </div>
       </div>
 
       {/* Key insight */}

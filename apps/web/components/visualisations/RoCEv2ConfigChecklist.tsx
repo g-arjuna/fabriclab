@@ -126,11 +126,11 @@ export function RoCEv2ConfigChecklist() {
                 <div className="space-y-2 px-4 pb-4 text-xs">
                   <div className="rounded-lg border border-white/10 bg-[#0a0f1a] p-3">
                     <div className="mb-1 text-[10px] text-slate-500">Configuration command</div>
-                    <pre className="whitespace-pre-wrap font-mono text-[10px] leading-6 text-cyan-300">{item.command}</pre>
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-6 text-cyan-300">{item.command}</pre>
                   </div>
                   <div className="rounded-lg border border-white/10 bg-[#0a0f1a] p-3">
                     <div className="mb-1 text-[10px] text-slate-500">Verify with</div>
-                    <code className="font-mono text-[10px] text-green-300">{item.verify}</code>
+                    <code className="break-all font-mono text-[10px] text-green-300">{item.verify}</code>
                   </div>
                   <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
                     <span className="font-semibold text-red-400">If skipped: </span>

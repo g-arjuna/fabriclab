@@ -88,7 +88,7 @@ export function NCCLAlgorithmViz() {
       </p>
 
       {/* Algorithm selector */}
-      <div className="grid grid-cols-3 gap-2 mb-5">
+      <div className="mb-5 grid gap-2 sm:grid-cols-3">
         {(["ring", "tree", "dbt"] as Algo[]).map((a) => (
           <button
             key={a}
@@ -109,8 +109,8 @@ export function NCCLAlgorithmViz() {
 
       <div className="grid gap-4 sm:grid-cols-2 mb-4">
         {/* Animation panel */}
-        <div className="rounded-xl bg-[#060d18] border border-white/8 p-3">
-          <div className="flex items-center justify-between mb-2">
+        <div className="rounded-xl border border-white/8 bg-[#060d18] p-3">
+          <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-[10px] text-slate-500">Communication pattern</span>
             <div className="flex gap-2">
               <button
@@ -129,7 +129,8 @@ export function NCCLAlgorithmViz() {
             </div>
           </div>
 
-          <svg viewBox="0 0 280 220" className="w-full">
+          <div className="overflow-x-auto">
+            <svg viewBox="0 0 280 220" className="min-w-[280px]">
             {algo === "ring" && (
               <>
                 {/* Ring arrangement */}
@@ -254,7 +255,8 @@ export function NCCLAlgorithmViz() {
                 </text>
               </>
             )}
-          </svg>
+            </svg>
+          </div>
         </div>
 
         {/* Stats and info panel */}
@@ -319,10 +321,10 @@ export function NCCLAlgorithmViz() {
 
       <div className="rounded-xl bg-[#0a0f1a] border border-white/8 p-3 text-xs">
         <span className="text-slate-500">NCCL env override: </span>
-        <code className="text-cyan-300 font-mono">
+        <code className="break-all text-cyan-300 font-mono">
           NCCL_ALGO={algo === "ring" ? "RING" : algo === "tree" ? "TREE" : "COLLNET_RING"}
         </code>
-        <span className="text-slate-600 ml-2">(leave unset in production -- NCCL auto-selects)</span>
+        <span className="ml-2 text-slate-600">(leave unset in production -- NCCL auto-selects)</span>
       </div>
     </div>
   )

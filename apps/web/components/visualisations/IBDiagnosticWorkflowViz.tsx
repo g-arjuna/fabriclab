@@ -64,25 +64,27 @@ export function IBDiagnosticWorkflowViz() {
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">InfiniBand diagnostic workflow — click each phase</p>
-      <div className="relative mb-5">
-        <div className="absolute left-0 right-0 top-4 h-0.5 bg-slate-800" />
-        <div className="relative flex justify-between">
-          {ibPhases.map((p) => (
-            <button key={p.id} onClick={() => setPhase(p.id)} className="flex flex-col items-center" style={{ flex: 1 }}>
-              <div
-                className="z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all"
-                style={{
-                  backgroundColor: phase === p.id ? p.color : "#0f172a",
-                  border: `2px solid ${p.color}`,
-                  color: phase === p.id ? "#fff" : p.color,
-                  transform: phase === p.id ? "scale(1.2)" : "scale(1)",
-                }}
-              >
-                {p.step}
-              </div>
-              <span className="mt-1 max-w-[50px] text-center text-[8px] leading-3 text-slate-600">{p.label.split(" ").slice(0, 2).join(" ")}</span>
-            </button>
-          ))}
+      <div className="mb-5 overflow-x-auto">
+        <div className="relative min-w-[560px]">
+          <div className="absolute left-0 right-0 top-4 h-0.5 bg-slate-800" />
+          <div className="relative flex justify-between">
+            {ibPhases.map((p) => (
+              <button key={p.id} onClick={() => setPhase(p.id)} className="flex flex-col items-center" style={{ flex: 1 }}>
+                <div
+                  className="z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all"
+                  style={{
+                    backgroundColor: phase === p.id ? p.color : "#0f172a",
+                    border: `2px solid ${p.color}`,
+                    color: phase === p.id ? "#fff" : p.color,
+                    transform: phase === p.id ? "scale(1.2)" : "scale(1)",
+                  }}
+                >
+                  {p.step}
+                </div>
+                <span className="mt-1 max-w-[50px] text-center text-[8px] leading-3 text-slate-600">{p.label.split(" ").slice(0, 2).join(" ")}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <div
@@ -106,7 +108,7 @@ export function IBDiagnosticWorkflowViz() {
         <div className="rounded-lg bg-black/20 p-3">
           <div className="mb-1.5 text-[10px] text-slate-500">Commands</div>
           {detail.commands.map((cmd, i) => (
-            <div key={i} className="font-mono text-[10px] leading-5 text-cyan-300">
+            <div key={i} className="font-mono text-[10px] leading-5 text-cyan-300 break-all">
               {cmd}
             </div>
           ))}

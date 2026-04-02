@@ -143,8 +143,9 @@ export function ConnectX7ModesViz() {
               )
             })}
           </div>
-          <div className="rounded-xl bg-[#0a0f1a] border border-white/10 overflow-hidden">
-            <table className="w-full text-xs">
+          <div className="rounded-xl border border-white/10 bg-[#0a0f1a]">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[420px] text-xs">
               <thead>
                 <tr className="border-b border-white/10">
                   <th className="text-left p-3 text-slate-500 font-medium">Property</th>
@@ -161,7 +162,8 @@ export function ConnectX7ModesViz() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
           <p className="mt-3 text-xs text-slate-500">
             The DGX node hardware — GPUs, NVLink, NVSwitch, CPUs — is identical in both modes. Only the external fabric changes.

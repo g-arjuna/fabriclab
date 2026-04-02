@@ -95,7 +95,7 @@ export function CongestionMechanicsViz() {
       <div className="flex flex-wrap gap-2 mb-5">
         {mechanisms.map(m => (
           <button key={m.id} onClick={() => setMech(m.id)}
-            className="flex-1 rounded-xl px-3 py-2.5 text-xs transition-all text-left"
+            className="w-full rounded-xl px-3 py-2.5 text-left text-xs transition-all sm:flex-1"
             style={{
               backgroundColor: mech === m.id ? details[m.id].color + "44" : "#0f172a",
               border: `1px solid ${mech === m.id ? details[m.id].border : "#1e293b"}`,
@@ -119,7 +119,7 @@ export function CongestionMechanicsViz() {
             <span className="text-[10px] font-bold text-white">{d.bufferFill}%</span>
           </div>
         </div>
-        <div className="flex gap-4 mt-2 text-[10px]">
+        <div className="mt-2 flex flex-col gap-1 text-[10px] sm:flex-row sm:gap-4">
           <span className={d.drops ? "text-red-400 font-semibold" : "text-slate-700"}>
             {d.drops ? "✗ Drops occurring" : "✓ No drops"}
           </span>

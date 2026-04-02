@@ -180,16 +180,28 @@ export function AddressingMistakesViz() {
 
           <div style={{ background: "#0f172a", borderRadius: 7, padding: "10px 14px" }}>
             {tab === "config" && (
-              <pre style={{ margin: 0, fontSize: 12, color: "#fca5a5", lineHeight: 1.65 }}>{sel.config}</pre>
+              <pre
+                style={{ margin: 0, fontSize: 12, color: "#fca5a5", lineHeight: 1.65, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+              >
+                {sel.config}
+              </pre>
             )}
             {tab === "symptom" && (
               <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7 }}>{sel.symptom}</div>
             )}
             {tab === "diagnose" && (
-              <pre style={{ margin: 0, fontSize: 11, color: "#fbbf24", lineHeight: 1.65 }}>{sel.diagnose}</pre>
+              <pre
+                style={{ margin: 0, fontSize: 11, color: "#fbbf24", lineHeight: 1.65, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+              >
+                {sel.diagnose}
+              </pre>
             )}
             {tab === "fix" && (
-              <pre style={{ margin: 0, fontSize: 11, color: "#4ade80", lineHeight: 1.65 }}>{sel.fix}</pre>
+              <pre
+                style={{ margin: 0, fontSize: 11, color: "#4ade80", lineHeight: 1.65, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+              >
+                {sel.fix}
+              </pre>
             )}
           </div>
         </div>

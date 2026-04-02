@@ -20,6 +20,7 @@ export function ShowTopologyViz() {
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">show topology — the asymmetry revealed</p>
       <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-4 font-mono text-[10px] leading-6 mb-4 overflow-x-auto">
+        <div className="min-w-[560px]">
         <div className="text-slate-500">DGX H100 -- Rail topology map</div>
         <div className="text-slate-700">{"  "}{"─".repeat(62)}</div>
         <div className="text-slate-500">{"  Rail  NIC       GUID                  NIC state  Switch port"}</div>
@@ -40,6 +41,7 @@ export function ShowTopologyViz() {
         ))}
         <div className="text-slate-700">{"  "}{"─".repeat(62)}</div>
         <div className="text-slate-500">{"  8 rails total  |  7/8 active"}</div>
+        </div>
       </div>
       {selected !== null && (
         <div className="rounded-xl p-4 text-xs space-y-2"

@@ -268,7 +268,7 @@ export function SignalChainViz() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-3">
+        <div className="mb-3 flex flex-wrap gap-1">
           {([
             { k: "what" as const, l: "What it does" },
             { k: "fail" as const, l: "How it fails" },
@@ -297,12 +297,12 @@ export function SignalChainViz() {
       </div>
 
       {/* DSP cost callout */}
-      <div className="mt-4 rounded-xl bg-amber-950/30 border border-amber-500/20 p-3">
+      <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-950/30 p-3">
         <div className="flex items-start gap-3">
           <span className="text-amber-400 text-sm mt-0.5">⚡</span>
           <div>
             <div className="text-xs font-semibold text-amber-400 mb-1">Why the DSP is the cost centre</div>
-            <div className="text-[10px] text-slate-400 leading-4">
+            <div className="break-words text-[10px] leading-4 text-slate-400">
               DSP silicon = ~20–40% of module bill of materials and ~50% of module power.
               A 64-port 800G switch: 64 × ~7W DSP = ~450W in DSP logic alone.
               This is why CPO and LPO exist — both move DSP out of the pluggable module into the switch ASIC.

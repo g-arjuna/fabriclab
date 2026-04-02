@@ -128,7 +128,7 @@ export function NVMeoFProtocolViz() {
       </p>
 
       {/* Transport selector */}
-      <div className="grid grid-cols-3 gap-2 mb-5">
+      <div className="mb-5 grid gap-2 sm:grid-cols-3">
         {transports.map(t => (
           <button
             key={t.id}
@@ -153,7 +153,7 @@ export function NVMeoFProtocolViz() {
       </div>
 
       {/* Stats bars */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
         {[
           { label: "Latency", tier: sel.latencyTier, value: sel.latency },
           { label: "CPU overhead", tier: sel.cpuTier, value: sel.cpuOverhead },
@@ -177,7 +177,7 @@ export function NVMeoFProtocolViz() {
       </div>
 
       {/* Detail tabs */}
-      <div className="flex gap-1 mb-3">
+      <div className="mb-3 flex flex-wrap gap-1">
         {([
           { k: "overview" as const, l: "How it works" },
           { k: "pros" as const, l: "Advantages" },
@@ -205,7 +205,7 @@ export function NVMeoFProtocolViz() {
         {tab === "overview" && (
           <div>
             <div className="text-xs text-slate-300 leading-5 mb-3">{sel.description}</div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid gap-2 text-xs sm:grid-cols-2">
               {[
                 { l: "Switch required", v: sel.switchReq },
                 { l: "Deployed in", v: sel.usedIn },

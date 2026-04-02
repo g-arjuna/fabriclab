@@ -58,7 +58,7 @@ export function StorageDataPathViz() {
       </p>
 
       {/* Mode toggle */}
-      <div className="flex gap-2 mb-5">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row">
         {(["before", "after"] as Mode[]).map(m => (
           <button
             key={m}
@@ -80,8 +80,8 @@ export function StorageDataPathViz() {
       </div>
 
       {/* Diagram */}
-      <div className="rounded-xl bg-[#060d18] border border-white/8 p-4 mb-4">
-        <svg viewBox={`0 0 640 ${mode === "before" ? 200 : 160}`} className="w-full">
+      <div className="mb-4 overflow-x-auto rounded-xl border border-white/8 bg-[#060d18] p-4">
+        <svg viewBox={`0 0 640 ${mode === "before" ? 200 : 160}`} className="min-w-[640px]">
 
           {/* CPU RAM label for before mode */}
           {mode === "before" && (
@@ -183,7 +183,7 @@ export function StorageDataPathViz() {
       </div>
 
       {/* Stats comparison */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         {[
           {
             label: "Before GDS",

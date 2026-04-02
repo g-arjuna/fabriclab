@@ -68,11 +68,11 @@ export function PauseStormViz() {
         </div>
         <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-3">
           <div className="text-[10px] text-slate-500 mb-1.5">What you see in the switch CLI</div>
-          <p className="text-slate-300 leading-5 font-mono text-[10px]">{detail.what_you_see}</p>
+          <p className="break-all font-mono text-[10px] leading-5 text-slate-300">{detail.what_you_see}</p>
         </div>
         <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-3">
           <div className="text-[10px] text-slate-500 mb-1.5">What you see in ethtool on the DGX</div>
-          <p className="text-slate-300 leading-5 font-mono text-[10px]">{detail.counters}</p>
+          <p className="break-all font-mono text-[10px] leading-5 text-slate-300">{detail.counters}</p>
         </div>
       </div>
     </div>

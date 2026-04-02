@@ -61,7 +61,12 @@ export function PFCCommandViz() {
       <pre className="rounded-xl bg-[#0a0f1a] border border-white/10 p-4 font-mono text-xs leading-6 text-slate-300 mb-4 overflow-x-auto">{data.output}</pre>
       <div className="space-y-2 text-xs">
         <div className="rounded-xl bg-slate-800/50 p-3"><span className="font-semibold text-white">Analysis: </span><span className="text-slate-300">{data.analysis}</span></div>
-        <div className="rounded-xl bg-slate-800/50 p-3"><span className="font-semibold text-cyan-400">Fix: </span><pre className="mt-1 font-mono text-cyan-300">{data.fix}</pre></div>
+        <div className="rounded-xl bg-slate-800/50 p-3">
+          <span className="font-semibold text-cyan-400">Fix: </span>
+          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-cyan-300">
+            {data.fix}
+          </pre>
+        </div>
       </div>
     </div>
   )

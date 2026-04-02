@@ -86,8 +86,8 @@ export function LinkBothEndsViz() {
       </div>
 
       {/* Link diagram */}
-      <div className="mb-4">
-        <svg viewBox="0 0 480 100" className="w-full max-h-24">
+      <div className="mb-4 overflow-x-auto">
+        <svg viewBox="0 0 480 100" className="max-h-24 min-w-[480px]">
           {/* DGX NIC box */}
           <rect x="10" y="30" width="130" height="40" rx="6"
             fill="#14532d33" stroke={s.dgx.color} strokeWidth="1.5" />

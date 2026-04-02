@@ -126,7 +126,9 @@ export function FirstAccessViz() {
 
         <div className="rounded-xl bg-slate-800/50 p-3 text-xs">
           <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">Default credentials</div>
-          <pre className="text-amber-300 font-mono text-[10px] leading-5">{info.loginCredentials}</pre>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all text-[10px] font-mono leading-5 text-amber-300">
+            {info.loginCredentials}
+          </pre>
         </div>
 
         <div className="rounded-xl bg-slate-800/50 p-3 text-xs">
