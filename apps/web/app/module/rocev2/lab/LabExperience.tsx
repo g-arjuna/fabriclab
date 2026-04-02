@@ -427,15 +427,17 @@ export function LabExperience({ labId }: { labId: string }) {
             </div>
           </aside>
 
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <div
+            className="grid flex-1 overflow-hidden"
+            style={{
+              gridTemplateRows:
+                workspaceFocus === "topology"
+                  ? "minmax(420px, 1.8fr) minmax(260px, 0.9fr)"
+                  : "220px minmax(0, 1fr)",
+            }}
+          >
             <div
-              className="relative flex-shrink-0 transition-[height] duration-300 ease-out"
-              style={{
-                height:
-                  workspaceFocus === "topology"
-                    ? "clamp(320px, 42vh, 460px)"
-                    : "220px",
-              }}
+              className="relative min-h-0 transition-[height] duration-300 ease-out"
             >
               <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-wrap items-center gap-2">
                 <button
@@ -472,7 +474,7 @@ export function LabExperience({ labId }: { labId: string }) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-hidden">
+            <div className="min-h-0 overflow-hidden">
               <MultiDeviceTerminal
                 devices={activeDevices}
                 labTitle={activeLab.title}
