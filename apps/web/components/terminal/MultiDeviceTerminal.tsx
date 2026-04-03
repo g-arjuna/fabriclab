@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal as XTerm } from '@xterm/xterm'
 
@@ -25,6 +25,8 @@ import type { DeviceType, LabDevice } from '@/types'
 interface Props {
   devices: LabDevice[]
   labTitle: string
+  onOpenUfmMap?: () => void
+  onOpenUfmApi?: () => void
 }
 
 const DEVICE_THEME: Record<
@@ -360,13 +362,47 @@ function coloriseOutput(output: string): string {
     .join('\r\n')
 }
 
-export function MultiDeviceTerminal({ devices, labTitle }: Props) {
+function UfmMapIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+    >
+      <path d="M12 5.5v13" />
+      <path d="M12 12H6.5" />
+      <path d="M12 12h5.5" />
+      <circle cx="12" cy="5.5" r="2.2" />
+      <circle cx="6.5" cy="12" r="2.2" />
+      <circle cx="17.5" cy="12" r="2.2" />
+      <circle cx="12" cy="18.5" r="2.2" />
+    </svg>
+  )
+}
+
+export function MultiDeviceTerminal({
+  devices,
+  labTitle,
+  onOpenUfmApi,
+  onOpenUfmMap,
+}: Props) {
   const activeDeviceId = useLabStore((state) => state.activeDeviceId)
   const deviceSessions = useLabStore((state) => state.deviceSessions)
   const setActiveDevice = useLabStore((state) => state.setActiveDevice)
   const openDeviceSession = useLabStore((state) => state.openDeviceSession)
 
   const openSessionIds = Object.keys(deviceSessions)
+  const activeDevice = useMemo(
+    () => devices.find((device) => device.id === activeDeviceId) ?? null,
+    [activeDeviceId, devices],
+  )
+  const showUfmActions =
+    activeDevice?.type === 'ufm-server' && !activeDevice.label.startsWith('[SIM ONLY]')
 
   useEffect(() => {
     if (devices.length === 0) return
@@ -385,57 +421,84 @@ export function MultiDeviceTerminal({ devices, labTitle }: Props) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#0a0f1a]">
-      <div className="flex flex-shrink-0 items-center gap-0.5 overflow-x-auto border-b border-white/10 bg-slate-950 px-2 py-1.5">
-        {devices.map((device) => {
-          const hasSession = deviceSessions[device.id] !== undefined
-          const isActive = activeDeviceId === device.id
-          const theme = DEVICE_THEME[device.type]
+      <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950 px-2 py-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+          {devices.map((device) => {
+            const hasSession = deviceSessions[device.id] !== undefined
+            const isActive = activeDeviceId === device.id
+            const theme = DEVICE_THEME[device.type]
 
-          return (
-            <button
-              key={device.id}
-              type="button"
-              onClick={() => {
-                if (!hasSession) {
-                  openDeviceSession(device.id)
-                }
-                setActiveDevice(device.id)
-              }}
-              className="flex flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-all"
-              style={{
-                backgroundColor: isActive ? theme.bg : 'transparent',
-                border: `1px solid ${isActive ? `${theme.accent}55` : 'transparent'}`,
-                color: isActive ? theme.fg : '#64748b',
-                opacity: hasSession || isActive ? 1 : 0.6,
-              }}
-              title={hasSession ? `Switch to ${device.label}` : `Open ${device.label} terminal`}
-            >
-              <span
-                className="h-2 w-2 flex-shrink-0 rounded-full transition-colors"
-                style={{
-                  backgroundColor: isActive
-                    ? theme.accent
-                    : hasSession
-                    ? `${theme.accent}88`
-                    : '#374151',
+            return (
+              <button
+                key={device.id}
+                type="button"
+                onClick={() => {
+                  if (!hasSession) {
+                    openDeviceSession(device.id)
+                  }
+                  setActiveDevice(device.id)
                 }}
-              />
-              <span className="font-medium">{device.label}</span>
-              <span
-                className="rounded px-1 py-0.5 text-[9px]"
+                className="flex flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-all"
                 style={{
-                  backgroundColor: isActive ? `${theme.accent}22` : 'transparent',
-                  color: isActive ? theme.accent : '#475569',
+                  backgroundColor: isActive ? theme.bg : 'transparent',
+                  border: `1px solid ${isActive ? `${theme.accent}55` : 'transparent'}`,
+                  color: isActive ? theme.fg : '#64748b',
+                  opacity: hasSession || isActive ? 1 : 0.6,
                 }}
+                title={hasSession ? `Switch to ${device.label}` : `Open ${device.label} terminal`}
               >
-                {device.osLabel}
-              </span>
-              {!hasSession && (
-                <span className="text-[9px] text-slate-600">+</span>
-              )}
-            </button>
-          )
-        })}
+                <span
+                  className="h-2 w-2 flex-shrink-0 rounded-full transition-colors"
+                  style={{
+                    backgroundColor: isActive
+                      ? theme.accent
+                      : hasSession
+                      ? `${theme.accent}88`
+                      : '#374151',
+                  }}
+                />
+                <span className="font-medium">{device.label}</span>
+                <span
+                  className="rounded px-1 py-0.5 text-[9px]"
+                  style={{
+                    backgroundColor: isActive ? `${theme.accent}22` : 'transparent',
+                    color: isActive ? theme.accent : '#475569',
+                  }}
+                >
+                  {device.osLabel}
+                </span>
+                {!hasSession && (
+                  <span className="text-[9px] text-slate-600">+</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {showUfmActions ? (
+          <div className="flex flex-shrink-0 items-center gap-2">
+            {onOpenUfmMap ? (
+              <button
+                type="button"
+                onClick={onOpenUfmMap}
+                className="inline-flex items-center gap-2 rounded-full border border-amber-300/15 bg-amber-300/[0.06] px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-100/80 transition hover:border-amber-200/25 hover:bg-amber-200/10 hover:text-amber-100"
+              >
+                <UfmMapIcon />
+                Fabric map
+              </button>
+            ) : null}
+            {onOpenUfmApi ? (
+              <button
+                type="button"
+                onClick={onOpenUfmApi}
+                className="inline-flex items-center gap-2 rounded-full border border-cyan-300/15 bg-cyan-300/[0.06] px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-cyan-100/80 transition hover:border-cyan-200/25 hover:bg-cyan-200/10 hover:text-cyan-100"
+              >
+                {"{}"}
+                API JSON
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="relative flex-1 min-h-0">

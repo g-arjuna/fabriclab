@@ -10,6 +10,7 @@ import { LabResult } from "@/components/lab/LabResult";
 import { SolutionModal } from "@/components/lab/SolutionModal";
 import { MultiDeviceTerminal } from "@/components/terminal/MultiDeviceTerminal";
 import { TopologyView } from "@/components/topology/TopologyView";
+import { UfmFabricTopology } from "@/components/topology/UfmFabricTopology";
 import { lab0a, lab0aDevices } from "@/data/labs/lab0a-fabric-cli-orientation";
 import { lab0b, lab0bDevices } from "@/data/labs/lab0b-roce-counter-reading";
 import { lab0, lab0Devices } from "@/data/labs/lab0-failed-rail";
@@ -33,6 +34,7 @@ import { isComplete } from "@/lib/labEngine";
 import { formatConditionLabel } from "@/lib/formatters";
 import { useLabStore } from "@/store/labStore";
 import { useProgressStore } from "@/store/progressStore";
+import type { LabDevice, RailState, TopologyState } from "@/types";
 
 const LABS = {
   [lab0a.id]: lab0a,
@@ -144,6 +146,277 @@ function DesktopRecommendationPrompt({ onDismiss }: { onDismiss: () => void }) {
 function formatElapsed(startTime: number | null, now: number): string {
   const elapsedSeconds = startTime ? Math.max(0, Math.floor((now - startTime) / 1000)) : 0;
   return `${String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:${String(elapsedSeconds % 60).padStart(2, "0")}`;
+}
+
+function inferLeafPortName(devices: LabDevice[], railId: number, fallbackPort: string): string {
+  const leafDevice = devices.find(
+    (device) => device.type === "leaf-switch" && device.railId === railId,
+  );
+  const commandPort = leafDevice?.allowedCommands
+    .map((command) => /\b(swp\d+)\b/.exec(command)?.[1])
+    .find((portName): portName is string => Boolean(portName));
+
+  return commandPort ?? fallbackPort;
+}
+
+function formatUfmPortRecord({
+  description,
+  dname,
+  guid,
+  highBerSeverity = "N/A",
+  lid,
+  logicalState,
+  path,
+  peerGuid,
+  peerNodeDescription,
+  peerNodeName,
+  peerPortDname,
+  physicalState,
+  severity,
+  systemIp,
+  systemName,
+}: {
+  description: "Computer IB Port" | "Switch IB Port";
+  dname: string;
+  guid: string;
+  highBerSeverity?: "N/A" | "Warning";
+  lid: number;
+  logicalState: "Active" | "Down";
+  path: string;
+  peerGuid: string;
+  peerNodeDescription: string;
+  peerNodeName: string;
+  peerPortDname: string;
+  physicalState: "Link Up" | "Polling";
+  severity: "Info" | "Warning" | "Critical";
+  systemIp: string;
+  systemName: string;
+}) {
+  return {
+    description,
+    number: Number.parseInt(dname.replace(/\D/g, ""), 10) || 1,
+    external_number: Number.parseInt(dname.replace(/\D/g, ""), 10) || 1,
+    physical_state: physicalState,
+    path,
+    tier: description === "Switch IB Port" ? 3 : 1,
+    high_ber_severity: highBerSeverity,
+    lid,
+    mirror: "disable",
+    logical_state: logicalState,
+    capabilities:
+      description === "Switch IB Port"
+        ? ["reset", "healthy_operations", "disable", "get_cables_info"]
+        : ["reset", "healthy_operations", "disable"],
+    mtu: 4096,
+    peer_port_dname: peerPortDname,
+    severity,
+    active_speed: logicalState === "Active" ? "NDR" : null,
+    enabled_speed: logicalState === "Active" ? ["SDR", "DDR", "QDR", "FDR", "EDR", "HDR", "NDR"] : [],
+    supported_speed: ["SDR", "DDR", "QDR", "FDR", "EDR", "HDR", "NDR"],
+    active_width: logicalState === "Active" ? "4x" : null,
+    enabled_width: logicalState === "Active" ? ["1x", "4x"] : [],
+    supported_width: ["1x", "4x"],
+    dname,
+    peer_node_name: peerNodeName,
+    peer: peerPortDname === "N/A" ? "N/A" : `${peerGuid}_${peerPortDname.replace(/\D/g, "") || "1"}`,
+    peer_node_guid: peerGuid,
+    systemID: guid.replace(/^0x/, ""),
+    node_description: `${systemName}:${dname}`,
+    label: dname,
+    name: `${guid.replace(/^0x/, "")}_${dname.replace(/\D/g, "") || "1"}`,
+    module: "N/A",
+    peer_lid: peerPortDname === "N/A" ? "N/A" : `${lid + 100}`,
+    peer_guid: peerGuid,
+    peer_node_description: peerNodeDescription,
+    guid,
+    system_name: systemName,
+    system_ip: systemIp,
+    peer_ip: peerPortDname === "N/A" ? "N/A" : "10.209.36.20",
+    system_capabilities:
+      description === "Switch IB Port"
+        ? ["ssh", "sysinfo", "reboot", "mark_device_unhealthy", "collect_system_dump", "sw_upgrade"]
+        : ["mark_device_unhealthy"],
+    system_mirroring_template: false,
+    hw_technology: null,
+  };
+}
+
+function buildUfmPortsPayload(
+  activeLabId: string,
+  activeDevices: LabDevice[],
+  topologyState: TopologyState,
+) {
+  const rails = topologyState.rails ?? [];
+
+  if (activeLabId === "lab6-alert-triage") {
+    const isRemediated = topologyState.opticReplaced === true;
+
+    return {
+      endpoint: "GET /ufmRest/resources/ports?system=leaf-rail5&active=true",
+      note:
+        "Documented UFM ports-resource response shape, populated from FabricLab's current lab state. Values are simulator-derived, not queried from a live UFM server.",
+      payload: {
+        total_resources: 8,
+        filtered_resources: 8,
+        num_of_pages: 1,
+        first_index: 1,
+        last_index: 8,
+        data: Array.from({ length: 8 }, (_, index) => {
+          const portNumber = index + 1;
+          const isFaultyPort = portNumber === 7;
+          const peerNodeName =
+            portNumber === 7 ? "DGX-Node-A" : `DGX-Node-${String.fromCharCode(64 + portNumber)}`;
+
+          return formatUfmPortRecord({
+            description: "Switch IB Port",
+            dname: `swp${portNumber}`,
+            guid: "0x9c0591030085abc0",
+            highBerSeverity: isFaultyPort && !isRemediated ? "Warning" : "N/A",
+            lid: 40 + portNumber,
+            logicalState: "Active",
+            path: `default(1) / Switch: leaf-rail5 / swp${portNumber}`,
+            peerGuid: `0x506b4b0300a1b20${portNumber}`,
+            peerNodeDescription: `${peerNodeName}:mlx5_5`,
+            peerNodeName,
+            peerPortDname: "mlx5_5",
+            physicalState: "Link Up",
+            severity: isFaultyPort && !isRemediated ? "Warning" : "Info",
+            systemIp: "10.209.36.15",
+            systemName: "leaf-rail5",
+          });
+        }),
+      },
+    };
+  }
+
+  if (rails.length > 0) {
+    const peerNodeName = activeLabId === "lab0a-fabric-cli-orientation" ? "dgx-node-01" : "dgx-node-a";
+
+    return {
+      endpoint: "GET /ufmRest/resources/ports?active=true",
+      note:
+        "Documented UFM ports-resource response shape, synthesized from this lab's rail state and endpoint mapping.",
+      payload: {
+        total_resources: rails.length,
+        filtered_resources: rails.length,
+        num_of_pages: 1,
+        first_index: rails.length > 0 ? 1 : 0,
+        last_index: rails.length,
+        data: rails.map((rail) => {
+          const switchPort = inferLeafPortName(
+            activeDevices,
+            rail.id,
+            `swp${activeLabId === "lab0-failed-rail" ? rail.id + 2 : rail.id + 1}`,
+          );
+          const linkUp = rail.switchPort === "up";
+          const peerGuid = rail.guid.replace(/^0x/, "");
+
+          return formatUfmPortRecord({
+            description: "Switch IB Port",
+            dname: switchPort,
+            guid: `0x9c0591030085ab${String(rail.id).padStart(2, "0")}`,
+            lid: 100 + rail.id,
+            logicalState: linkUp ? "Active" : "Down",
+            path: `default(1) / Switch: leaf-rail${rail.id} / ${switchPort}`,
+            peerGuid: `0x${peerGuid}`,
+            peerNodeDescription: `${peerNodeName}:${rail.nicName}`,
+            peerNodeName,
+            peerPortDname: rail.nicName,
+            physicalState: linkUp ? "Link Up" : "Polling",
+            severity: rail.switchPort === "up" ? "Info" : "Warning",
+            systemIp: `10.209.36.${20 + rail.id}`,
+            systemName: `leaf-rail${rail.id}`,
+          });
+        }),
+      },
+    };
+  }
+
+  return {
+    endpoint: "GET /ufmRest/resources/ports?active=true",
+    note:
+      "REST-shaped example generated from this lab's current device list. The topology card is still the source of truth for visual layout.",
+    payload: {
+      total_resources: activeDevices.filter((device) => device.type !== "ufm-server").length,
+      filtered_resources: activeDevices.filter((device) => device.type !== "ufm-server").length,
+      num_of_pages: 1,
+      first_index: 1,
+      last_index: activeDevices.filter((device) => device.type !== "ufm-server").length,
+      data: activeDevices
+        .filter((device) => device.type !== "ufm-server")
+        .map((device, index) =>
+          formatUfmPortRecord({
+            description: device.type === "dgx" ? "Computer IB Port" : "Switch IB Port",
+            dname: inferLeafPortName([device], device.railId ?? 0, inferLeafPortName([device], 0, "1")),
+            guid: `0x506b4b0300a1b3${String(index).padStart(2, "0")}`,
+            lid: 200 + index,
+            logicalState: device.status === "up" ? "Active" : "Down",
+            path: `default(1) / ${device.type === "dgx" ? "Computer" : "Switch"}: ${device.id} / ${device.label}`,
+            peerGuid: "N/A",
+            peerNodeDescription: "N/A",
+            peerNodeName: "N/A",
+            peerPortDname: "N/A",
+            physicalState: device.status === "up" ? "Link Up" : "Polling",
+            severity: device.status === "up" ? "Info" : "Warning",
+            systemIp: `10.209.36.${100 + index}`,
+            systemName: device.id,
+          }),
+        ),
+    },
+  };
+}
+
+function buildUfmApiExample(
+  activeLabId: string,
+  activeDevices: LabDevice[],
+  topologyState: TopologyState,
+  labConditions: Record<string, boolean>,
+) {
+  if (activeLabId === "lab15-rdma-rkey-exposure") {
+    const isolationVerified = labConditions.pkeyIsolationVerified === true;
+
+    return {
+      endpoint: "GET /ufmRest/resources/pkeys/{pkey}",
+      note:
+        "Documented /ufmRest/resources/pkeys/<pkey>?guids_data=true shape, rendered from the lab's current PKey isolation state.",
+      payload: isolationVerified
+        ? {
+            pkeys: [
+              {
+                partition: "TenantA_0x8001",
+                ip_over_ib: true,
+                guids: [
+                  { membership: "full", guid: "506b4b0300a1b200", index0: false },
+                  { membership: "limited", guid: "506b4b0300a1b210", index0: false },
+                ],
+              },
+              {
+                partition: "TenantB_0x8002",
+                ip_over_ib: true,
+                guids: [
+                  { membership: "full", guid: "506b4b0300a1b202", index0: false },
+                  { membership: "limited", guid: "506b4b0300a1b210", index0: false },
+                ],
+              },
+            ],
+          }
+        : {
+            warning: "Pre-verification state in this lab. Run the UFM PKey curl reads after hardening.",
+            pkeys: [
+              {
+                partition: "TenantA_0x8001",
+                ip_over_ib: true,
+                guids: [
+                  { membership: "full", guid: "506b4b0300a1b200", index0: false },
+                  { membership: "full", guid: "506b4b0300a1b202", index0: false },
+                ],
+              },
+            ],
+          },
+    };
+  }
+
+  return buildUfmPortsPayload(activeLabId, activeDevices, topologyState);
 }
 
 function KnowledgePanelDrawer() {
@@ -296,6 +569,116 @@ function LabDiscussionModal({
   );
 }
 
+function UfmTopologyModal({
+  activeDevices,
+  activeLabTitle,
+  onClose,
+  topologyState,
+}: {
+  activeDevices: LabDevice[];
+  activeLabTitle: string;
+  onClose: () => void;
+  topologyState: TopologyState;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-8 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#060d18] shadow-2xl shadow-slate-950/40"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4 sm:px-6">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-[0.28em] text-amber-200/80">
+              UFM fabric topology
+            </p>
+            <h2 className="mt-2 truncate text-xl font-semibold text-white sm:text-2xl">
+              {activeLabTitle}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+              Live view rendered from the current simulator topology state, so link and rail status
+              mirrors what the UFM commands report in this lab.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-slate-300 transition hover:text-white"
+          >
+            {"\u2715 Close"}
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-hidden p-4 sm:p-6">
+          <div className="h-[72vh] min-h-[520px]">
+            <UfmFabricTopology devices={activeDevices} topologyState={topologyState} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UfmApiModal({
+  activeDevices,
+  activeLabId,
+  labConditions,
+  onClose,
+  topologyState,
+}: {
+  activeDevices: LabDevice[];
+  activeLabId: string;
+  labConditions: Record<string, boolean>;
+  onClose: () => void;
+  topologyState: TopologyState;
+}) {
+  const apiExample = useMemo(
+    () => buildUfmApiExample(activeLabId, activeDevices, topologyState, labConditions),
+    [activeDevices, activeLabId, labConditions, topologyState],
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-8 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#060d18] shadow-2xl shadow-slate-950/40"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4 sm:px-6">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-[0.28em] text-cyan-200/80">
+              UFM REST API example
+            </p>
+            <h2 className="mt-2 truncate font-mono text-sm text-cyan-100 sm:text-base">
+              {apiExample.endpoint}
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+              {apiExample.note}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-slate-300 transition hover:text-white"
+          >
+            {"\u2715 Close"}
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+          <pre className="rounded-3xl border border-white/10 bg-slate-950/70 p-5 font-mono text-xs leading-6 text-slate-200">
+            {JSON.stringify(apiExample.payload, null, 2)}
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function LabExperience({ labId }: { labId: string }) {
   const loadLab = useLabStore((state) => state.loadLab);
   const resetLab = useLabStore((state) => state.resetLab);
@@ -307,6 +690,8 @@ export function LabExperience({ labId }: { labId: string }) {
   const [topologyExpanded, setTopologyExpanded] = useState(false);
   const [solutionOpen, setSolutionOpen] = useState(false);
   const [discussionOpen, setDiscussionOpen] = useState(false);
+  const [ufmApiOpen, setUfmApiOpen] = useState(false);
+  const [ufmMapOpen, setUfmMapOpen] = useState(false);
   const [showDesktopPrompt, setShowDesktopPrompt] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [workspaceFocus, setWorkspaceFocus] = useState<"topology" | "terminal">("topology");
@@ -315,6 +700,7 @@ export function LabExperience({ labId }: { labId: string }) {
   const activeDevices = useMemo(() => LAB_DEVICES[activeLab.id] ?? [], [activeLab.id]);
   const sourceChapter = LAB_SOURCE_CHAPTERS[activeLab.id];
   const isLabComplete = useLabStore((state) => isComplete(state.lab, activeLab));
+  const topologyState = useLabStore((state) => state.topology);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
@@ -380,6 +766,8 @@ export function LabExperience({ labId }: { labId: string }) {
   useEffect(() => {
     setSolutionOpen(false);
     setDiscussionOpen(false);
+    setUfmApiOpen(false);
+    setUfmMapOpen(false);
   }, [activeLab.id]);
 
   return (
@@ -569,6 +957,8 @@ export function LabExperience({ labId }: { labId: string }) {
               <MultiDeviceTerminal
                 devices={activeDevices}
                 labTitle={activeLab.title}
+                onOpenUfmApi={() => setUfmApiOpen(true)}
+                onOpenUfmMap={() => setUfmMapOpen(true)}
               />
             </div>
           </div>
@@ -617,6 +1007,25 @@ export function LabExperience({ labId }: { labId: string }) {
           activeLabId={activeLab.id}
           activeLabTitle={activeLab.title}
           onClose={() => setDiscussionOpen(false)}
+        />
+      ) : null}
+
+      {ufmMapOpen ? (
+        <UfmTopologyModal
+          activeDevices={activeDevices}
+          activeLabTitle={activeLab.title}
+          onClose={() => setUfmMapOpen(false)}
+          topologyState={topologyState}
+        />
+      ) : null}
+
+      {ufmApiOpen ? (
+        <UfmApiModal
+          activeDevices={activeDevices}
+          activeLabId={activeLab.id}
+          labConditions={labState.conditions}
+          onClose={() => setUfmApiOpen(false)}
+          topologyState={topologyState}
         />
       ) : null}
 
