@@ -1,7 +1,8 @@
 "use client";
 
-import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
+
+import { getSolutionGuide } from "@/data/labs/solutionGuides";
 
 type SolutionModalProps = {
   isOpen: boolean;
@@ -10,17 +11,8 @@ type SolutionModalProps = {
   title: string;
 };
 
-const SOLUTION_PATH_OVERRIDES: Record<string, string> = {
-  "lab0-failed-rail": "/images/labs/lab0-failed-rail-solution.webp",
-};
-
-function getSolutionPath(labId: string) {
-  return SOLUTION_PATH_OVERRIDES[labId] ?? `/images/labs/${labId}-solution.webp`;
-}
-
 export function SolutionModal({ isOpen, onClose, labId, title }: SolutionModalProps) {
-  const [hasAssetError, setHasAssetError] = useState(false);
-  const solutionSrc = useMemo(() => getSolutionPath(labId), [labId]);
+  const guide = useMemo(() => getSolutionGuide(labId), [labId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -35,10 +27,6 @@ export function SolutionModal({ isOpen, onClose, labId, title }: SolutionModalPr
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onClose]);
 
-  useEffect(() => {
-    setHasAssetError(false);
-  }, [labId, isOpen]);
-
   if (!isOpen) return null;
 
   return (
@@ -52,10 +40,10 @@ export function SolutionModal({ isOpen, onClose, labId, title }: SolutionModalPr
       >
         <div className="flex items-start justify-between gap-4 border-b border-white/8 px-6 py-5">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Solution Replay</p>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Solution Guide</p>
             <h3 className="mt-2 text-xl font-semibold text-white">{title}</h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-              Hover over the replay to zoom into the terminal area for easier command reading.
+              Follow the command sequence below in the listed device terminal tabs.
             </p>
           </div>
           <button
@@ -68,24 +56,45 @@ export function SolutionModal({ isOpen, onClose, labId, title }: SolutionModalPr
         </div>
 
         <div className="overflow-auto p-6">
-          {hasAssetError ? (
+          {!guide ? (
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-6 text-sm leading-7 text-amber-100">
-              Solution recording pending for this lab. The replay modal is wired, but the asset is not available yet.
+              A step-by-step solution guide is not available for this lab yet. Use the hints panel in the
+              sidebar while we fill this gap.
             </div>
           ) : (
-            <div className="rounded-3xl border border-white/8 bg-[#020817] p-4 shadow-[0_24px_80px_rgba(2,6,23,0.55)]">
-              <div className="group relative mx-auto aspect-video w-full max-w-[1400px] overflow-hidden rounded-2xl border border-white/10 bg-slate-950">
-                <Image
-                  src={solutionSrc}
-                  alt={`${title} solution replay`}
-                  width={1920}
-                  height={1080}
-                  unoptimized
-                  priority
-                  onError={() => setHasAssetError(true)}
-                  className="h-full w-full object-contain transition duration-300 ease-out group-hover:scale-150 group-hover:origin-bottom"
-                />
-              </div>
+            <div className="space-y-4">
+              {guide.steps.map((step, index) => (
+                <section
+                  key={`${guide.labId}-${index + 1}-${step.title}`}
+                  className="rounded-3xl border border-white/8 bg-[#020817] p-5 shadow-[0_24px_80px_rgba(2,6,23,0.55)]"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 font-mono text-sm font-semibold text-cyan-200">
+                      {String(index + 1).padStart(2, "0")}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-base font-semibold text-white">{step.title}</h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">{step.details}</p>
+
+                      <div className="mt-4 space-y-3">
+                        {step.commands.map((commandItem, commandIndex) => (
+                          <div
+                            key={`${commandItem.deviceId}-${commandIndex}-${commandItem.command}`}
+                            className="rounded-2xl border border-white/8 bg-slate-950/70 p-4"
+                          >
+                            <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
+                              {commandItem.deviceId}
+                            </p>
+                            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-xl bg-slate-900/70 px-4 py-3 font-mono text-sm leading-6 text-cyan-100">
+                              <code>{commandItem.command}</code>
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              ))}
             </div>
           )}
         </div>

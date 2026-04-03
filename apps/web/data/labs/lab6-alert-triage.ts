@@ -81,6 +81,7 @@ export const lab6Devices: LabDevice[] = [
       "show ufm events",
       "show ufm port leaf-rail5 swp7",
       "show ufm topology",
+      "reseat connector leaf-rail5 swp7",
       "help",
       "hint",
     ],

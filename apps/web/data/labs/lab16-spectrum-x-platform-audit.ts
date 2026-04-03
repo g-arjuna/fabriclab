@@ -18,6 +18,7 @@ export const lab16Devices: LabDevice[] = [
       "ip link show",
       "ip link show | grep mtu",
       "nv show router bgp",
+      "submit audit report",
       "help",
     ],
     position: { x: 300, y: 120 },

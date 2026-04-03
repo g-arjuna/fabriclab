@@ -385,6 +385,28 @@ Ready for Spectrum-X BGP unnumbered configuration in Lab 17.`,
 
 // ─── Task 6: help command ────────────────────────────────────────────────────
 
+export function handleSubmitAuditReport(): CommandResult {
+  const { setCondition, markVerified } = useLabStore.getState()
+  setCondition("auditReportComplete", true)
+  markVerified("auditReportComplete")
+
+  return {
+    output: `Audit report submitted.
+
+Summary:
+  NVUE / CL version: PASS
+  Port bring-up: PASS
+  ASIC identity and forwarding counters: PASS
+  MTU baseline: REQUIRES DAY-ZERO UPDATE TO 9216
+  BGP baseline: CLEAN
+
+Next action:
+  Proceed to the RoCE day-zero configuration workflow.`,
+    conceptId: "spectrum-x",
+    type: "success",
+  }
+}
+
 export function handleHelp(): CommandResult {
   return {
     output: `Lab 16 — Spectrum-X Platform Bring-Up Audit
@@ -395,7 +417,7 @@ Task 2 (port audit):  nv show interface | grep -E "swp|state"
 Task 3 (ASIC check):  decode-syseeprom · cl-netstat
 Task 4 (MTU check):   ip link show | grep mtu
 Task 5 (BGP check):   nv show router bgp
-Task 6:               Write audit report in the answer box
+Task 6 (submit):      submit audit report
 
 Run commands on the correct device (leaf-01, leaf-02, or storage-01).`,
     type: "info",

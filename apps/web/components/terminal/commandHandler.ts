@@ -74,6 +74,7 @@ import {
   handleNvShowInterfaceStorage,
   handleNvShowRouterBgp,
   handleNvVersion,
+  handleSubmitAuditReport,
 } from "@/lib/commands/lab16Handlers";
 import {
   handleClResourceQuery,
@@ -1092,6 +1093,7 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "cl-netstat": handleClNetstat,
   "ip link show | grep mtu": handleIpLinkShowMtuLeaf01,
   "nv show router bgp": handleNvShowRouterBgp,
+  "submit audit report": handleSubmitAuditReport,
   "show rdma links": showRdmaLinks,
   "show switch port rail0": () => showSwitchPort("rail0"),
   "show switch port rail1": () => showSwitchPort("rail1"),

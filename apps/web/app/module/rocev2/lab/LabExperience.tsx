@@ -102,7 +102,6 @@ const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
 };
 
 type LabId = keyof typeof LABS;
-const LABS_WITH_SOLUTION_REPLAYS = new Set<LabId>([lab0.id]);
 
 function DesktopRecommendationPrompt({ onDismiss }: { onDismiss: () => void }) {
   return (
@@ -216,7 +215,6 @@ export function LabExperience({ labId }: { labId: string }) {
   const activeLab = useMemo(() => LABS[labId as LabId] ?? lab1, [labId]);
   const activeDevices = useMemo(() => LAB_DEVICES[activeLab.id] ?? [], [activeLab.id]);
   const sourceChapter = LAB_SOURCE_CHAPTERS[activeLab.id];
-  const hasSolution = LABS_WITH_SOLUTION_REPLAYS.has(activeLab.id);
   const isLabComplete = useLabStore((state) => isComplete(state.lab, activeLab));
 
   useEffect(() => {
@@ -390,21 +388,19 @@ export function LabExperience({ labId }: { labId: string }) {
               </div>
             )}
 
-            {hasSolution && (
-              <div className="mt-4 rounded-2xl border border-white/8 bg-slate-900/60 p-4">
-                <p className="text-[10px] uppercase tracking-widest text-slate-500">Need Help?</p>
-                <p className="mt-2 text-xs leading-6 text-slate-400">
-                  Watch a recorded solution replay for this lab.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setSolutionOpen(true)}
-                  className="mt-3 w-full rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2.5 text-sm font-medium text-cyan-200 transition hover:border-cyan-300/30 hover:bg-cyan-400/15 hover:text-white"
-                >
-                  Show Solution
-                </button>
-              </div>
-            )}
+            <div className="mt-4 rounded-2xl border border-white/8 bg-slate-900/60 p-4">
+              <p className="text-[10px] uppercase tracking-widest text-slate-500">Need Help?</p>
+              <p className="mt-2 text-xs leading-6 text-slate-400">
+                Open the step-by-step command guide for this lab.
+              </p>
+              <button
+                type="button"
+                onClick={() => setSolutionOpen(true)}
+                className="mt-3 w-full rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2.5 text-sm font-medium text-cyan-200 transition hover:border-cyan-300/30 hover:bg-cyan-400/15 hover:text-white"
+              >
+                Show Solution
+              </button>
+            </div>
 
             <div className="mt-4">
               <CommunityThread
