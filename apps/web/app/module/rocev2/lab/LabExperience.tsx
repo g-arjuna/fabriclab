@@ -429,6 +429,11 @@ export function LabExperience({ labId }: { labId: string }) {
             <span className="hidden rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-xs text-amber-200 lg:inline-flex">
               Desktop recommended
             </span>
+            <DiscussionPulseButton
+              label="Report / Issue / Discuss"
+              onClick={() => setDiscussionOpen(true)}
+              className="hidden rounded-full px-4 py-2 text-[10px] lg:inline-flex"
+            />
             <AuthControls compact />
           </div>
         </header>
@@ -449,12 +454,6 @@ export function LabExperience({ labId }: { labId: string }) {
                 {activeLab.difficulty}
               </span>
             </div>
-
-            <DiscussionPulseButton
-              label="Report / Issue / Discuss"
-              onClick={() => setDiscussionOpen(true)}
-              className="mt-4 w-full"
-            />
 
             <div className="mt-3 rounded-xl border border-white/8 bg-slate-900/60 px-4 py-2">
               <p className="text-[10px] uppercase tracking-widest text-slate-500">Elapsed</p>
