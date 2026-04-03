@@ -219,49 +219,30 @@ function DiscussionPulseButton({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-2xl bg-amber-500/10 px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.22em] text-amber-200 transition hover:bg-amber-500/15 hover:text-amber-100 ${className}`}
+      className={`group inline-flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.16em] text-slate-300 transition hover:border-cyan-300/20 hover:bg-cyan-300/[0.06] hover:text-slate-100 ${className}`}
     >
-      <svg
-        className="pointer-events-none absolute inset-0 h-full w-full"
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <rect
-          x="1.5"
-          y="1.5"
-          width="97"
-          height="97"
-          rx="14"
-          ry="14"
-          fill="none"
-          stroke="rgba(251, 146, 60, 0.8)"
-          strokeWidth="1.5"
-          strokeDasharray="8 6"
-          className="lab-discussion-dash"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      <span className="relative flex items-center justify-between gap-3">
-        <span>{label}</span>
-        <span className="text-sm text-amber-300 transition group-hover:translate-x-0.5">
-          {"\u2197"}
+      <span className="flex min-w-0 items-center gap-2.5">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 bg-slate-900/60 text-cyan-200 transition group-hover:border-cyan-300/20 group-hover:text-cyan-100">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-3.5 w-3.5"
+            aria-hidden="true"
+          >
+            <path d="M7.5 18.5 4 20l1-3.6A7.2 7.2 0 0 1 3.5 12C3.5 7.86 7.31 4.5 12 4.5S20.5 7.86 20.5 12 16.69 19.5 12 19.5c-1.58 0-3.06-.38-4.5-1Z" />
+            <path d="M8.5 11.8h7" />
+            <path d="M8.5 14.5h4.2" />
+          </svg>
         </span>
+        <span>{label}</span>
       </span>
-      <style jsx>{`
-        .lab-discussion-dash {
-          animation: lab-discussion-march 1.2s linear infinite;
-        }
-
-        @keyframes lab-discussion-march {
-          from {
-            stroke-dashoffset: 0;
-          }
-          to {
-            stroke-dashoffset: -28;
-          }
-        }
-      `}</style>
+      <span className="text-sm text-slate-500 transition group-hover:translate-x-0.5 group-hover:text-cyan-200">
+        {"\u2192"}
+      </span>
     </button>
   );
 }
