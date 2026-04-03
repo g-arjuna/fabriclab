@@ -9,8 +9,7 @@ import { useLabStore } from "@/store/labStore"
 // ─── Task 1: nv --version ────────────────────────────────────────────────────
 
 export function handleNvVersion(): CommandResult {
-  const { setCondition, markVerified, topology } = useLabStore.getState()
-  const t = topology as any
+  const { setCondition, markVerified } = useLabStore.getState()
   setCondition("clVersionVerified", true)
   markVerified("clVersionVerified")
   return {
@@ -18,6 +17,20 @@ export function handleNvVersion(): CommandResult {
 Cumulus Linux 5.4.0
 Build: Cumulus Linux 5.4.0 2024-01-15T08:22:14+00:00
 git commit: a8f31c2e`,
+    conceptId: "nvue-version",
+    type: "success",
+  }
+}
+
+export function handleLsbRelease(): CommandResult {
+  const { setCondition, markVerified } = useLabStore.getState()
+  setCondition("clVersionVerified", true)
+  markVerified("clVersionVerified")
+
+  return {
+    output: `DISTRIB_ID="Cumulus Linux"
+DISTRIB_RELEASE=5.4.0
+DISTRIB_DESCRIPTION="Cumulus Linux 5.4.0"`,
     conceptId: "nvue-version",
     type: "success",
   }
@@ -304,7 +317,9 @@ export function handleClNetstat(): CommandResult {
     markVerified("asicHealthChecked")
   }
   return {
-    output: `Kernel Interface table
+    output: `sudo cl-netstat
+
+Kernel Interface table
 Iface      MTU    Met  RX-OK     RX-ERR  RX-DRP  RX-OVR  TX-OK     TX-ERR  TX-DRP  TX-OVR  Flags
 swp1       1500   0    0         0       0       0       0         0       0       0       BMRU
 swp2       1500   0    0         0       0       0       0         0       0       0       BMRU
@@ -338,17 +353,15 @@ export function handleIpLinkShowMtuLeaf01(): CommandResult {
   setCondition("mtuVerified", true)
   markVerified("mtuVerified")
   return {
-    output: `1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 ...
-2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...
-4: swp1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...   ← ACTION REQUIRED
-5: swp2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...   ← ACTION REQUIRED
-6: swp3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...   ← ACTION REQUIRED
-7: swp4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...   ← ACTION REQUIRED
-8: swp5: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...   ← ACTION REQUIRED
-9: swp6: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...   ← ACTION REQUIRED
-10: swp7: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...  ← ACTION REQUIRED
-11: swp8: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...  ← ACTION REQUIRED
-[... swp9–swp32 all mtu 1500 ...]
+    output: `swp1             UP             1500
+swp2             UP             1500
+swp3             UP             1500
+swp4             UP             1500
+swp5             UP             1500
+swp6             UP             1500
+swp7             UP             1500
+swp8             UP             1500
+[... swp9-swp32 all MTU 1500 ...]
 
 AUDIT RESULT: All server-facing ports at MTU 1500.
 Required: MTU 9216 on swp1-32 before RoCE configuration.

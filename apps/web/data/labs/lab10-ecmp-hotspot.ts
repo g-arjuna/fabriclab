@@ -3,16 +3,12 @@ import type { LabConfig, LabDevice } from "@/types"
 export const lab10Devices: LabDevice[] = [
   {
     id: "workstation",
-    type: "dgx",
-    label: "Engineering Workstation",
-    sublabel: "Linux shell · control-plane checks",
+    type: "ufm-server",
+    label: "NetQ Workstation",
+    sublabel: "NetQ CLI - ECMP health checks",
     prompt: "engineer@workstation:~$",
-    osLabel: "Ubuntu Workstation",
-    allowedCommands: [
-      "show fabric health",
-      "help",
-      "hint",
-    ],
+    osLabel: "Ubuntu Workstation + NetQ CLI",
+    allowedCommands: ["netq show ecmp", "help", "hint"],
     position: { x: 120, y: 60 },
     status: "up",
   },
@@ -20,14 +16,11 @@ export const lab10Devices: LabDevice[] = [
     id: "leaf1",
     type: "leaf-switch",
     label: "Leaf 1",
-    sublabel: "BGP edge · ECMP consumer",
-    prompt: "leaf1#",
+    sublabel: "Ingress leaf - ECMP consumer",
+    prompt: "cumulus@leaf1:~$",
     osLabel: "Cumulus Linux",
     allowedCommands: [
-      "show bgp summary",
-      "show bgp route 10.4.0.0/16",
-      "show bgp route 10.4.0.0/16 detail",
-      "show ip route 10.4.0.0/16",
+      "nv show vrf default router bgp address-family ipv4-unicast route 10.4.0.0/16",
       "help",
       "hint",
     ],
@@ -38,15 +31,14 @@ export const lab10Devices: LabDevice[] = [
     id: "spineB",
     type: "spine-switch",
     label: "Spine B",
-    sublabel: "Reduced capacity · one Leaf4 link down",
-    prompt: "spineB#",
+    sublabel: "Reduced capacity - one Leaf4 uplink down",
+    prompt: "cumulus@spineB:~$",
     osLabel: "Cumulus Linux",
     allowedCommands: [
-      "show interface counters",
-      "show interface counters after",
-      "show bgp neighbors 10.0.0.1",
-      "show bgp link-bandwidth",
-      "set bgp link-bandwidth community 1200",
+      "nv show interface swp54 link stats",
+      "nv show router policy route-map UCMP-LEAF4 rule 10 set",
+      "nv set router policy route-map UCMP-LEAF4 rule 10 set ext-community-bw multipaths",
+      "nv config apply",
       "help",
       "hint",
     ],
@@ -67,7 +59,8 @@ export const lab10: LabConfig = {
     + "its normal throughput. A Grafana alert fired: "
     + "'SpineB -> Leaf4 link utilisation 112% of capacity (impossible - check counters)'. "
     + "Your task: identify which spine is overloaded, why weighted ECMP is not active, "
-    + "and configure the BGP Link Bandwidth Community to restore balanced forwarding.",
+    + "and configure the BGP Link Bandwidth extended community policy so SpineB's reduced "
+    + "capacity is reflected in downstream UCMP route weights.",
   initialTopology: {
     nic: { name: "eth0", speed: 400, state: "up" },
     pfcEnabled: true,
@@ -83,5 +76,24 @@ export const lab10: LabConfig = {
     "bandwidthCommunityConfigured",
     "weightedEcmpVerified",
   ],
-  hints: [],
+  hints: [
+    {
+      level: 1,
+      text: "Start with the NetQ ECMP summary on the workstation, then compare it with SpineB's swp54 counters.",
+      triggerAfterMistakes: 1,
+      triggerAfterSeconds: 30,
+    },
+    {
+      level: 2,
+      text: "Leaf1's BGP route to 10.4.0.0/16 should tell you whether the SpineB next hop still has equal weight.",
+      triggerAfterMistakes: 2,
+      triggerAfterSeconds: 90,
+    },
+    {
+      level: 3,
+      text: "On SpineB, inspect the UCMP route-map set clause, stage ext-community-bw multipaths, apply it, then re-check the Leaf1 route.",
+      triggerAfterMistakes: 3,
+      triggerAfterSeconds: 180,
+    },
+  ],
 }

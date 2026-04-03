@@ -3,16 +3,12 @@ import type { LabConfig, LabDevice } from "@/types"
 export const lab11Devices: LabDevice[] = [
   {
     id: "workstation",
-    type: "dgx",
-    label: "Engineering Workstation",
-    sublabel: "Fabric overview · topology checks",
+    type: "ufm-server",
+    label: "NetQ Workstation",
+    sublabel: "NetQ CLI - BGP health checks",
     prompt: "engineer@workstation:~$",
-    osLabel: "Ubuntu Workstation",
-    allowedCommands: [
-      "show topology",
-      "help",
-      "hint",
-    ],
+    osLabel: "Ubuntu Workstation + NetQ CLI",
+    allowedCommands: ["netq check bgp", "help", "hint"],
     position: { x: 110, y: 60 },
     status: "up",
   },
@@ -20,13 +16,11 @@ export const lab11Devices: LabDevice[] = [
     id: "leaf1",
     type: "leaf-switch",
     label: "Leaf 1",
-    sublabel: "Ingress leaf · receives both paths",
-    prompt: "leaf1#",
+    sublabel: "Ingress leaf - receives both paths",
+    prompt: "cumulus@leaf1:~$",
     osLabel: "Cumulus Linux",
     allowedCommands: [
-      "show bgp route 10.2.0.0/16",
-      "show bgp route 10.2.0.0/16 after",
-      "show ip route 10.2.0.0/16",
+      "nv show vrf default router bgp address-family ipv4-unicast route 10.2.0.0/16",
       "help",
       "hint",
     ],
@@ -37,13 +31,14 @@ export const lab11Devices: LabDevice[] = [
     id: "spineA",
     type: "spine-switch",
     label: "Spine A",
-    sublabel: "Failed Leaf2 downlink · wrong ASN",
-    prompt: "spineA#",
+    sublabel: "Leaf2-facing link down - wrong ASN",
+    prompt: "cumulus@spineA:~$",
     osLabel: "Cumulus Linux",
     allowedCommands: [
-      "show bgp route 10.2.0.0/16",
-      "show bgp neighbors 10.0.0.2",
-      "set bgp local-as 65000",
+      "nv show vrf default router bgp address-family ipv4-unicast route 10.2.0.0/16",
+      "nv show vrf default router bgp neighbor 10.0.0.2",
+      "nv set router bgp autonomous-system 65000",
+      "nv config apply",
       "help",
       "hint",
     ],
@@ -55,11 +50,12 @@ export const lab11Devices: LabDevice[] = [
     type: "spine-switch",
     label: "Spine B",
     sublabel: "Carrying direct + suboptimal traffic",
-    prompt: "spineB#",
+    prompt: "cumulus@spineB:~$",
     osLabel: "Cumulus Linux",
     allowedCommands: [
-      "show interface counters",
-      "set bgp local-as 65000 spineb",
+      "nv show interface swp4 link stats",
+      "nv set router bgp autonomous-system 65000",
+      "nv config apply",
       "help",
       "hint",
     ],
@@ -79,7 +75,9 @@ export const lab11: LabConfig = {
     + "ago and is at 78% completion. Stopping it would waste ~18 hours of compute time. "
     + "A monitoring alert fired 20 minutes ago: 'SpineB -> Leaf2 link utilisation: 89%'. "
     + "Your task: determine why SpineB is overloaded despite no server-side changes, "
-    + "find the root cause in the BGP routing design, and implement the correct fix.",
+    + "find the root cause in the BGP routing design, and implement the correct fix. "
+    + "This lab intentionally includes a non-standard SpineA-SpineB eBGP peering so you can observe "
+    + "how mismatched spine ASNs let a failed-spine detour route survive.",
   initialTopology: {
     nic: { name: "eth0", speed: 400, state: "up" },
     pfcEnabled: true,
@@ -96,5 +94,24 @@ export const lab11: LabConfig = {
     "spineBAsnUnified",
     "postFixPathVerified",
   ],
-  hints: [],
+  hints: [
+    {
+      level: 1,
+      text: "Use NetQ first to scope the BGP failure, then inspect Leaf1's route to 10.2.0.0/16.",
+      triggerAfterMistakes: 1,
+      triggerAfterSeconds: 30,
+    },
+    {
+      level: 2,
+      text: "On SpineA, inspect the same prefix and the SpineA-SpineB neighbor. The detour exists because the two spines are in different ASNs.",
+      triggerAfterMistakes: 2,
+      triggerAfterSeconds: 90,
+    },
+    {
+      level: 3,
+      text: "Stage ASN 65000 on both spines with nv set router bgp autonomous-system 65000, apply it on each spine, then re-check Leaf1's route.",
+      triggerAfterMistakes: 3,
+      triggerAfterSeconds: 180,
+    },
+  ],
 }

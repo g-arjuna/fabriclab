@@ -1,6 +1,18 @@
 export function formatConditionLabel(key: string): string {
   const labels: Record<string, string> = {
     railIdentified: "Rail identified",
+    ufmRailMapChecked: "UFM rail map checked",
+    hcaInventoryChecked: "DGX HCA inventory checked",
+    rdmaNetdevMapChecked: "RDMA to netdev mapping checked",
+    eth0StateChecked: "eth0 Linux link state checked",
+    eth1StateChecked: "eth1 Linux link state checked",
+    leafRail0PortChecked: "leaf-rail0 swp1 checked",
+    leafRail1PortChecked: "leaf-rail1 swp1 checked",
+    roceCounterProfileChecked: "RoCE profile checked on swp1",
+    roceTrafficProbeRun: "ib_write_bw probe completed",
+    switchPfcCountersRead: "Switch PFC counters read",
+    switchRoceCountersRead: "Switch RoCE counters read",
+    hostNicCountersRead: "Host NIC counters read",
     linkConfirmed: "Link state confirmed",
     faultIsolated: "Fault isolated to switch port",
     pfcMissing: "PFC absence confirmed",

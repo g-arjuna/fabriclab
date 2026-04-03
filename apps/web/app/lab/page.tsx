@@ -10,6 +10,8 @@ import { getCatalogAccessState, getCurriculumCatalog } from "@/lib/catalog/runti
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 const SUPPORTED_LAB_IDS = new Set([
+  "lab0a-fabric-cli-orientation",
+  "lab0b-roce-counter-reading",
   "lab0-failed-rail",
   "lab1-pfc-fix",
   "lab2-congestion",
@@ -104,7 +106,7 @@ export default async function LabPage({ searchParams }: LabPageProps) {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full border border-white/10 bg-slate-950 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-slate-400">
-                          Lab {lab.number}
+                          Lab {lab.numberLabel ?? lab.number}
                         </span>
                         <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-300">
                           {lab.durationLabel}

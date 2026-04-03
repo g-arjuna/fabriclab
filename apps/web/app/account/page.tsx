@@ -4,6 +4,8 @@ import { NotificationPreferencesPanel } from "@/components/notifications/Notific
 import { PublicTopNav } from "@/components/layout/PublicTopNav";
 import { getServerViewer } from "@/lib/auth/server";
 
+export const dynamic = "force-dynamic";
+
 export default async function AccountPage() {
   const viewer = await getServerViewer();
 

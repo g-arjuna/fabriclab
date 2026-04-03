@@ -10,6 +10,8 @@ import { LabResult } from "@/components/lab/LabResult";
 import { SolutionModal } from "@/components/lab/SolutionModal";
 import { MultiDeviceTerminal } from "@/components/terminal/MultiDeviceTerminal";
 import { TopologyView } from "@/components/topology/TopologyView";
+import { lab0a, lab0aDevices } from "@/data/labs/lab0a-fabric-cli-orientation";
+import { lab0b, lab0bDevices } from "@/data/labs/lab0b-roce-counter-reading";
 import { lab0, lab0Devices } from "@/data/labs/lab0-failed-rail";
 import { lab1, lab1Devices } from "@/data/labs/lab1-pfc-fix";
 import { lab2, lab2Devices } from "@/data/labs/lab2-congestion";
@@ -33,6 +35,8 @@ import { useLabStore } from "@/store/labStore";
 import { useProgressStore } from "@/store/progressStore";
 
 const LABS = {
+  [lab0a.id]: lab0a,
+  [lab0b.id]: lab0b,
   [lab0.id]: lab0,
   [lab1.id]: lab1,
   [lab2.id]: lab2,
@@ -53,6 +57,8 @@ const LABS = {
 };
 
 const LAB_DEVICES = {
+  [lab0a.id]: lab0aDevices,
+  [lab0b.id]: lab0bDevices,
   [lab0.id]: lab0Devices,
   [lab1.id]: lab1Devices,
   [lab2.id]: lab2Devices,
@@ -73,6 +79,8 @@ const LAB_DEVICES = {
 };
 
 const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
+  [lab0a.id]: { slug: "ch3-the-cli", label: "Chapter 3: The CLI" },
+  [lab0b.id]: { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },
   [lab0.id]: { slug: "ch3-the-cli", label: "Chapter 3: The CLI" },
   [lab1.id]: { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },
   [lab2.id]: { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },

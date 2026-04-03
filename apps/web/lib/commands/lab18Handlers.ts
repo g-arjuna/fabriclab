@@ -1,90 +1,195 @@
 import type { CommandResult } from "@/types"
 import { useLabStore } from "@/store/labStore"
 
-export function handleLab18ShowEcnProfile(): CommandResult {
-  const { topology, setCondition, markVerified } = useLabStore.getState()
-  const t = topology as any
-  const minT = t.ecnMinThreshold ?? 10485760
-  const maxT = t.ecnMaxThreshold ?? 31457280
-  setCondition("thresholdInspected", true)
-  markVerified("thresholdInspected")
+const DEFAULT_ROCE_EGRESS_POOL_BYTES = 6291456
+
+function getThresholds(): { minThreshold: number; maxThreshold: number } {
+  const topology = useLabStore.getState().topology as any
   return {
-    output: `Profile: roce
-  Min Threshold:  ${minT} bytes (${(minT / (1024 * 1024)).toFixed(1)} MB)  ${minT > 6291456 ? '<- EXCEEDS TC3 buffer capacity!' : 'v'}
-  Max Threshold:  ${maxT} bytes (${(maxT / (1024 * 1024)).toFixed(1)} MB)  ${maxT > 6291456 ? '<- EXCEEDS TC3 buffer capacity!' : 'v'}
-  Mark Probability: linear
-  Mode: ECN only (no drops)
-  Applied to:     TC3 egress on all RoCE interfaces`,
-    type: minT > 6291456 ? "error" : "success",
+    minThreshold: topology.ecnMinThreshold ?? 10485760,
+    maxThreshold: topology.ecnMaxThreshold ?? 31457280,
   }
 }
 
-export function handleLab18ClResourceQuery(): CommandResult {
-  const { topology, setCondition, markVerified } = useLabStore.getState()
-  const t = topology as any
-  const minT = t.ecnMinThreshold ?? 10485760
-  const losslessBuffer = t.losslessBufferBytes ?? 6291456
-  const problemVisible = minT > losslessBuffer
+function getRoceEgressPoolBytes(): number {
+  const topology = useLabStore.getState().topology as any
+  return topology.losslessBufferBytes ?? DEFAULT_ROCE_EGRESS_POOL_BYTES
+}
+
+function formatBytes(value: number): string {
+  if (value >= 1024 * 1024) {
+    return `${(value / (1024 * 1024)).toFixed(2)} MB`
+  }
+  return `${(value / 1024).toFixed(2)} KB`
+}
+
+export function handleLab18ShowEcnProfile(): CommandResult {
+  const { setCondition, markVerified } = useLabStore.getState()
+  const { minThreshold, maxThreshold } = getThresholds()
+  const rocePoolBytes = getRoceEgressPoolBytes()
+  const exceedsPool = minThreshold > rocePoolBytes
+
+  setCondition("thresholdInspected", true)
+  markVerified("thresholdInspected")
+
+  return {
+    output: `Interface swp1
+  congestion-control
+    operational  applied
+    -----------  -------
+    ecn          enabled      enabled
+    min-threshold ${minThreshold} bytes (${formatBytes(minThreshold)})
+    max-threshold ${maxThreshold} bytes (${formatBytes(maxThreshold)})
+    probability   100
+
+${exceedsPool ? "Warning: TC3 ECN min-threshold is above the swp1 RoCE egress pool size." : "ECN thresholds are inside the swp1 RoCE egress pool budget."}`,
+    type: exceedsPool ? "error" : "success",
+  }
+}
+
+export function handleLab18ShowPoolMap(): CommandResult {
+  const { setCondition, markVerified } = useLabStore.getState()
+  const { minThreshold } = getThresholds()
+  const rocePoolBytes = getRoceEgressPoolBytes()
+  const problemVisible = minThreshold > rocePoolBytes
+
   if (problemVisible) {
     setCondition("problemIdentified", true)
     markVerified("problemIdentified")
   }
-  return {
-    output: `TCAM and Buffer Resources:
-  Per-port buffer headroom (TC3, lossless):
-    swp1: headroom=98304 bytes  xoff=81920  xon=32768
-  Total lossless buffer carved: ${losslessBuffer} bytes (6 MB)
-  Lossy buffer remaining: 41943040 bytes (40 MB)
 
-  ECN Profile: roce
-    min-threshold: ${minT} bytes (${(minT / (1024 * 1024)).toFixed(1)} MB)${problemVisible ? '  <- EXCEEDS lossless buffer (6 MB) â€” ECN will NEVER fire' : ''}
-    max-threshold: ${t.ecnMaxThreshold ?? 31457280} bytes (${((t.ecnMaxThreshold ?? 31457280) / (1024 * 1024)).toFixed(1)} MB)${problemVisible ? '  <- EXCEEDS lossless buffer (6 MB)' : ''}`,
+  return {
+    output: `Interface: swp1
+---------------------------------------------------------------------
+name                   mode      pool-id  traffic-class  size
+---------------------  --------  -------  -------------  --------
+lossy-default-ingress  DYNAMIC   2        -              40.00 MB
+roce-reserved-ingress  DYNAMIC   3        -              ${formatBytes(rocePoolBytes)}
+lossy-default-egress   DYNAMIC   13       0,6            40.00 MB
+roce-reserved-egress   DYNAMIC   14       3              ${formatBytes(rocePoolBytes)}
+
+${problemVisible ? `Problem: ECN min-threshold ${minThreshold} bytes is larger than the TC3 RoCE egress pool ${rocePoolBytes} bytes.` : "RoCE TC3 ECN thresholds now fit within the egress pool."}`,
     type: problemVisible ? "error" : "success",
+  }
+}
+
+export function handleLab18ClResourceQuery(): CommandResult {
+  return {
+    output:
+      "Use `nv show interface swp1 qos roce status pool-map` for RoCE pool sizing in this lab. `cl-resource-query` reports ASIC resource usage, not per-queue ECN thresholds.",
+    type: "info",
   }
 }
 
 export function handleLab18SetEcnMin(): CommandResult {
   const { topology, setTopology } = useLabStore.getState()
-  setTopology({ ...(topology as object), ecnMinThreshold: 500000 } as any)
-  return { output: `Staged: qos ecn profile roce min-threshold 500000\nRun 'nv config apply' to commit.`, type: "success" }
-}
 
-export function handleLab18SetEcnMax(): CommandResult {
-  const { topology, setTopology } = useLabStore.getState()
-  setTopology({ ...(topology as object), ecnMaxThreshold: 1500000 } as any)
-  return { output: `Staged: qos ecn profile roce max-threshold 1500000\nRun 'nv config apply' to commit.`, type: "success" }
-}
+  setTopology({
+    ...(topology as object),
+    ecnMinThreshold: 500000,
+  } as any)
 
-export function handleLab18ConfigApply(): CommandResult {
-  const { topology, setTopology, setCondition, markVerified } = useLabStore.getState()
-  const t = topology as any
-  const minT = t.ecnMinThreshold ?? 10485760
-  if (minT <= 500000 && (t.ecnMaxThreshold ?? 31457280) >= 1500000) {
-    setTopology({ ...(topology as object), thresholdFixed: true, ecnMarkingActive: true, configApplied: true } as any)
-    setCondition("thresholdFixed", true)
-    markVerified("thresholdFixed")
-  }
   return {
-    output: `Applying configuration...
-  Validating ECN thresholds... ${minT <= 6291456 ? 'OK' : 'WARNING: may exceed buffer'}
-  Pushing to Spectrum-4 ASIC... OK
-  ECN profile 'roce' updated on TC3 egress... OK
-Configuration applied successfully.`,
+    output:
+      "Staged: nv set qos congestion-control default-global traffic-class 3 min-threshold 500000\nRun `nv config apply` to commit.",
     type: "success",
   }
 }
 
-export function handleLab18EthtoolSwp1Ecn(): CommandResult {
+export function handleLab18SetEcnMax(): CommandResult {
+  const { topology, setTopology } = useLabStore.getState()
+
+  setTopology({
+    ...(topology as object),
+    ecnMaxThreshold: 1500000,
+  } as any)
+
+  return {
+    output:
+      "Staged: nv set qos congestion-control default-global traffic-class 3 max-threshold 1500000\nRun `nv config apply` to commit.",
+    type: "success",
+  }
+}
+
+export function handleLab18ConfigApply(): CommandResult {
+  const { topology, setTopology, setCondition, markVerified } = useLabStore.getState()
+  const { minThreshold, maxThreshold } = getThresholds()
+  const rocePoolBytes = getRoceEgressPoolBytes()
+  const thresholdFixed = minThreshold <= 500000 && maxThreshold >= 1500000
+
+  setTopology({
+    ...(topology as object),
+    thresholdFixed,
+    ecnMarkingActive: thresholdFixed,
+    configApplied: true,
+  } as any)
+
+  if (thresholdFixed) {
+    setCondition("thresholdFixed", true)
+    markVerified("thresholdFixed")
+  }
+
+  return {
+    output: `Applying configuration...
+  Validating ECN thresholds for TC3... ${minThreshold <= rocePoolBytes ? "OK" : "WARNING: min-threshold still exceeds the RoCE egress pool"}
+  Programming Spectrum-4 congestion-control profile... OK
+Configuration applied successfully.`,
+    type: thresholdFixed ? "success" : "error",
+  }
+}
+
+export function handleLab18ShowRoceCounters(): CommandResult {
   const { topology, setCondition, markVerified } = useLabStore.getState()
-  const marking = (topology as any).ecnMarkingActive && (topology as any).thresholdFixed
-  if (marking) {
+  const t = topology as any
+  const startedFlows = new Set<string>(t.lab18StartedFlows ?? [])
+  const markingActive = Boolean(t.ecnMarkingActive && t.thresholdFixed && startedFlows.size > 0)
+  const ecnMarkedPackets = markingActive ? 4829384 : 0
+  const pausePackets = markingActive ? 184 : 92144
+
+  if (markingActive) {
     setCondition("ecnMarkingVerified", true)
     markVerified("ecnMarkingVerified")
   }
+
   return {
-    output: `  tx_ecn_marked_pkts:   ${marking ? 4829384 : 0}${marking ? '  <- ECN active, DCQCN engaged v' : '  <- WARNING: ECN not marking. Fix thresholds first.'}
-  rx_ecn_ce_pkts:       0`,
-    type: marking ? "success" : "error",
+    output: `Interface: swp1
+-----------------------------
+rx-stats
+  rx-pfc-stats
+    pause-packets      0
+  rx-roce-stats
+    roce-packets       18429384
+    no-buffer-discard  0
+tx-stats
+  tx-pfc-stats
+    pause-packets      ${pausePackets}
+  tx-ecn-stats
+    ecn-marked-packets ${ecnMarkedPackets}
+
+${markingActive ? "ECN marks are rising and PFC pause pressure is dropping." : "ECN marks are still zero. Recheck TC3 thresholds and make sure at least one ib_write_bw stream is running."}`,
+    type: markingActive ? "success" : "error",
+  }
+}
+
+export function handleLab18EthtoolSwp1Ecn(): CommandResult {
+  return handleLab18ShowRoceCounters()
+}
+
+export function handleLab18ShowPfcCounters(): CommandResult {
+  const thresholdFixed = Boolean((useLabStore.getState().topology as any).thresholdFixed)
+
+  return {
+    output: `switch-priority  rx-pause-frames  rx-pause-duration  tx-pause-frames  tx-pause-duration
+---------------  ---------------  -----------------  ---------------  -----------------
+0                0                0 Bytes            0                0 Bytes
+1                0                0 Bytes            0                0 Bytes
+2                0                0 Bytes            0                0 Bytes
+3                0                0 Bytes            ${thresholdFixed ? "184" : "92144"}           ${thresholdFixed ? "36.0 KB" : "219.8 MB"}
+4                0                0 Bytes            0                0 Bytes
+5                0                0 Bytes            0                0 Bytes
+6                0                0 Bytes            0                0 Bytes
+7                0                0 Bytes            0                0 Bytes`,
+    type: thresholdFixed ? "success" : "error",
   }
 }
 
@@ -101,24 +206,26 @@ export function handleLab18ShowInterfaceCounters(): CommandResult {
   }
 }
 
-export function handleLab18IbWriteBwMulti(): CommandResult {
-  const fixed = (useLabStore.getState().topology as any).thresholdFixed ?? false
-  const bw = fixed ? 46.81 : 12.34
+export function handleLab18IbWriteBwMulti(adapterName = "mlx5_0"): CommandResult {
+  const { topology, setTopology } = useLabStore.getState()
+  const t = topology as any
+  const startedFlows = Array.from(new Set([...(t.lab18StartedFlows ?? []), adapterName])).sort()
+  const bw = t.thresholdFixed ? 46.81 : 12.34
+
+  setTopology({
+    ...(topology as object),
+    lab18StartedFlows: startedFlows,
+  } as any)
+
   return {
-    output: `[1] ib_write_bw started on mlx5_0
-[2] ib_write_bw started on mlx5_1
-[3] ib_write_bw started on mlx5_2
-[4] ib_write_bw started on mlx5_3
+    output: `[${startedFlows.length}] ib_write_bw started on ${adapterName}
+Command running in the background: ib_write_bw -d ${adapterName} --iters 10000 --size 65536 192.168.100.2
 
-Generating multi-flow congestion...
-[Check leaf-01: ethtool -S swp1 | grep ecn]
+Per-flow BW estimate:
+  ${adapterName}: ${bw} GB/s
 
-Per-flow BW:
-  mlx5_0: ${bw} GB/s
-  mlx5_1: ${bw} GB/s
-  mlx5_2: ${bw} GB/s
-  mlx5_3: ${bw} GB/s
-Total: ${(bw * 4).toFixed(1)} GB/s ${!fixed ? '<- degraded: PFC-only congestion control' : '<- DCQCN stabilizing all flows v'}`,
-    type: fixed ? "success" : "error",
+Active load generators: ${startedFlows.join(", ")}
+Switch check: nv show interface swp1 qos roce counters`,
+    type: t.thresholdFixed ? "success" : "info",
   }
 }

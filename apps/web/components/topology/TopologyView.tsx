@@ -16,6 +16,14 @@ export function TopologyView({ compact = false }: { compact?: boolean }) {
   const unevenSpine = useLabStore((state) => state.topology.unevenSpine ?? false);
 
   const diagram = (() => {
+    if (labId === "lab0a-fabric-cli-orientation") {
+      return <OrientationTopologyDiagram compact={compact} />;
+    }
+
+    if (labId === "lab0b-roce-counter-reading") {
+      return <CounterPrimerTopologyDiagram compact={compact} />;
+    }
+
     if (labId === "lab0-failed-rail" && rails && rails.length > 0) {
       return <RailTopologyDiagram rails={rails} compact={compact} />;
     }
@@ -611,6 +619,192 @@ function RailTopologyDiagram({ rails, compact = false }: { rails: RailState[]; c
           }
         }
       `}</style>
+    </section>
+  );
+}
+
+function OrientationTopologyDiagram({ compact = false }: { compact?: boolean }) {
+  return (
+    <section className="flex h-full flex-col rounded-3xl border border-white/10 bg-slate-950/80 p-4 text-slate-100 shadow-2xl shadow-slate-950/30 backdrop-blur">
+      <p className="text-xs uppercase tracking-[0.28em] text-slate-400">
+        Orientation topology - two DGX rails
+      </p>
+
+      <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-white/8 bg-slate-900/40 p-3">
+        <svg viewBox="0 0 560 320" width="100%" height="100%">
+          <rect
+            x="190"
+            y="12"
+            width="180"
+            height="44"
+            rx="14"
+            fill="#7c2d12"
+            stroke="#f59e0b"
+            strokeWidth="1.5"
+            onClick={() => handleDeviceClick("ufm-server")}
+            className="cursor-pointer transition-opacity hover:opacity-90"
+          />
+          <text x="280" y="40" textAnchor="middle" fill="#fed7aa" fontSize="14" fontWeight="700">
+            UFM Server
+          </text>
+
+          <line x1="280" y1="56" x2="280" y2="96" stroke="#f59e0b" strokeWidth="2" strokeDasharray="5 4" />
+
+          <rect
+            x="150"
+            y="96"
+            width="260"
+            height="60"
+            rx="18"
+            fill="#1d4ed8"
+            stroke="#60a5fa"
+            strokeWidth="1.5"
+            onClick={() => handleDeviceClick("dgx-node-01")}
+            className="cursor-pointer transition-opacity hover:opacity-90"
+          />
+          <text x="280" y="123" textAnchor="middle" fill="#eff6ff" fontSize="16" fontWeight="700">
+            DGX Node 01
+          </text>
+          <text x="280" y="144" textAnchor="middle" fill="#bfdbfe" fontSize="11">
+            mlx5_0 / eth0     mlx5_1 / eth1
+          </text>
+
+          <line x1="220" y1="156" x2="165" y2="212" stroke="#22c55e" strokeWidth="5" />
+          <line x1="340" y1="156" x2="395" y2="212" stroke="#22c55e" strokeWidth="5" />
+
+          <rect
+            x="84"
+            y="212"
+            width="162"
+            height="64"
+            rx="16"
+            fill="#14532d"
+            stroke="#22c55e"
+            strokeWidth="1.5"
+            onClick={() => handleDeviceClick("leaf-rail0")}
+            className="cursor-pointer transition-opacity hover:opacity-90"
+          />
+          <text x="165" y="237" textAnchor="middle" fill="#dcfce7" fontSize="15" fontWeight="700">
+            leaf-rail0
+          </text>
+          <text x="165" y="257" textAnchor="middle" fill="#bbf7d0" fontSize="11">
+            swp1 - Rail 0
+          </text>
+
+          <rect
+            x="314"
+            y="212"
+            width="162"
+            height="64"
+            rx="16"
+            fill="#14532d"
+            stroke="#22c55e"
+            strokeWidth="1.5"
+            onClick={() => handleDeviceClick("leaf-rail1")}
+            className="cursor-pointer transition-opacity hover:opacity-90"
+          />
+          <text x="395" y="237" textAnchor="middle" fill="#dcfce7" fontSize="15" fontWeight="700">
+            leaf-rail1
+          </text>
+          <text x="395" y="257" textAnchor="middle" fill="#bbf7d0" fontSize="11">
+            swp1 - Rail 1
+          </text>
+        </svg>
+      </div>
+
+      {!compact ? (
+        <div className="mt-4 grid grid-cols-3 gap-2 text-[11px] text-slate-300">
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-amber-200">UFM</p>
+            <p className="mt-1 leading-5 text-slate-300">Fabric-wide rail to endpoint mapping</p>
+          </div>
+          <div className="rounded-2xl border border-blue-400/20 bg-blue-400/10 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-blue-200">DGX OS</p>
+            <p className="mt-1 leading-5 text-slate-300">ibstat, RDMA mapping, Linux netdev state</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200">Cumulus</p>
+            <p className="mt-1 leading-5 text-slate-300">NVUE interface link state on swp1</p>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function CounterPrimerTopologyDiagram({ compact = false }: { compact?: boolean }) {
+  return (
+    <section className="flex h-full flex-col rounded-3xl border border-white/10 bg-slate-950/80 p-4 text-slate-100 shadow-2xl shadow-slate-950/30 backdrop-blur">
+      <p className="text-xs uppercase tracking-[0.28em] text-slate-400">
+        Lossless counter primer - single RoCE rail
+      </p>
+
+      <div className="mt-3 flex min-h-0 flex-1 items-center justify-center rounded-2xl border border-white/8 bg-slate-900/40 p-3">
+        <svg viewBox="0 0 560 320" width="100%" height="100%">
+          <rect
+            x="60"
+            y="126"
+            width="180"
+            height="68"
+            rx="18"
+            fill="#1d4ed8"
+            stroke="#60a5fa"
+            strokeWidth="1.5"
+            onClick={() => handleDeviceClick("dgx-node-01")}
+            className="cursor-pointer transition-opacity hover:opacity-90"
+          />
+          <text x="150" y="153" textAnchor="middle" fill="#eff6ff" fontSize="16" fontWeight="700">
+            DGX Node 01
+          </text>
+          <text x="150" y="174" textAnchor="middle" fill="#bfdbfe" fontSize="11">
+            mlx5_0 / eth0
+          </text>
+
+          <line x1="240" y1="160" x2="320" y2="160" stroke="#22c55e" strokeWidth="6" />
+          <text x="280" y="147" textAnchor="middle" fill="#86efac" fontSize="11">
+            400G RoCEv2
+          </text>
+          <text x="280" y="190" textAnchor="middle" fill="#67e8f9" fontSize="10">
+            ECN marks + PFC pauses, no drops
+          </text>
+
+          <rect
+            x="320"
+            y="126"
+            width="180"
+            height="68"
+            rx="18"
+            fill="#14532d"
+            stroke="#22c55e"
+            strokeWidth="1.5"
+            onClick={() => handleDeviceClick("leaf-rail0")}
+            className="cursor-pointer transition-opacity hover:opacity-90"
+          />
+          <text x="410" y="153" textAnchor="middle" fill="#dcfce7" fontSize="16" fontWeight="700">
+            leaf-rail0
+          </text>
+          <text x="410" y="174" textAnchor="middle" fill="#bbf7d0" fontSize="11">
+            swp1 to DGX + peer egress
+          </text>
+        </svg>
+      </div>
+
+      {!compact ? (
+        <div className="mt-4 grid grid-cols-3 gap-2 text-[11px] text-slate-300">
+          <div className="rounded-2xl border border-blue-400/20 bg-blue-400/10 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-blue-200">DGX probe</p>
+            <p className="mt-1 leading-5 text-slate-300">Run ib_write_bw, then inspect ethtool counters</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200">Switch PFC</p>
+            <p className="mt-1 leading-5 text-slate-300">Read priority-3 pause frames on swp1</p>
+          </div>
+          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-200">Switch ECN</p>
+            <p className="mt-1 leading-5 text-slate-300">Check RoCE counters and no-buffer-discard</p>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

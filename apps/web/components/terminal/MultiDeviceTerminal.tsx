@@ -5,6 +5,19 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Terminal as XTerm } from '@xterm/xterm'
 
 import { handleCommand } from '@/components/terminal/commandHandler'
+import {
+  ARROW_DOWN_SEQUENCE,
+  ARROW_UP_SEQUENCE,
+  TAB_SEQUENCE,
+  appendTerminalInput,
+  autocompleteTerminalInput,
+  recallCommandHistory,
+  rememberSubmittedCommand,
+  replaceTerminalInput,
+  resetCompletionState,
+  scheduleClipboardPasteFallback,
+  type CompletionState,
+} from '@/components/terminal/terminalInputHelpers'
 import { useLabStore } from '@/store/labStore'
 import type { DeviceType, LabDevice } from '@/types'
 
@@ -58,6 +71,9 @@ function DeviceTerminalPane({
   const termRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const inputBufferRef = useRef('')
+  const commandHistoryRef = useRef<string[]>([])
+  const historyIndexRef = useRef<number | null>(null)
+  const completionStateRef = useRef<CompletionState | null>(null)
   const initialised = useRef(false)
   const appendToDeviceHistory = useLabStore((state) => state.appendToDeviceHistory)
   const theme = DEVICE_THEME[device.type]
@@ -85,6 +101,18 @@ function DeviceTerminalPane({
       const fitAddon = new FitAddon()
       terminal.loadAddon(fitAddon)
       terminal.open(containerRef.current)
+      terminal.attachCustomKeyEventHandler((event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') {
+          scheduleClipboardPasteFallback(terminal, inputBufferRef, completionStateRef)
+          return true
+        }
+
+        if (event.key === 'Tab' || event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          event.preventDefault()
+        }
+
+        return true
+      })
 
       requestAnimationFrame(() => {
         fitAddon.fit()
@@ -108,12 +136,9 @@ function DeviceTerminalPane({
         const customEvent = event as CustomEvent<{ command: string; deviceId?: string }>
         if (customEvent.detail.deviceId && customEvent.detail.deviceId !== device.id) return
         const command = customEvent.detail.command
-        while (inputBufferRef.current.length > 0) {
-          inputBufferRef.current = inputBufferRef.current.slice(0, -1)
-          terminal.write('\b \b')
-        }
-        inputBufferRef.current = command
-        terminal.write(command)
+        replaceTerminalInput(terminal, inputBufferRef, command)
+        resetCompletionState(completionStateRef)
+        historyIndexRef.current = null
       }
       window.addEventListener('insert-command', handleInsert as EventListener)
 
@@ -140,8 +165,48 @@ function DeviceTerminalPane({
             })
           }
 
+          rememberSubmittedCommand(
+            commandHistoryRef,
+            historyIndexRef,
+            completionStateRef,
+            input,
+          )
           inputBufferRef.current = ''
           writePrompt()
+          return
+        }
+
+        if (data === ARROW_UP_SEQUENCE) {
+          recallCommandHistory(
+            terminal,
+            inputBufferRef,
+            commandHistoryRef,
+            historyIndexRef,
+            completionStateRef,
+            'previous',
+          )
+          return
+        }
+
+        if (data === ARROW_DOWN_SEQUENCE) {
+          recallCommandHistory(
+            terminal,
+            inputBufferRef,
+            commandHistoryRef,
+            historyIndexRef,
+            completionStateRef,
+            'next',
+          )
+          return
+        }
+
+        if (data === TAB_SEQUENCE) {
+          autocompleteTerminalInput(
+            terminal,
+            inputBufferRef,
+            device.allowedCommands,
+            completionStateRef,
+          )
           return
         }
 
@@ -150,13 +215,16 @@ function DeviceTerminalPane({
             inputBufferRef.current = inputBufferRef.current.slice(0, -1)
             terminal.write('\b \b')
           }
+          resetCompletionState(completionStateRef)
           return
         }
 
-        if (/[\x20-\x7e]/.test(data)) {
-          inputBufferRef.current += data
-          terminal.write(data)
-        }
+        appendTerminalInput(
+          terminal,
+          inputBufferRef,
+          completionStateRef,
+          data,
+        )
       })
 
       resizeObserver = new ResizeObserver(() => fitAddon.fit())

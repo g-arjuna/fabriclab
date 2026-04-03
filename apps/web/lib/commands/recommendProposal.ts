@@ -51,10 +51,10 @@ Proposal B cannot connect all 64 DGX nodes.
 The fabric is physically undersized. Even at $0.3M less,
 it delivers a cluster that only works at half scale.
 
-Run 'calculate oversubscription b' again and compare
+Run 'python3 fabric-sizing.py --proposal b' again and compare
 the NIC ports available vs required.
 
-Then use 'recommend proposal a' to submit the correct choice.`,
+Then use 'python3 fabric-sizing.py --recommend a' to submit the correct choice.`,
     conceptId: "rocev2",
     type: "error",
   };

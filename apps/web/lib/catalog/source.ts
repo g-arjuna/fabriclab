@@ -15,6 +15,7 @@ export type SourceCatalogItem = {
   kind: CatalogKind;
   slug: string;
   number: number;
+  numberLabel?: string;
   title: string;
   href: string;
   durationMinutes: number;

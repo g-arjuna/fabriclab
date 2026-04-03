@@ -218,8 +218,7 @@ export async function signInWithSession(page: Page, email = smokeEmail) {
       {
         name: getSessionCookieName(),
         value: session!,
-        domain: new URL(appUrl).hostname,
-        path: "/",
+        url: appUrl,
         httpOnly: true,
         sameSite: "Lax",
         secure: appUrl.startsWith("https://"),

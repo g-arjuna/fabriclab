@@ -3,6 +3,9 @@ import { useLabStore } from "@/store/labStore";
 
 export function ethtoolStats(): CommandResult {
   const {
+    lab,
+    markVerified,
+    setCondition,
     topology: { congestionDetected, ecnEnabled, nic, pfcEnabled, silentCongestion },
   } = useLabStore.getState();
 
@@ -22,6 +25,11 @@ export function ethtoolStats(): CommandResult {
   // rx_ecn_marked: only when ECN is enabled AND there is congestion
   const rxEcnMarked = ecnEnabled && (congestionDetected || hasSilentCongestion)
     ? "2947" : "0";
+
+  if (lab.labId === "lab1-pfc-fix" && congestionDetected && !pfcEnabled) {
+    setCondition("nicDropsChecked", true);
+    markVerified("nicDropsChecked");
+  }
 
   return {
     output: `NIC statistics (ConnectX-7 · ${nic.name}):

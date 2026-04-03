@@ -28,13 +28,13 @@ Spine switches:
 Cluster capacity:
   DGX nodes supported:   32 leaf x 16 downlinks = 512 NIC ports
   At 8 NICs per DGX:     512 / 8 = 64 DGX nodes  OK
-  Switch hops (one-way): 2 (DGX → Leaf → Spine)
+  Switch hops (one-way): 2 (DGX -> Leaf -> Spine)
   AllReduce traversals:  4 links per reduce-scatter round-trip
   Total switch count:    32 leaf + 16 spine = 48 switches
 
 Vendor price:   $1.2M
 
-Next: run 'calculate oversubscription a' to check the ratio.`,
+Next: run 'python3 fabric-sizing.py --proposal a' to check the ratio.`,
     conceptId: "rocev2",
     type: "info",
   };
@@ -67,12 +67,12 @@ Spine switches:
 Cluster capacity:
   DGX nodes supported:   8 leaf x 32 downlinks = 256 NIC ports
   At 8 NICs per DGX:     256 / 8 = 32 DGX nodes  FAIL  (need 64, have 32)
-  AllReduce hops:        2 (same as Proposal A)
+  Switch hops (one-way): 2 (DGX -> Leaf -> Spine)
   Total switch count:    8 leaf + 32 spine = 40 switches
 
 Vendor price:   $0.9M
 
-Next: run 'calculate oversubscription b' to check the ratio.`,
+Next: run 'python3 fabric-sizing.py --proposal b' to check the ratio.`,
     conceptId: "rocev2",
     type: "info",
   };

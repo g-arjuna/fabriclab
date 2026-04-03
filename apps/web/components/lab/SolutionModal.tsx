@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getSolutionGuide } from "@/data/labs/solutionGuides";
 
@@ -13,9 +13,11 @@ type SolutionModalProps = {
 
 export function SolutionModal({ isOpen, onClose, labId, title }: SolutionModalProps) {
   const guide = useMemo(() => getSolutionGuide(labId), [labId]);
+  const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
+    setCopiedCommand(null);
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -26,6 +28,38 @@ export function SolutionModal({ isOpen, onClose, labId, title }: SolutionModalPr
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onClose]);
+
+  const copyCommand = async (command: string) => {
+    let didCopy = false;
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(command);
+        didCopy = true;
+      } catch {
+        didCopy = false;
+      }
+    }
+
+    if (!didCopy) {
+      const textArea = document.createElement("textarea");
+      textArea.value = command;
+      textArea.setAttribute("readonly", "true");
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      didCopy = document.execCommand("copy");
+      document.body.removeChild(textArea);
+    }
+
+    if (!didCopy) {
+      return;
+    }
+
+    setCopiedCommand(command);
+    window.setTimeout(() => setCopiedCommand(null), 1200);
+  };
 
   if (!isOpen) return null;
 
@@ -82,9 +116,19 @@ export function SolutionModal({ isOpen, onClose, labId, title }: SolutionModalPr
                             key={`${commandItem.deviceId}-${commandIndex}-${commandItem.command}`}
                             className="rounded-2xl border border-white/8 bg-slate-950/70 p-4"
                           >
-                            <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
-                              {commandItem.deviceId}
-                            </p>
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">
+                                {commandItem.deviceId}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => void copyCommand(commandItem.command)}
+                                className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.24em] text-slate-300 transition hover:border-cyan-400/30 hover:text-cyan-100"
+                                aria-label={`Copy command: ${commandItem.command}`}
+                              >
+                                {copiedCommand === commandItem.command ? "Copied" : "Copy"}
+                              </button>
+                            </div>
                             <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-xl bg-slate-900/70 px-4 py-3 font-mono text-sm leading-6 text-cyan-100">
                               <code>{commandItem.command}</code>
                             </pre>

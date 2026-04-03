@@ -1,3 +1,5 @@
+import { lab0a, lab0aDevices } from "@/data/labs/lab0a-fabric-cli-orientation";
+import { lab0b, lab0bDevices } from "@/data/labs/lab0b-roce-counter-reading";
 import { lab0, lab0Devices } from "@/data/labs/lab0-failed-rail";
 import { lab1, lab1Devices } from "@/data/labs/lab1-pfc-fix";
 import { lab2, lab2Devices } from "@/data/labs/lab2-congestion";
@@ -19,14 +21,47 @@ import { calculateOversubscriptionA, calculateOversubscriptionB } from "@/lib/co
 import { compareProposals } from "@/lib/commands/compareProposals";
 import { ibstat } from "@/lib/commands/ibstat";
 import { ethtoolStats, ethtoolStatsEth3 } from "@/lib/commands/ethtoolStats";
-import { ethtoolStatsPauseStorm, showInterfaceCountersPauseStorm } from "@/lib/commands/lab7Handlers";
+import {
+  ethtoolStatsPauseStorm,
+  handleLab7NvShowInterfaceSwp1CountersQosPfcStats,
+  handleLab7NvShowQosCongestionControlTc3,
+  showInterfaceCountersPauseStorm,
+} from "@/lib/commands/lab7Handlers";
 import {
   ethtoolStatsPriorityMismatch,
+  handleLab8NvShowInterfaceSwp1QosPfc,
+  handleLab8NvShowQosRoce,
   showDcbPfcWithPriority,
   showRocePriorityMismatch,
 } from "@/lib/commands/lab8Handlers";
-import { ethtoolStatsEth2, noShutdown, replaceOpticRail2 } from "@/lib/commands/lab9Handlers";
 import {
+  clearProtodownReasonSwp3,
+  clearProtodownSwp3,
+  ethtoolStatsEth2,
+  handleLab9NvShowInterfaceSwp3Link,
+  noShutdown,
+  replaceOpticRail2,
+  showUfmTopologyLab9,
+} from "@/lib/commands/lab9Handlers";
+import {
+  handleLab10Leaf1ShowBgpRoute,
+  handleLab10NetqShowEcmp,
+  handleLab10SetExtCommunityBwMultipaths,
+  handleLab10SpineBInterfaceSwp54LinkStats,
+  handleLab10SpineBShowRouteMapSet,
+} from "@/lib/commands/lab10Handlers";
+import {
+  handleLab11Leaf1ShowRoute,
+  handleLab11NetqCheckBgp,
+  handleLab11SetSpineAsn,
+  handleLab11SpineAShowNeighbor,
+  handleLab11SpineAShowRoute,
+  handleLab11SpineBInterfaceSwp4LinkStats,
+} from "@/lib/commands/lab11Handlers";
+import {
+  configureRouteMapDscp10,
+  configureSegmentList,
+  configureSrtePolicy,
   ping6Spine02,
   ping6Spine03,
   ping6StorageSid,
@@ -69,6 +104,7 @@ import {
   handleDecodeSyseepromLeaf01,
   handleDecodeSyseepromStorage,
   handleIpLinkShowMtuLeaf01,
+  handleLsbRelease,
   handleNvShowInterfaceLeaf01,
   handleNvShowInterfaceLeaf02,
   handleNvShowInterfaceStorage,
@@ -76,6 +112,55 @@ import {
   handleNvVersion,
   handleSubmitAuditReport,
 } from "@/lib/commands/lab16Handlers";
+import {
+  nvShowInterfaceLinkFlapProtectionLab0,
+  nvShowInterfaceLinkLab0,
+  nvShowInterfaceStatusLab0,
+  showUfmTopologyLab0,
+} from "@/lib/commands/lab0Handlers";
+import {
+  handleLab0aEthtool,
+  handleLab0aIbstat,
+  handleLab0aIpLinkShow,
+  handleLab0aLeafSwp1Link,
+  handleLab0aRdmaLinkShow,
+  handleLab0aShowUfmTopology,
+} from "@/lib/commands/lab0aHandlers";
+import {
+  handleLab0bEthtoolEth0,
+  handleLab0bIbWriteBw,
+  handleLab0bShowPfcStats,
+  handleLab0bShowRoceCounters,
+  handleLab0bShowRoceStatus,
+} from "@/lib/commands/lab0bHandlers";
+import {
+  handleLab1NvShowInterfaceSwp1CountersQosPfcStats,
+  handleLab1NvShowInterfaceSwp1QosPfc,
+  handleLab1NvShowQosRoce,
+} from "@/lib/commands/lab1Handlers";
+import {
+  handleLab2EthtoolEth0,
+  handleLab2NvShowInterfaceSwp1CountersQosPfcStats,
+  handleLab2NvShowQosCongestionControlDefaultGlobal,
+  handleLab2NvShowQosCongestionControlTc3,
+  isLab2Active,
+} from "@/lib/commands/lab2Handlers";
+import {
+  handleLab3LeafUplinkCounters,
+  handleLab3NvShowInterfaceAdaptiveRouting,
+  handleLab3NvShowRouterAdaptiveRouting,
+  handleLab3SpineSwp1Counters,
+} from "@/lib/commands/lab3Handlers";
+import {
+  handleLab6DcgmDmonGpu5,
+  handleLab6DgxEthtoolEth5,
+  handleLab6LeafSwp7Ethtool,
+  handleLab6LeafSwp7Link,
+  handleLab6LeafSwp7PfcStats,
+  handleLab6ReseatConnector,
+  handleLab6UfmHighBerPorts,
+  handleLab6UfmLeafRail5Ports,
+} from "@/lib/commands/lab6Handlers";
 import {
   handleClResourceQuery,
   handleEthtoolMlx5Grep,
@@ -105,6 +190,9 @@ import {
   handleLab18SetEcnMin,
   handleLab18ShowEcnProfile,
   handleLab18ShowInterfaceCounters,
+  handleLab18ShowPfcCounters,
+  handleLab18ShowPoolMap,
+  handleLab18ShowRoceCounters,
 } from "@/lib/commands/lab18Handlers";
 import { ncclDebugTransport } from "@/lib/commands/ncclDebugTransport";
 import { recommendProposalA, recommendProposalB } from "@/lib/commands/recommendProposal";
@@ -124,6 +212,7 @@ import { showRoce } from "@/lib/commands/showRoce";
 import { runNcclTests } from "@/lib/commands/runNcclTests";
 import {
   ETHTOOL_STATS_COMMAND,
+  ETHTOOL_STATS_ETH1_COMMAND,
   ETHTOOL_STATS_ETH2_COMMAND,
   ETHTOOL_STATS_ETH3_COMMAND,
   ETHTOOL_STATS_ETH5_COMMAND,
@@ -135,6 +224,8 @@ import type { CommandResult, DeviceType, LabConfig, LabDevice } from "@/types";
 import { useLabStore } from "@/store/labStore";
 
 const LAB_CONFIGS: Record<string, LabConfig> = {
+  [lab0a.id]: lab0a,
+  [lab0b.id]: lab0b,
   [lab0.id]: lab0,
   [lab1.id]: lab1,
   [lab2.id]: lab2,
@@ -155,6 +246,8 @@ const LAB_CONFIGS: Record<string, LabConfig> = {
 };
 
 const LAB_DEVICES: Record<string, LabDevice[]> = {
+  [lab0a.id]: lab0aDevices,
+  [lab0b.id]: lab0bDevices,
   [lab0.id]: lab0Devices,
   [lab1.id]: lab1Devices,
   [lab2.id]: lab2Devices,
@@ -175,6 +268,8 @@ const LAB_DEVICES: Record<string, LabDevice[]> = {
 };
 
 const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
+  [lab0a.id]: [...new Set(lab0aDevices.map((device) => device.type))],
+  [lab0b.id]: [...new Set(lab0bDevices.map((device) => device.type))],
   [lab0.id]: [...new Set(lab0Devices.map((device) => device.type))],
   [lab1.id]: [...new Set(lab1Devices.map((device) => device.type))],
   [lab2.id]: [...new Set(lab2Devices.map((device) => device.type))],
@@ -195,6 +290,8 @@ const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
 };
 
 const LAB_CHAPTER_LINKS: Record<string, { slug: string; label: string }> = {
+  [lab0a.id]: { slug: "ch3-the-cli", label: "Chapter 3: The CLI" },
+  [lab0b.id]: { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },
   [lab0.id]: { slug: "ch3-the-cli", label: "Chapter 3: The CLI" },
   [lab1.id]: { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },
   [lab2.id]: { slug: "ch5-pfc-ecn-congestion", label: "Chapter 5: PFC & ECN" },
@@ -257,10 +354,81 @@ function showUfmEventsByLab(): CommandResult {
     : showUfmEvents();
 }
 
+function showUfmTopologyByLab(): CommandResult {
+  const labId = useLabStore.getState().lab.labId;
+  if (labId === lab0a.id) {
+    return handleLab0aShowUfmTopology();
+  }
+  if (labId === lab0.id) {
+    return showUfmTopologyLab0();
+  }
+  if (labId === lab9.id) {
+    return showUfmTopologyLab9();
+  }
+  return showUfmTopology();
+}
+
 function showQosEcnProfileByLab(): CommandResult {
-  return useLabStore.getState().lab.labId === lab18.id
-    ? handleLab18ShowEcnProfile()
-    : handleNvShowQosEcnProfile();
+  const labId = useLabStore.getState().lab.labId;
+  if (labId === lab0b.id) {
+    return handleLab0bShowRoceStatus();
+  }
+  return labId === lab18.id ? handleLab18ShowEcnProfile() : handleNvShowQosEcnProfile();
+}
+
+function showNvInterfaceSwp1QosRoceCountersByLab(): CommandResult {
+  const labId = useLabStore.getState().lab.labId;
+  if (labId === lab0b.id) {
+    return handleLab0bShowRoceCounters();
+  }
+  return labId === lab18.id ? handleLab18ShowRoceCounters() : handleEthtoolSwp1Ecn();
+}
+
+function showNvQosRoceByLab(): CommandResult {
+  const labId = useLabStore.getState().lab.labId;
+  if (labId === lab1.id) {
+    return handleLab1NvShowQosRoce();
+  }
+  if (labId === lab8.id) {
+    return handleLab8NvShowQosRoce();
+  }
+  return handleNvShowQosRoce();
+}
+
+function showNvInterfaceSwp1QosPfcByLab(): CommandResult {
+  const labId = useLabStore.getState().lab.labId;
+  if (labId === lab8.id) {
+    return handleLab8NvShowInterfaceSwp1QosPfc();
+  }
+  if (labId === lab17.id) {
+    return handleNvShowQosPfc();
+  }
+  return handleLab1NvShowInterfaceSwp1QosPfc();
+}
+
+function showNvInterfaceSwp1CountersQosPfcStatsByLab(): CommandResult {
+  const labId = useLabStore.getState().lab.labId;
+  if (labId === lab0b.id) {
+    return handleLab0bShowPfcStats();
+  }
+  if (labId === lab7.id) {
+    return handleLab7NvShowInterfaceSwp1CountersQosPfcStats();
+  }
+  if (labId === lab18.id) {
+    return handleLab18ShowPfcCounters();
+  }
+  if (labId === lab17.id) {
+    return handleNvShowInterfaceCountersPfc();
+  }
+  return isLab2Active()
+    ? handleLab2NvShowInterfaceSwp1CountersQosPfcStats()
+    : handleLab1NvShowInterfaceSwp1CountersQosPfcStats();
+}
+
+function showNvQosCongestionControlTc3ByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab7.id
+    ? handleLab7NvShowQosCongestionControlTc3()
+    : handleLab2NvShowQosCongestionControlTc3();
 }
 
 function showClResourceQueryByLab(): CommandResult {
@@ -273,6 +441,71 @@ function showEthtoolSwp1EcnByLab(): CommandResult {
   return useLabStore.getState().lab.labId === lab18.id
     ? handleLab18EthtoolSwp1Ecn()
     : handleEthtoolSwp1Ecn();
+}
+
+function showNvInterfaceSwp1LinkStatsByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab3.id
+    ? handleLab3SpineSwp1Counters()
+    : handleLab18ShowInterfaceCounters();
+}
+
+function ibstatByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab0a.id
+    ? handleLab0aIbstat()
+    : ibstat();
+}
+
+function rdmaLinkShowByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab0a.id
+    ? handleLab0aRdmaLinkShow()
+    : rdmaLinkShow();
+}
+
+function ipLinkShowEth0ByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab0a.id
+    ? handleLab0aIpLinkShow("eth0")
+    : handleIpLinkShow();
+}
+
+function ethtoolStatsEth0ByLab(): CommandResult {
+  const labId = useLabStore.getState().lab.labId;
+  if (labId === lab0a.id) {
+    return handleLab0aEthtool("eth0");
+  }
+  if (labId === lab0b.id) {
+    return handleLab0bEthtoolEth0();
+  }
+  return ethtoolStatsByLab();
+}
+
+function nvShowInterfaceSwp1LinkByLab(): CommandResult {
+  if (useLabStore.getState().lab.labId === lab0a.id) {
+    return handleLab0aLeafSwp1Link();
+  }
+
+  return {
+    output:
+      "This lab does not expose 'nv show interface swp1 link'. Type 'help' on the active device to see the platform-native commands available here.",
+    type: "info",
+  };
+}
+
+function ibWriteBwByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab0b.id
+    ? handleLab0bIbWriteBw()
+    : handleIbWriteBw();
+}
+
+function showNvInterfaceSwp54LinkStatsByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab10.id
+    ? handleLab10SpineBInterfaceSwp54LinkStats()
+    : handleLab3LeafUplinkCounters("swp54");
+}
+
+function showLab11BgpRouteByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "spineA"
+    ? handleLab11SpineAShowRoute()
+    : handleLab11Leaf1ShowRoute();
 }
 
 function showNvInterfaceByDevice(): CommandResult {
@@ -320,10 +553,19 @@ function ethtoolStatsByLab(): CommandResult {
   if (labId === lab7.id || pauseStorm) {
     return ethtoolStatsPauseStorm();
   }
+  if (labId === lab2.id) {
+    return handleLab2EthtoolEth0();
+  }
   if (labId === lab8.id) {
     return ethtoolStatsPriorityMismatch();
   }
   return ethtoolStats();
+}
+
+function ethtoolStatsEth5ByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab6.id
+    ? handleLab6DgxEthtoolEth5()
+    : ethtoolStatsEth5();
 }
 
 export function showUfmPorts(): CommandResult {
@@ -1019,13 +1261,22 @@ Route convergence in ~15 seconds.`,
 }
 
 const EXACT_HANDLERS: Record<string, () => CommandResult> = {
-  ibstat: ibstat,
+  ibstat: ibstatByLab,
   "show fabric health": showFabricHealth,
+  "netq show ecmp": handleLab10NetqShowEcmp,
+  "netq check bgp": handleLab11NetqCheckBgp,
   "show bgp summary": showBgpSummary,
   "show bgp route 10.4.0.0/16": showBgpRouteLeaf4,
   "show bgp route 10.4.0.0/16 detail": showBgpRouteLeaf4Detail,
   "show bgp route 10.2.0.0/16": showBgpRouteLeaf2ByDevice,
   "show bgp route 10.2.0.0/16 after": showBgpRouteLeaf2After,
+  "nv show vrf default router bgp address-family ipv4-unicast route 10.4.0.0/16":
+    handleLab10Leaf1ShowBgpRoute,
+  "nv show vrf default router bgp address-family ipv4-unicast route 10.2.0.0/16":
+    showLab11BgpRouteByDevice,
+  "nv show router policy route-map UCMP-LEAF4 rule 10 set":
+    handleLab10SpineBShowRouteMapSet,
+  "nv show vrf default router bgp neighbor 10.0.0.2": handleLab11SpineAShowNeighbor,
   "show ip route 10.4.0.0/16": showIpRouteLeaf4,
   "show ip route 10.2.0.0/16": showIpRouteLeaf2,
   "show ip route vrf STORAGE": showIpRouteVrfStorage,
@@ -1034,14 +1285,18 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "show bgp link-bandwidth": showBgpLinkBandwidth,
   "show proposal a": showProposalA,
   "show proposal b": showProposalB,
+  "cat proposal-a.txt": showProposalA,
+  "cat proposal-b.txt": showProposalB,
   "show topology": showTopologyByLab,
   "show isis neighbor": showIsisNeighbor,
   "show isis srv6 node": showIsisSrv6Node,
+  "show isis segment-routing srv6 node": showIsisSrv6Node,
   "show segment-routing srv6 sid": showSegmentRoutingSrv6SidByDevice,
   "show sr-te segment-list": showSrteSegmentList,
   "show sr-te policy": showSrtePolicy,
   "show ip policy": showIpPolicy,
   "show route-map STEER-CHECKPOINT": showRouteMapSteerCheckpoint,
+  "show route-map SET_SR_POLICY": showRouteMapSteerCheckpoint,
   "show mtu": showMtu,
   "show srv6 packets": showSrv6PacketsByDevice,
   "show mr info": showMrInfo,
@@ -1058,40 +1313,119 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
     useLabStore.getState().lab.labId === lab17.id || useLabStore.getState().lab.labId === lab18.id
       ? handleNvShowQosTrustDscpMap()
       : showQosTrustDscpMap(),
+  "nv show qos trust dscp-map": () =>
+    useLabStore.getState().lab.labId === lab17.id || useLabStore.getState().lab.labId === lab18.id
+      ? handleNvShowQosTrustDscpMap()
+      : showQosTrustDscpMap(),
+  "nv show qos roce prio-map": handleNvShowQosTrustDscpMap,
   "nv show interface swp1 qos": () =>
     useLabStore.getState().lab.labId === lab17.id || useLabStore.getState().lab.labId === lab18.id
       ? handleNvShowInterfaceQos()
       : nvShowInterfaceSwp1Qos(),
   "nv set interface swp1-32 qos roce": () => runMutation("nv set interface swp1-32 qos roce"),
+  "nv set qos roce": () => runMutation("nv set qos roce"),
+  "nv set qos congestion-control default-global traffic-class 3 ecn enabled": () =>
+    runMutation("nv set qos congestion-control default-global traffic-class 3 ecn enabled"),
   "nv config apply": () => runMutation("nv config apply"),
   "nv config save": () => runMutation("nv config save"),
-  "nv show qos roce": handleNvShowQosRoce,
+  "nv show qos roce": showNvQosRoceByLab,
+  "nv show interface swp1 qos pfc": showNvInterfaceSwp1QosPfcByLab,
+  "nv show interface swp1 counters qos pfc-stats":
+    showNvInterfaceSwp1CountersQosPfcStatsByLab,
+  "nv show qos congestion-control default-global":
+    handleLab2NvShowQosCongestionControlDefaultGlobal,
+  "nv show qos congestion-control default-global traffic-class 3":
+    showNvQosCongestionControlTc3ByLab,
   "nv show qos ecn profile roce": showQosEcnProfileByLab,
+  "nv show interface swp1 qos roce status": showQosEcnProfileByLab,
+  "nv show interface swp1 qos roce status pool-map": handleLab18ShowPoolMap,
+  "nv show interface swp1 qos roce counters": showNvInterfaceSwp1QosRoceCountersByLab,
   "nv show qos pfc": handleNvShowQosPfc,
   "nv show qos scheduler": handleNvShowQosScheduler,
+  "nv show router adaptive-routing": handleLab3NvShowRouterAdaptiveRouting,
+  "nv show interface status": nvShowInterfaceStatusLab0,
+  "nv show interface swp1 link": nvShowInterfaceSwp1LinkByLab,
+  "nv show interface swp2 link": () => nvShowInterfaceLinkLab0("swp2"),
+  "nv show interface swp3 link": () =>
+    useLabStore.getState().lab.labId === lab9.id
+      ? handleLab9NvShowInterfaceSwp3Link()
+      : nvShowInterfaceLinkLab0("swp3"),
+  "nv show interface swp4 link": () => nvShowInterfaceLinkLab0("swp4"),
+  "nv show interface swp5 link": () => nvShowInterfaceLinkLab0("swp5"),
+  "nv show interface swp6 link": () => nvShowInterfaceLinkLab0("swp6"),
+  "nv show interface swp7 link": () =>
+    useLabStore.getState().lab.labId === lab6.id
+      ? handleLab6LeafSwp7Link()
+      : nvShowInterfaceLinkLab0("swp7"),
+  "nv show interface swp8 link": () => nvShowInterfaceLinkLab0("swp8"),
+  "nv show interface swp9 link": () => nvShowInterfaceLinkLab0("swp9"),
+  "nv show interface swp2 link flap-protection": () =>
+    nvShowInterfaceLinkFlapProtectionLab0("swp2"),
+  "nv show interface swp3 link flap-protection": () =>
+    nvShowInterfaceLinkFlapProtectionLab0("swp3"),
+  "nv show interface swp4 link flap-protection": () =>
+    nvShowInterfaceLinkFlapProtectionLab0("swp4"),
+  "nv show interface swp5 link flap-protection": () =>
+    nvShowInterfaceLinkFlapProtectionLab0("swp5"),
+  "nv show interface swp6 link flap-protection": () =>
+    nvShowInterfaceLinkFlapProtectionLab0("swp6"),
+  "nv show interface swp7 link flap-protection": () =>
+    nvShowInterfaceLinkFlapProtectionLab0("swp7"),
+  "nv show interface swp8 link flap-protection": () =>
+    nvShowInterfaceLinkFlapProtectionLab0("swp8"),
+  "nv show interface swp9 link flap-protection": () =>
+    nvShowInterfaceLinkFlapProtectionLab0("swp9"),
   "nv show interface swp1 counters pfc": handleNvShowInterfaceCountersPfc,
+  "nv show interface swp51 link stats": () => handleLab3LeafUplinkCounters("swp51"),
+  "nv show interface swp52 link stats": () => handleLab3LeafUplinkCounters("swp52"),
+  "nv show interface swp53 link stats": () => handleLab3LeafUplinkCounters("swp53"),
+  "nv show interface swp54 link stats": showNvInterfaceSwp54LinkStatsByLab,
+  "nv show interface swp4 link stats": handleLab11SpineBInterfaceSwp4LinkStats,
+  "nv show interface swp51 router adaptive-routing": handleLab3NvShowInterfaceAdaptiveRouting,
   "cl-resource-query": showClResourceQueryByLab,
+  "sudo cl-resource-query": showClResourceQueryByLab,
   "ethtool -S swp1 | grep ecn": showEthtoolSwp1EcnByLab,
-  "ib_write_bw -d mlx5_0 --iters 5000 --size 65536 192.168.100.2": handleIbWriteBw,
+  "ib_write_bw -d mlx5_0 --iters 5000 --size 65536 192.168.100.2": ibWriteBwByLab,
   "ib_write_lat -d mlx5_0 --iters 10000 192.168.100.2": handleIbWriteLat,
-  "ip link show eth0": handleIpLinkShow,
+  "ip link show eth0": ipLinkShowEth0ByLab,
+  "ip link show eth1": () => handleLab0aIpLinkShow("eth1"),
   "ethtool -S mlx5_0 | grep -E 'ecn|pfc|retry'": handleEthtoolMlx5Grep,
+  "ethtool -S eth0 | grep -E 'ecn|pfc|retry'": handleEthtoolMlx5Grep,
   "nv set qos ecn profile roce min-threshold 500000": () => runMutation("nv set qos ecn profile roce min-threshold 500000"),
   "nv set qos ecn profile roce max-threshold 1500000": () => runMutation("nv set qos ecn profile roce max-threshold 1500000"),
-  "ib_write_bw -d mlx5_0 --iters 10000 --size 65536 192.168.100.2 &": handleLab18IbWriteBwMulti,
-  "ib_write_bw -d mlx5_1 --iters 10000 --size 65536 192.168.100.2 &": handleLab18IbWriteBwMulti,
-  "ib_write_bw -d mlx5_2 --iters 10000 --size 65536 192.168.100.2 &": handleLab18IbWriteBwMulti,
-  "ib_write_bw -d mlx5_3 --iters 10000 --size 65536 192.168.100.2 &": handleLab18IbWriteBwMulti,
+  "nv set qos congestion-control default-global traffic-class 3 min-threshold 500000": () =>
+    runMutation("nv set qos congestion-control default-global traffic-class 3 min-threshold 500000"),
+  "nv set qos congestion-control default-global traffic-class 3 max-threshold 1500000": () =>
+    runMutation("nv set qos congestion-control default-global traffic-class 3 max-threshold 1500000"),
+  "sudo vtysh -f /etc/frr/checkpoint-segment-list.conf": configureSegmentList,
+  "sudo vtysh -f /etc/frr/checkpoint-srte-policy.conf": configureSrtePolicy,
+  "sudo vtysh -f /etc/frr/checkpoint-color-route-map.conf": configureRouteMapDscp10,
+  "ib_write_bw -d mlx5_0 --iters 10000 --size 65536 192.168.100.2 &": () =>
+    handleLab18IbWriteBwMulti("mlx5_0"),
+  "ib_write_bw -d mlx5_1 --iters 10000 --size 65536 192.168.100.2 &": () =>
+    handleLab18IbWriteBwMulti("mlx5_1"),
+  "ib_write_bw -d mlx5_2 --iters 10000 --size 65536 192.168.100.2 &": () =>
+    handleLab18IbWriteBwMulti("mlx5_2"),
+  "ib_write_bw -d mlx5_3 --iters 10000 --size 65536 192.168.100.2 &": () =>
+    handleLab18IbWriteBwMulti("mlx5_3"),
+  "nv show interface swp1 link stats": showNvInterfaceSwp1LinkStatsByLab,
   "nv show interface swp1 counters": handleLab18ShowInterfaceCounters,
   "show gvmi table": showGvmiTable,
   "show ufm pkey table": showUfmPkeyTable,
+  "curl -ks 'https://ufm-server/ufmRest/resources/pkeys/0x8001'": showUfmPkeyTable,
+  "curl -ks 'https://ufm-server/ufmRest/resources/pkeys/0x8002'": showUfmPkeyTable,
   "nv --version": handleNvVersion,
+  "cat /etc/lsb-release": handleLsbRelease,
   "cl-platform-info": handleClPlatformInfo,
+  "nv show platform": handleClPlatformInfo,
   "nv show interface": showNvInterfaceByDevice,
   "nv show interface | grep -E \"swp|state\"": showNvInterfaceByDevice,
   "decode-syseeprom": decodeSyseepromByDevice,
   "cl-netstat": handleClNetstat,
+  "sudo cl-netstat": handleClNetstat,
   "ip link show | grep mtu": handleIpLinkShowMtuLeaf01,
+  "ip -br link show": handleIpLinkShowMtuLeaf01,
+  "ip -br link show | grep swp": handleIpLinkShowMtuLeaf01,
   "nv show router bgp": handleNvShowRouterBgp,
   "submit audit report": handleSubmitAuditReport,
   "show rdma links": showRdmaLinks,
@@ -1137,32 +1471,53 @@ For per-port counters on this switch, use:
     type: "error" as const,
   }),
   "show nccl env": showNcclEnv,
+  "env | grep '^NCCL_'": showNcclEnv,
   "show spine counters": showSpineCounters,
   "show ufm ports": showUfmPorts,
+  "curl -ks 'https://ufm-server/ufmRest/resources/ports?high_ber_only=true&active=true'":
+    handleLab6UfmHighBerPorts,
   "show ufm alarms": showUfmAlarms,
   "show ufm events": showUfmEventsByLab,
   "show ufm port leaf-rail5 swp7": showUfmPortDetail,
-  "show ufm topology": showUfmTopology,
+  "curl -ks 'https://ufm-server/ufmRest/resources/ports?system=leaf-rail5&active=true'":
+    handleLab6UfmLeafRail5Ports,
+  "show ufm topology": showUfmTopologyByLab,
   "show dcgm gpu5": showDcgmGpu5,
+  "dcgmi dmon -i 5 -c 1": handleLab6DcgmDmonGpu5,
+  "dcgmi dmon -i 5 -c 1 -e 1001,1004,1005": handleLab6DcgmDmonGpu5,
   "show dcgm all": showDcgmAll,
   "show pfc pause-stats": showPfcPauseStats,
+  "nv show interface swp7 counters qos pfc-stats": handleLab6LeafSwp7PfcStats,
   "show interface counters": showInterfaceCountersByLab,
   "show interface swp7": () =>
     useLabStore.getState().lab.labId === lab6.id ? showInterfaceSwp7() : showActiveLeafSwitchPort(),
-  [ETHTOOL_STATS_COMMAND]: ethtoolStatsByLab,
+  [ETHTOOL_STATS_COMMAND]: ethtoolStatsEth0ByLab,
+  [ETHTOOL_STATS_ETH1_COMMAND]: () => handleLab0aEthtool("eth1"),
   [ETHTOOL_STATS_ETH2_COMMAND]: ethtoolStatsEth2,
   [ETHTOOL_STATS_ETH3_COMMAND]: ethtoolStatsEth3,
-  [ETHTOOL_STATS_ETH5_COMMAND]: ethtoolStatsEth5,
+  [ETHTOOL_STATS_ETH5_COMMAND]: ethtoolStatsEth5ByLab,
+  "ethtool -S swp7": handleLab6LeafSwp7Ethtool,
   "nccl-debug --transport": ncclDebugTransport,
-  "rdma link show": rdmaLinkShow,
+  "rdma link show": rdmaLinkShowByLab,
   "run nccl-tests": runNcclTests,
+  "NCCL_DEBUG=INFO mpirun -np 128 -N 8 /opt/nccl-tests/build/all_reduce_perf -b 8G -e 8G -f 2 -g 1":
+    runNcclTests,
   "calculate oversubscription a": calculateOversubscriptionA,
   "calculate oversubscription b": calculateOversubscriptionB,
+  "python3 fabric-sizing.py --proposal a": calculateOversubscriptionA,
+  "python3 fabric-sizing.py --proposal b": calculateOversubscriptionB,
   "compare proposals": compareProposals,
+  "python3 fabric-sizing.py --compare": compareProposals,
   "recommend proposal a": recommendProposalA,
   "recommend proposal b": recommendProposalB,
   "recommend proposal": () => ({
-    output: "Specify which proposal: 'recommend proposal a' or 'recommend proposal b'",
+    output: "Specify which proposal: 'python3 fabric-sizing.py --recommend a' or '--recommend b'",
+    type: "info" as const,
+  }),
+  "python3 fabric-sizing.py --recommend a": recommendProposalA,
+  "python3 fabric-sizing.py --recommend b": recommendProposalB,
+  "python3 fabric-sizing.py --recommend": () => ({
+    output: "Specify which proposal: 'python3 fabric-sizing.py --recommend a' or '--recommend b'",
     type: "info" as const,
   }),
   "show roce": showRoceByLab,
@@ -1181,25 +1536,61 @@ For per-port counters on this switch, use:
     runMutation("set nccl ib-hca mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"),
   "set nccl socket-ifname": () => runMutation("set nccl socket-ifname"),
   "set nccl socket-ifname eno1": () => runMutation("set nccl socket-ifname eno1"),
+  "export NCCL_IB_HCA=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1":
+    () =>
+      runMutation(
+        "export NCCL_IB_HCA=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1",
+      ),
+  "export NCCL_SOCKET_IFNAME=eno1": () =>
+    runMutation("export NCCL_SOCKET_IFNAME=eno1"),
   "enable gid filter": () => runMutation("enable gid filter"),
   "ibv_reg_mr rotate": () => runMutation("ibv_reg_mr rotate"),
   "rkey scan": () => runMutation("rkey scan"),
   "set bgp link-bandwidth community 1200": setBgpLinkBandwidthCommunity,
   "set bgp local-as 65000": setBgpLocalAsSpineA,
   "set bgp local-as 65000 spineb": setBgpLocalAsSpineB,
+  "nv set router policy route-map UCMP-LEAF4 rule 10 set ext-community-bw multipaths":
+    handleLab10SetExtCommunityBwMultipaths,
+  "nv set router bgp autonomous-system 65000": () =>
+    handleLab11SetSpineAsn(
+      useLabStore.getState().activeDeviceId === "spineB" ? "spineB" : "spineA",
+    ),
   "clear counters": () => runMutation("clear counters"),
   "show interface counters after": showInterfaceCountersAfter,
   "replace optic rail2": replaceOpticRail2,
   "no shutdown": noShutdown,
+  "sudo ./ops/replace-osfp.sh leaf-rail2 swp3": replaceOpticRail2,
+  "sudo ip link set swp3 protodown_reason linkflap off":
+    clearProtodownReasonSwp3,
+  "sudo ip link set swp3 protodown off": clearProtodownSwp3,
   "reseat connector leaf-rail5 swp7": reseatConnector,
+  "sudo ./ops/reseat-dac.sh leaf-rail5 swp7": handleLab6ReseatConnector,
   "set pkey tenanta 0x8001": setPkeyTenantA,
   "set pkey tenantb 0x8002": setPkeyTenantB,
+  "curl -ks -X PUT 'https://ufm-server/ufmRest/resources/pkeys/0x8001/guids/506b4b0300a1b200'":
+    setPkeyTenantA,
+  "curl -ks -X PUT 'https://ufm-server/ufmRest/resources/pkeys/0x8002/guids/506b4b0300a1b202'":
+    setPkeyTenantB,
+  "nv set interface swp51 router adaptive-routing enable on": () =>
+    runMutation("nv set interface swp51 router adaptive-routing enable on"),
+  "nv set interface swp52 router adaptive-routing enable on": () =>
+    runMutation("nv set interface swp52 router adaptive-routing enable on"),
+  "nv set interface swp53 router adaptive-routing enable on": () =>
+    runMutation("nv set interface swp53 router adaptive-routing enable on"),
+  "nv set interface swp54 router adaptive-routing enable on": () =>
+    runMutation("nv set interface swp54 router adaptive-routing enable on"),
   "traceroute6 checkpoint dscp10": traceroute6CheckpointDscp10,
   "traceroute6 nccl dscp26": traceroute6NcclDscp26,
   "ping6 spine02 sid": ping6Spine02,
   "ping6 spine03 sid": ping6Spine03,
   "ping6 storage sid": ping6StorageSid,
+  "traceroute 10.100.0.1": traceroute6CheckpointDscp10,
+  "traceroute 10.20.0.11": traceroute6NcclDscp26,
+  "ping -6 2001:db8:0:spine02::1 -c 3": ping6Spine02,
+  "ping -6 2001:db8:0:spine03::1 -c 3": ping6Spine03,
+  "ping -6 2001:db8:0:lsrv::100 -c 3": ping6StorageSid,
   "tcpdump srh swp1": tcpdumpSrhByDevice,
+  "sudo tcpdump -ni swp1 'ip6 and ip6[6] == 43' -c 20": tcpdumpSrhByDevice,
   ping: () => ({
     output: `ping: ICMP reachability is not the diagnostic tool here.
 

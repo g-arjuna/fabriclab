@@ -669,6 +669,51 @@
   "labs": [
     {
       "kind": "lab",
+      "slug": "lab0a-fabric-cli-orientation",
+      "number": 0,
+      "numberLabel": "0A",
+      "title": "Fabric CLI orientation",
+      "href": "/lab?lab=lab0a-fabric-cli-orientation",
+      "durationMinutes": 12,
+      "durationLabel": "12 min",
+      "tags": [
+        "CLI",
+        "UFM",
+        "DGX OS",
+        "Cumulus",
+        "Rail mapping"
+      ],
+      "description": "A no-incident calibration lab. Learn how UFM, DGX OS, Linux netdev names, and Cumulus NVUE each describe the same two-rail fabric before you start troubleshooting failures.",
+      "previewSummary": "Build the mental map that connects mlx5 HCAs, ethX netdevs, swp ports, and rail labels.",
+      "defaultPublished": true,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch3-the-cli"
+    },
+    {
+      "kind": "lab",
+      "slug": "lab0b-roce-counter-reading",
+      "number": 0,
+      "numberLabel": "0B",
+      "title": "Read RoCE lossless counters",
+      "href": "/lab?lab=lab0b-roce-counter-reading",
+      "durationMinutes": 15,
+      "durationLabel": "15 min",
+      "tags": [
+        "PFC",
+        "ECN",
+        "RoCE counters",
+        "ib_write_bw"
+      ],
+      "description": "A healthy-link counter drill. Run a short RDMA write probe, then correlate switch-side PFC and RoCE counters with DGX ethtool counters so ECN marks, PFC pauses, and zero-drop behavior become familiar before incident labs.",
+      "previewSummary": "Learn what good lossless RoCE telemetry looks like before you troubleshoot bad telemetry.",
+      "defaultPublished": true,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch5-pfc-ecn-congestion"
+    },
+    {
+      "kind": "lab",
       "slug": "lab0-failed-rail",
       "number": 0,
       "title": "Identify the failed rail",

@@ -5,6 +5,10 @@ import { lab2 } from "@/data/labs/lab2-congestion";
 import { lab3 } from "@/data/labs/lab3-uneven-spine";
 import { lab4 } from "@/data/labs/lab4-topology-sizing";
 import { lab5 } from "@/data/labs/lab5-nccl-diagnosis";
+import { lab7 } from "@/data/labs/lab7-pause-storm";
+import { lab8 } from "@/data/labs/lab8-pfc-priority-mismatch";
+import { lab10 } from "@/data/labs/lab10-ecmp-hotspot";
+import { lab11 } from "@/data/labs/lab11-bgp-path-failure";
 import { lab14 } from "@/data/labs/lab14-srv6-te-path-steering";
 import { lab15 } from "@/data/labs/lab15-rdma-rkey-exposure";
 import { lab16 } from "@/data/labs/lab16-spectrum-x-platform-audit";
@@ -17,10 +21,32 @@ import {
   configureSrtePolicy,
 } from "@/lib/commands/lab14Handlers";
 import {
+  handleLab1NvConfigApply,
+  handleLab1NvSetQosRoce,
+} from "@/lib/commands/lab1Handlers";
+import {
+  handleLab2NvConfigApply,
+  handleLab2NvSetQosCongestionControlTc3EcnEnabled,
+} from "@/lib/commands/lab2Handlers";
+import {
+  handleLab3EnableAdaptiveRouting,
+  handleLab3NvConfigApply,
+} from "@/lib/commands/lab3Handlers";
+import {
+  handleLab7NvConfigApply,
+  handleLab7NvSetQosCongestionControlTc3EcnEnabled,
+} from "@/lib/commands/lab7Handlers";
+import {
   enableGidFilter,
   ibvRegMrRotate,
   rkeyScan,
 } from "@/lib/commands/lab15Handlers";
+import {
+  handleLab8NvConfigApply,
+  handleLab8NvSetQosRoce,
+} from "@/lib/commands/lab8Handlers";
+import { handleLab10NvConfigApply } from "@/lib/commands/lab10Handlers";
+import { handleLab11NvConfigApply } from "@/lib/commands/lab11Handlers";
 import {
   handleNvConfigApply,
   handleNvConfigSave,
@@ -39,6 +65,8 @@ const LAB_CONFIGS = {
   [lab3.id]: lab3,
   [lab4.id]: lab4,
   [lab5.id]: lab5,
+  [lab10.id]: lab10,
+  [lab11.id]: lab11,
   [lab14.id]: lab14,
   [lab15.id]: lab15,
   [lab16.id]: lab16,
@@ -118,6 +146,7 @@ export function runMutation(command: string): CommandResult {
         bufferUtilPct: 30,
       } as typeof store.topology);
       store.setCondition("lbEnabled", true);
+      store.markVerified("lbEnabled");
       return {
         output: "Per-packet load balancing enabled. RSHP active.\n"
           + "AllReduce traffic will now be distributed across all\n"
@@ -127,27 +156,28 @@ export function runMutation(command: string): CommandResult {
         type: "success",
       };
     case "set nccl ib-hca":
-    case "set nccl ib-hca mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7": {
-      const socketAlreadyFixed = (store.topology as any).ncclSocketIfname === "eno1";
+    case "set nccl ib-hca mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7":
+    case "export NCCL_IB_HCA=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1": {
       store.setTopology({
         ...(store.topology as object),
         ncclIbHca: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1",
-        ncclTransport: socketAlreadyFixed ? "net" : (store.topology as any).ncclTransport,
-        ncclTestsFixed: socketAlreadyFixed,
-        ncclTestsBusbw: socketAlreadyFixed ? 146.6 : (store.topology as any).ncclTestsBusbw,
+        ncclTransport: "net",
+        ncclTestsFixed: true,
+        ncclTestsBusbw: 146.6,
       } as typeof store.topology);
       store.setCondition("hcaFixed", true);
       store.markVerified("hcaFixed");
       return {
         output: "NCCL_IB_HCA set to: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1\n"
           + "This matches the RoCEv2 RDMA device names from rdma link show.\n"
-          + "Also fix NCCL_SOCKET_IFNAME if not done: set nccl socket-ifname eno1",
+          + "NET/IB transport is now available. Also set NCCL_SOCKET_IFNAME=eno1 so NCCL bootstrap stays on the management network.",
         conceptId: "rocev2",
         type: "success",
       };
     }
     case "set nccl socket-ifname":
-    case "set nccl socket-ifname eno1": {
+    case "set nccl socket-ifname eno1":
+    case "export NCCL_SOCKET_IFNAME=eno1": {
       const hcaAlreadyFixed = (store.topology as any).ncclIbHca?.includes("mlx5_0:1");
       store.setTopology({
         ...(store.topology as object),
@@ -162,8 +192,8 @@ export function runMutation(command: string): CommandResult {
         output: "NCCL_SOCKET_IFNAME set to: eno1 (management ethernet)\n"
           + (
             hcaAlreadyFixed
-              ? "Both env variables are now correct. Run: run nccl-tests to verify."
-              : "Still need to fix NCCL_IB_HCA. Run: set nccl ib-hca mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
+              ? "Both env variables are now correct. Rerun all_reduce_perf with NCCL_DEBUG=INFO to verify NET/IB transport."
+              : "Still need to fix NCCL_IB_HCA. Run: export NCCL_IB_HCA=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1"
           ),
         conceptId: "rocev2",
         type: "success",
@@ -200,7 +230,41 @@ export function runMutation(command: string): CommandResult {
       return applyRouteMapSwp14();
     case "nv set interface swp1-32 qos roce":
       return handleNvSetRoce();
+    case "nv set qos roce":
+      if (store.lab.labId === lab17.id) {
+        return handleNvSetRoce();
+      }
+      if (store.lab.labId === lab8.id) {
+        return handleLab8NvSetQosRoce();
+      }
+      return handleLab1NvSetQosRoce();
+    case "nv set qos congestion-control default-global traffic-class 3 ecn enabled":
+      if (store.lab.labId === lab7.id) {
+        return handleLab7NvSetQosCongestionControlTc3EcnEnabled();
+      }
+      return handleLab2NvSetQosCongestionControlTc3EcnEnabled();
     case "nv config apply":
+      if (store.lab.labId === lab1.id) {
+        return handleLab1NvConfigApply();
+      }
+      if (store.lab.labId === lab2.id) {
+        return handleLab2NvConfigApply();
+      }
+      if (store.lab.labId === lab3.id) {
+        return handleLab3NvConfigApply();
+      }
+      if (store.lab.labId === lab7.id) {
+        return handleLab7NvConfigApply();
+      }
+      if (store.lab.labId === lab8.id) {
+        return handleLab8NvConfigApply();
+      }
+      if (store.lab.labId === lab10.id) {
+        return handleLab10NvConfigApply();
+      }
+      if (store.lab.labId === lab11.id) {
+        return handleLab11NvConfigApply();
+      }
       return store.lab.labId === lab18.id ? handleLab18ConfigApply() : handleNvConfigApply();
     case "nv config save":
       return handleNvConfigSave();
@@ -208,12 +272,24 @@ export function runMutation(command: string): CommandResult {
       return handleLab18SetEcnMin();
     case "nv set qos ecn profile roce max-threshold 1500000":
       return handleLab18SetEcnMax();
+    case "nv set qos congestion-control default-global traffic-class 3 min-threshold 500000":
+      return handleLab18SetEcnMin();
+    case "nv set qos congestion-control default-global traffic-class 3 max-threshold 1500000":
+      return handleLab18SetEcnMax();
     case "enable gid filter":
       return enableGidFilter();
     case "ibv_reg_mr rotate":
       return ibvRegMrRotate();
     case "rkey scan":
       return rkeyScan();
+    case "nv set interface swp51 router adaptive-routing enable on":
+      return handleLab3EnableAdaptiveRouting("swp51");
+    case "nv set interface swp52 router adaptive-routing enable on":
+      return handleLab3EnableAdaptiveRouting("swp52");
+    case "nv set interface swp53 router adaptive-routing enable on":
+      return handleLab3EnableAdaptiveRouting("swp53");
+    case "nv set interface swp54 router adaptive-routing enable on":
+      return handleLab3EnableAdaptiveRouting("swp54");
     case "help":
       return {
         output: `Available commands:

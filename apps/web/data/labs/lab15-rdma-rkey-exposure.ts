@@ -1,36 +1,15 @@
 import type { LabConfig, LabDevice } from "@/types"
 
-// ─── Devices ──────────────────────────────────────────────────────────────────
-// Topology:
-//   tenanta-node  — victim node: MR owner, GID filter disabled initially
-//   tenantb-node  — attacker perspective: runs rkey_scan
-//   leaf-switch   — SN5600, Spectrum-X
-//   ufm-server    — UFM Enterprise PKey management
-//
-// Starting state:
-//   tenanta-node: GID filtering DISABLED, MR with low-entropy RKEY 0x00000027
-//   tenantb-node: rkey_scan pre-installed
-//   UFM: PKey partitions already configured (TenantA=0x8001, TenantB=0x8002)
-//
-// Topology extensions used (add to types/index.ts TopologyState):
-//   gidFilterEnabled?: boolean
-//   rkeyRotated?: boolean
-
 export const lab15Devices: LabDevice[] = [
   {
     id: "tenanta-node",
     type: "dgx",
     label: "TenantA Node",
-    sublabel: "victim · MR owner · GID filter disabled",
+    sublabel: "Victim node - ConnectX-7 GID view",
     prompt: "tenanta-node:~$",
     osLabel: "DGX OS / libibverbs",
     allowedCommands: [
-      "show mr info",
       "ibv_devinfo -d mlx5_0 -i 1",
-      "show gid filter",
-      "enable gid filter",
-      "ibv_reg_mr rotate",
-      "show mr info after",
       "help",
       "hint",
     ],
@@ -41,12 +20,11 @@ export const lab15Devices: LabDevice[] = [
     id: "tenantb-node",
     type: "dgx",
     label: "TenantB Node",
-    sublabel: "attacker perspective · rkey scanner",
+    sublabel: "Attacker perspective - QP probe",
     prompt: "tenantb-node:~$",
     osLabel: "DGX OS / libibverbs",
     allowedCommands: [
       "ibv_devinfo -d mlx5_0",
-      "rkey scan",
       "ibv_rc_pingpong -d mlx5_0 -g 1",
       "help",
       "hint",
@@ -58,11 +36,11 @@ export const lab15Devices: LabDevice[] = [
     id: "leaf-switch",
     type: "leaf-switch",
     label: "Leaf Switch",
-    sublabel: "SN5600 · Spectrum-X · GBP enforcement",
-    prompt: "leaf-sw#",
+    sublabel: "SN5600 - QoS/GVMI inventory",
+    prompt: "cumulus@leaf-sw:~$",
     osLabel: "Cumulus Linux 5.x",
     allowedCommands: [
-      "show qos trust dscp-map",
+      "nv show qos trust dscp-map",
       "nv show interface swp1 qos",
       "show gvmi table",
       "help",
@@ -75,18 +53,38 @@ export const lab15Devices: LabDevice[] = [
     id: "ufm-server",
     type: "ufm-server",
     label: "UFM Server",
-    sublabel: "PKey management · fabric policy",
+    sublabel: "UFM REST - PKey policy",
     prompt: "ufm-admin@ufm:~$",
     osLabel: "UFM Enterprise",
     allowedCommands: [
-      "show ufm pkey table",
-      "show ufm events",
-      "set pkey tenanta 0x8001",
-      "set pkey tenantb 0x8002",
+      "curl -ks 'https://ufm-server/ufmRest/resources/pkeys/0x8001'",
+      "curl -ks 'https://ufm-server/ufmRest/resources/pkeys/0x8002'",
+      "curl -ks -X PUT 'https://ufm-server/ufmRest/resources/pkeys/0x8001/guids/506b4b0300a1b200'",
+      "curl -ks -X PUT 'https://ufm-server/ufmRest/resources/pkeys/0x8002/guids/506b4b0300a1b202'",
       "help",
       "hint",
     ],
     position: { x: 560, y: 170 },
+    status: "up",
+  },
+  {
+    id: "security-harness",
+    type: "ufm-server",
+    label: "[SIM ONLY] Security Harness",
+    sublabel: "Teaches MR state, RKEY rotation, and GID-filter outcomes",
+    prompt: "lab-harness@security:~$",
+    osLabel: "FabricLab simulation harness",
+    allowedCommands: [
+      "show mr info",
+      "show gid filter",
+      "enable gid filter",
+      "ibv_reg_mr rotate",
+      "show mr info after",
+      "rkey scan",
+      "help",
+      "hint",
+    ],
+    position: { x: 330, y: 310 },
     status: "up",
   },
 ]
@@ -97,19 +95,20 @@ export const lab15: LabConfig = {
   difficulty: "advanced",
   expectedMinutes: 40,
   scenario:
-    "A security audit on a multi-tenant GPU cluster has flagged a critical finding:\n"
-    + "TenantB was able to read memory from a TenantA GPU node using a guessed RKEY.\n\n"
-    + "The cluster runs DGX H100 nodes (ConnectX-7 NICs). GID filtering is disabled\n"
-    + "on TenantA's NIC — the default state on many deployments. TenantA's Memory\n"
-    + "Region was registered with a low-entropy RKEY (predictable kernel seed).\n\n"
+    "A security audit on a multi-tenant GPU cluster has flagged a critical finding: "
+    + "TenantB can establish an RC QP toward a TenantA host and a low-entropy RKEY makes "
+    + "remote-read guessing practical in this lab scenario.\n\n"
+    + "Use real host and fabric commands where they exist (`ibv_devinfo`, `ibv_rc_pingpong`, "
+    + "NVUE QoS/GVMI views, and UFM PKey REST APIs). The [SIM ONLY] Security Harness tab "
+    + "exposes lab-specific commands for MR inspection, RKEY rotation, and GID-filter state "
+    + "so the vulnerability mechanics remain inspectable without pretending those are "
+    + "standard DGX shell commands.\n\n"
     + "Your task:\n"
-    + "  1. Inspect the pre-allocated MR on tenanta-node (note the low RKEY value)\n"
-    + "  2. Reproduce the RKEY scan attack from tenantb-node\n"
-    + "  3. Identify both misconfigurations: GID filter disabled + low-entropy RKEY\n"
-    + "  4. Enable GID filtering on tenanta-node's ConnectX-7 NIC\n"
-    + "  5. Rotate the RKEY by re-registering the Memory Region\n"
-    + "  6. Confirm the attack fails with both fixes applied\n"
-    + "  7. Verify PKey isolation at the fabric level via UFM",
+    + "  1. Inspect TenantA's GID view and current MR security state\n"
+    + "  2. Reproduce the cross-tenant QP/RKEY exposure from TenantB\n"
+    + "  3. Enable host-side GID filtering and rotate the MR RKEY in the security harness\n"
+    + "  4. Confirm the attack fails after those host-side controls\n"
+    + "  5. Verify TenantA/TenantB are isolated into separate UFM PKeys",
   initialTopology: {
     nic: { name: "eth0", speed: 400, state: "up" },
     pfcEnabled: true,
@@ -117,7 +116,7 @@ export const lab15: LabConfig = {
     congestionDetected: false,
     silentCongestion: false,
     bufferUtilPct: 10,
-  } as any,
+  },
   requiredConditions: [
     "mrInspected",
     "rkeyVulnerabilityReproduced",
@@ -132,19 +131,19 @@ export const lab15: LabConfig = {
       level: 1,
       triggerAfterMistakes: 3,
       triggerAfterSeconds: 120,
-      text: "Start on tenanta-node. Run 'show mr info' to see the pre-allocated Memory Region and its RKEY. Notice how low the RKEY value is — this is the entropy problem. Then run 'show gid filter' to confirm GID filtering is off. Then switch to tenantb-node and run 'rkey scan' to reproduce the attack.",
+      text: "Start with `ibv_devinfo` on TenantA and TenantB, then use the [SIM ONLY] Security Harness to inspect MR state and run the first `rkey scan`.",
     },
     {
       level: 2,
       triggerAfterMistakes: 6,
       triggerAfterSeconds: 240,
-      text: "Two misconfigurations, two fixes — both required. Fix 1: on tenanta-node, run 'enable gid filter' to enable ROCE_ADDR_FILTER. Fix 2: run 'ibv_reg_mr rotate' to force a new high-entropy RKEY. Apply both, then re-run 'rkey scan' from tenantb-node to verify.",
+      text: "On the Security Harness, both `enable gid filter` and `ibv_reg_mr rotate` are required before the second `rkey scan` should fail.",
     },
     {
       level: 3,
       triggerAfterMistakes: 10,
       triggerAfterSeconds: 400,
-      text: "Full sequence: tenanta-node 'show mr info' → tenantb-node 'rkey scan' (attack succeeds) → tenanta-node 'show gid filter' (identifies disabled filter) → tenanta-node 'enable gid filter' → tenanta-node 'ibv_reg_mr rotate' → tenantb-node 'rkey scan' (fails — attack blocked) → ufm-server 'show ufm pkey table' (confirms fabric isolation).",
+      text: "Use UFM REST reads for 0x8001 and 0x8002 after the host-side fix to confirm TenantA and TenantB do not share a PKey.",
     },
   ],
 }

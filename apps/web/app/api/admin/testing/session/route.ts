@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
     value: session,
     httpOnly: true,
     sameSite: "lax",
-    secure: true,
+    secure: request.nextUrl.protocol === "https:",
     path: "/",
     maxAge: 60 * 60 * 24 * 14,
   });

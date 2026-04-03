@@ -10,6 +10,17 @@ export function rdmaLinkShow(): CommandResult {
 
   // Multi-rail mode: Lab 0 with 8-rail topology
   if (rails.length > 0) {
+    const degradedRail = rails.find(
+      (rail) => rail.switchPort !== "up" || rail.nicState !== "up",
+    );
+    const railAlreadyIdentified =
+      useLabStore.getState().lab.conditions.railIdentified === true;
+
+    if (degradedRail && railAlreadyIdentified) {
+      setCondition("linkConfirmed", true);
+      markVerified("linkConfirmed");
+    }
+
     const lines = rails.map(rail => {
       const pfcWarning = !topology.pfcEnabled
         ? '\n  WARNING: PFC disabled -- lossless operation not guaranteed'

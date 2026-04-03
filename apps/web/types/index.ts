@@ -19,6 +19,7 @@ export interface TopologyState {
   pauseStorm?: boolean
   pfcPriority?: number
   opticReplaced?: boolean
+  protodownReasonCleared?: boolean
   unevenSpine?: boolean
   lbMode?: 'hash' | 'adaptive' | 'per-packet'
   bufferUtilPct: number
@@ -64,7 +65,15 @@ export interface TopologyState {
   storagePortsExpected?: number
   leaf02MtuCurrent?: number
   storage01MtuCurrent?: number
+  adaptiveRoutingPendingPorts?: string[]
+  ecnConfigPending?: boolean
+  ucmpRouteMapPending?: boolean
+  ucmpRouteMapApplied?: boolean
   roceShorthandApplied?: boolean
+  spineAAsnPending?: boolean
+  spineBAsnPending?: boolean
+  spineAAsnApplied?: boolean
+  spineBAsnApplied?: boolean
   dscpTrustVerified?: boolean
   ecnThresholdsVerified?: boolean
   pfcConfigVerified?: boolean
@@ -76,12 +85,16 @@ export interface TopologyState {
   ecnMaxThreshold?: number
   ibWriteBwResult?: number | null
   ibWriteLatP99?: number | null
+  lab17RoceConfiguredDevices?: string[]
+  lab17ConfigAppliedDevices?: string[]
   ecnMarkingActive?: boolean
   thresholdInspected?: boolean
   problemIdentified?: boolean
   thresholdFixed?: boolean
   ecnMarkingVerified?: boolean
   losslessBufferBytes?: number
+  lab18StartedFlows?: string[]
+  lab0bTrafficGenerated?: boolean
 }
 
 export interface LabState {

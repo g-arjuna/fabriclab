@@ -32,7 +32,7 @@ Proposal B fails at the capacity level - it cannot connect
 all 64 DGX nodes regardless of oversubscription ratio.
 The $0.3M saving is not a saving; it delivers an unusable fabric.
 
-Use 'recommend proposal a' to submit your recommendation.`,
+Use 'python3 fabric-sizing.py --recommend a' to submit your recommendation.`,
     conceptId: "rocev2",
     type: "info",
   };

@@ -5,16 +5,15 @@ export const lab14Devices: LabDevice[] = [
     id: "rackb-node01",
     type: "dgx",
     label: "Rack B Node",
-    sublabel: "checkpoint source - traceroute6 verification",
+    sublabel: "Checkpoint source - path verification",
     prompt: "rackb-node01:~$",
     osLabel: "Ubuntu 22.04",
     allowedCommands: [
-      "show topology",
-      "traceroute6 checkpoint dscp10",
-      "traceroute6 nccl dscp26",
-      "ping6 spine02 sid",
-      "ping6 spine03 sid",
-      "ping6 storage sid",
+      "traceroute 10.100.0.1",
+      "traceroute 10.20.0.11",
+      "ping -6 2001:db8:0:spine02::1 -c 3",
+      "ping -6 2001:db8:0:spine03::1 -c 3",
+      "ping -6 2001:db8:0:lsrv::100 -c 3",
       "help",
       "hint",
     ],
@@ -25,21 +24,19 @@ export const lab14Devices: LabDevice[] = [
     id: "leaf-rackb",
     type: "leaf-switch",
     label: "Leaf RackB",
-    sublabel: "headend - SR-TE policy applied here",
-    prompt: "leaf-rackB#",
+    sublabel: "SR-TE headend - colors storage BGP routes",
+    prompt: "leaf-rackb#",
     osLabel: "Cumulus Linux 5.x / FRR",
     allowedCommands: [
       "show isis neighbor",
-      "show isis srv6 node",
+      "show isis segment-routing srv6 node",
       "show segment-routing srv6 sid",
       "show sr-te segment-list",
       "show sr-te policy",
-      "show ip policy",
-      "show route-map STEER-CHECKPOINT",
-      "configure segment-list",
-      "configure sr-te policy",
-      "configure route-map dscp10",
-      "apply route-map swp1-4",
+      "show route-map SET_SR_POLICY",
+      "sudo vtysh -f /etc/frr/checkpoint-segment-list.conf",
+      "sudo vtysh -f /etc/frr/checkpoint-srte-policy.conf",
+      "sudo vtysh -f /etc/frr/checkpoint-color-route-map.conf",
       "show mtu",
       "help",
       "hint",
@@ -51,13 +48,13 @@ export const lab14Devices: LabDevice[] = [
     id: "spine-01",
     type: "spine-switch",
     label: "Spine-01",
-    sublabel: "NCCL collective spine - watch for checkpoint SRH",
+    sublabel: "NCCL collective spine - should stay free of checkpoint SRH",
     prompt: "spine-01#",
     osLabel: "Cumulus Linux 5.x / FRR",
     allowedCommands: [
       "show interface counters",
-      "show srv6 packets",
-      "tcpdump srh swp1",
+      "show segment-routing srv6 sid",
+      "sudo tcpdump -ni swp1 'ip6 and ip6[6] == 43' -c 20",
       "help",
       "hint",
     ],
@@ -73,8 +70,8 @@ export const lab14Devices: LabDevice[] = [
     osLabel: "Cumulus Linux 5.x / FRR",
     allowedCommands: [
       "show interface counters",
-      "show srv6 packets",
-      "tcpdump srh swp1",
+      "show segment-routing srv6 sid",
+      "sudo tcpdump -ni swp1 'ip6 and ip6[6] == 43' -c 20",
       "help",
       "hint",
     ],
@@ -105,19 +102,18 @@ export const lab14: LabConfig = {
   difficulty: "advanced",
   expectedMinutes: 40,
   scenario:
-    "Two racks share a four-spine fat-tree. Rack A runs NCCL All-Reduce (DSCP 26). "
-    + "Rack B runs model checkpoint-to-storage (DSCP 10, 50 GB flows). "
-    + "Checkpoint is flooding Spine-01, which NCCL also uses. Training latency "
-    + "has increased by 35%. ib_write_bw between Rack A nodes is healthy in isolation, "
-    + "but degrades when checkpoint runs at the same time.\n\n"
-    + "IS-IS is up. SRv6 locators are pre-assigned. No SR-TE policies exist yet.\n\n"
+    "Two racks share a four-spine L3 fabric. Rack A runs NCCL All-Reduce toward 10.20.0.0/24, "
+    + "while Rack B writes model checkpoints to the storage prefix 10.100.0.0/24. "
+    + "Checkpoint flows are currently hashing through Spine-01, which NCCL also uses, and "
+    + "training latency has increased by 35%. IS-IS SRv6 locators are already advertised, "
+    + "but no SR-TE policy is installed at the Rack B headend.\n\n"
     + "Your task:\n"
     + "  1. Verify IS-IS SRv6 adjacency and SID reachability\n"
-    + "  2. Configure segment-list: spine-02 -> spine-03 -> leaf-storage decap\n"
-    + "  3. Define SR-TE policy: color 100, endpoint leaf-storage\n"
-    + "  4. Apply DSCP 10 -> SR-TE color 100 route-map on leaf-rackB swp1-4\n"
-    + "  5. Verify traceroute6 DSCP 10 transits spine-02 then spine-03\n"
-    + "  6. Confirm spine-01 receives zero checkpoint SRH traffic",
+    + "  2. Configure segment-list CHECKPOINT-PATH: spine-02 -> spine-03 -> leaf-storage End.DT4\n"
+    + "  3. Define SR-TE policy color 100, endpoint leaf-storage\n"
+    + "  4. Attach a BGP route-map that sets SR-TE color 100 on the storage prefix route\n"
+    + "  5. Verify traceroute to 10.100.0.1 follows spine-02 then spine-03\n"
+    + "  6. Confirm Spine-01 receives zero checkpoint SRH packets while 10.20.0.11 still uses normal ECMP",
   initialTopology: {
     nic: { name: "eth0", speed: 400, state: "up" },
     pfcEnabled: true,
@@ -143,19 +139,19 @@ export const lab14: LabConfig = {
       level: 1,
       triggerAfterMistakes: 3,
       triggerAfterSeconds: 120,
-      text: "Start on leaf-rackB. Run 'show isis neighbor' to confirm IS-IS is up, then 'show isis srv6 node' to see the pre-assigned SIDs for spine-02, spine-03, and leaf-storage.",
+      text: "Start on leaf-rackb with 'show isis neighbor' and 'show isis segment-routing srv6 node', then ping the three SIDs from rackb-node01.",
     },
     {
       level: 2,
       triggerAfterMistakes: 6,
       triggerAfterSeconds: 240,
-      text: "Configuration sequence: (1) 'configure segment-list', (2) 'configure sr-te policy', (3) 'configure route-map dscp10', (4) 'apply route-map swp1-4'.",
+      text: "Load the segment-list, SR-TE policy, and BGP color route-map snippets with the three 'sudo vtysh -f ...' commands on leaf-rackb.",
     },
     {
       level: 3,
       triggerAfterMistakes: 10,
       triggerAfterSeconds: 400,
-      text: "After applying the route-map, go to rackb-node01 and run 'traceroute6 checkpoint dscp10'. You should see spine-02 at hop 2 and spine-03 at hop 3. Then switch to spine-01 and run 'tcpdump srh swp1' - it should show zero SRH packets for checkpoint traffic.",
+      text: "After the route-map is active, run 'traceroute 10.100.0.1' from rackb-node01 and 'sudo tcpdump -ni swp1 'ip6 and ip6[6] == 43' -c 20' on spine-01.",
     },
   ],
 }

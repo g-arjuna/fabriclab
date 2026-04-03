@@ -71,7 +71,8 @@ Pre-provisioned SIDs for your segment-list:
   spine-03 End SID:          2001:db8:0:spine03::1
   leaf-storage End.DT4 SID:  2001:db8:0:lsrv::100  (decap into VRF STORAGE)
 
-Verify reachability -> 'ping6 spine02 sid'`,
+Verify reachability from rackb-node01 with:
+  ping -6 2001:db8:0:spine02::1 -c 3`,
     type: "info",
   }
 }
@@ -122,7 +123,8 @@ export function ping6StorageSid(): CommandResult {
 SID reachable (End.DT4 / VRF STORAGE)
 
 All three segment-list SIDs confirmed reachable.
-Ready to configure the segment-list -> 'configure segment-list'`,
+Ready to load the segment-list config on leaf-rackb:
+  sudo vtysh -f /etc/frr/checkpoint-segment-list.conf`,
     type: "success",
   }
 }
@@ -153,18 +155,17 @@ export function configureSegmentList(): CommandResult {
   store.markVerified("segmentListConfigured")
 
   return {
-    output: `Configuring segment-list CHECKPOINT-PATH...
+    output: `Loading /etc/frr/checkpoint-segment-list.conf...
 
-vtysh (simulated):
-  segment-routing
-   traffic-eng
-    segment-list CHECKPOINT-PATH
-     index 10 ipv6 2001:db8:0:spine02::1
-     index 20 ipv6 2001:db8:0:spine03::1
-     index 30 ipv6 2001:db8:0:lsrv::100
-    !
-   !
-  !
+segment-routing
+ traffic-eng
+  segment-list CHECKPOINT-PATH
+   index 10 ipv6 2001:db8:0:spine02::1
+   index 20 ipv6 2001:db8:0:spine03::1
+   index 30 ipv6 2001:db8:0:lsrv::100
+  exit
+ exit
+exit
 
 Segment-list CHECKPOINT-PATH configured.
 3 segments: spine-02 -> spine-03 -> leaf-storage (End.DT4)
@@ -181,7 +182,7 @@ export function showSrteSegmentList(): CommandResult {
     return {
       output: `No segment-lists configured.
 
-Run 'configure segment-list' to define the CHECKPOINT-PATH.`,
+Run 'sudo vtysh -f /etc/frr/checkpoint-segment-list.conf' to define CHECKPOINT-PATH.`,
       type: "info",
     }
   }
@@ -198,7 +199,8 @@ Name: CHECKPOINT-PATH
 
 SID list order: traffic visits spine-02 first, then spine-03, then decaps at leaf-storage.
 
-Next step: bind this list to a policy -> 'configure sr-te policy'`,
+Next step: bind this list to a policy:
+  sudo vtysh -f /etc/frr/checkpoint-srte-policy.conf`,
     type: "success",
   }
 }
@@ -211,7 +213,8 @@ export function configureSrtePolicy(): CommandResult {
     return {
       output: `ERROR: segment-list CHECKPOINT-PATH not found.
 
-Configure the segment-list first -> 'configure segment-list'`,
+Configure the segment-list first:
+  sudo vtysh -f /etc/frr/checkpoint-segment-list.conf`,
       type: "error",
     }
   }
@@ -221,17 +224,15 @@ Configure the segment-list first -> 'configure segment-list'`,
   store.markVerified("srtePolicyActive")
 
   return {
-    output: `Configuring SR-TE policy CHECKPOINT-STORAGE...
+    output: `Loading /etc/frr/checkpoint-srte-policy.conf...
 
-vtysh (simulated):
-  segment-routing
-   traffic-eng
-    policy CHECKPOINT-STORAGE
-     color 100 endpoint 2001:db8:0:lsrv::1
-     candidate-path preference 100 explicit segment-list CHECKPOINT-PATH
-    !
-   !
-  !
+segment-routing
+ traffic-eng
+  policy CHECKPOINT-STORAGE color 100 endpoint 2001:db8:0:lsrv::1
+   candidate-path preference 100 name PRIMARY explicit segment-list CHECKPOINT-PATH
+  exit
+ exit
+exit
 
 Policy CHECKPOINT-STORAGE configured.
 
@@ -271,29 +272,53 @@ Policy: CHECKPOINT-STORAGE
         [2] 2001:db8:0:lsrv::100
 
   Traffic counters: 0 packets, 0 bytes (no traffic steered yet)
-  -> Apply route-map to steer DSCP 10 here -> 'configure route-map dscp10'`,
+  -> Attach SR-TE color 100 to the storage BGP route:
+     sudo vtysh -f /etc/frr/checkpoint-color-route-map.conf`,
     type: "success",
   }
 }
 
 export function configureRouteMapDscp10(): CommandResult {
+  const store = useLabStore.getState()
+  const policyActive = store.topology.srtePolicyActive ?? false
+
+  if (!policyActive) {
+    return {
+      output: `ERROR: SR-TE policy CHECKPOINT-STORAGE is not active.
+
+Load the segment-list and policy first:
+  sudo vtysh -f /etc/frr/checkpoint-segment-list.conf
+  sudo vtysh -f /etc/frr/checkpoint-srte-policy.conf`,
+      type: "error",
+    }
+  }
+
+  store.setTopology({
+    routeMapApplied: true,
+    congestionDetected: false,
+    bufferUtilPct: 22,
+  })
+  store.setCondition("routeMapApplied", true)
+  store.markVerified("routeMapApplied")
+
   return {
-    output: `Configuring route-map STEER-CHECKPOINT...
+    output: `Loading /etc/frr/checkpoint-color-route-map.conf...
 
-vtysh (simulated):
-  route-map STEER-CHECKPOINT permit 10
-   match ip dscp 10
-   set sr-te color 100
-  !
-  route-map STEER-CHECKPOINT permit 20
-   ! permit all other traffic - no set action = normal ECMP
-  !
+route-map SET_SR_POLICY permit 10
+ set sr-te color 100
+exit
+router bgp 65020
+ address-family ipv4 unicast
+  neighbor LEAF-STORAGE route-map SET_SR_POLICY in
+ exit-address-family
+exit
 
-Route-map STEER-CHECKPOINT created.
-  Clause 10: DSCP 10 -> SR-TE color 100 (checkpoint -> CHECKPOINT-STORAGE policy)
-  Clause 20: all other traffic -> normal ECMP forwarding
+Route-map SET_SR_POLICY is attached inbound on the storage BGP neighbor.
+Routes learned from leaf-storage are colored 100 and resolve onto SR-TE policy CHECKPOINT-STORAGE.
 
-Apply to server-facing ports -> 'apply route-map swp1-4'`,
+Verify with:
+  show route-map SET_SR_POLICY
+  show sr-te policy`,
     type: "success",
   }
 }
@@ -389,21 +414,16 @@ export function showRouteMapSteerCheckpoint(): CommandResult {
   const applied = useLabStore.getState().topology.routeMapApplied ?? false
 
   return {
-    output: `route-map STEER-CHECKPOINT, permit, sequence 10
+    output: `route-map SET_SR_POLICY, permit, sequence 10
   Match clauses:
-    ip dscp 10
+    (none)
   Set clauses:
     sr-te color 100
-  Policy routing matches: ${applied ? "0 packets, 0 bytes" : "pending traffic"}
+  Applied to:
+    router bgp 65020
+      neighbor LEAF-STORAGE route-map SET_SR_POLICY in
 
-route-map STEER-CHECKPOINT, permit, sequence 20
-  Match clauses:
-    (none - matches all remaining traffic)
-  Set clauses:
-    (none - normal forwarding)
-  Policy routing matches: ${applied ? "0 packets, 0 bytes" : "pending traffic"}
-
-${applied ? "Route-map is active on swp1-4." : "Route-map definition is ready; apply it on swp1-4 to activate steering."}`,
+${applied ? "Storage routes imported from LEAF-STORAGE are now colored 100." : "Route-map is not active yet; load /etc/frr/checkpoint-color-route-map.conf."}`,
     type: "info",
   }
 }
@@ -415,16 +435,16 @@ export function traceroute6CheckpointDscp10(): CommandResult {
 
   if (!applied || !policyActive) {
     return {
-      output: `traceroute to 2001:db8:0:lsrv::1, 30 hops max, DSCP=10
+      output: `traceroute to 10.100.0.1 (10.100.0.1), 30 hops max
 
  1  2001:db8:0:leaf-rackb::1  (leaf-rackB)    0.412 ms
  2  2001:db8:0:spine01::1     (spine-01)  <- checkpoint is hitting spine-01
     0.821 ms
  3  2001:db8:0:lsrv::1        (leaf-storage)  1.249 ms
 
-DSCP 10 traffic is going through spine-01 (normal ECMP).
-SR-TE policy is not active or route-map is not applied.
-Complete all configuration steps before re-running traceroute6.`,
+Traffic to 10.100.0.1 is still going through spine-01 (normal ECMP).
+SR-TE policy is not active or the BGP color route-map is not applied.
+Complete all configuration steps before re-running traceroute.`,
       type: "error",
     }
   }
@@ -433,8 +453,7 @@ Complete all configuration steps before re-running traceroute6.`,
   store.markVerified("tracerouteVerified")
 
   return {
-    output: `traceroute to 2001:db8:0:lsrv::1, 30 hops max
-  Probe marked DSCP 10 (-Q 0x28)
+    output: `traceroute to 10.100.0.1 (10.100.0.1), 30 hops max
   SRH present in outbound packet (3 SIDs)
 
  1  2001:db8:0:leaf-rackb::1   (leaf-rackB)   0.391 ms
@@ -452,8 +471,9 @@ Complete all configuration steps before re-running traceroute6.`,
     SRH decapsulated (End.DT4 applied at leaf-storage)
     Inner IPv4 packet delivered to VRF STORAGE
 
-CONFIRMED: DSCP 10 traffic follows SR-TE path spine-02 -> spine-03
-Now verify spine-01 is clean -> switch to spine-01: 'tcpdump srh swp1'`,
+CONFIRMED: Traffic to 10.100.0.1 follows SR-TE path spine-02 -> spine-03
+Now verify spine-01 is clean:
+  sudo tcpdump -ni swp1 'ip6 and ip6[6] == 43' -c 20`,
     type: "success",
   }
 }
@@ -462,18 +482,17 @@ export function traceroute6NcclDscp26(): CommandResult {
   const applied = useLabStore.getState().topology.routeMapApplied ?? false
 
   return {
-    output: `traceroute to 2001:db8:0:leaf-a1::1, 30 hops max
-  Probe marked DSCP 26 (-Q 0x68)
-  ${applied ? "No SRH in outbound packet (normal ECMP - DSCP 26 not steered)" : "No SR-TE policy active"}
+    output: `traceroute to 10.20.0.11 (10.20.0.11), 30 hops max
+  ${applied ? "No SRH in outbound packet (normal ECMP - rack-local compute traffic is not colored)" : "No SR-TE policy active"}
 
  1  2001:db8:0:leaf-rackb::1   (leaf-rackB)   0.388 ms
  2  2001:db8:0:spine01::1      (spine-01)${applied ? "  <- ECMP chose spine-01 (no SRH)" : ""}
     0.819 ms
  3  2001:db8:0:leaf-a1::1      (Leaf-A1)   1.228 ms
 
-NCCL traffic (DSCP 26) follows normal ECMP - no SR-TE steering applied.
+NCCL traffic to 10.20.0.11 follows normal ECMP - no SR-TE steering applied.
 Spine may vary per run (ECMP is hash-based).
-${applied ? "DSCP 26 is intentionally not in route-map clause 10." : ""}`,
+${applied ? "Only routes learned from LEAF-STORAGE are colored 100." : ""}`,
     type: "success",
   }
 }
@@ -484,7 +503,7 @@ export function tcpdumpSrhSwp1Spine01(): CommandResult {
 
   if (!applied) {
     return {
-      output: `tcpdump -i swp1 -v 'ip6 and ip6[6]==43' -c 20
+      output: `sudo tcpdump -ni swp1 'ip6 and ip6[6] == 43' -c 20
   (Next Header 43 = Routing Header / SRH)
 
 14:23:01.441201 IP6 2001:db8:0:leaf-rackb::1 > 2001:db8:0:lsrv::100
@@ -507,7 +526,7 @@ Apply SR-TE policy and route-map before re-checking.`,
   store.markVerified("spine01Clean")
 
   return {
-    output: `tcpdump -i swp1 -v 'ip6 and ip6[6]==43' -c 20 --timeout 30
+    output: `sudo tcpdump -ni swp1 'ip6 and ip6[6] == 43' -c 20
   (Next Header 43 = Routing Header / SRH)
 
 tcpdump: listening on swp1, link-type EN10MB, 30 second capture...
@@ -535,14 +554,14 @@ export function tcpdumpSrhSwp1Spine02(): CommandResult {
 
   if (!applied) {
     return {
-      output: `tcpdump -i swp1 'ip6 and ip6[6]==43' -c 5
+      output: `sudo tcpdump -ni swp1 'ip6 and ip6[6] == 43' -c 5
 0 packets captured (no SR-TE active yet)`,
       type: "info",
     }
   }
 
   return {
-    output: `tcpdump -i swp1 -v 'ip6 and ip6[6]==43' -c 5
+    output: `sudo tcpdump -ni swp1 'ip6 and ip6[6] == 43' -c 5
   (Next Header 43 = Routing Header / SRH)
 
 14:23:01.441201 IP6 2001:db8:0:leaf-rackb::? > 2001:db8:0:spine02::1

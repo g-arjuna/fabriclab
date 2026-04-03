@@ -5,6 +5,20 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 
 import { handleCommand } from "@/components/terminal/commandHandler";
+import { KNOWN_COMMANDS } from "@/lib/commandCatalog";
+import {
+  ARROW_DOWN_SEQUENCE,
+  ARROW_UP_SEQUENCE,
+  TAB_SEQUENCE,
+  appendTerminalInput,
+  autocompleteTerminalInput,
+  recallCommandHistory,
+  rememberSubmittedCommand,
+  replaceTerminalInput,
+  resetCompletionState,
+  scheduleClipboardPasteFallback,
+  type CompletionState,
+} from "@/components/terminal/terminalInputHelpers";
 
 const PROMPT = "fabric-sim:~$ ";
 
@@ -41,6 +55,9 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const inputBufferRef = useRef("");
+  const commandHistoryRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number | null>(null);
+  const completionStateRef = useRef<CompletionState | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -60,6 +77,18 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
 
     terminal.loadAddon(fitAddon);
     terminal.open(containerRef.current);
+    terminal.attachCustomKeyEventHandler((event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        scheduleClipboardPasteFallback(terminal, inputBufferRef, completionStateRef);
+        return true;
+      }
+
+      if (event.key === "Tab" || event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+      }
+
+      return true;
+    });
     fitAddon.fit();
 
     terminalRef.current = terminal;
@@ -79,19 +108,11 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
     });
     terminal.write(PROMPT);
 
-    const replaceInput = (nextInput: string) => {
-      while (inputBufferRef.current.length > 0) {
-        inputBufferRef.current = inputBufferRef.current.slice(0, -1);
-        terminal.write("\b \b");
-      }
-
-      inputBufferRef.current = nextInput;
-      terminal.write(nextInput);
-    };
-
     const handleInsertCommand = (event: Event) => {
       const customEvent = event as CustomEvent<{ command: string }>;
-      replaceInput(customEvent.detail.command);
+      replaceTerminalInput(terminal, inputBufferRef, customEvent.detail.command);
+      resetCompletionState(completionStateRef);
+      historyIndexRef.current = null;
     };
 
     window.addEventListener("insert-command", handleInsertCommand as EventListener);
@@ -106,8 +127,48 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
           terminal.write(`${colorizeOutput(output)}\r\n`);
         }
 
+        rememberSubmittedCommand(
+          commandHistoryRef,
+          historyIndexRef,
+          completionStateRef,
+          currentInput.trim(),
+        );
         inputBufferRef.current = "";
         terminal.write(PROMPT);
+        return;
+      }
+
+      if (data === ARROW_UP_SEQUENCE) {
+        recallCommandHistory(
+          terminal,
+          inputBufferRef,
+          commandHistoryRef,
+          historyIndexRef,
+          completionStateRef,
+          "previous",
+        );
+        return;
+      }
+
+      if (data === ARROW_DOWN_SEQUENCE) {
+        recallCommandHistory(
+          terminal,
+          inputBufferRef,
+          commandHistoryRef,
+          historyIndexRef,
+          completionStateRef,
+          "next",
+        );
+        return;
+      }
+
+      if (data === TAB_SEQUENCE) {
+        autocompleteTerminalInput(
+          terminal,
+          inputBufferRef,
+          Array.from(KNOWN_COMMANDS),
+          completionStateRef,
+        );
         return;
       }
 
@@ -116,6 +177,7 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
           inputBufferRef.current = inputBufferRef.current.slice(0, -1);
           terminal.write("\b \b");
         }
+        resetCompletionState(completionStateRef);
         return;
       }
 
@@ -124,13 +186,16 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
           inputBufferRef.current = inputBufferRef.current.slice(0, -1);
           terminal.write("\b \b");
         }
+        resetCompletionState(completionStateRef);
         return;
       }
 
-      if (/[\x20-\x7e]/.test(data)) {
-        inputBufferRef.current += data;
-        terminal.write(data);
-      }
+      appendTerminalInput(
+        terminal,
+        inputBufferRef,
+        completionStateRef,
+        data,
+      );
     });
 
     const resizeObserver = new ResizeObserver(() => {

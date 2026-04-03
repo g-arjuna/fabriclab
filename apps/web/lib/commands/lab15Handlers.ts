@@ -65,7 +65,7 @@ export function showMrInfo(): CommandResult {
 
   if (rkeyRotated) {
     return {
-      output: `Memory Region info (tenanta-node, post-rotation):
+      output: `[SIM ONLY] Memory Region info (tenanta-node, post-rotation):
 
   MR handle:    0x55a3b2c10000
   Address:      0x7f8b44000000
@@ -85,7 +85,7 @@ MR was re-registered at 2026-03-15 14:31:07 (rotation applied).`,
   }
 
   return {
-    output: `Memory Region info (tenanta-node):
+    output: `[SIM ONLY] Memory Region info (tenanta-node):
 
   MR handle:    0x55a3b2c10000
   Address:      0x7f8b44000000
@@ -149,7 +149,7 @@ export function showGidFilter(): CommandResult {
 
   if (gidFilterEnabled) {
     return {
-      output: `GID Filter Status (tenanta-node, mlx5_0):
+      output: `[SIM ONLY] GID Filter Status (tenanta-node, mlx5_0):
 
   ROCE_ADDR_FILTER_ENABLE:  1 (ENABLED) ✓
 
@@ -169,7 +169,7 @@ GID filtering is active. TenantB nodes cannot establish QP connections.`,
   }
 
   return {
-    output: `GID Filter Status (tenanta-node, mlx5_0):
+    output: `[SIM ONLY] GID Filter Status (tenanta-node, mlx5_0):
 
   ROCE_ADDR_FILTER_ENABLE:  0 (DISABLED)
 
@@ -199,7 +199,7 @@ export function enableGidFilter(): CommandResult {
   markVerified("gidFilteringEnabled")
 
   return {
-    output: `Enabling GID filter on mlx5_0 (tenanta-node)...
+    output: `[SIM ONLY] Enabling GID filter on mlx5_0 (tenanta-node)...
 
   Applying: mlxconfig -d /dev/mst/mt4129_pciconf0 s ROCE_ADDR_FILTER_ENABLE=1
 
@@ -234,7 +234,7 @@ export function ibvRegMrRotate(): CommandResult {
   markVerified("rkeyRotated")
 
   return {
-    output: `Rotating Memory Region RKEY (tenanta-node)...
+    output: `[SIM ONLY] Rotating Memory Region RKEY (tenanta-node)...
 
 Step 1: ibv_dereg_mr(mr=0x55a3b2c10000)
   Old rkey: 0x00000027  (low entropy — now INVALIDATED)
@@ -265,7 +265,7 @@ Verify the new RKEY: show mr info after`,
 
 export function showMrInfoAfter(): CommandResult {
   return {
-    output: `Memory Region info (tenanta-node, post-rotation):
+    output: `[SIM ONLY] Memory Region info (tenanta-node, post-rotation):
 
   MR handle:    0x55a3b2c10000
   Address:      0x7f8b44000000
@@ -294,7 +294,7 @@ export function rkeyScan(): CommandResult {
     markVerified("attackBlocked")
 
     return {
-      output: `rkey_scan v1.2 — RDMA RKEY scanner
+      output: `[SIM ONLY] rkey_scan v1.2 - RDMA RKEY scanner
 Target: tenanta-node (10.0.1.5), port=mlx5_0
 
 ${gidFilterEnabled
@@ -332,7 +332,7 @@ ${gidFilterEnabled && rkeyRotated
   markVerified("rkeyVulnerabilityReproduced")
 
   return {
-    output: `rkey_scan v1.2 — RDMA RKEY scanner
+    output: `[SIM ONLY] rkey_scan v1.2 - RDMA RKEY scanner
 Target: tenanta-node (10.0.1.5), port=mlx5_0
 
 Establishing QP connection to tenanta-node...
@@ -510,7 +510,24 @@ export function showUfmPkeyTable(): CommandResult {
   markVerified("pkeyIsolationVerified")
 
   return {
-    output: `UFM Enterprise — PKey Partition Table:
+    output: `{
+  "pkey": "0x8001",
+  "members": [
+    {
+      "guid": "0x506b4b0300a1b200",
+      "membership": "full",
+      "name": "tenanta-node"
+    },
+    {
+      "guid": "0x506b4b0300a1b210",
+      "membership": "limited",
+      "name": "storage-node"
+    }
+  ],
+  "isolation_status": "TenantA and TenantB do not share a PKey"
+}
+
+Reference summary for this lab:
 
 Partition    P_Key   Rate  Members
 -----------  ------  ----  -------------------------------------------------------
@@ -569,20 +586,26 @@ ${gidFilterEnabled
 
 export function setPkeyTenantA(): CommandResult {
   return {
-    output: `UFM: PKey assignment for TenantA partition (0x8001) confirmed.
-All TenantA nodes are assigned as full members.
-Storage node is assigned as limited member.
-No changes were needed — partition was already correctly configured.`,
+    output: `{
+  "status": "ok",
+  "pkey": "0x8001",
+  "guid": "0x506b4b0300a1b200",
+  "membership": "full",
+  "message": "TenantA GUID is assigned to PKey 0x8001"
+}`,
     type: "info",
   }
 }
 
 export function setPkeyTenantB(): CommandResult {
   return {
-    output: `UFM: PKey assignment for TenantB partition (0x8002) confirmed.
-All TenantB nodes are assigned as full members.
-Storage node is assigned as limited member.
-No changes were needed — partition was already correctly configured.`,
+    output: `{
+  "status": "ok",
+  "pkey": "0x8002",
+  "guid": "0x506b4b0300a1b202",
+  "membership": "full",
+  "message": "TenantB GUID is assigned to PKey 0x8002"
+}`,
     type: "info",
   }
 }
