@@ -206,6 +206,115 @@ function KnowledgePanelDrawer() {
   );
 }
 
+function DiscussionPulseButton({
+  label,
+  onClick,
+  className = "",
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group relative overflow-hidden rounded-2xl bg-amber-500/10 px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.22em] text-amber-200 transition hover:bg-amber-500/15 hover:text-amber-100 ${className}`}
+    >
+      <svg
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <rect
+          x="1.5"
+          y="1.5"
+          width="97"
+          height="97"
+          rx="14"
+          ry="14"
+          fill="none"
+          stroke="rgba(251, 146, 60, 0.8)"
+          strokeWidth="1.5"
+          strokeDasharray="8 6"
+          className="lab-discussion-dash"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <span className="relative flex items-center justify-between gap-3">
+        <span>{label}</span>
+        <span className="text-sm text-amber-300 transition group-hover:translate-x-0.5">
+          {"\u2197"}
+        </span>
+      </span>
+      <style jsx>{`
+        .lab-discussion-dash {
+          animation: lab-discussion-march 1.2s linear infinite;
+        }
+
+        @keyframes lab-discussion-march {
+          from {
+            stroke-dashoffset: 0;
+          }
+          to {
+            stroke-dashoffset: -28;
+          }
+        }
+      `}</style>
+    </button>
+  );
+}
+
+function LabDiscussionModal({
+  activeLabId,
+  activeLabTitle,
+  onClose,
+}: {
+  activeLabId: string;
+  activeLabTitle: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-8 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#060d18] shadow-2xl shadow-slate-950/40"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4 sm:px-6">
+          <div>
+            <p className="text-xs uppercase tracking-[0.28em] text-amber-300">
+              Report / Issue / Discuss
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">
+              Community discussion
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-sm text-slate-300 transition hover:text-white"
+          >
+            {"\u2715 Close"}
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          <CommunityThread
+            contentKind="lab"
+            contentSlug={activeLabId}
+            standaloneSpacing={false}
+            title={activeLabTitle}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function LabExperience({ labId }: { labId: string }) {
   const loadLab = useLabStore((state) => state.loadLab);
   const resetLab = useLabStore((state) => state.resetLab);
@@ -216,6 +325,7 @@ export function LabExperience({ labId }: { labId: string }) {
   const markLabComplete = useProgressStore((state) => state.markLabComplete);
   const [topologyExpanded, setTopologyExpanded] = useState(false);
   const [solutionOpen, setSolutionOpen] = useState(false);
+  const [discussionOpen, setDiscussionOpen] = useState(false);
   const [showDesktopPrompt, setShowDesktopPrompt] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [workspaceFocus, setWorkspaceFocus] = useState<"topology" | "terminal">("topology");
@@ -288,6 +398,7 @@ export function LabExperience({ labId }: { labId: string }) {
 
   useEffect(() => {
     setSolutionOpen(false);
+    setDiscussionOpen(false);
   }, [activeLab.id]);
 
   return (
@@ -339,6 +450,12 @@ export function LabExperience({ labId }: { labId: string }) {
               </span>
             </div>
 
+            <DiscussionPulseButton
+              label="Report / Issue / Discuss"
+              onClick={() => setDiscussionOpen(true)}
+              className="mt-4 w-full"
+            />
+
             <div className="mt-3 rounded-xl border border-white/8 bg-slate-900/60 px-4 py-2">
               <p className="text-[10px] uppercase tracking-widest text-slate-500">Elapsed</p>
               <p className="mt-0.5 font-mono text-2xl font-semibold text-cyan-300">
@@ -351,6 +468,11 @@ export function LabExperience({ labId }: { labId: string }) {
               <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-300">
                 {activeLab.scenario}
               </p>
+              <DiscussionPulseButton
+                label="Discuss this lab"
+                onClick={() => setDiscussionOpen(true)}
+                className="mt-4 w-full"
+              />
             </div>
 
             <div className="mt-5">
@@ -410,14 +532,6 @@ export function LabExperience({ labId }: { labId: string }) {
               </button>
             </div>
 
-            <div className="mt-4">
-              <CommunityThread
-                compact
-                contentKind="lab"
-                contentSlug={activeLab.id}
-                title={activeLab.title}
-              />
-            </div>
           </aside>
 
           <div
@@ -517,6 +631,14 @@ export function LabExperience({ labId }: { labId: string }) {
         labId={activeLab.id}
         title={activeLab.title}
       />
+
+      {discussionOpen ? (
+        <LabDiscussionModal
+          activeLabId={activeLab.id}
+          activeLabTitle={activeLab.title}
+          onClose={() => setDiscussionOpen(false)}
+        />
+      ) : null}
 
       {showDesktopPrompt ? (
         <DesktopRecommendationPrompt onDismiss={() => setShowDesktopPrompt(false)} />

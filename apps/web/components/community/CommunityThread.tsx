@@ -26,6 +26,7 @@ type CommunityThreadProps = {
   contentSlug: string;
   title: string;
   compact?: boolean;
+  standaloneSpacing?: boolean;
 };
 
 const typeLabels: Record<CommentType, string> = {
@@ -61,6 +62,7 @@ export function CommunityThread({
   contentSlug,
   title,
   compact = false,
+  standaloneSpacing = true,
 }: CommunityThreadProps) {
   const { user, loading } = useAuth();
   const { preferences, savePreferences } = useNotificationPreferences(Boolean(user));
@@ -323,7 +325,7 @@ export function CommunityThread({
   return (
     <section
       className={`rounded-3xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-slate-950/30 ${
-        compact ? "p-4" : "mt-12 p-6 sm:p-8"
+        compact ? "p-4" : `${standaloneSpacing ? "mt-12" : ""} p-6 sm:p-8`
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">

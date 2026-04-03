@@ -11,6 +11,7 @@ import {
   TAB_SEQUENCE,
   appendTerminalInput,
   autocompleteTerminalInput,
+  pasteClipboardText,
   recallCommandHistory,
   rememberSubmittedCommand,
   replaceTerminalInput,
@@ -74,6 +75,7 @@ function DeviceTerminalPane({
   const commandHistoryRef = useRef<string[]>([])
   const historyIndexRef = useRef<number | null>(null)
   const completionStateRef = useRef<CompletionState | null>(null)
+  const pasteMenuRef = useRef<HTMLDivElement | null>(null)
   const initialised = useRef(false)
   const appendToDeviceHistory = useLabStore((state) => state.appendToDeviceHistory)
   const theme = DEVICE_THEME[device.type]
@@ -84,6 +86,12 @@ function DeviceTerminalPane({
     let resizeObserver: ResizeObserver | null = null
     let disposable: { dispose: () => void } | null = null
     let handleInsert: ((event: Event) => void) | null = null
+    let handleContextMenu: ((event: MouseEvent) => void) | null = null
+    let handlePasteClick: (() => void) | null = null
+    let handleDismissPasteMenu: (() => void) | null = null
+    let handleTextareaPaste: ((event: ClipboardEvent) => void) | null = null
+    let handleTextareaKeyDown: ((event: KeyboardEvent) => void) | null = null
+    let terminalTextarea: HTMLTextAreaElement | null = null
 
     const timeoutId = window.setTimeout(() => {
       if (!containerRef.current || initialised.current) return
@@ -102,11 +110,6 @@ function DeviceTerminalPane({
       terminal.loadAddon(fitAddon)
       terminal.open(containerRef.current)
       terminal.attachCustomKeyEventHandler((event) => {
-        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') {
-          scheduleClipboardPasteFallback(terminal, inputBufferRef, completionStateRef)
-          return true
-        }
-
         if (event.key === 'Tab' || event.key === 'ArrowUp' || event.key === 'ArrowDown') {
           event.preventDefault()
         }
@@ -141,6 +144,62 @@ function DeviceTerminalPane({
         historyIndexRef.current = null
       }
       window.addEventListener('insert-command', handleInsert as EventListener)
+
+      handleDismissPasteMenu = () => {
+        if (pasteMenuRef.current) {
+          pasteMenuRef.current.style.display = 'none'
+        }
+      }
+
+      handlePasteClick = () => {
+        void pasteClipboardText(terminal, inputBufferRef, completionStateRef)
+        terminal.focus()
+        handleDismissPasteMenu?.()
+      }
+
+      handleContextMenu = (event: MouseEvent) => {
+        event.preventDefault()
+
+        if (!pasteMenuRef.current || !containerRef.current) {
+          return
+        }
+
+        const bounds = containerRef.current.getBoundingClientRect()
+        pasteMenuRef.current.style.left = `${event.clientX - bounds.left}px`
+        pasteMenuRef.current.style.top = `${event.clientY - bounds.top}px`
+        pasteMenuRef.current.style.display = 'block'
+      }
+
+      containerRef.current?.addEventListener('contextmenu', handleContextMenu)
+      pasteMenuRef.current?.addEventListener('click', handlePasteClick)
+      window.addEventListener('click', handleDismissPasteMenu)
+
+      terminalTextarea = containerRef.current?.querySelector<HTMLTextAreaElement>(
+        '.xterm-helper-textarea',
+      ) ?? null
+      handleTextareaKeyDown = (event: KeyboardEvent) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') {
+          event.preventDefault()
+          scheduleClipboardPasteFallback(terminal, inputBufferRef, completionStateRef)
+        }
+      }
+      handleTextareaPaste = (event: ClipboardEvent) => {
+        event.preventDefault()
+        const clipboardText =
+          event.clipboardData?.getData('text/plain')
+          || event.clipboardData?.getData('text')
+          || ''
+        if (clipboardText.length > 0) {
+          appendTerminalInput(
+            terminal,
+            inputBufferRef,
+            completionStateRef,
+            clipboardText,
+          )
+        }
+      }
+      terminalTextarea?.addEventListener('keydown', handleTextareaKeyDown)
+      terminalTextarea?.addEventListener('paste', handleTextareaPaste)
 
       disposable = terminal.onData((data) => {
         if (data === '\r') {
@@ -236,6 +295,21 @@ function DeviceTerminalPane({
       if (handleInsert) {
         window.removeEventListener('insert-command', handleInsert as EventListener)
       }
+      if (handleContextMenu) {
+        containerRef.current?.removeEventListener('contextmenu', handleContextMenu)
+      }
+      if (handlePasteClick) {
+        pasteMenuRef.current?.removeEventListener('click', handlePasteClick)
+      }
+      if (handleDismissPasteMenu) {
+        window.removeEventListener('click', handleDismissPasteMenu)
+      }
+      if (handleTextareaPaste) {
+        terminalTextarea?.removeEventListener('paste', handleTextareaPaste)
+      }
+      if (handleTextareaKeyDown) {
+        terminalTextarea?.removeEventListener('keydown', handleTextareaKeyDown)
+      }
       disposable?.dispose()
       resizeObserver?.disconnect()
       termRef.current?.dispose()
@@ -253,7 +327,22 @@ function DeviceTerminalPane({
     }
   }, [isVisible])
 
-  return <div ref={containerRef} className="h-full w-full" />
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      <div
+        ref={pasteMenuRef}
+        className="absolute z-10 hidden min-w-24 rounded-xl border border-white/10 bg-slate-900 px-2 py-1 shadow-xl"
+      >
+        <button
+          type="button"
+          className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-slate-200 transition hover:bg-white/10"
+        >
+          Paste
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function coloriseOutput(output: string): string {

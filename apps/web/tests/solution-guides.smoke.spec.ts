@@ -157,7 +157,10 @@ test.describe("Solution guide walkthroughs", () => {
     await page.keyboard.press("Control+V");
     await expect
       .poll(() => getVisibleTerminalText(page))
-      .toContain("show ufm topology");
+      .toMatch(/ufm-server\s+\$\s+show ufm topology\s*$/);
+    expect(await getVisibleTerminalText(page)).not.toContain(
+      "show ufm topologyshow ufm topology",
+    );
     await page.keyboard.press("Enter");
     await expect
       .poll(() => getVisibleTerminalText(page))
@@ -175,6 +178,17 @@ test.describe("Solution guide walkthroughs", () => {
     await expect
       .poll(() => getVisibleTerminalText(page))
       .toMatch(/ufm-server\s+\$\s+show ufm topology\s*$/);
+
+    await page.keyboard.press("Enter");
+    await terminalInput.click({ button: "right" });
+    await expect(page.getByRole("button", { name: "Paste" })).toBeVisible();
+    await page.getByRole("button", { name: "Paste" }).click();
+    await expect
+      .poll(() => getVisibleTerminalText(page))
+      .toMatch(/ufm-server\s+\$\s+show ufm topology\s*$/);
+    expect(await getVisibleTerminalText(page)).not.toContain(
+      "show ufm topologyshow ufm topology",
+    );
 
     assertNoBrowserErrors(tracker);
   });

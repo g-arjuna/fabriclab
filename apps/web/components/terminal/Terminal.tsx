@@ -12,6 +12,7 @@ import {
   TAB_SEQUENCE,
   appendTerminalInput,
   autocompleteTerminalInput,
+  pasteClipboardText,
   recallCommandHistory,
   rememberSubmittedCommand,
   replaceTerminalInput,
@@ -58,6 +59,7 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
   const commandHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number | null>(null);
   const completionStateRef = useRef<CompletionState | null>(null);
+  const pasteMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -78,11 +80,6 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
     terminal.loadAddon(fitAddon);
     terminal.open(containerRef.current);
     terminal.attachCustomKeyEventHandler((event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
-        scheduleClipboardPasteFallback(terminal, inputBufferRef, completionStateRef);
-        return true;
-      }
-
       if (event.key === "Tab" || event.key === "ArrowUp" || event.key === "ArrowDown") {
         event.preventDefault();
       }
@@ -116,6 +113,62 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
     };
 
     window.addEventListener("insert-command", handleInsertCommand as EventListener);
+
+    const dismissPasteMenu = () => {
+      if (pasteMenuRef.current) {
+        pasteMenuRef.current.style.display = "none";
+      }
+    };
+
+    const handlePasteClick = () => {
+      void pasteClipboardText(terminal, inputBufferRef, completionStateRef);
+      terminal.focus();
+      dismissPasteMenu();
+    };
+
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+
+      if (!containerRef.current || !pasteMenuRef.current) {
+        return;
+      }
+
+      const bounds = containerRef.current.getBoundingClientRect();
+      pasteMenuRef.current.style.left = `${event.clientX - bounds.left}px`;
+      pasteMenuRef.current.style.top = `${event.clientY - bounds.top}px`;
+      pasteMenuRef.current.style.display = "block";
+    };
+
+    containerRef.current.addEventListener("contextmenu", handleContextMenu);
+    pasteMenuRef.current?.addEventListener("click", handlePasteClick);
+    window.addEventListener("click", dismissPasteMenu);
+
+    const terminalTextarea = containerRef.current.querySelector<HTMLTextAreaElement>(
+      ".xterm-helper-textarea",
+    );
+    const handleTextareaKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        scheduleClipboardPasteFallback(terminal, inputBufferRef, completionStateRef);
+      }
+    };
+    const handleTextareaPaste = (event: ClipboardEvent) => {
+      event.preventDefault();
+      const clipboardText =
+        event.clipboardData?.getData("text/plain")
+        || event.clipboardData?.getData("text")
+        || "";
+      if (clipboardText.length > 0) {
+        appendTerminalInput(
+          terminal,
+          inputBufferRef,
+          completionStateRef,
+          clipboardText,
+        );
+      }
+    };
+    terminalTextarea?.addEventListener("keydown", handleTextareaKeyDown);
+    terminalTextarea?.addEventListener("paste", handleTextareaPaste);
 
     const disposable = terminal.onData((data) => {
       if (data === "\r") {
@@ -205,13 +258,33 @@ export function Terminal({ labTitle }: { labTitle: string | null }) {
 
     return () => {
       window.removeEventListener("insert-command", handleInsertCommand as EventListener);
+      containerRef.current?.removeEventListener("contextmenu", handleContextMenu);
+      pasteMenuRef.current?.removeEventListener("click", handlePasteClick);
+      window.removeEventListener("click", dismissPasteMenu);
+      terminalTextarea?.removeEventListener("keydown", handleTextareaKeyDown);
+      terminalTextarea?.removeEventListener("paste", handleTextareaPaste);
       disposable.dispose();
       resizeObserver.disconnect();
       terminal.dispose();
     };
   }, [labTitle]);
 
-  return <div ref={containerRef} className="h-full min-h-[320px] w-full" />;
+  return (
+    <div className="relative h-full min-h-[320px] w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      <div
+        ref={pasteMenuRef}
+        className="absolute z-10 hidden min-w-24 rounded-xl border border-white/10 bg-slate-900 px-2 py-1 shadow-xl"
+      >
+        <button
+          type="button"
+          className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-slate-200 transition hover:bg-white/10"
+        >
+          Paste
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default Terminal;

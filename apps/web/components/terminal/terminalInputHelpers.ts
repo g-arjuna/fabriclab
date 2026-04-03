@@ -76,6 +76,28 @@ export function scheduleClipboardPasteFallback(
   }, 50);
 }
 
+export async function pasteClipboardText(
+  terminal: XTerm,
+  inputBufferRef: { current: string },
+  completionStateRef: { current: CompletionState | null },
+) {
+  if (!navigator.clipboard?.readText) {
+    return;
+  }
+
+  try {
+    const clipboardText = await navigator.clipboard.readText();
+    appendTerminalInput(
+      terminal,
+      inputBufferRef,
+      completionStateRef,
+      clipboardText,
+    );
+  } catch {
+    // Browser clipboard permission can be denied; keep the terminal usable.
+  }
+}
+
 export function recallCommandHistory(
   terminal: XTerm,
   inputBufferRef: { current: string },
