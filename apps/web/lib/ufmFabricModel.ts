@@ -1,10 +1,13 @@
 import type { LabDevice, RailState, TopologyState } from "@/types";
 
+type UfmOperatingMode = "roce" | "infiniband";
+
 export interface UfmFabricNode {
   id: string;
   label: string;
   typeLabel: "Host" | "Switch";
   portName: string;
+  operatingMode: UfmOperatingMode;
   status: "up" | "down" | "error-disabled" | "degraded" | "admin-down";
   railId?: number;
   guid: string;
@@ -47,6 +50,41 @@ function inferPortName(device: LabDevice): string {
   );
 }
 
+function inferOperatingMode(device: LabDevice): UfmOperatingMode {
+  const profile = [
+    device.label,
+    device.sublabel ?? "",
+    device.osLabel,
+    ...device.allowedCommands,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    profile.includes("cumulus") ||
+    profile.includes("spectrum") ||
+    profile.includes("roce") ||
+    /\b(swp\d+|eth\d+)\b/.test(profile) ||
+    profile.includes("ethtool") ||
+    profile.includes("ecn") ||
+    profile.includes("pfc")
+  ) {
+    return "roce";
+  }
+
+  if (
+    profile.includes("infiniband") ||
+    profile.includes("pkey") ||
+    profile.includes("ipoib") ||
+    profile.includes("opensm") ||
+    profile.includes("ibv_")
+  ) {
+    return "infiniband";
+  }
+
+  return "roce";
+}
+
 function buildNodes(devices: LabDevice[], topologyState: TopologyState, rails: RailState[]): UfmFabricNode[] {
   const fabricDevices = devices.filter(
     (device) => device.type !== "ufm-server" && !device.label.startsWith("[SIM ONLY]"),
@@ -65,6 +103,7 @@ function buildNodes(devices: LabDevice[], topologyState: TopologyState, rails: R
         label: device.label,
         typeLabel: "Switch" as const,
         portName: inferPortName(device),
+        operatingMode: inferOperatingMode(device),
         status:
           rail?.switchPort ??
           (topologyState.opticReplaced === true && device.id === "leaf-rail5"
@@ -85,6 +124,7 @@ function buildNodes(devices: LabDevice[], topologyState: TopologyState, rails: R
         label: device.label,
         typeLabel: "Host" as const,
         portName: inferPortName(device),
+        operatingMode: inferOperatingMode(device),
         status: rail?.nicState ?? device.status,
         railId: device.railId,
         guid: rail?.guid ?? `0x506b4b0300a1b2${String(index).padStart(2, "0")}`,
@@ -154,6 +194,7 @@ function buildLinks(nodes: UfmFabricNode[], rails: RailState[]): UfmFabricLink[]
 }
 
 function formatPortRecord(node: UfmFabricNode, link?: UfmFabricLink) {
+  const isRoce = node.operatingMode === "roce";
   const portNumber = Number.parseInt(node.portName.replace(/\D/g, ""), 10) || 1;
   const peerNodeId =
     link?.fromNodeId === node.id
@@ -175,7 +216,14 @@ function formatPortRecord(node: UfmFabricNode, link?: UfmFabricLink) {
         : "N/A";
 
   return {
-    description: node.typeLabel === "Host" ? "Computer IB Port" : "Switch IB Port",
+    description:
+      node.typeLabel === "Host"
+        ? isRoce
+          ? "Computer Ethernet Port"
+          : "Computer IB Port"
+        : isRoce
+          ? "Switch Ethernet Port"
+          : "Switch IB Port",
     number: portNumber,
     external_number: portNumber,
     physical_state: link?.physicalState ?? "Polling",
@@ -189,17 +237,25 @@ function formatPortRecord(node: UfmFabricNode, link?: UfmFabricLink) {
       node.typeLabel === "Switch"
         ? ["reset", "healthy_operations", "disable", "get_cables_info"]
         : ["reset", "healthy_operations", "disable"],
-    mtu: 4096,
+    mtu: isRoce ? 9216 : 4096,
     peer_port_dname: peerPort,
     severity: link?.severity ?? (node.status === "up" ? "Info" : "Warning"),
-    active_speed: (link?.status ?? "Down") === "Active" ? "NDR" : null,
+    active_speed: (link?.status ?? "Down") === "Active" ? (isRoce ? "400GbE" : "NDR") : null,
     enabled_speed: (link?.status ?? "Down") === "Active"
-      ? ["SDR", "DDR", "QDR", "FDR", "EDR", "HDR", "NDR"]
+      ? isRoce
+        ? ["100GbE", "200GbE", "400GbE"]
+        : ["SDR", "DDR", "QDR", "FDR", "EDR", "HDR", "NDR"]
       : [],
-    supported_speed: ["SDR", "DDR", "QDR", "FDR", "EDR", "HDR", "NDR"],
-    active_width: (link?.status ?? "Down") === "Active" ? "4x" : null,
-    enabled_width: (link?.status ?? "Down") === "Active" ? ["1x", "4x"] : [],
-    supported_width: ["1x", "4x"],
+    supported_speed: isRoce
+      ? ["100GbE", "200GbE", "400GbE"]
+      : ["SDR", "DDR", "QDR", "FDR", "EDR", "HDR", "NDR"],
+    active_width: (link?.status ?? "Down") === "Active" ? (isRoce ? "1x" : "4x") : null,
+    enabled_width: (link?.status ?? "Down") === "Active"
+      ? isRoce
+        ? ["1x"]
+        : ["1x", "4x"]
+      : [],
+    supported_width: isRoce ? ["1x"] : ["1x", "4x"],
     dname: node.portName,
     peer_node_name: peerNodeId,
     peer: peerGuid === "N/A" ? "N/A" : `${peerGuid.replace(/^0x/, "")}_${Number.parseInt(peerPort.replace(/\D/g, ""), 10) || 1}`,
@@ -221,7 +277,8 @@ function formatPortRecord(node: UfmFabricNode, link?: UfmFabricLink) {
         ? ["ssh", "sysinfo", "reboot", "mark_device_unhealthy", "collect_system_dump", "sw_upgrade"]
         : ["mark_device_unhealthy"],
     system_mirroring_template: false,
-    hw_technology: null,
+    hw_technology: isRoce ? "Ethernet" : "InfiniBand",
+    operating_mode: node.operatingMode === "roce" ? "RoCE" : "InfiniBand",
   };
 }
 
@@ -301,7 +358,7 @@ export function buildUfmApiExampleFromModel({
         ? "GET /ufmRest/resources/ports?system=leaf-rail5&active=true"
         : "GET /ufmRest/resources/ports?active=true",
     note:
-      "Documented UFM ports-resource response shape, generated from the same FabricLab fabric model as the topology view so link status and endpoint mapping stay in sync.",
+      "Documented UFM ports-resource response shape, generated from the same FabricLab fabric model as the topology view so link status, endpoint mapping, and RoCE-vs-InfiniBand port mode stay in sync.",
     payload: {
       total_resources: portRows.length,
       filtered_resources: portRows.length,
