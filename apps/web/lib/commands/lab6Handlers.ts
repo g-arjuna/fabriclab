@@ -169,6 +169,12 @@ export function handleLab6LeafSwp7PfcStats(): CommandResult {
 }
 
 export function handleLab6ReseatConnector(): CommandResult {
+  const { setTopology, topology } = useLabStore.getState();
+
+  setTopology({
+    ...(topology as object),
+    opticReplaced: true,
+  } as typeof topology);
   markCondition("rootCauseLayerIdentified");
   markCondition("remediationIssued");
 

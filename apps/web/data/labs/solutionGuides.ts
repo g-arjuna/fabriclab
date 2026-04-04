@@ -357,14 +357,9 @@ export const SOLUTION_GUIDES: Record<string, SolutionGuide> = {
         ],
       },
       {
-        title: "Run the site-local physical remediation script",
-        details: "This command represents your site's local runbook, not a universal UFM command; it models a controlled reseat on the suspect connector.",
-        commands: [
-          {
-            deviceId: "ufm-server",
-            command: "sudo ./ops/reseat-dac.sh leaf-rail5 swp7",
-          },
-        ],
+        title: "Reseat the suspect DAC from the Physical Infra panel",
+        details: "Open the Physical Infra panel in the left sidebar and run the leaf-rail5 swp7 connector reseat workflow there so the UFM CLI stays reserved for UFM API commands.",
+        commands: [],
       },
     ],
   },
@@ -456,12 +451,8 @@ export const SOLUTION_GUIDES: Record<string, SolutionGuide> = {
       },
       {
         title: "Replace the optic and clear linkflap protodown",
-        details: "Run the site-local optic replacement script, then clear the linkflap protodown state with Linux `ip link` commands on the switch.",
+        details: "Use the Physical Infra panel to replace the OSFP on leaf-rail2 swp3, then clear the linkflap protodown state with Linux `ip link` commands on the switch.",
         commands: [
-          {
-            deviceId: "ufm-server",
-            command: "sudo ./ops/replace-osfp.sh leaf-rail2 swp3",
-          },
           {
             deviceId: "leaf-rail2",
             command: "sudo ip link set swp3 protodown_reason linkflap off",

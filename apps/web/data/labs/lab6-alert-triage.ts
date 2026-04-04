@@ -48,7 +48,6 @@ export const lab6Devices: LabDevice[] = [
     allowedCommands: [
       "curl -ks 'https://ufm-server/ufmRest/resources/ports?high_ber_only=true&active=true'",
       "curl -ks 'https://ufm-server/ufmRest/resources/ports?system=leaf-rail5&active=true'",
-      "sudo ./ops/reseat-dac.sh leaf-rail5 swp7",
       "help",
       "hint",
     ],
@@ -77,7 +76,7 @@ export const lab6: LabConfig = {
     + "  3. Confirm the GPU-side symptom from DCGM and the NIC counters\n"
     + "  4. Correlate that host view with the leaf-side FEC/PFC counters\n"
     + "  5. Determine the root-cause layer (physical / transport / application)\n"
-    + "  6. Run the site-local remediation script for the connector reseat",
+    + "  6. Use the Physical Infra panel to request the connector reseat",
   initialTopology: {
     pfcEnabled: true,
     ecnEnabled: true,
@@ -114,7 +113,7 @@ export const lab6: LabConfig = {
       triggerAfterMistakes: 10,
       triggerAfterSeconds: 420,
       text:
-        "Sequence: UFM high-BER REST query -> UFM leaf-rail5 active-port query -> dcgmi dmon -i 5 -c 1 -e 1001,1004,1005 -> ethtool -S eth5 -> nv show interface swp7 link -> ethtool -S swp7 -> nv show interface swp7 counters qos pfc-stats -> sudo ./ops/reseat-dac.sh leaf-rail5 swp7",
+        "Sequence: UFM high-BER REST query -> UFM leaf-rail5 active-port query -> dcgmi dmon -i 5 -c 1 -e 1001,1004,1005 -> ethtool -S eth5 -> nv show interface swp7 link -> ethtool -S swp7 -> nv show interface swp7 counters qos pfc-stats -> Physical Infra panel: reseat the DAC on leaf-rail5 swp7",
     },
   ],
 };

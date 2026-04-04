@@ -30,11 +30,14 @@ import { lab15, lab15Devices } from "@/data/labs/lab15-rdma-rkey-exposure";
 import { lab16, lab16Devices } from "@/data/labs/lab16-spectrum-x-platform-audit";
 import { lab17, lab17Devices } from "@/data/labs/lab17-roce-day-zero-config";
 import { lab18, lab18Devices } from "@/data/labs/lab18-ecn-threshold-tuning";
+import { handleLab6ReseatConnector } from "@/lib/commands/lab6Handlers";
+import { replaceOpticRail2 } from "@/lib/commands/lab9Handlers";
 import { isComplete } from "@/lib/labEngine";
 import { formatConditionLabel } from "@/lib/formatters";
+import { buildUfmApiExampleFromModel, buildUfmFabricModel } from "@/lib/ufmFabricModel";
 import { useLabStore } from "@/store/labStore";
 import { useProgressStore } from "@/store/progressStore";
-import type { LabDevice, RailState, TopologyState } from "@/types";
+import type { CommandResult, LabDevice, TopologyState } from "@/types";
 
 const LABS = {
   [lab0a.id]: lab0a,
@@ -113,6 +116,36 @@ const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
 
 type LabId = keyof typeof LABS;
 
+const PHYSICAL_INFRA_RUNBOOKS: Partial<
+  Record<
+    LabId,
+    {
+      actionLabel: string;
+      body: string;
+      completionKey: string;
+      title: string;
+      execute: () => CommandResult;
+    }
+  >
+> = {
+  [lab6.id]: {
+    actionLabel: "Reseat DAC on leaf-rail5 swp7",
+    body:
+      "Use this out-of-band maintenance action after UFM/DCGM/NVUE point to a marginal physical connector. Keeping it here avoids pretending it is a stock UFM shell command.",
+    completionKey: "remediationIssued",
+    title: "Connector reseat runbook",
+    execute: handleLab6ReseatConnector,
+  },
+  [lab9.id]: {
+    actionLabel: "Replace OSFP on leaf-rail2 swp3",
+    body:
+      "Trigger the optic replacement workflow here, then return to the Cumulus switch CLI to clear linkflap protodown with `ip link`.",
+    completionKey: "opticReplaced",
+    title: "Optic replacement runbook",
+    execute: replaceOpticRail2,
+  },
+};
+
 function DesktopRecommendationPrompt({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-6 backdrop-blur-sm">
@@ -148,276 +181,6 @@ function formatElapsed(startTime: number | null, now: number): string {
   return `${String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:${String(elapsedSeconds % 60).padStart(2, "0")}`;
 }
 
-function inferLeafPortName(devices: LabDevice[], railId: number, fallbackPort: string): string {
-  const leafDevice = devices.find(
-    (device) => device.type === "leaf-switch" && device.railId === railId,
-  );
-  const commandPort = leafDevice?.allowedCommands
-    .map((command) => /\b(swp\d+)\b/.exec(command)?.[1])
-    .find((portName): portName is string => Boolean(portName));
-
-  return commandPort ?? fallbackPort;
-}
-
-function formatUfmPortRecord({
-  description,
-  dname,
-  guid,
-  highBerSeverity = "N/A",
-  lid,
-  logicalState,
-  path,
-  peerGuid,
-  peerNodeDescription,
-  peerNodeName,
-  peerPortDname,
-  physicalState,
-  severity,
-  systemIp,
-  systemName,
-}: {
-  description: "Computer IB Port" | "Switch IB Port";
-  dname: string;
-  guid: string;
-  highBerSeverity?: "N/A" | "Warning";
-  lid: number;
-  logicalState: "Active" | "Down";
-  path: string;
-  peerGuid: string;
-  peerNodeDescription: string;
-  peerNodeName: string;
-  peerPortDname: string;
-  physicalState: "Link Up" | "Polling";
-  severity: "Info" | "Warning" | "Critical";
-  systemIp: string;
-  systemName: string;
-}) {
-  return {
-    description,
-    number: Number.parseInt(dname.replace(/\D/g, ""), 10) || 1,
-    external_number: Number.parseInt(dname.replace(/\D/g, ""), 10) || 1,
-    physical_state: physicalState,
-    path,
-    tier: description === "Switch IB Port" ? 3 : 1,
-    high_ber_severity: highBerSeverity,
-    lid,
-    mirror: "disable",
-    logical_state: logicalState,
-    capabilities:
-      description === "Switch IB Port"
-        ? ["reset", "healthy_operations", "disable", "get_cables_info"]
-        : ["reset", "healthy_operations", "disable"],
-    mtu: 4096,
-    peer_port_dname: peerPortDname,
-    severity,
-    active_speed: logicalState === "Active" ? "NDR" : null,
-    enabled_speed: logicalState === "Active" ? ["SDR", "DDR", "QDR", "FDR", "EDR", "HDR", "NDR"] : [],
-    supported_speed: ["SDR", "DDR", "QDR", "FDR", "EDR", "HDR", "NDR"],
-    active_width: logicalState === "Active" ? "4x" : null,
-    enabled_width: logicalState === "Active" ? ["1x", "4x"] : [],
-    supported_width: ["1x", "4x"],
-    dname,
-    peer_node_name: peerNodeName,
-    peer: peerPortDname === "N/A" ? "N/A" : `${peerGuid}_${peerPortDname.replace(/\D/g, "") || "1"}`,
-    peer_node_guid: peerGuid,
-    systemID: guid.replace(/^0x/, ""),
-    node_description: `${systemName}:${dname}`,
-    label: dname,
-    name: `${guid.replace(/^0x/, "")}_${dname.replace(/\D/g, "") || "1"}`,
-    module: "N/A",
-    peer_lid: peerPortDname === "N/A" ? "N/A" : `${lid + 100}`,
-    peer_guid: peerGuid,
-    peer_node_description: peerNodeDescription,
-    guid,
-    system_name: systemName,
-    system_ip: systemIp,
-    peer_ip: peerPortDname === "N/A" ? "N/A" : "10.209.36.20",
-    system_capabilities:
-      description === "Switch IB Port"
-        ? ["ssh", "sysinfo", "reboot", "mark_device_unhealthy", "collect_system_dump", "sw_upgrade"]
-        : ["mark_device_unhealthy"],
-    system_mirroring_template: false,
-    hw_technology: null,
-  };
-}
-
-function buildUfmPortsPayload(
-  activeLabId: string,
-  activeDevices: LabDevice[],
-  topologyState: TopologyState,
-) {
-  const rails = topologyState.rails ?? [];
-
-  if (activeLabId === "lab6-alert-triage") {
-    const isRemediated = topologyState.opticReplaced === true;
-
-    return {
-      endpoint: "GET /ufmRest/resources/ports?system=leaf-rail5&active=true",
-      note:
-        "Documented UFM ports-resource response shape, populated from FabricLab's current lab state. Values are simulator-derived, not queried from a live UFM server.",
-      payload: {
-        total_resources: 8,
-        filtered_resources: 8,
-        num_of_pages: 1,
-        first_index: 1,
-        last_index: 8,
-        data: Array.from({ length: 8 }, (_, index) => {
-          const portNumber = index + 1;
-          const isFaultyPort = portNumber === 7;
-          const peerNodeName =
-            portNumber === 7 ? "DGX-Node-A" : `DGX-Node-${String.fromCharCode(64 + portNumber)}`;
-
-          return formatUfmPortRecord({
-            description: "Switch IB Port",
-            dname: `swp${portNumber}`,
-            guid: "0x9c0591030085abc0",
-            highBerSeverity: isFaultyPort && !isRemediated ? "Warning" : "N/A",
-            lid: 40 + portNumber,
-            logicalState: "Active",
-            path: `default(1) / Switch: leaf-rail5 / swp${portNumber}`,
-            peerGuid: `0x506b4b0300a1b20${portNumber}`,
-            peerNodeDescription: `${peerNodeName}:mlx5_5`,
-            peerNodeName,
-            peerPortDname: "mlx5_5",
-            physicalState: "Link Up",
-            severity: isFaultyPort && !isRemediated ? "Warning" : "Info",
-            systemIp: "10.209.36.15",
-            systemName: "leaf-rail5",
-          });
-        }),
-      },
-    };
-  }
-
-  if (rails.length > 0) {
-    const peerNodeName = activeLabId === "lab0a-fabric-cli-orientation" ? "dgx-node-01" : "dgx-node-a";
-
-    return {
-      endpoint: "GET /ufmRest/resources/ports?active=true",
-      note:
-        "Documented UFM ports-resource response shape, synthesized from this lab's rail state and endpoint mapping.",
-      payload: {
-        total_resources: rails.length,
-        filtered_resources: rails.length,
-        num_of_pages: 1,
-        first_index: rails.length > 0 ? 1 : 0,
-        last_index: rails.length,
-        data: rails.map((rail) => {
-          const switchPort = inferLeafPortName(
-            activeDevices,
-            rail.id,
-            `swp${activeLabId === "lab0-failed-rail" ? rail.id + 2 : rail.id + 1}`,
-          );
-          const linkUp = rail.switchPort === "up";
-          const peerGuid = rail.guid.replace(/^0x/, "");
-
-          return formatUfmPortRecord({
-            description: "Switch IB Port",
-            dname: switchPort,
-            guid: `0x9c0591030085ab${String(rail.id).padStart(2, "0")}`,
-            lid: 100 + rail.id,
-            logicalState: linkUp ? "Active" : "Down",
-            path: `default(1) / Switch: leaf-rail${rail.id} / ${switchPort}`,
-            peerGuid: `0x${peerGuid}`,
-            peerNodeDescription: `${peerNodeName}:${rail.nicName}`,
-            peerNodeName,
-            peerPortDname: rail.nicName,
-            physicalState: linkUp ? "Link Up" : "Polling",
-            severity: rail.switchPort === "up" ? "Info" : "Warning",
-            systemIp: `10.209.36.${20 + rail.id}`,
-            systemName: `leaf-rail${rail.id}`,
-          });
-        }),
-      },
-    };
-  }
-
-  return {
-    endpoint: "GET /ufmRest/resources/ports?active=true",
-    note:
-      "REST-shaped example generated from this lab's current device list. The topology card is still the source of truth for visual layout.",
-    payload: {
-      total_resources: activeDevices.filter((device) => device.type !== "ufm-server").length,
-      filtered_resources: activeDevices.filter((device) => device.type !== "ufm-server").length,
-      num_of_pages: 1,
-      first_index: 1,
-      last_index: activeDevices.filter((device) => device.type !== "ufm-server").length,
-      data: activeDevices
-        .filter((device) => device.type !== "ufm-server")
-        .map((device, index) =>
-          formatUfmPortRecord({
-            description: device.type === "dgx" ? "Computer IB Port" : "Switch IB Port",
-            dname: inferLeafPortName([device], device.railId ?? 0, inferLeafPortName([device], 0, "1")),
-            guid: `0x506b4b0300a1b3${String(index).padStart(2, "0")}`,
-            lid: 200 + index,
-            logicalState: device.status === "up" ? "Active" : "Down",
-            path: `default(1) / ${device.type === "dgx" ? "Computer" : "Switch"}: ${device.id} / ${device.label}`,
-            peerGuid: "N/A",
-            peerNodeDescription: "N/A",
-            peerNodeName: "N/A",
-            peerPortDname: "N/A",
-            physicalState: device.status === "up" ? "Link Up" : "Polling",
-            severity: device.status === "up" ? "Info" : "Warning",
-            systemIp: `10.209.36.${100 + index}`,
-            systemName: device.id,
-          }),
-        ),
-    },
-  };
-}
-
-function buildUfmApiExample(
-  activeLabId: string,
-  activeDevices: LabDevice[],
-  topologyState: TopologyState,
-  labConditions: Record<string, boolean>,
-) {
-  if (activeLabId === "lab15-rdma-rkey-exposure") {
-    const isolationVerified = labConditions.pkeyIsolationVerified === true;
-
-    return {
-      endpoint: "GET /ufmRest/resources/pkeys/{pkey}",
-      note:
-        "Documented /ufmRest/resources/pkeys/<pkey>?guids_data=true shape, rendered from the lab's current PKey isolation state.",
-      payload: isolationVerified
-        ? {
-            pkeys: [
-              {
-                partition: "TenantA_0x8001",
-                ip_over_ib: true,
-                guids: [
-                  { membership: "full", guid: "506b4b0300a1b200", index0: false },
-                  { membership: "limited", guid: "506b4b0300a1b210", index0: false },
-                ],
-              },
-              {
-                partition: "TenantB_0x8002",
-                ip_over_ib: true,
-                guids: [
-                  { membership: "full", guid: "506b4b0300a1b202", index0: false },
-                  { membership: "limited", guid: "506b4b0300a1b210", index0: false },
-                ],
-              },
-            ],
-          }
-        : {
-            warning: "Pre-verification state in this lab. Run the UFM PKey curl reads after hardening.",
-            pkeys: [
-              {
-                partition: "TenantA_0x8001",
-                ip_over_ib: true,
-                guids: [
-                  { membership: "full", guid: "506b4b0300a1b200", index0: false },
-                  { membership: "full", guid: "506b4b0300a1b202", index0: false },
-                ],
-              },
-            ],
-          },
-    };
-  }
-
-  return buildUfmPortsPayload(activeLabId, activeDevices, topologyState);
-}
 
 function KnowledgePanelDrawer() {
   const activeConceptId = useLabStore((state) => state.activeConceptId);
@@ -569,6 +332,49 @@ function LabDiscussionModal({
   );
 }
 
+function PhysicalInfraPanel({
+  activeLabId,
+  isComplete,
+  output,
+  onRunAction,
+}: {
+  activeLabId: LabId;
+  isComplete: boolean;
+  output: string | null;
+  onRunAction: (execute: () => CommandResult) => void;
+}) {
+  const runbook = PHYSICAL_INFRA_RUNBOOKS[activeLabId];
+
+  if (!runbook) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-orange-200/10 bg-white/[0.03] p-4">
+      <p className="text-[10px] uppercase tracking-[0.24em] text-orange-200/80">
+        Physical Infra
+      </p>
+      <h3 className="mt-2 text-sm font-semibold text-white">{runbook.title}</h3>
+      <p className="mt-2 text-xs leading-6 text-slate-400">{runbook.body}</p>
+
+      <button
+        type="button"
+        onClick={() => onRunAction(runbook.execute)}
+        disabled={isComplete}
+        className="mt-3 w-full rounded-xl border border-orange-200/15 bg-orange-200/[0.06] px-4 py-2.5 text-xs font-medium uppercase tracking-[0.18em] text-orange-100/90 transition hover:border-orange-200/25 hover:bg-orange-200/[0.1] disabled:cursor-default disabled:border-emerald-300/15 disabled:bg-emerald-300/[0.06] disabled:text-emerald-200/80"
+      >
+        {isComplete ? "Runbook completed" : runbook.actionLabel}
+      </button>
+
+      {output ? (
+        <pre className="mt-3 max-h-52 overflow-auto rounded-xl border border-white/8 bg-slate-950/60 p-3 whitespace-pre-wrap font-mono text-[11px] leading-5 text-slate-300">
+          {output}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
 function UfmTopologyModal({
   activeDevices,
   activeLabTitle,
@@ -635,7 +441,12 @@ function UfmApiModal({
   topologyState: TopologyState;
 }) {
   const apiExample = useMemo(
-    () => buildUfmApiExample(activeLabId, activeDevices, topologyState, labConditions),
+    () =>
+      buildUfmApiExampleFromModel({
+        activeLabId,
+        fabricModel: buildUfmFabricModel(activeDevices, topologyState),
+        labConditions,
+      }),
     [activeDevices, activeLabId, labConditions, topologyState],
   );
 
@@ -692,6 +503,7 @@ export function LabExperience({ labId }: { labId: string }) {
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const [ufmApiOpen, setUfmApiOpen] = useState(false);
   const [ufmMapOpen, setUfmMapOpen] = useState(false);
+  const [physicalInfraOutput, setPhysicalInfraOutput] = useState<string | null>(null);
   const [showDesktopPrompt, setShowDesktopPrompt] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [workspaceFocus, setWorkspaceFocus] = useState<"topology" | "terminal">("topology");
@@ -768,7 +580,13 @@ export function LabExperience({ labId }: { labId: string }) {
     setDiscussionOpen(false);
     setUfmApiOpen(false);
     setUfmMapOpen(false);
+    setPhysicalInfraOutput(null);
   }, [activeLab.id]);
+
+  const activeRunbook = PHYSICAL_INFRA_RUNBOOKS[activeLab.id as LabId];
+  const physicalInfraDone = activeRunbook
+    ? labState.conditions[activeRunbook.completionKey] === true
+    : false;
 
   return (
     <>
@@ -842,6 +660,16 @@ export function LabExperience({ labId }: { labId: string }) {
                 className="mt-4 w-full"
               />
             </div>
+
+            <PhysicalInfraPanel
+              activeLabId={activeLab.id as LabId}
+              isComplete={physicalInfraDone}
+              output={physicalInfraOutput}
+              onRunAction={(execute) => {
+                const result = execute();
+                setPhysicalInfraOutput(result.output);
+              }}
+            />
 
             <div className="mt-5">
               <p className="text-[10px] uppercase tracking-widest text-slate-500">Conditions</p>

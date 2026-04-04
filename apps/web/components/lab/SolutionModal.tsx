@@ -77,7 +77,8 @@ export function SolutionModal({ isOpen, onClose, labId, title }: SolutionModalPr
             <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Solution Guide</p>
             <h3 className="mt-2 text-xl font-semibold text-white">{title}</h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-              Follow the command sequence below in the listed device terminal tabs.
+              Follow the sequence below in device terminals. Physical remediation steps, when present,
+              live in the sidebar Physical Infra panel.
             </p>
           </div>
           <button

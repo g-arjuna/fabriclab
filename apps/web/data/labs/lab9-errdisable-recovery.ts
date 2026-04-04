@@ -45,7 +45,6 @@ export const lab9Devices: LabDevice[] = [
     osLabel: "Ubuntu + UFM Enterprise",
     allowedCommands: [
       "show ufm topology",
-      "sudo ./ops/replace-osfp.sh leaf-rail2 swp3",
       "help",
       "hint",
     ],
@@ -117,7 +116,7 @@ export const lab9: LabConfig = {
       triggerAfterMistakes: 10,
       triggerAfterSeconds: 400,
       text:
-        "After 'sudo ./ops/replace-osfp.sh leaf-rail2 swp3', clear linkflap protodown with 'sudo ip link set swp3 protodown_reason linkflap off' and 'sudo ip link set swp3 protodown off', then verify with 'nv show interface swp3 link' and 'rdma link show'.",
+        "Use the Physical Infra panel to replace the OSFP on leaf-rail2 swp3, then clear linkflap protodown with 'sudo ip link set swp3 protodown_reason linkflap off' and 'sudo ip link set swp3 protodown off'. Verify with 'nv show interface swp3 link' and 'rdma link show'.",
     },
   ],
 };
