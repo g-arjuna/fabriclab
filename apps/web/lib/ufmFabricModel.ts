@@ -46,7 +46,7 @@ function inferPortName(device: LabDevice): string {
       .map((command) => /\b(swp\d+|eth\d+|mlx5_\d+)\b/.exec(command)?.[1])
       .find((portName): portName is string => Boolean(portName)) ??
     device.sublabel?.match(/\b(swp\d+|eth\d+|mlx5_\d+)\b/)?.[1] ??
-    "1"
+    (device.type === "dgx" ? "eth0" : "swp1")
   );
 }
 
@@ -141,8 +141,73 @@ function buildLinks(nodes: UfmFabricNode[], rails: RailState[]): UfmFabricLink[]
   const switches = nodes.filter((node) => node.typeLabel === "Switch");
   const primaryHost = hosts[0];
 
-  if (!primaryHost || switches.length === 0) {
+  if (switches.length === 0) {
     return [];
+  }
+
+  if (!primaryHost) {
+    const spineNodes = switches.filter((node) => /spine/i.test(`${node.id} ${node.label}`));
+    const edgeNodes = switches.filter((node) => !/spine/i.test(`${node.id} ${node.label}`));
+    const storageNode = edgeNodes.find((node) => /storage/i.test(`${node.id} ${node.label}`));
+
+    if (spineNodes.length > 0 && edgeNodes.length > 0) {
+      return spineNodes.flatMap((spineNode, spineIndex) =>
+        edgeNodes.map((edgeNode, edgeIndex) => {
+          const isUp = spineNode.status === "up" && edgeNode.status === "up";
+          return {
+            id: `${spineNode.id}-${edgeNode.id}`,
+            fromNodeId: spineNode.id,
+            toNodeId: edgeNode.id,
+            fromPort: formatIndexedPort(spineNode.portName, edgeIndex),
+            toPort: formatIndexedPort(edgeNode.portName, spineIndex),
+            fromGuid: spineNode.guid,
+            toGuid: edgeNode.guid,
+            status: isUp ? "Active" : "Down",
+            physicalState: isUp ? "Link Up" : "Polling",
+            severity: isUp ? "Info" : "Warning",
+          } satisfies UfmFabricLink;
+        }),
+      );
+    }
+
+    if (storageNode && edgeNodes.length > 1) {
+      return edgeNodes
+        .filter((node) => node.id !== storageNode.id)
+        .map((edgeNode, edgeIndex) => {
+          const isUp = storageNode.status === "up" && edgeNode.status === "up";
+          return {
+            id: `${storageNode.id}-${edgeNode.id}`,
+            fromNodeId: storageNode.id,
+            toNodeId: edgeNode.id,
+            fromPort: formatIndexedPort(storageNode.portName, edgeIndex),
+            toPort: formatIndexedPort(edgeNode.portName, 0),
+            fromGuid: storageNode.guid,
+            toGuid: edgeNode.guid,
+            status: isUp ? "Active" : "Down",
+            physicalState: isUp ? "Link Up" : "Polling",
+            severity: isUp ? "Info" : "Warning",
+          } satisfies UfmFabricLink;
+        });
+    }
+
+    const sortedSwitches = [...switches].sort((left, right) => left.x - right.x);
+    return sortedSwitches.slice(1).map((switchNode, index) => {
+      const previousNode = sortedSwitches[index];
+      const isUp = previousNode.status === "up" && switchNode.status === "up";
+
+      return {
+        id: `${previousNode.id}-${switchNode.id}`,
+        fromNodeId: previousNode.id,
+        toNodeId: switchNode.id,
+        fromPort: formatIndexedPort(previousNode.portName, index),
+        toPort: formatIndexedPort(switchNode.portName, 0),
+        fromGuid: previousNode.guid,
+        toGuid: switchNode.guid,
+        status: isUp ? "Active" : "Down",
+        physicalState: isUp ? "Link Up" : "Polling",
+        severity: isUp ? "Info" : "Warning",
+      };
+    });
   }
 
   if (rails.length > 0) {
@@ -174,23 +239,33 @@ function buildLinks(nodes: UfmFabricNode[], rails: RailState[]): UfmFabricLink[]
       .filter((link): link is UfmFabricLink => Boolean(link));
   }
 
-  return switches.map((switchNode, index) => {
-    const hostNode = hosts[Math.min(index, hosts.length - 1)];
-    const isUp = switchNode.status === "up" && hostNode.status === "up";
+  return switches.flatMap((switchNode) =>
+    hosts.map((hostNode, hostIndex) => {
+      const isUp = switchNode.status === "up" && hostNode.status === "up";
 
-    return {
-      id: `${switchNode.id}-${hostNode.id}`,
-      fromNodeId: switchNode.id,
-      toNodeId: hostNode.id,
-      fromPort: switchNode.portName,
-      toPort: hostNode.portName,
-      fromGuid: switchNode.guid,
-      toGuid: hostNode.guid,
-      status: isUp ? "Active" : "Down",
-      physicalState: isUp ? "Link Up" : "Polling",
-      severity: isUp ? "Info" : "Warning",
-    };
-  });
+      return {
+        id: `${switchNode.id}-${hostNode.id}`,
+        fromNodeId: switchNode.id,
+        toNodeId: hostNode.id,
+        fromPort:
+          hosts.length > 1
+            ? formatIndexedPort(switchNode.portName, hostIndex)
+            : switchNode.portName,
+        toPort: hostNode.portName,
+        fromGuid: switchNode.guid,
+        toGuid: hostNode.guid,
+        status: isUp ? "Active" : "Down",
+        physicalState: isUp ? "Link Up" : "Polling",
+        severity: isUp ? "Info" : "Warning",
+      };
+    }),
+  );
+}
+
+function formatIndexedPort(basePort: string, offset: number): string {
+  const baseNumber = Number.parseInt(basePort.replace(/\D/g, ""), 10) || 1;
+  const prefix = basePort.replace(/\d+$/, "") || "swp";
+  return `${prefix}${baseNumber + offset}`;
 }
 
 function formatPortRecord(node: UfmFabricNode, link?: UfmFabricLink) {
