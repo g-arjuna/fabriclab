@@ -787,6 +787,31 @@ export function LabExperience({ labId }: { labId: string }) {
                   </svg>
                   Zoom
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setUfmMapOpen(true)}
+                  className="flex items-center gap-1.5 rounded-full border border-amber-300/15 bg-amber-300/[0.06] px-4 py-2 text-xs font-medium text-amber-100/80 transition hover:border-amber-200/25 hover:bg-amber-200/10 hover:text-amber-100"
+                  title="Open UFM fabric map"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="2.25" />
+                    <circle cx="6" cy="18" r="2.25" />
+                    <circle cx="18" cy="18" r="2.25" />
+                    <path d="M10.4 13.6 7.6 16.4" />
+                    <path d="M13.6 13.6 16.4 16.4" />
+                  </svg>
+                  UFM Map
+                </button>
               </div>
 
               <div className="h-full">
