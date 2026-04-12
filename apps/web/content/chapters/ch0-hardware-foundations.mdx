@@ -97,6 +97,116 @@ But NVLink only works within one chassis. The moment you need more than one serv
 
 ---
 
+## Act 3B -- What AMD does instead: Infinity Fabric and xGMI
+
+The DGX H100 uses NVLink and NVSwitch for intra-node GPU communication. This is the NVIDIA solution -- proprietary, fast, and deeply integrated with the CUDA software stack. But when you encounter AMD Instinct GPUs in your infrastructure -- MI300X, MI325X, or the newer MI350 series -- the intra-node interconnect works on a fundamentally different architecture. Understanding both is increasingly necessary, because enterprise AI deployments are no longer uniformly NVIDIA.
+
+<AMDvsNVIDIAInterconnectViz />
+
+### The Infinity Fabric stack
+
+AMD's answer to NVLink is **Infinity Fabric**, a family of interconnect technologies that spans everything from die-to-die communication inside a single chip package to server-to-server links across a rack. This is not a single protocol -- it is a layered architecture:
+
+**Infinity Fabric (intra-package)** handles communication between chiplets within a single GPU die stack. AMD's Instinct GPUs use a chiplet design: multiple Accelerator Complex Dies (XCDs) are bonded together on an I/O Die (IOD). The Infinity Fabric between these chiplets provides the high-bandwidth, low-latency path that keeps the chiplets behaving like a single coherent GPU to the software above.
+
+**xGMI (External Global Memory Interconnect)** is the Infinity Fabric variant that connects multiple GPU packages together within a single server. This is the functional equivalent of NVLink -- it is the multi-GPU scale-up interconnect that allows 8 GPUs in a server to communicate directly without going through PCIe or the host CPU. Like NVLink, xGMI creates a fully-connected mesh topology where every GPU can directly access every other GPU's memory.
+
+### Comparing the generations: MI325X, MI350X, and what changes
+
+The interconnect specs shift meaningfully across AMD generations. As a network engineer, these numbers matter because they tell you the bandwidth budget available for tensor parallelism within a node -- and therefore what spills out onto the external fabric as data parallelism traffic.
+
+<AMDGenerationCompareViz />
+
+**MI325X (CDNA 3, shipping 2024--2025)**
+
+The MI325X is a CDNA 3 architecture GPU using 8 XCD chiplets on an OAM (OCP Accelerator Module) form factor. Each MI325X GPU carries **256 GB of HBM3E** memory with **6 TB/s** memory bandwidth.
+
+For multi-GPU communication, the MI325X uses xGMI with 8 links. Each xGMI link runs at approximately **64 GB/s** raw, yielding around **48 GB/s** practical per-link throughput after protocol overhead and CRC correction. Across all 8 links to its 7 peer GPUs, an MI325X achieves roughly **336 GB/s** aggregate peer bandwidth -- though workload throughput is capped by the slowest link in the mesh, giving practical AllReduce bandwidth of approximately **310--330 GB/s** per GPU in production.
+
+An 8-GPU MI325X platform (Universal Baseboard 2.0 / UBB 2.0) provides:
+
+- 2 TB total HBM3E capacity per node
+- 48 TB/s aggregate memory bandwidth across the node
+- Fully-meshed xGMI topology between all 8 GPUs
+
+**MI350X / MI355X (CDNA 4, shipping 2025)**
+
+The MI350 series represents a significant generational jump. AMD rebuilt Infinity Fabric for CDNA 4, delivering **5.5 TB/s** of intra-package interconnect bandwidth between dies -- internal bandwidth that the MI325X did not have at this level.
+
+The inter-GPU (xGMI) link count increases from 8 to **7 Gen4 links**, but the per-link bandwidth increases substantially, yielding **1,075 GB/s aggregate GPU-to-GPU bandwidth** per GPU -- more than 3x the MI325X figure. Each MI350X/MI355X carries **288 GB of HBM3E** with **8 TB/s** memory bandwidth.
+
+An 8-GPU MI350 platform provides:
+
+- 2.3 TB total HBM3E capacity per node (MI350X) / 2.3 TB (MI355X)
+- 64 TB/s aggregate memory bandwidth across the node
+- Redesigned fully-meshed Infinity Fabric topology
+
+The MI355X (liquid-cooled) variant runs at up to **1,400W TDP**, compared to MI350X at 1,000W and MI325X at 1,000W.
+
+### The parallel to NVLink generation jumps
+
+If this pattern sounds familiar, it should. The NVIDIA generational jumps follow the same rhythm:
+
+| Generation | NVIDIA Scale-Up | AMD Scale-Up |
+| --- | --- | --- |
+| H100 era | NVLink 4.0 - 900 GB/s intra-node | MI300X/MI325X - ~336 GB/s (xGMI) |
+| B200 era | NVLink 5.0 - 1.8 TB/s intra-node | MI350 - ~1,075 GB/s (xGMI Gen4) |
+
+The bandwidth gap between NVIDIA and AMD at intra-node scale-up is real and significant. NVLink 4.0 at 900 GB/s versus MI325X xGMI at ~336 GB/s means tensor parallelism within a node is substantially faster on a DGX H100 than on a comparable MI325X node. This has direct consequences for model partitioning strategy: workloads that rely heavily on intra-node tensor parallelism may need to restructure their parallelism plan on AMD hardware.
+
+The MI350 generation closes this gap meaningfully. At ~1,075 GB/s aggregate, MI350X node-level bandwidth approaches NVLink 4.0 territory, though NVLink 5.0 in Blackwell has already moved the goalposts to 1.8 TB/s.
+
+### Scale-out: the external fabric perspective
+
+Where the architectures converge is on the external fabric -- the network that connects nodes to each other. Both NVIDIA and AMD platforms use standard Ethernet for scale-out:
+
+- NVIDIA DGX nodes: ConnectX-7 NICs running InfiniBand NDR or RoCEv2
+- AMD MI325X/MI350X nodes: AMD Pollara 400 NICs (or OEM equivalents) running **RoCEv2 or UEC** (Ultra Ethernet Consortium)
+
+The AMD Pollara 400 NIC is AMD's scale-out networking solution, targeting the Ultra Ethernet Consortium specification as an alternative to NVIDIA's Spectrum-X ecosystem. From a fabric perspective, AMD-GPU nodes look essentially the same as NVIDIA-GPU nodes at the external switch: 400GbE ports, RoCEv2 traffic, DSCP marking, PFC and ECN requirements. Everything you configure on the Ethernet fabric for an NVIDIA cluster applies unchanged to an AMD cluster.
+
+This is why FabricLab's PFC, ECN, congestion control, and switch configuration content is directly applicable regardless of which GPU vendor's hardware populates your compute nodes. The fabric does not care whether the RDMA traffic originates from a ConnectX-7 or a Pollara 400 -- it sees UDP/4791 with DSCP 26, and it manages it the same way.
+
+**UALink: AMD's answer to NVLink Networking**
+
+NVLink Networking (Chapter 12) extends NVLink beyond a single chassis to connect multiple DGX nodes at the scale-up interconnect level. AMD is developing an analogous open-standard capability through the **UALink consortium** (Ultra Accelerator Link).
+
+UALink 1.0 defines a 200 GT/s per-lane interconnect that can connect up to 1,024 accelerators in a pod, using 4 lanes per GPU for 800 GB/s total connection bandwidth. This is an industry consortium standard rather than a proprietary NVIDIA technology -- AMD, Google, AWS, Intel, Microsoft, Cisco, and others are all consortium members.
+
+UALink hardware (switches, GPU implementations) is expected in the **2026/2027 window**. For production deployments today, AMD scale-up remains xGMI within a single 8-GPU node, with RoCEv2 for all cross-node scale-out. UALink is important to understand as the technology that AMD intends to use when NVLink Networking-style multi-node scale-up is needed.
+
+### What changes for your diagnostic work
+
+If you encounter an AMD Instinct cluster, the external fabric diagnostics remain almost identical to what this course teaches. The internal node diagnostics use different tools:
+
+```bash
+# AMD equivalent of nvidia-smi for GPU health
+rocm-smi
+
+# Check xGMI link topology
+rocm-smi --showtopo
+
+# Check xGMI link bandwidth state
+rocm-smi --showtopoweight
+
+# AMD equivalent of ibstat for RDMA state
+# AMD nodes still expose RDMA interfaces via rdma-core
+ibstat
+rdma dev show
+
+# RCCL (AMD's NCCL equivalent) test for AllReduce performance
+# Replace nccl-tests with rccl-tests on AMD nodes
+rccl-tests/build/all_reduce_perf -b 8 -e 8G -f 2 -g 8
+```
+
+The `rocm-smi --showtopo` output will display the xGMI mesh weight between GPU pairs. A weight of 15 indicates a direct xGMI link. A weight of 0 indicates the GPUs are on separate sockets with no direct link. Any weight above 15 indicates a longer path with intermediate hops -- which will degrade collective operation performance in the same way a congested external fabric hop degrades NCCL AllReduce.
+
+The ROCm stack (AMD's equivalent of CUDA + MLNX-OFED) is installed separately. RCCL (ROCm Collective Communication Library) is the AMD equivalent of NCCL. Its tuning variables, collective algorithm selection, and performance measurement workflow mirror NCCL closely -- Chapter 8's NCCL discussion maps directly to RCCL with minor naming differences.
+
+---
+
+> **The practical summary**: AMD Instinct GPUs use Infinity Fabric / xGMI for intra-node scale-up instead of NVLink. The MI325X delivers ~336 GB/s per-GPU aggregate peer bandwidth (versus 900 GB/s on H100 NVLink 4.0). The MI350 series closes much of this gap at ~1,075 GB/s. For the external fabric -- the network you configure and operate -- both platforms are indistinguishable: both run RoCEv2 over 400GbE, both require identical PFC/ECN configuration, and both generate the same AllReduce traffic pattern at the switch level.
+
 ## Act 4 -- Why standard Ethernet breaks down
 
 Your first instinct might be: just use fast Ethernet. We have 400GbE. That should be enough.
@@ -480,6 +590,7 @@ You started this chapter knowing enterprise servers and switches. You now know:
 - Why RoCEv2 traffic is structurally low-entropy, what flowlets are, and why this makes ECMP fail for AI fabrics
 - Why InfiniBand was adopted from supercomputing, and why RoCEv2 emerged as an alternative
 - The evolution from NIC -> HCA -> DPU and what each adds
+- How AMD Instinct GPUs use Infinity Fabric / xGMI for intra-node scale-up instead of NVLink, and why the external Ethernet fabric stays operationally the same
 - The complete anatomy of a DGX H100 and why each component exists
 - How the three networks of a DGX deployment connect and why they are separate
 - Why the same ConnectX-7 NIC can connect to an InfiniBand fabric or an Ethernet fabric -- and what changes across the entire infrastructure when you make that choice

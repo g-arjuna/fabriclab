@@ -5,6 +5,8 @@ import { Image } from "@/components/chapter/MdxImage"
 import { EnterpriseBaselineViz } from "@/components/visualisations/EnterpriseBaselineViz"
 import { TrainingParallelismViz } from "@/components/visualisations/TrainingParallelismViz"
 import { NVLinkViz } from "@/components/visualisations/NVLinkViz"
+import { AMDvsNVIDIAInterconnectViz } from "@/components/visualisations/AMDvsNVIDIAInterconnectViz"
+import { AMDGenerationCompareViz } from "@/components/visualisations/AMDGenerationCompareViz"
 import { PacketDropCostViz } from "@/components/visualisations/PacketDropCostViz"
 import { IndustryEvolutionViz } from "@/components/visualisations/IndustryEvolutionViz"
 import { NICEvolutionViz } from "@/components/visualisations/NICEvolutionViz"
@@ -222,6 +224,8 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   EnterpriseBaselineViz,
   TrainingParallelismViz,
   NVLinkViz,
+  AMDvsNVIDIAInterconnectViz,
+  AMDGenerationCompareViz,
   PacketDropCostViz,
   IndustryEvolutionViz,
   NICEvolutionViz,
