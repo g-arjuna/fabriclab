@@ -1,0 +1,176 @@
+---
+title: "Lab 20 - EVPN Tenant Route Leak"
+labNumber: 20
+slug: "lab20-evpn-tenant-leak"
+difficulty: "advanced"
+expectedMinutes: 45
+chapterRef: "ch27-bgp-evpn-multitenancy"
+description: "Diagnose and fix a BGP-EVPN route-target misconfiguration that is leaking TenantA's storage subnet into TenantB's VRF."
+published: true
+---
+
+import LabTerminal from '@/components/lab/LabTerminal'
+import LabHint from '@/components/lab/LabHint'
+import LabCheck from '@/components/lab/LabCheck'
+import LabAnswerBox from '@/components/lab/LabAnswerBox'
+
+## Scenario
+
+Your security team has escalated a critical incident: a DGX node belonging to **TenantB** has successfully pinged `10.100.1.5`, which is a storage server in **TenantA's** dedicated storage subnet `10.100.1.0/24`. This should be impossible - the two tenants are meant to be fully isolated via BGP-EVPN with distinct route-targets. The cross-tenant connectivity has been confirmed by three separate engineers, and it is reproducible.
+
+The fabric consists of two Spectrum-4 leaf switches (`leaf-01` and `leaf-02`) acting as VTEPs. `leaf-01` is the designated leaf for TenantA's compute and storage nodes. `leaf-02` hosts TenantB's compute nodes. Both leaves have BGP sessions to a pair of spines. Configuration was deployed last night during a maintenance window by a junior engineer who made a copy-paste error in the EVPN route-target configuration on `leaf-02`.
+
+Your task is to find the misconfiguration, confirm it is the root cause, apply the fix, and verify that TenantA's storage is no longer reachable from TenantB while ensuring TenantA's own hosts can still reach their storage normally.
+
+**Lab topology:**
+
+- `leaf-01` - TenantA leaf (VRF_A: RT 65000:100, storage subnet 10.100.1.0/24)
+- `leaf-02` - TenantB leaf (VRF_B: RT 65000:200, but misconfigured to also import 65000:100)
+- `dgx-tenanta` - DGX H200 in TenantA (swp3 on leaf-01, VLAN 10, VNI 100)
+- `dgx-tenantb` - DGX H200 in TenantB (swp3 on leaf-02, VLAN 20, VNI 200)
+
+---
+
+## Task 1 - Confirm the Route Leak
+
+Before you can fix the problem you must confirm exactly how the leak is occurring. Start by verifying what routes exist in `leaf-02`'s VRF_B routing table and identify the leaked prefix.
+
+<LabTerminal nodeId="leaf-02" prompt="cumulus@leaf-02:~$">
+net show bgp vrf VRF_B ipv4 unicast
+</LabTerminal>
+
+<LabHint level={1} triggerAfterMistakes={3} triggerAfterSeconds={120}>
+The BGP VRF table will show you all IPv4 prefixes imported into VRF_B. Look for any prefixes in the `10.100.x.x` range - those belong to TenantA's storage and should not appear here.
+</LabHint>
+
+<LabCheck id="leakConfirmed" label="Route leak confirmed in VRF_B routing table" />
+
+Now confirm which specific EVPN Type-5 route is carrying the leaked prefix and which Route Distinguisher it originates from:
+
+<LabTerminal nodeId="leaf-02" prompt="cumulus@leaf-02:~$">
+net show bgp evpn route type 5
+</LabTerminal>
+
+<LabHint level={2} triggerAfterMistakes={6} triggerAfterSeconds={240}>
+In the Type-5 output, look for a route with the prefix `10.100.1.0/24`. The Route Distinguisher of that route will be in the format `65001:100` (leaf-01's RD for TenantA). The presence of this RD's prefixes in VRF_B means leaf-02 is importing TenantA's route-target.
+</LabHint>
+
+<LabCheck id="leakyLeafIdentified" label="Leaked Type-5 route identified with source RD" />
+
+---
+
+## Task 2 - Find the Misconfigured Route-Target
+
+You now know the leak is happening and where the route originates. The next step is to find the exact misconfiguration on `leaf-02` that is causing VRF_B to import TenantA's routes.
+
+<LabTerminal nodeId="leaf-02" prompt="cumulus@leaf-02:~$">
+nv show vrf VRF_B router bgp route-import
+</LabTerminal>
+
+<LabHint level={1} triggerAfterMistakes={3} triggerAfterSeconds={120}>
+This command shows all route-targets that VRF_B is configured to import from EVPN. You should see `65000:200` (correct for TenantB) and `65000:100` (incorrect - this is TenantA's RT). The second entry is the misconfiguration.
+</LabHint>
+
+<LabCheck id="rtMisconfigFound" label="Erroneous RT 65000:100 import found on leaf-02 VRF_B" />
+
+---
+
+## Task 3 - Fix the Route-Target Import
+
+Remove the erroneous route-target import from `leaf-02`'s VRF_B. Apply the configuration and confirm it has taken effect.
+
+<LabTerminal nodeId="leaf-02" prompt="cumulus@leaf-02:~$">
+nv unset vrf VRF_B router bgp route-import from-evpn route-target 65000:100
+nv config apply
+</LabTerminal>
+
+After applying, verify the RT import configuration is now correct (only 65000:200):
+
+<LabTerminal nodeId="leaf-02" prompt="cumulus@leaf-02:~$">
+nv show vrf VRF_B router bgp route-import
+</LabTerminal>
+
+<LabCheck id="rtFixed" label="RT 65000:100 removed from VRF_B import - only 65000:200 remains" />
+
+---
+
+## Task 4 - Verify Tenant Isolation Restored
+
+Confirm that the leak is gone: TenantA's storage prefix `10.100.1.0/24` should no longer appear in VRF_B's routing table on `leaf-02`.
+
+<LabTerminal nodeId="leaf-02" prompt="cumulus@leaf-02:~$">
+net show bgp vrf VRF_B ipv4 unicast
+</LabTerminal>
+
+<LabHint level={1} triggerAfterMistakes={3} triggerAfterSeconds={120}>
+The `10.100.1.0/24` prefix should no longer appear in this output. If it still appears, BGP may need a moment to withdraw the route - try `net clear bgp vrf VRF_B *` to force a soft reset, then re-check.
+</LabHint>
+
+<LabCheck id="isolationRestored" label="TenantA storage prefix absent from VRF_B routing table" />
+
+Now confirm that `dgx-tenantb` can no longer reach TenantA's storage:
+
+<LabTerminal nodeId="dgx-tenantb" prompt="root@dgx-tenantb:~#">
+ping -c 3 10.100.1.5
+</LabTerminal>
+
+<LabCheck id="crossTenantBlocked" label="Cross-tenant ping blocked - isolation confirmed" />
+
+---
+
+## Task 5 - Verify Legitimate TenantA Access Still Works
+
+After any fix that modifies route-target imports, you must confirm that legitimate intra-tenant traffic is not broken. TenantA's DGX compute node must still reach the storage server.
+
+<LabTerminal nodeId="dgx-tenanta" prompt="root@dgx-tenanta:~#">
+ping -c 3 10.100.1.5
+</LabTerminal>
+
+<LabCheck id="legitimateAccessVerified" label="TenantA compute can still reach TenantA storage - intra-tenant routing intact" />
+
+Optionally run a brief `ib_write_bw` test to confirm that RDMA access from TenantA's DGX to storage is fully functional:
+
+<LabTerminal nodeId="dgx-tenanta" prompt="root@dgx-tenanta:~#">
+ib_write_bw -d mlx5_0 -x 3 10.100.1.5 --port 18515 --duration 5
+</LabTerminal>
+
+<LabCheck id="rdmaVerified" label="RDMA Write BW test passes from TenantA compute to storage" />
+
+---
+
+## Debrief
+
+**Root cause:** A junior engineer copy-pasted the VRF configuration from `leaf-01`'s VRF_A to `leaf-02`'s VRF_B during last night's maintenance window. The route-import section was not updated, leaving `65000:100` (TenantA's RT) in VRF_B's import list alongside the correct `65000:200`. This caused every leaf in the fabric to accept TenantA's Type-5 IP prefix routes into VRF_B's BGP table.
+
+**Why this is catastrophic:** In a BGP-EVPN fabric, route-target import is the *sole* routing isolation mechanism between tenants. Unlike a traditional firewall, there is no default-deny between VRFs - once a route exists in a VRF's FIB, any host in that VRF can reach the prefix without restriction (unless GBP is also configured). A route-target misconfiguration silently grants full Layer 3 reachability across tenant boundaries.
+
+**Why it wasn't caught by monitoring:** SNMP counter-based monitoring cannot detect this class of failure because no errors or drops occur - the traffic flows successfully. Only a monitoring tool that audits the BGP route-target configuration fabric-wide (such as NetQ's `check evpn` command, covered in Ch28) would catch this proactively.
+
+**Prevention strategy:**
+
+1. Use GitOps for NVUE configuration - all changes reviewed by a second engineer before apply
+2. Run `netq check evpn` as a CI/CD gate on every configuration change
+3. Implement a VNI/RT registry that maps every RT value to its owning tenant and validates new assignments against it
+4. Set BGP route-target imports to explicit (never use wildcards like `route-import *`)
+
+**Key commands for this class of incident:**
+
+```bash
+# Confirm leak
+net show bgp vrf <VRF> ipv4 unicast          # Look for cross-tenant prefixes
+net show bgp evpn route type 5               # Identify source RD of leaked routes
+
+# Find misconfiguration
+nv show vrf <VRF> router bgp route-import    # Check what RTs are being imported
+
+# Fix
+nv unset vrf <VRF> router bgp route-import from-evpn route-target <wrong-rt>
+nv config apply
+
+# Verify
+net show bgp vrf <VRF> ipv4 unicast | grep <leaked-prefix>   # Should return empty
+```
+
+<LabAnswerBox id="reflection" label="Reflection question">
+If GBP microsegmentation had been configured with explicit deny contracts between TENANT2_COMPUTE and TENANT1_STORAGE EPGs, would this route-leak incident still have allowed TenantB to access TenantA's storage data? Explain why routing isolation and GBP policy are complementary rather than redundant security mechanisms.
+</LabAnswerBox>

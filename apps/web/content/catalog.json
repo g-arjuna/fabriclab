@@ -690,6 +690,32 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch26-adaptive-routing-spectrum-x"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch27-bgp-evpn-multitenancy",
+      "number": 27,
+      "title": "BGP-EVPN Multi-Tenancy on Spectrum-X",
+      "href": "/learn/ch27-bgp-evpn-multitenancy",
+      "durationMinutes": 60,
+      "durationLabel": "60 min",
+      "partKey": "platform-integration",
+      "partTitle": "Part 6 - Platform Integration",
+      "partDescription": "Requires Part 5 - Ch 24+",
+      "tags": [
+        "BGP-EVPN",
+        "VXLAN",
+        "Spectrum-X",
+        "Multi-tenancy",
+        "GBP",
+        "Tenant isolation"
+      ],
+      "description": "How Spectrum-X enforces tenant isolation using BGP-EVPN, VXLAN, and GBP microsegmentation - from VNI planning to route-target configuration and operational troubleshooting.",
+      "previewSummary": "Learn how Spectrum-X partitions one physical GPU fabric into isolated tenant domains with EVPN, VNIs, and line-rate policy enforcement.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch27-bgp-evpn-multitenancy"
     }
   ],
   "labs": [
@@ -1108,6 +1134,28 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch26-adaptive-routing-spectrum-x"
+    },
+    {
+      "kind": "lab",
+      "slug": "lab20-evpn-tenant-leak",
+      "number": 20,
+      "title": "EVPN Tenant Route Leak",
+      "href": "/lab?lab=lab20-evpn-tenant-leak",
+      "durationMinutes": 45,
+      "durationLabel": "45 min",
+      "tags": [
+        "BGP-EVPN",
+        "Route-target",
+        "Spectrum-X",
+        "VXLAN",
+        "Tenant isolation"
+      ],
+      "description": "Diagnose and fix a BGP-EVPN route-target misconfiguration that leaks TenantA's storage routes into TenantB's VRF.",
+      "previewSummary": "Track down a cross-tenant EVPN route leak, repair the import RT, and confirm isolation without breaking valid tenant traffic.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch27-bgp-evpn-multitenancy"
     }
   ]
 }

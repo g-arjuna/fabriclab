@@ -1,0 +1,467 @@
+---
+title: "BGP-EVPN Multi-Tenancy on Spectrum-X"
+chapterNumber: 27
+slug: "ch27-bgp-evpn-multitenancy"
+description: "How Spectrum-X enforces tenant isolation using BGP-EVPN, VXLAN, and GBP microsegmentation - from VNI planning to route-target configuration and operational troubleshooting."
+published: true
+prev: "ch26-adaptive-routing-spectrum-x"
+next: "ch28-netq-operations"
+---
+
+## Act 1 - Multi-Tenancy Requirements in GPU Clouds
+
+The trajectory of GPU infrastructure has moved firmly toward shared tenancy. A hyperscaler or cloud GPU provider cannot afford to dedicate an entire Spectrum-X SuperPOD to a single customer for every workload - the economics demand that multiple tenants coexist on the same physical fabric. But coexistence introduces four hard requirements that a flat, unpartitioned Ethernet network fundamentally cannot satisfy.
+
+**Routing isolation** means that TenantA's training VMs must not receive routes belonging to TenantB's inference cluster. This is not a firewall problem - a firewall that sees cross-tenant routes can still be misconfigured. Isolation must be enforced at the routing layer so that the routes simply do not exist in the wrong VRF. **Security isolation** means that even a misconfigured host in TenantA should have no physical path to TenantB's traffic - the switch ASIC must enforce the boundary, not userspace software. **Performance isolation** means that TenantA's all-reduce traffic, which can generate synchronized multi-hundred-gigabit bursts at barrier points, must not degrade TenantB's inference latency. Finally, **management isolation** means that the operators managing TenantA's workload should not be able to observe or modify any aspect of TenantB's fabric state.
+
+Spectrum-X is engineered to enforce all four properties simultaneously. The architecture distributes enforcement across three layers: BGP-EVPN handles routing isolation by scoping route advertisement to per-tenant VRFs, VXLAN encapsulation enforces security isolation by tagging every frame with a 24-bit VNI that the Spectrum-4 ASIC validates in hardware, and GBP (Group-Based Policy) microsegmentation provides fine-grained intra-tenant performance and security policy that the TCAM enforces at line rate.
+
+In practice, a GPU cloud might operate three distinct tenant classes simultaneously. **Bare-metal tenants** receive dedicated DGX nodes attached to dedicated leaf switches; their VNIs are completely separate and the Spectrum-4 never bridges frames between them. **Shared-GPU tenants** using vGPU on a common DGX B200 are isolated via GBP EPGs within a shared VNI range, with policy contracts governing which EPGs may communicate. **Inference tenants** typically have lower bandwidth demands but strict latency SLAs and are placed in separate VRFs with ECN thresholds tuned for shorter queues. This chapter covers how to configure, verify, and troubleshoot all three patterns.
+
+---
+
+## Act 2 - EVPN-VXLAN Recap and Spectrum-X Specifics
+
+VXLAN (Virtual Extensible LAN) solves the fundamental problem that Ethernet was never designed to operate at the scale of a multi-tenant data centre. A standard 802.1Q VLAN tag is 12 bits - 4,094 usable VLANs - which is insufficient when you need tens of thousands of isolated tenant segments. VXLAN extends this to a 24-bit VNI field, providing approximately 16 million distinct network identifiers, which is more than adequate even for the largest GPU clouds.
+
+Mechanically, VXLAN encapsulation wraps the original tenant Ethernet frame in a UDP/IP/Ethernet stack with an 8-byte VXLAN header carrying the VNI. The outer IP header uses the VTEP (VXLAN Tunnel Endpoint) IP addresses - on Spectrum-X, every Spectrum-4 leaf switch acts as a VTEP. When TenantA's DGX node sends a frame, the ingress leaf encapsulates it with the tenant's VNI, routes it across the IP underlay (BGP on the spine), and the egress leaf decapsulates it before delivering to the destination host. Spectrum-4 performs both the encapsulation and decapsulation entirely in the forwarding ASIC at line rate - there is no software VTEP path and no added latency beyond the normal forwarding pipeline.
+
+BGP-EVPN (Ethernet VPN, RFC 7432 and RFC 8365) is the control plane that distributes VTEP reachability and MAC/IP mappings across the fabric without requiring flood-and-learn. Two EVPN route types are critical for GPU cloud operation. **Type-2 (MAC-IP) routes** carry a host's MAC address and its associated IP address, allowing remote VTEPs to build their FDB (Forwarding Database) from control-plane information rather than by flooding unknown unicast. **Type-5 (IP prefix) routes** carry subnet-level prefixes and are used for inter-tenant routing at the IP layer - critically, Type-5 routes can be imported into a remote VRF only if the route-target matches, which is the enforcement mechanism for routing isolation.
+
+Spectrum-4 uses **symmetric IRB** (Integrated Routing and Bridging) for inter-subnet traffic within a tenant. In symmetric IRB, both the ingress and egress VTEP perform routing. The ingress leaf routes the frame into the L3 VNI (the per-VRF routed tunnel), sends it across the fabric, and the egress leaf routes it out to the destination host. This is the preferred model for GPU fabrics because the same VNI is used in both directions, simplifying traffic engineering and telemetry. Asymmetric IRB - where only the ingress leaf routes and the egress leaf only bridges - creates asymmetric VNI usage that complicates per-tenant utilization accounting and is generally avoided in Spectrum-X deployments.
+
+<VXLANEncapViz />
+
+```bash
+# Verify VXLAN tunnel state on leaf-01
+cumulus@leaf-01:~$ nv show vxlan
+Name    VNI    VTEP Address   State   MTU
+------  -----  -------------  ------  ----
+vxlan10 100    10.0.0.1       up      9216
+vxlan20 200    10.0.0.1       up      9216
+
+# Show VTEP peers (remote VTEPs in BGP-EVPN)
+cumulus@leaf-01:~$ nv show vxlan remote-vtep
+Remote VTEP     State   VNIs
+-----------     -----   ----
+10.0.0.2        up      100, 200
+10.0.0.3        up      100, 200
+10.0.0.4        up      100, 200
+```
+
+---
+
+## Act 3 - BGP-EVPN Configuration on Spectrum-X (NVUE Full Walkthrough)
+
+A production two-tenant Spectrum-X fabric configuration proceeds in four logical phases: underlay BGP, VXLAN interface creation, VRF and bridge membership, and BGP-EVPN address-family configuration with route-target assignment. Each phase builds on the previous, and errors introduced in any phase will manifest as routing failures in the next.
+
+**Phase 1: Underlay BGP** establishes IP reachability between all VTEP loopbacks. On Spectrum-X this is standard eBGP with each leaf in its own AS:
+
+```bash
+cumulus@leaf-01:~$ nv set router bgp autonomous-system 65001
+cumulus@leaf-01:~$ nv set router bgp router-id 10.0.0.1
+cumulus@leaf-01:~$ nv set vrf default router bgp neighbor swp1 remote-as 65100
+cumulus@leaf-01:~$ nv set vrf default router bgp neighbor swp2 remote-as 65100
+cumulus@leaf-01:~$ nv set vrf default router bgp address-family ipv4-unicast network 10.0.0.1/32
+cumulus@leaf-01:~$ nv config apply
+```
+
+**Phase 2: VXLAN interfaces and bridge membership.** Each VNI requires a VXLAN interface and membership in the correct bridge and VLAN:
+
+```bash
+# Create VXLAN interfaces for tenant VNIs
+cumulus@leaf-01:~$ nv set interface vxlan100 vxlan id 100
+cumulus@leaf-01:~$ nv set interface vxlan100 vxlan local-tunnelip 10.0.0.1
+cumulus@leaf-01:~$ nv set interface vxlan200 vxlan id 200
+cumulus@leaf-01:~$ nv set interface vxlan200 vxlan local-tunnelip 10.0.0.1
+
+# Add to bridge and VLAN membership
+cumulus@leaf-01:~$ nv set bridge domain br_default vlan 10 vni 100
+cumulus@leaf-01:~$ nv set bridge domain br_default vlan 20 vni 200
+
+# Add host-facing ports to VLANs
+cumulus@leaf-01:~$ nv set interface swp3 bridge domain br_default access 10
+cumulus@leaf-01:~$ nv set interface swp4 bridge domain br_default access 20
+```
+
+**Phase 3: VRF creation and L3 VNI assignment** for symmetric IRB:
+
+```bash
+# Tenant VRFs
+cumulus@leaf-01:~$ nv set vrf TENANT1 vni 1000
+cumulus@leaf-01:~$ nv set vrf TENANT2 vni 2000
+
+# SVI interfaces for routing
+cumulus@leaf-01:~$ nv set interface vlan10 ip address 10.10.1.1/24
+cumulus@leaf-01:~$ nv set interface vlan10 ip vrr address 10.10.1.254/24
+cumulus@leaf-01:~$ nv set interface vlan10 vrf TENANT1
+cumulus@leaf-01:~$ nv set interface vlan20 ip address 10.20.1.1/24
+cumulus@leaf-01:~$ nv set interface vlan20 ip vrr address 10.20.1.254/24
+cumulus@leaf-01:~$ nv set interface vlan20 vrf TENANT2
+```
+
+**Phase 4: BGP-EVPN address family and route-target configuration.** This is the most operationally critical phase - route-target mismatches are the primary cause of tenant isolation failures:
+
+```bash
+# Enable EVPN address family
+cumulus@leaf-01:~$ nv set vrf default router bgp address-family l2vpn-evpn enable on
+cumulus@leaf-01:~$ nv set vrf default router bgp neighbor swp1 address-family l2vpn-evpn enable on
+cumulus@leaf-01:~$ nv set vrf default router bgp neighbor swp2 address-family l2vpn-evpn enable on
+
+# Advertise all VNIs
+cumulus@leaf-01:~$ nv set evpn enable on
+cumulus@leaf-01:~$ nv set evpn multihoming enable on
+
+# Per-VRF route distinguisher and route targets
+cumulus@leaf-01:~$ nv set vrf TENANT1 router bgp autonomous-system 65001
+cumulus@leaf-01:~$ nv set vrf TENANT1 router bgp rd 65001:100
+cumulus@leaf-01:~$ nv set vrf TENANT1 router bgp route-export to-evpn route-target 65000:100
+cumulus@leaf-01:~$ nv set vrf TENANT1 router bgp route-import from-evpn route-target 65000:100
+
+cumulus@leaf-01:~$ nv set vrf TENANT2 router bgp autonomous-system 65001
+cumulus@leaf-01:~$ nv set vrf TENANT2 router bgp rd 65001:200
+cumulus@leaf-01:~$ nv set vrf TENANT2 router bgp route-export to-evpn route-target 65000:200
+cumulus@leaf-01:~$ nv set vrf TENANT2 router bgp route-import from-evpn route-target 65000:200
+
+cumulus@leaf-01:~$ nv config apply
+```
+
+**Verification - healthy two-tenant fabric:**
+
+```bash
+cumulus@leaf-01:~$ nv show evpn
+EVPN Status: enabled
+VNIs configured: 4 (2 L2, 2 L3)
+BGP sessions with EVPN: 2
+
+cumulus@leaf-01:~$ net show bgp evpn route
+BGP table version is 24, local router ID is 10.0.0.1
+Status codes: s suppressed, d damped, h history, * valid, > best
+Origin codes: i - IGP, e - EGP, ? - incomplete
+
+   Network          Next Hop        In Sid/Label MED LocPrf Weight Path
+Route Distinguisher: 65001:100
+*> [2]:[0]:[48]:[aa:bb:cc:dd:ee:01]
+                    10.0.0.1                           32768 ?
+*> [5]:[0]:[24]:[10.10.1.0]
+                    10.0.0.1                           32768 ?
+Route Distinguisher: 65002:100
+*  [2]:[0]:[48]:[aa:bb:cc:dd:ee:02]
+                    10.0.0.2                               0 65100 65002 ?
+*> [5]:[0]:[24]:[10.10.2.0]
+                    10.0.0.2                               0 65100 65002 ?
+Route Distinguisher: 65001:200
+*> [5]:[0]:[24]:[10.20.1.0]
+                    10.0.0.1                           32768 ?
+Route Distinguisher: 65002:200
+*  [5]:[0]:[24]:[10.20.2.0]
+                    10.0.0.2                               0 65100 65002 ?
+```
+
+<EVPNConfigWalkthroughViz />
+
+Notice that the Type-5 routes for TENANT1 (`10.10.x.0/24`) appear only in the TENANT1 route distinguisher space, and TENANT2 routes (`10.20.x.0/24`) appear only in their own space. If you ever see a TENANT1 prefix inside TENANT2's RD space, a route-target misconfiguration is importing cross-tenant routes - this is exactly the failure condition Lab 20 explores.
+
+---
+
+## Act 4 - GBP Microsegmentation (Extending Ch23)
+
+In Chapter 23 we introduced GBP (Group-Based Policy) in the context of AI networking security - EPGs (Endpoint Policy Groups) as a logical grouping mechanism and policy contracts as the allow/deny rules between them. In this act we extend that foundation to the operational configuration of GBP within a multi-tenant Spectrum-X fabric, with focus on the TCAM implementation and the practical limits practitioners need to plan for.
+
+GBP on Spectrum-4 works by assigning a 16-bit scalable group tag (SGT) to each EPG. When a packet arrives at an ingress leaf, the Spectrum-4 ASIC looks up the source IP in a policy table and stamps the packet with the appropriate SGT. At the egress point - either the destination leaf or an inline enforcement switch - the ASIC reads the SGT and looks up the policy contract in the TCAM to determine whether the packet should be forwarded or dropped. This enforcement is hardware-accelerated with no per-packet CPU involvement.
+
+The practical value of this in a GPU cloud is significant. Consider a scenario where TenantA has both GPU training nodes and a storage cluster on the same Spectrum-X fabric, but TenantB should not be able to reach TenantA's storage even if a routing misconfiguration momentarily leaks a prefix. GBP provides a second enforcement layer: even if TenantB receives TenantA's storage route, the TCAM will drop the packet because TenantB's SGT has no permit contract to TenantA's storage EPG.
+
+```bash
+# Define EPGs (endpoint groups) - leaf-01
+cumulus@leaf-01:~$ nv set system security gbp epg TENANT1_COMPUTE sgt 100
+cumulus@leaf-01:~$ nv set system security gbp epg TENANT1_STORAGE sgt 101
+cumulus@leaf-01:~$ nv set system security gbp epg TENANT2_COMPUTE sgt 200
+cumulus@leaf-01:~$ nv set system security gbp epg TENANT2_STORAGE sgt 201
+
+# Bind EPGs to interfaces (or subnets via ACL)
+cumulus@leaf-01:~$ nv set interface swp3 security gbp epg TENANT1_COMPUTE
+cumulus@leaf-01:~$ nv set interface swp5 security gbp epg TENANT1_STORAGE
+
+# Create policy contracts
+# Allow TENANT1_COMPUTE to reach TENANT1_STORAGE
+cumulus@leaf-01:~$ nv set system security gbp contract C1_COMPUTE_TO_STORAGE \
+  src-epg TENANT1_COMPUTE dst-epg TENANT1_STORAGE action permit
+
+# Allow intra-EPG (compute-to-compute within tenant)
+cumulus@leaf-01:~$ nv set system security gbp contract C1_INTRA_COMPUTE \
+  src-epg TENANT1_COMPUTE dst-epg TENANT1_COMPUTE action permit
+
+# Deny TENANT2 to TENANT1 storage (explicit deny)
+cumulus@leaf-01:~$ nv set system security gbp contract CROSS_TENANT_DENY \
+  src-epg TENANT2_COMPUTE dst-epg TENANT1_STORAGE action deny log
+
+cumulus@leaf-01:~$ nv config apply
+
+# Verify TCAM entries consumed
+cumulus@leaf-01:~$ nv show system security gbp stats
+EPG Policies in TCAM: 6 / 4096 available
+Contract entries:      4 / 8192 available
+SGT bindings active:   48 hosts
+```
+
+TCAM capacity is a planning constraint. Spectrum-4 supports up to 4,096 EPG policy entries and 8,192 contract entries. In a SuperPOD with 128 leaf switches, each switch enforces its own TCAM policy locally - policies are not shared across switches. For most GPU cloud deployments, a practical upper bound is 32 EPGs and 256 contracts per tenant, which leaves ample headroom even on a 32-tenant fabric.
+
+<GBPPolicyMatrixViz />
+
+One operational note: GBP contracts are directional. A permit contract from TENANT1_COMPUTE to TENANT1_STORAGE does **not** automatically permit return traffic from TENANT1_STORAGE back to TENANT1_COMPUTE. In stateless Ethernet environments, you must explicitly create the reverse contract or use a stateful policy mode. For RoCEv2 training traffic, which is RDMA Write (unidirectional data push from initiator to target), this asymmetry is actually desirable - the storage EPG should not be able to initiate connections to the compute EPG.
+
+---
+
+## Act 5 - VNI Planning for SuperPOD Scale
+
+VNI allocation is a discipline that practitioners often treat as an afterthought and then spend significant time unwinding. A 24-bit VNI namespace gives you 16,777,214 usable values - which sounds limitless until you realize that silent misconfiguration (two tenants accidentally sharing a VNI) causes immediate traffic mixing without any routing error, and that this category of bug is extremely difficult to detect without a centralized VNI registry.
+
+The recommended allocation scheme for a Spectrum-X SuperPOD follows a hierarchical range model that separates traffic types, tenants, and administrative functions:
+
+```text
+VNI Range Allocation - Spectrum-X SuperPOD Reference Design
+============================================================
+
+Range           Purpose                         Size
+-----------     -------------------------------- --------
+100-199         TENANT1: L2 compute segments    100 VNIs
+200-299         TENANT1: L2 storage segments    100 VNIs
+1000            TENANT1: L3 VNI (symmetric IRB)   1 VNI
+
+1100-1199       TENANT2: L2 compute segments    100 VNIs
+1200-1299       TENANT2: L2 storage segments    100 VNIs
+2000            TENANT2: L3 VNI                   1 VNI
+
+... (pattern repeats per tenant, tenant offset = 1000 x tenant_id) ...
+
+9000-9099       Management plane                 100 VNIs
+9100-9199       OOB overlay                      100 VNIs
+9900            Default/untagged catch            1 VNI
+
+10000-10999     Shared inference services        1000 VNIs
+11000-65534     Reserved / future expansion
+```
+
+This layout has several important properties. L2 and L3 VNIs for each tenant are in adjacent but non-overlapping ranges, making mis-assignment immediately visible in configuration review. The management plane has a distinct high-range allocation that is administratively separate from tenant ranges. The L3 VNI (the per-VRF routed VNI for symmetric IRB) uses a flat 1000 x tenant_id formula, making it trivial to compute programmatically.
+
+```bash
+# Configure VNI range - NVUE
+cumulus@leaf-01:~$ nv set vrf TENANT1 vni 1000
+cumulus@leaf-01:~$ nv set vrf TENANT2 vni 2000
+
+# Verify no VNI conflicts across all configured VNIs
+cumulus@leaf-01:~$ nv show vxlan
+Name       VNI    Local VTEP      Remote VTEPs    State
+---------  -----  --------------  --------------  -----
+vxlan100   100    10.0.0.1        10.0.0.2        up
+vxlan101   101    10.0.0.1        10.0.0.2        up
+vxlan200   200    10.0.0.1        10.0.0.2        up
+vxlan1000  1000   10.0.0.1        10.0.0.2        up
+vxlan2000  2000   10.0.0.1        10.0.0.2        up
+
+# Check for duplicate VNIs across bridge domains (should return empty)
+cumulus@leaf-01:~$ nv show bridge domain br_default vlan | grep -c "duplicate"
+0
+```
+
+VNI range conflicts cause silent traffic mixing that manifests as intermittent connectivity and subtle performance degradation - frames from TenantA's RDMA flows are delivered to TenantB's QPs, which increment error counters without surfacing a clear routing failure. The monitoring chapter (Ch28) covers how to detect this class of error via NetQ.
+
+<VNIAllocationViz />
+
+The other critical VNI planning consideration is MTU. VXLAN adds 50 bytes of overhead (8-byte VXLAN header + 8-byte UDP + 20-byte outer IP + 14-byte outer Ethernet). RoCEv2 training traffic runs at 4,096-byte or 8,192-byte RDMA message sizes. The underlay MTU must be set to at least 9,216 bytes (jumbo frames) to accommodate the largest tenant frames plus VXLAN overhead without fragmentation. Every underlay interface - including the spine uplinks - must be configured at jumbo MTU; a single 1,500-byte MTU link anywhere in the path will silently fragment VXLAN frames, causing catastrophic RDMA performance degradation.
+
+```bash
+# Set jumbo MTU on all fabric-facing interfaces
+cumulus@leaf-01:~$ nv set interface swp1-4 link mtu 9216
+cumulus@leaf-01:~$ nv set interface vlan10 ip mtu 9216
+cumulus@leaf-01:~$ nv set interface vlan20 ip mtu 9216
+cumulus@leaf-01:~$ nv config apply
+
+# Verify MTU consistency
+cumulus@leaf-01:~$ nv show interface --view=brief | awk '{print $1, $5}' | grep swp
+swp1   9216
+swp2   9216
+swp3   9216
+swp4   9216
+```
+
+---
+
+## Act 6 - Troubleshooting EVPN Tenant Isolation Failures
+
+Multi-tenant EVPN fabrics fail in a small set of predictable patterns. A practitioner who has memorized these four failure modes and their diagnostic commands can resolve the majority of production incidents before they escalate.
+
+**Failure A: Cross-tenant route leak (TenantA routes visible in TenantB's VRF)**
+
+This is the most critical failure - it directly enables tenant-to-tenant traffic and represents a security incident in a GPU cloud. The cause is almost always a misconfigured route-target import statement on one leaf.
+
+```bash
+# Symptom: TenantB can ping TenantA's storage server
+# Step 1: Check what routes are in TenantB's VRF
+cumulus@leaf-02:~$ net show bgp vrf TENANT2 ipv4 unicast
+BGP routing table for VRF TENANT2, address family IPv4 Unicast
+BGP table version is 18
+
+   Network          Next Hop        MED LocPrf Weight Path
+*> 10.20.1.0/24     0.0.0.0              32768 ?     (local)
+*> 10.20.2.0/24     10.0.0.1        0          0 65100 65001 ?
+*> 10.10.1.0/24     10.0.0.1        0          0 65100 65001 ?  <-- LEAKED!
+
+# Step 2: Check what RTs are being imported into TENANT2's BGP
+cumulus@leaf-02:~$ net show bgp vrf TENANT2 evpn route type 5
+...
+Route Distinguisher: 65001:100  <-- This is TENANT1's RD appearing in TENANT2!
+*> [5]:[0]:[24]:[10.10.1.0]
+   Route target: 65000:100
+   Imported into: TENANT2 VRF   <-- Root cause: TENANT2 is importing RT 65000:100
+
+# Step 3: Check the import RT config on leaf-02
+cumulus@leaf-02:~$ nv show vrf TENANT2 router bgp route-import
+Route-Import Configuration for VRF TENANT2:
+  from-evpn route-target 65000:200   (correct)
+  from-evpn route-target 65000:100   <-- WRONG - should not be here
+
+# Fix: Remove the erroneous RT import
+cumulus@leaf-02:~$ nv unset vrf TENANT2 router bgp route-import from-evpn route-target 65000:100
+cumulus@leaf-02:~$ nv config apply
+
+# Verify the leaked route is gone
+cumulus@leaf-02:~$ net show bgp vrf TENANT2 ipv4 unicast | grep 10.10
+(no output - correct)
+```
+
+**Failure B: Tenant cannot reach own storage (missing RT import)**
+
+The inverse of Failure A - a legitimate RT import is missing, so the storage prefix is not imported into the compute VRF.
+
+```bash
+# Symptom: TENANT1 compute cannot reach 10.10.3.0/24 (storage subnet)
+cumulus@leaf-01:~$ net show bgp vrf TENANT1 ipv4 unicast | grep 10.10.3
+(no output)
+
+# Check what RTs are exported by the storage leaf
+cumulus@storage-leaf:~$ nv show vrf TENANT1_STORAGE router bgp route-export
+from-evpn route-target: 65000:103  <-- Storage uses a dedicated sub-RT
+
+# Compute VRF only imports 65000:100 - not 65000:103
+# Fix: Add the storage RT to the compute VRF import
+cumulus@leaf-01:~$ nv set vrf TENANT1 router bgp route-import from-evpn route-target 65000:103
+cumulus@leaf-01:~$ nv config apply
+```
+
+**Failure C: VXLAN flood-and-learn enabled (incorrect for multi-tenant)**
+
+Flood-and-learn is the default VXLAN behaviour without EVPN - unknown unicast and BUM (Broadcast, Unknown unicast, Multicast) traffic is flooded to all VTEPs in the fabric. In a multi-tenant fabric this is catastrophic: all tenants receive all BUM traffic from all other tenants, breaking both security and performance isolation.
+
+```bash
+# Detect if F&L is active
+cumulus@leaf-01:~$ nv show vxlan flooding
+Flooding mode: head-end-replication    <-- WRONG for EVPN fabric
+Remote VTEPs in flood list: 10.0.0.2, 10.0.0.3, 10.0.0.4
+
+# Correct: should be EVPN-controlled
+# Fix
+cumulus@leaf-01:~$ nv set vxlan flooding enable off
+cumulus@leaf-01:~$ nv config apply
+
+# Verify
+cumulus@leaf-01:~$ nv show vxlan flooding
+Flooding mode: evpn    <-- Correct
+```
+
+**Failure D: WJH VXLAN drop reasons**
+
+When VXLAN is misconfigured, the Spectrum-4 WJH engine logs specific drop reasons that identify the fault:
+
+```bash
+cumulus@leaf-01:~$ net show wjh
+Severity  Timestamp            Drop Reason              Src IP        Dst IP
+--------  -------------------  -----------------------  -----------   -----------
+Error     2026-04-12 09:14:23  VXLAN_VNI_NOT_FOUND     10.30.1.5     10.0.0.2
+Error     2026-04-12 09:14:31  VXLAN_VTEP_MAC_MISS     10.0.0.3      10.0.0.1
+Warning   2026-04-12 09:15:02  VXLAN_VNI_MISMATCH      10.0.0.2      10.0.0.1
+
+# VXLAN_VNI_NOT_FOUND: Ingress VNI not configured on this switch
+# VXLAN_VTEP_MAC_MISS: Remote VTEP's MAC not in ARP/ND table (underlay issue)
+# VXLAN_VNI_MISMATCH: Encap/decap VNI doesn't match - usually config drift
+```
+
+Each drop reason maps to a specific fix: VNI_NOT_FOUND means the vxlan interface was not created on this leaf; VTEP_MAC_MISS means the underlay BGP session is not advertising the VTEP loopback; VNI_MISMATCH means the same VNI is configured as different VLANs on different leaves - a classic copy-paste configuration error.
+
+---
+
+## Act 7 - NVIDIA Air for Multi-Tenant Testing
+
+Before deploying a new multi-tenant configuration to production, every change should be validated in NVIDIA Air - the cloud-hosted network simulation platform that can reproduce a Spectrum-X SuperPOD topology with full Cumulus Linux functionality. Air is covered in depth in Ch31; this act focuses specifically on the multi-tenant EVPN validation workflow.
+
+The validation workflow follows five steps: **build**, **configure**, **inject-fault**, **observe**, **fix-and-verify**. Building the Air topology can be done from exported NVUE YAML, which allows you to maintain topology-as-code:
+
+```bash
+# Export current leaf-01 NVUE config to YAML (on production switch)
+cumulus@leaf-01:~$ nv config save
+cumulus@leaf-01:~$ cat /etc/nvue.d/startup.yaml > /tmp/leaf-01-config.yaml
+
+# Upload to Air and create simulation
+air> topology create --file leaf-01-config.yaml --name "ch27-evpn-test"
+Topology created: ch27-evpn-test (4 nodes)
+Simulation ID: sim-abc123
+
+# Start simulation
+air> simulation start sim-abc123
+Status: Running (all nodes up after 45s)
+```
+
+Once the simulation is running, inject the fault you want to test - in this case, the route-target misconfiguration that causes Failure A:
+
+```bash
+# On the simulated leaf-02, inject the RT misconfiguration
+air-leaf-02> nv set vrf TENANT2 router bgp route-import from-evpn route-target 65000:100
+air-leaf-02> nv config apply
+
+# Verify the leak manifests
+air-dgx-tenantb> ping 10.10.1.5
+PING 10.10.1.5: 64 data bytes
+64 bytes from 10.10.1.5: icmp_seq=0 ttl=63 time=0.4 ms
+# Leak confirmed - TENANT2 host can reach TENANT1 storage
+
+# Run NetQ automated isolation check
+netq check evpn
+EVPN check result: FAILED
+  leaf-02: VRF TENANT2 importing RT 65000:100 - cross-tenant route leak detected
+  Affected prefix: 10.10.1.0/24 visible in TENANT2 VRF on 3 leaves
+
+# Fix and re-verify
+air-leaf-02> nv unset vrf TENANT2 router bgp route-import from-evpn route-target 65000:100
+air-leaf-02> nv config apply
+netq check evpn
+EVPN check result: PASSED (all tenants isolated)
+```
+
+The NetQ `check evpn` command (covered in depth in Ch28) runs automated route-target consistency checks across all leaves in the fabric and flags any cross-tenant RT imports. Integrating this check into a CI/CD pipeline - triggered on every NVUE config change - means that isolation violations are caught in simulation before they ever touch production.
+
+For `ib_write_bw`-based isolation verification between tenants:
+
+```bash
+# On TenantA's simulated DGX node - start RDMA server
+air-dgx-tenanta> ib_write_bw -d mlx5_0 -x 3 --port 18515
+
+# From TenantB's simulated DGX - attempt cross-tenant RDMA (should fail)
+air-dgx-tenantb> ib_write_bw -d mlx5_0 -x 3 10.10.1.5 --port 18515
+RDMA CM connection failed: ECONNREFUSED
+# GBP policy blocking the connection - correct behaviour
+```
+
+The combination of NetQ automated route-target checking and `ib_write_bw` connectivity testing gives operators confidence in two complementary properties: routing isolation (no routes leak between VRFs) and data-plane isolation (even if a route were to leak, GBP prevents the actual data transfer). Both checks should be mandatory gates in any GitOps pipeline managing Spectrum-X multi-tenant configuration.
+
+---
+
+## Chapter 27 Summary
+
+BGP-EVPN multi-tenancy on Spectrum-X is the mechanism by which a single physical GPU fabric is safely partitioned among multiple tenants with independent routing, security, and performance domains. The architecture layers three complementary isolation technologies: VXLAN VNIs for Layer 2 segmentation (24-bit namespace, hardware encap/decap in Spectrum-4), BGP-EVPN route-targets for Layer 3 routing isolation (Type-2 MAC-IP routes for host reachability, Type-5 IP prefix routes for subnet routing, with RT import/export governing which routes appear in which VRF), and GBP microsegmentation for fine-grained intra-tenant and cross-tenant policy enforcement in TCAM.
+
+Symmetric IRB is the recommended IRB model for GPU fabrics because it uses the same L3 VNI in both directions, simplifying traffic engineering and telemetry correlation. VNI planning must follow a structured allocation scheme to prevent silent traffic mixing - the most operationally dangerous class of multi-tenant failure because it does not produce routing errors.
+
+The four primary failure modes (cross-tenant route leak, missing RT import, flood-and-learn enabled, VXLAN drop in WJH) each have deterministic diagnostic paths using `net show bgp evpn route type 5`, `nv show vrf ... router bgp route-import`, and `net show wjh`. NVIDIA Air simulation with NetQ `check evpn` automation provides the validation loop that prevents isolation failures from reaching production.
+
+Chapter 28 extends the observability model: NetQ's fabric-wide monitoring, congestion correlation, and CI/CD integration complete the operational stack built on top of the Spectrum-X hardware and EVPN control plane introduced in this chapter.

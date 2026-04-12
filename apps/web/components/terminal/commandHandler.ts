@@ -18,6 +18,7 @@ import { lab16, lab16Devices } from "@/data/labs/lab16-spectrum-x-platform-audit
 import { lab17, lab17Devices } from "@/data/labs/lab17-roce-day-zero-config";
 import { lab18, lab18Devices } from "@/data/labs/lab18-ecn-threshold-tuning";
 import { lab19, lab19Devices } from "@/data/labs/lab19-adaptive-routing-imbalance";
+import { lab20, lab20Devices } from "@/data/labs/lab20-evpn-tenant-leak";
 import { calculateOversubscriptionA, calculateOversubscriptionB } from "@/lib/commands/calculateOversubscription";
 import { compareProposals } from "@/lib/commands/compareProposals";
 import { ibstat } from "@/lib/commands/ibstat";
@@ -212,6 +213,26 @@ import {
   handleShowSpineInterfaceAdaptiveRouting,
   handleSpineNetShowCounters,
 } from "@/lib/commands/lab19Handlers";
+import {
+  handleDgxTenantAIbWriteBw,
+  handleDgxTenantAIpRoute,
+  handleDgxTenantAPing,
+  handleDgxTenantBIpRoute,
+  handleDgxTenantBPing,
+  handleLeaf01ShowBgpVrfA,
+  handleLeaf01ShowEvpn,
+  handleLeaf01ShowEvpnRouteType5,
+  handleLeaf01ShowVrfAExport,
+  handleLeaf01ShowVrfAImport,
+  handleLeaf01ShowVxlan,
+  handleLeaf01ShowWjh,
+  handleLeaf02ShowBgpVrfB,
+  handleLeaf02ShowEvpn,
+  handleLeaf02ShowEvpnRouteType5,
+  handleLeaf02ShowVrfBExport,
+  handleLeaf02ShowVrfBImport,
+  handleLeaf02ShowWjh,
+} from "@/lib/commands/lab20Handlers";
 import { ncclDebugTransport } from "@/lib/commands/ncclDebugTransport";
 import { recommendProposalA, recommendProposalB } from "@/lib/commands/recommendProposal";
 import { runMutation } from "@/lib/commands/mutations";
@@ -262,6 +283,7 @@ const LAB_CONFIGS: Record<string, LabConfig> = {
   [lab17.id]: lab17,
   [lab18.id]: lab18,
   [lab19.id]: lab19,
+  [lab20.id]: lab20,
 };
 
 const LAB_DEVICES: Record<string, LabDevice[]> = {
@@ -285,6 +307,7 @@ const LAB_DEVICES: Record<string, LabDevice[]> = {
   [lab17.id]: lab17Devices,
   [lab18.id]: lab18Devices,
   [lab19.id]: lab19Devices,
+  [lab20.id]: lab20Devices,
 };
 
 const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
@@ -308,6 +331,7 @@ const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
   [lab17.id]: [...new Set(lab17Devices.map((device) => device.type))],
   [lab18.id]: [...new Set(lab18Devices.map((device) => device.type))],
   [lab19.id]: [...new Set(lab19Devices.map((device) => device.type))],
+  [lab20.id]: [...new Set(lab20Devices.map((device) => device.type))],
 };
 
 const LAB_CHAPTER_LINKS: Record<string, { slug: string; label: string }> = {
@@ -328,6 +352,7 @@ const LAB_CHAPTER_LINKS: Record<string, { slug: string; label: string }> = {
   [lab17.id]: { slug: "ch25-roce-configuration-operations", label: "Chapter 25: RoCE Configuration and Operations on Spectrum-X" },
   [lab18.id]: { slug: "ch25-roce-configuration-operations", label: "Chapter 25: RoCE Configuration and Operations on Spectrum-X" },
   [lab19.id]: { slug: "ch26-adaptive-routing-spectrum-x", label: "Chapter 26: Adaptive Routing and Per-Packet Spraying on Spectrum-X" },
+  [lab20.id]: { slug: "ch27-bgp-evpn-multitenancy", label: "Chapter 27: BGP-EVPN Multi-Tenancy on Spectrum-X" },
 };
 
 function showActiveLeafSwitchPort(): CommandResult {
@@ -545,6 +570,54 @@ function showNvInterfaceSwp54LinkStatsByLab(): CommandResult {
   return useLabStore.getState().lab.labId === lab10.id
     ? handleLab10SpineBInterfaceSwp54LinkStats()
     : handleLab3LeafUplinkCounters("swp54");
+}
+
+function showLab20BgpVrfByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "leaf-02"
+    ? handleLeaf02ShowBgpVrfB()
+    : handleLeaf01ShowBgpVrfA();
+}
+
+function showLab20EvpnType5ByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "leaf-02"
+    ? handleLeaf02ShowEvpnRouteType5()
+    : handleLeaf01ShowEvpnRouteType5();
+}
+
+function showLab20RouteImportByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "leaf-02"
+    ? handleLeaf02ShowVrfBImport()
+    : handleLeaf01ShowVrfAImport();
+}
+
+function showLab20RouteExportByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "leaf-02"
+    ? handleLeaf02ShowVrfBExport()
+    : handleLeaf01ShowVrfAExport();
+}
+
+function showLab20EvpnByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "leaf-02"
+    ? handleLeaf02ShowEvpn()
+    : handleLeaf01ShowEvpn();
+}
+
+function showLab20WjhByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "leaf-02"
+    ? handleLeaf02ShowWjh()
+    : handleLeaf01ShowWjh();
+}
+
+function showLab20IpRouteByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "dgx-tenantb"
+    ? handleDgxTenantBIpRoute()
+    : handleDgxTenantAIpRoute();
+}
+
+function pingLab20ByDevice(): CommandResult {
+  return useLabStore.getState().activeDeviceId === "dgx-tenantb"
+    ? handleDgxTenantBPing()
+    : handleDgxTenantAPing();
 }
 
 function showLab11BgpRouteByDevice(): CommandResult {
@@ -1444,6 +1517,7 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "ethtool -S swp1 | grep ecn": showEthtoolSwp1EcnByLab,
   "ib_write_bw -d mlx5_0 --iters 5000 --size 65536 192.168.100.2": ibWriteBwByLab,
   "ib_write_bw -d mlx5_0 -x 3 --report_gbits -D 30 -q 16 10.100.1.2": handleLab19IbWriteBw,
+  "ib_write_bw -d mlx5_0 -x 3 10.100.1.5 --port 18515 --duration 5": handleDgxTenantAIbWriteBw,
   "ib_write_lat -d mlx5_0 --iters 10000 192.168.100.2": handleIbWriteLat,
   "ip link show eth0": ipLinkShowEth0ByLab,
   "ip link show eth1": () => handleLab0aIpLinkShow("eth1"),
@@ -1453,6 +1527,19 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "mlxconfig -d /dev/mst/mt41692_pciconf0 q ROCE_REORDER_BUFFER_SIZE": handleMlxconfigQueryReorderSize,
   "nv show interface eth0 reorder-buffer": () => handleShowReorderBuffer("eth0"),
   "nv show interface eth1 reorder-buffer": () => handleShowReorderBuffer("eth1"),
+  "net show bgp vrf VRF_A ipv4 unicast": showLab20BgpVrfByDevice,
+  "net show bgp vrf VRF_B ipv4 unicast": showLab20BgpVrfByDevice,
+  "net show bgp evpn route type 5": showLab20EvpnType5ByDevice,
+  "nv show vrf VRF_A router bgp route-import": showLab20RouteImportByDevice,
+  "nv show vrf VRF_A router bgp route-export": showLab20RouteExportByDevice,
+  "nv show vrf VRF_B router bgp route-import": showLab20RouteImportByDevice,
+  "nv show vrf VRF_B router bgp route-export": showLab20RouteExportByDevice,
+  "net show bgp vrf VRF_A evpn route": handleLeaf01ShowEvpnRouteType5,
+  "nv show evpn": showLab20EvpnByDevice,
+  "net show wjh": showLab20WjhByDevice,
+  "nv show vxlan": handleLeaf01ShowVxlan,
+  "ping -c 3 10.100.1.5": pingLab20ByDevice,
+  "ip route show vrf default": showLab20IpRouteByDevice,
   "nv set qos ecn profile roce min-threshold 500000": () => runMutation("nv set qos ecn profile roce min-threshold 500000"),
   "nv set qos ecn profile roce max-threshold 1500000": () => runMutation("nv set qos ecn profile roce max-threshold 1500000"),
   "nv set qos congestion-control default-global traffic-class 3 min-threshold 500000": () =>
@@ -1463,6 +1550,9 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "nv set router adaptive-routing mode per-flowlet": handleSetARModePerFlowlet,
   "nv set router adaptive-routing flowlet-timer 100us": () => handleSetFlowletTimer("100us"),
   "nv set router adaptive-routing flowlet-timer 1s": () => handleSetFlowletTimer("1s"),
+  "nv unset vrf VRF_B router bgp route-import from-evpn route-target 65000:100": () =>
+    runMutation("nv unset vrf VRF_B router bgp route-import from-evpn route-target 65000:100"),
+  "net clear bgp vrf VRF_B *": () => runMutation("net clear bgp vrf VRF_B *"),
   "nv set interface eth0 reorder-buffer enable": () => handleSetReorderBufferEnable("eth0"),
   "nv set interface eth1 reorder-buffer enable": () => handleSetReorderBufferEnable("eth1"),
   "sudo vtysh -f /etc/frr/checkpoint-segment-list.conf": configureSegmentList,

@@ -31,6 +31,7 @@ import { lab16, lab16Devices } from "@/data/labs/lab16-spectrum-x-platform-audit
 import { lab17, lab17Devices } from "@/data/labs/lab17-roce-day-zero-config";
 import { lab18, lab18Devices } from "@/data/labs/lab18-ecn-threshold-tuning";
 import { lab19, lab19Devices } from "@/data/labs/lab19-adaptive-routing-imbalance";
+import { lab20, lab20Devices } from "@/data/labs/lab20-evpn-tenant-leak";
 import { handleLab6ReseatConnector } from "@/lib/commands/lab6Handlers";
 import { replaceOpticRail2 } from "@/lib/commands/lab9Handlers";
 import { isComplete } from "@/lib/labEngine";
@@ -61,6 +62,7 @@ const LABS = {
   [lab17.id]: lab17,
   [lab18.id]: lab18,
   [lab19.id]: lab19,
+  [lab20.id]: lab20,
 };
 
 const LAB_DEVICES = {
@@ -84,6 +86,7 @@ const LAB_DEVICES = {
   [lab17.id]: lab17Devices,
   [lab18.id]: lab18Devices,
   [lab19.id]: lab19Devices,
+  [lab20.id]: lab20Devices,
 };
 
 const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
@@ -118,6 +121,10 @@ const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
   [lab19.id]: {
     slug: "ch26-adaptive-routing-spectrum-x",
     label: "Chapter 26: Adaptive Routing and Per-Packet Spraying on Spectrum-X",
+  },
+  [lab20.id]: {
+    slug: "ch27-bgp-evpn-multitenancy",
+    label: "Chapter 27: BGP-EVPN Multi-Tenancy on Spectrum-X",
   },
 };
 

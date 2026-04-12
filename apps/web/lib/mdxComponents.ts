@@ -218,6 +218,11 @@ import RoCEScenarioTroubleshootViz from "@/components/visualisations/ch25/RoCESc
 import ECMPCollisionViz from "@/components/visualisations/ch26/ECMPCollisionViz"
 import AdaptiveRoutingEngineViz from "@/components/visualisations/ch26/AdaptiveRoutingEngineViz"
 import SuperNICReorderBufferViz from "@/components/visualisations/ch26/SuperNICReorderBufferViz"
+// === Ch27 -- BGP-EVPN Multi-Tenancy on Spectrum-X ===
+import VXLANEncapViz from "@/components/visualisations/ch27/VXLANEncapViz"
+import EVPNConfigWalkthroughViz from "@/components/visualisations/ch27/EVPNConfigWalkthroughViz"
+import GBPPolicyMatrixViz from "@/components/visualisations/ch27/GBPPolicyMatrixViz"
+import VNIAllocationViz from "@/components/visualisations/ch27/VNIAllocationViz"
 
 // === Legacy components (no longer in active chapters, kept for reference) ===
 // ServerRackViz, NICCardViz, DGXNodeViz, HardwareComparison
@@ -423,4 +428,9 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   ECMPCollisionViz,
   AdaptiveRoutingEngineViz,
   SuperNICReorderBufferViz,
+  // Ch27
+  VXLANEncapViz,
+  EVPNConfigWalkthroughViz,
+  GBPPolicyMatrixViz,
+  VNIAllocationViz,
 }

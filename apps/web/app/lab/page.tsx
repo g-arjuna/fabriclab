@@ -30,6 +30,7 @@ const SUPPORTED_LAB_IDS = new Set([
   "lab17-roce-day-zero-config",
   "lab18-ecn-threshold-tuning",
   "lab19-adaptive-routing-imbalance",
+  "lab20-evpn-tenant-leak",
 ]);
 
 function LabLoadingState() {

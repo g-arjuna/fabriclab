@@ -83,6 +83,18 @@ export interface TopologyState {
   spine04UtilPct?: number
   arDecisions?: number
   arRedirects?: number
+  evpnEnabled?: boolean
+  vrfBImportRtCorrect?: boolean
+  vrfBHasLeakedRoute?: boolean
+  leakConfirmed?: boolean
+  leakyLeafIdentified?: boolean
+  rtMisconfigFound?: boolean
+  rtFixed?: boolean
+  isolationRestored?: boolean
+  crossTenantBlocked?: boolean
+  legitimateAccessVerified?: boolean
+  rdmaVerified?: boolean
+  bgpSoftResetDone?: boolean
   roceShorthandApplied?: boolean
   spineAAsnPending?: boolean
   spineBAsnPending?: boolean

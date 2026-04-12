@@ -864,6 +864,61 @@ export const SOLUTION_GUIDES: Record<string, SolutionGuide> = {
       },
     ],
   },
+  "lab20-evpn-tenant-leak": {
+    labId: "lab20-evpn-tenant-leak",
+    title: "Step-by-step command guide",
+    steps: [
+      {
+        title: "Confirm the leaked prefix inside TenantB's VRF",
+        details: "Start on leaf-02 and prove the issue by showing that TenantA's storage route appears in VRF_B.",
+        commands: [
+          { deviceId: "leaf-02", command: "net show bgp vrf VRF_B ipv4 unicast" },
+          { deviceId: "leaf-02", command: "net show bgp evpn route type 5" },
+        ],
+      },
+      {
+        title: "Locate the bad EVPN import route-target",
+        details: "Inspect the VRF_B import policy on leaf-02 and identify the stray TenantA route-target.",
+        commands: [
+          { deviceId: "leaf-02", command: "nv show vrf VRF_B router bgp route-import" },
+          { deviceId: "leaf-02", command: "nv show vrf VRF_B router bgp route-export" },
+        ],
+      },
+      {
+        title: "Remove the wrong route-target and apply the fix",
+        details: "Unset RT 65000:100 from VRF_B, then apply the config so the leak is withdrawn from the FIB.",
+        commands: [
+          {
+            deviceId: "leaf-02",
+            command: "nv unset vrf VRF_B router bgp route-import from-evpn route-target 65000:100",
+          },
+          { deviceId: "leaf-02", command: "nv config apply" },
+          { deviceId: "leaf-02", command: "net clear bgp vrf VRF_B *" },
+        ],
+      },
+      {
+        title: "Verify cross-tenant access is gone",
+        details: "Recheck the VRF_B route table on leaf-02, then confirm TenantB can no longer reach TenantA's storage.",
+        commands: [
+          { deviceId: "leaf-02", command: "net show bgp vrf VRF_B ipv4 unicast" },
+          { deviceId: "dgx-tenantb", command: "ip route show vrf default" },
+          { deviceId: "dgx-tenantb", command: "ping -c 3 10.100.1.5" },
+        ],
+      },
+      {
+        title: "Confirm legitimate TenantA traffic still works",
+        details: "Validate that TenantA compute still reaches TenantA storage normally, including RDMA path verification.",
+        commands: [
+          { deviceId: "dgx-tenanta", command: "ip route show vrf default" },
+          { deviceId: "dgx-tenanta", command: "ping -c 3 10.100.1.5" },
+          {
+            deviceId: "dgx-tenanta",
+            command: "ib_write_bw -d mlx5_0 -x 3 10.100.1.5 --port 18515 --duration 5",
+          },
+        ],
+      },
+    ],
+  },
 };
 
 export function getSolutionGuide(labId: string): SolutionGuide | undefined {

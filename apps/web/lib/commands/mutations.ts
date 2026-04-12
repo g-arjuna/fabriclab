@@ -15,6 +15,7 @@ import { lab16 } from "@/data/labs/lab16-spectrum-x-platform-audit";
 import { lab17 } from "@/data/labs/lab17-roce-day-zero-config";
 import { lab18 } from "@/data/labs/lab18-ecn-threshold-tuning";
 import { lab19 } from "@/data/labs/lab19-adaptive-routing-imbalance";
+import { lab20 } from "@/data/labs/lab20-evpn-tenant-leak";
 import {
   applyRouteMapSwp14,
   configureRouteMapDscp10,
@@ -66,6 +67,11 @@ import {
   handleSetFlowletTimer,
   handleSetReorderBufferEnable,
 } from "@/lib/commands/lab19Handlers";
+import {
+  handleLeaf02BgpSoftReset,
+  handleLeaf02ConfigApply,
+  handleLeaf02UnsetRtImport,
+} from "@/lib/commands/lab20Handlers";
 import { useLabStore } from "@/store/labStore";
 
 const LAB_CONFIGS = {
@@ -82,6 +88,7 @@ const LAB_CONFIGS = {
   [lab17.id]: lab17,
   [lab18.id]: lab18,
   [lab19.id]: lab19,
+  [lab20.id]: lab20,
 };
 
 export function runMutation(command: string): CommandResult {
@@ -280,6 +287,9 @@ export function runMutation(command: string): CommandResult {
           ? handleDgxNvConfigApply()
           : handleLab19NvConfigApply();
       }
+      if (store.lab.labId === lab20.id) {
+        return handleLeaf02ConfigApply();
+      }
       return store.lab.labId === lab18.id ? handleLab18ConfigApply() : handleNvConfigApply();
     case "nv config save":
       return handleNvConfigSave();
@@ -303,6 +313,10 @@ export function runMutation(command: string): CommandResult {
       return handleSetReorderBufferEnable("eth0");
     case "nv set interface eth1 reorder-buffer enable":
       return handleSetReorderBufferEnable("eth1");
+    case "nv unset vrf VRF_B router bgp route-import from-evpn route-target 65000:100":
+      return handleLeaf02UnsetRtImport();
+    case "net clear bgp vrf VRF_B *":
+      return handleLeaf02BgpSoftReset();
     case "enable gid filter":
       return enableGidFilter();
     case "ibv_reg_mr rotate":
