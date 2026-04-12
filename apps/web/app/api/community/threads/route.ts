@@ -9,7 +9,7 @@ import {
   type CommunityForumThread,
 } from "@/lib/community/forum";
 import { createGitHubIssueFromThread, getGitHubIssueMirrorPublicAvailability } from "@/lib/community/github";
-import { notifyThreadActivity } from "@/lib/notifications/dispatch";
+import { notifyAdminsOfCommunityActivity, notifyThreadActivity } from "@/lib/notifications/dispatch";
 import { ensureViewerNotificationSubscription } from "@/lib/notifications/subscriptions";
 import { getAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
@@ -220,6 +220,19 @@ export async function POST(request: Request) {
   }
 
   if (appEnv) {
+    await notifyAdminsOfCommunityActivity({
+      actorName: authorName,
+      actorEmail: viewer.email,
+      event: threadType === "general" ? "general_thread_created" : "tracked_discussion_created",
+      subjectLabel: title,
+      targetLabel:
+        threadType === "general"
+          ? "General forum"
+          : `${threadType === "chapter" ? "Chapter" : "Lab"}: ${getSourceCatalogItem(contentKind!, contentSlug)?.title ?? contentSlug}`,
+      targetUrl: `${appEnv.appUrl}/community/${threadId}`,
+      bodyPreview: body,
+    }).catch(() => undefined);
+
     await notifyThreadActivity({
       admin: adminDb,
       threadId,

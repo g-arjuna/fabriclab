@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 
 import { getServerViewer } from "@/lib/auth/server";
+import { getSourceCatalogItem } from "@/lib/catalog/source";
 import {
   deriveCommunityAuthorName,
   isMissingCommunityTables,
   type CommunityForumPost,
 } from "@/lib/community/forum";
-import { notifyThreadActivity } from "@/lib/notifications/dispatch";
+import { notifyAdminsOfCommunityActivity, notifyThreadActivity } from "@/lib/notifications/dispatch";
 import { ensureViewerNotificationSubscription } from "@/lib/notifications/subscriptions";
 import { getAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
@@ -43,7 +44,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   const [{ data: thread, error: threadError }, { data: profile }] = await Promise.all([
     supabase
       .from("community_threads")
-      .select("id, title")
+      .select("id, title, thread_type, content_kind, content_slug")
       .eq("id", threadId)
       .eq("status", "published")
       .maybeSingle(),
@@ -109,6 +110,19 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   const appEnv = getPublicSupabaseEnv();
   if (appEnv) {
+    await notifyAdminsOfCommunityActivity({
+      actorName: authorName,
+      actorEmail: viewer.email,
+      event: thread.thread_type === "general" ? "general_thread_replied" : "tracked_discussion_replied",
+      subjectLabel: thread.title,
+      targetLabel:
+        thread.thread_type === "general"
+          ? "General forum"
+          : `${thread.thread_type === "chapter" ? "Chapter" : "Lab"}: ${thread.content_kind && thread.content_slug ? (getSourceCatalogItem(thread.content_kind, thread.content_slug)?.title ?? thread.content_slug) : thread.title}`,
+      targetUrl: `${appEnv.appUrl}/community/${threadId}`,
+      bodyPreview: body,
+    }).catch(() => undefined);
+
     await notifyThreadActivity({
       admin: adminDb,
       threadId,

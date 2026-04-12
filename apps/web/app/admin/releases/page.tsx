@@ -63,12 +63,20 @@ export default async function AdminReleasesPage() {
           <Link href="/account" className="text-sm text-cyan-300 transition hover:text-cyan-200">
             {"<- Back to account"}
           </Link>
-          <Link
-            href="/curriculum"
-            className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
-          >
-            Open curriculum
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/admin/community"
+              className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+            >
+              Community inbox
+            </Link>
+            <Link
+              href="/curriculum"
+              className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/20 hover:text-white"
+            >
+              Open curriculum
+            </Link>
+          </div>
         </div>
 
         <header className="mt-10 max-w-3xl">

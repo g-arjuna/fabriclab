@@ -62,12 +62,20 @@ export default async function AccountPage() {
                 <p className="mt-3 text-sm leading-7 text-cyan-100">
                   Manage content release state and internal test metadata from the release-control dashboard.
                 </p>
-                <Link
-                  href="/admin/releases"
-                  className="mt-5 inline-flex rounded-full border border-cyan-400/30 px-4 py-2 text-sm text-cyan-100 transition hover:border-cyan-300/50 hover:text-white"
-                >
-                  Open release controls
-                </Link>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Link
+                    href="/admin/releases"
+                    className="inline-flex rounded-full border border-cyan-400/30 px-4 py-2 text-sm text-cyan-100 transition hover:border-cyan-300/50 hover:text-white"
+                  >
+                    Open release controls
+                  </Link>
+                  <Link
+                    href="/admin/community"
+                    className="inline-flex rounded-full border border-cyan-400/30 px-4 py-2 text-sm text-cyan-100 transition hover:border-cyan-300/50 hover:text-white"
+                  >
+                    Open community inbox
+                  </Link>
+                </div>
               </div>
             ) : null}
 

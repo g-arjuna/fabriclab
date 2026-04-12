@@ -6,6 +6,7 @@ import {
   listNewContentNotificationRecipients,
   listThreadActivityRecipients,
 } from "@/lib/notifications/subscriptions";
+import { getAdminSupabaseEnv } from "@/lib/supabase/env";
 
 type ContentNotificationInput = {
   admin: SupabaseClient;
@@ -77,6 +78,82 @@ export async function notifyThreadActivity(input: ThreadNotificationInput) {
           `Open: ${input.threadUrl}`,
           "",
           "You're receiving this because thread activity notifications are enabled.",
+        ].join("\n"),
+      }),
+    ),
+  );
+}
+
+type AdminCommunityNotificationInput = {
+  actorName: string;
+  actorEmail?: string | null;
+  event:
+    | "content_comment_created"
+    | "content_comment_replied"
+    | "tracked_discussion_created"
+    | "tracked_discussion_replied"
+    | "general_thread_created"
+    | "general_thread_replied";
+  subjectLabel: string;
+  targetLabel: string;
+  targetUrl: string;
+  bodyPreview: string;
+};
+
+function getAdminNotificationRecipients() {
+  const adminEnv = getAdminSupabaseEnv();
+  if (!adminEnv) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      adminEnv.adminEmails
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function getAdminEventLabel(event: AdminCommunityNotificationInput["event"]) {
+  switch (event) {
+    case "content_comment_created":
+      return "posted a chapter/lab comment";
+    case "content_comment_replied":
+      return "replied to a chapter/lab comment";
+    case "tracked_discussion_created":
+      return "opened a tracked discussion";
+    case "tracked_discussion_replied":
+      return "replied to a tracked discussion";
+    case "general_thread_created":
+      return "opened a general forum thread";
+    case "general_thread_replied":
+      return "replied in the general forum";
+    default:
+      return "triggered a community event";
+  }
+}
+
+export async function notifyAdminsOfCommunityActivity(input: AdminCommunityNotificationInput) {
+  const recipients = getAdminNotificationRecipients();
+  if (!recipients.length) {
+    return;
+  }
+
+  await Promise.all(
+    recipients.map((recipient) =>
+      sendNotificationEmail({
+        to: recipient,
+        subject: `[FabricLab] Community activity: ${input.subjectLabel}`,
+        text: [
+          `${input.actorName} ${getAdminEventLabel(input.event)}.`,
+          "",
+          `Target: ${input.targetLabel}`,
+          `Subject: ${input.subjectLabel}`,
+          `Open: ${input.targetUrl}`,
+          "",
+          "Preview:",
+          input.bodyPreview,
         ].join("\n"),
       }),
     ),
