@@ -25,9 +25,19 @@ type CommunityComment = {
 type CommunityCommentReply = {
   id: string;
   comment_id: string;
+  parent_reply_id: string | null;
   body: string;
   author_name: string;
   created_at: string;
+  child_replies?: CommunityCommentReply[];
+};
+
+type ReplyTarget = {
+  commentId: string;
+  parentReplyId: string | null;
+  targetKey: string;
+  targetAuthorName: string;
+  targetType: "comment" | "reply";
 };
 
 type CommunityThreadProps = {
@@ -66,6 +76,33 @@ function formatDate(value: string) {
   }
 }
 
+async function fetchCommunityComments(contentKind: ContentKind, contentSlug: string) {
+  const response = await fetch(
+    `/api/community/comments?kind=${contentKind}&slug=${encodeURIComponent(contentSlug)}`,
+    {
+      cache: "no-store",
+    },
+  );
+
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        comments?: CommunityComment[];
+        error?: string;
+        setupPending?: boolean;
+      }
+    | null;
+
+  return { response, payload };
+}
+
+function buildReplyPlaceholder(target: ReplyTarget) {
+  if (target.targetType === "reply") {
+    return `Reply to ${target.targetAuthorName}'s reply with additional context or a follow-up.`;
+  }
+
+  return `Reply to ${target.targetAuthorName}'s comment with additional context or a follow-up.`;
+}
+
 export function CommunityThread({
   contentKind,
   contentSlug,
@@ -91,7 +128,7 @@ export function CommunityThread({
   const [error, setError] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [postingThread, setPostingThread] = useState(false);
-  const [replyingCommentId, setReplyingCommentId] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
   const [replyBody, setReplyBody] = useState("");
   const [replyPosting, setReplyPosting] = useState(false);
   const [trackedDialogOpen, setTrackedDialogOpen] = useState(false);
@@ -105,20 +142,7 @@ export function CommunityThread({
       setFetching(true);
       setError(null);
 
-      const response = await fetch(
-        `/api/community/comments?kind=${contentKind}&slug=${encodeURIComponent(contentSlug)}`,
-        {
-          cache: "no-store",
-        },
-      );
-
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            comments?: CommunityComment[];
-            error?: string;
-            setupPending?: boolean;
-          }
-        | null;
+      const { response, payload } = await fetchCommunityComments(contentKind, contentSlug);
 
       if (!active) {
         return;
@@ -336,8 +360,12 @@ export function CommunityThread({
     setTrackedDialogOpen(false);
   }
 
-  async function handleCommentReplySubmit(event: FormEvent<HTMLFormElement>, commentId: string) {
+  async function handleCommentReplySubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!replyTarget) {
+      return;
+    }
 
     if (replyBody.trim().length < 12) {
       setError("Reply should be at least 12 characters.");
@@ -348,13 +376,14 @@ export function CommunityThread({
     setError(null);
     setMessage(null);
 
-    const response = await fetch(`/api/community/comments/${commentId}/replies`, {
+    const response = await fetch(`/api/community/comments/${replyTarget.commentId}/replies`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         body: replyBody,
+        parentReplyId: replyTarget.parentReplyId,
       }),
     });
 
@@ -375,25 +404,111 @@ export function CommunityThread({
       return;
     }
 
-    if (payload?.reply) {
-      setComments((current) =>
-        current.map((comment) =>
-          comment.id === commentId
-            ? {
-                ...comment,
-                community_comment_replies: [
-                  ...(comment.community_comment_replies ?? []),
-                  payload.reply!,
-                ],
-              }
-            : comment,
-        ),
-      );
+    const refreshed = await fetchCommunityComments(contentKind, contentSlug);
+    if (refreshed.response.ok) {
+      setComments(refreshed.payload?.comments ?? []);
+      setSetupPending(Boolean(refreshed.payload?.setupPending));
     }
 
     setReplyBody("");
-    setReplyingCommentId(null);
+    setReplyTarget(null);
     setMessage(payload?.message ?? "Reply posted.");
+  }
+
+  function openReplyComposer(target: ReplyTarget) {
+    setReplyTarget(target);
+    setReplyBody("");
+    setMessage(null);
+    setError(null);
+  }
+
+  function closeReplyComposer() {
+    setReplyTarget(null);
+    setReplyBody("");
+  }
+
+  function renderReplyComposer(target: ReplyTarget) {
+    if (!user || loading) {
+      return null;
+    }
+
+    if (replyTarget?.targetKey !== target.targetKey) {
+      return (
+        <button
+          type="button"
+          onClick={() => openReplyComposer(target)}
+          className="rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 transition hover:border-white/20 hover:text-white"
+        >
+          {target.targetType === "reply" ? "Reply to reply" : "Reply to comment"}
+        </button>
+      );
+    }
+
+    return (
+      <form className="space-y-3" onSubmit={(event) => void handleCommentReplySubmit(event)}>
+        <textarea
+          value={replyBody}
+          onChange={(event) => setReplyBody(event.target.value)}
+          rows={3}
+          placeholder={buildReplyPlaceholder(target)}
+          className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm leading-7 text-slate-100 outline-none transition focus:border-cyan-500/40"
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={closeReplyComposer}
+            className="rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 transition hover:border-white/20 hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={replyPosting}
+            className="rounded-full bg-cyan-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {replyPosting ? "Posting..." : "Reply"}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  function renderReplyThread(replies: CommunityCommentReply[], commentId: string, depth = 0) {
+    if (!replies.length) {
+      return null;
+    }
+
+    return (
+      <div className={`${depth === 0 ? "mt-4" : "mt-3"} space-y-3 border-l border-white/10 pl-4`}>
+        {replies.map((reply) => {
+          const target: ReplyTarget = {
+            commentId,
+            parentReplyId: reply.id,
+            targetKey: `reply:${reply.id}`,
+            targetAuthorName: reply.author_name,
+            targetType: "reply",
+          };
+
+          return (
+            <div key={reply.id} className="rounded-2xl border border-white/8 bg-slate-950/70 p-3">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <span className="rounded-full border border-white/10 px-2.5 py-1 uppercase tracking-[0.2em] text-cyan-300">
+                  Reply
+                </span>
+                <span>{reply.author_name}</span>
+                <span>{formatDate(reply.created_at)}</span>
+              </div>
+              <p className={`mt-3 whitespace-pre-line text-slate-300 ${compact ? "text-xs leading-6" : "text-sm leading-7"}`}>
+                {reply.body}
+              </p>
+
+              {loading ? null : user ? <div className="mt-4">{renderReplyComposer(target)}</div> : null}
+              {renderReplyThread(reply.child_replies ?? [], commentId, depth + 1)}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
   return (
@@ -462,70 +577,17 @@ export function CommunityThread({
                 {comment.body}
               </p>
 
-              {comment.community_comment_replies?.length ? (
-                <div className="mt-4 space-y-3 border-l border-white/10 pl-4">
-                  {comment.community_comment_replies.map((reply) => (
-                    <div key={reply.id} className="rounded-2xl border border-white/8 bg-slate-950/70 p-3">
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                        <span className="rounded-full border border-white/10 px-2.5 py-1 uppercase tracking-[0.2em] text-cyan-300">
-                          Reply
-                        </span>
-                        <span>{reply.author_name}</span>
-                        <span>{formatDate(reply.created_at)}</span>
-                      </div>
-                      <p className={`mt-3 whitespace-pre-line text-slate-300 ${compact ? "text-xs leading-6" : "text-sm leading-7"}`}>
-                        {reply.body}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
+              {renderReplyThread(comment.community_comment_replies ?? [], comment.id)}
 
               {loading ? null : user ? (
                 <div className="mt-4">
-                  {replyingCommentId === comment.id ? (
-                    <form className="space-y-3" onSubmit={(event) => void handleCommentReplySubmit(event, comment.id)}>
-                      <textarea
-                        value={replyBody}
-                        onChange={(event) => setReplyBody(event.target.value)}
-                        rows={3}
-                        placeholder="Reply to this comment with additional context or a follow-up."
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm leading-7 text-slate-100 outline-none transition focus:border-cyan-500/40"
-                      />
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReplyingCommentId(null);
-                            setReplyBody("");
-                          }}
-                          className="rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 transition hover:border-white/20 hover:text-white"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={replyPosting}
-                          className="rounded-full bg-cyan-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {replyPosting ? "Posting..." : "Reply"}
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReplyingCommentId(comment.id);
-                        setReplyBody("");
-                        setMessage(null);
-                        setError(null);
-                      }}
-                      className="rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 transition hover:border-white/20 hover:text-white"
-                    >
-                      Reply to comment
-                    </button>
-                  )}
+                  {renderReplyComposer({
+                    commentId: comment.id,
+                    parentReplyId: null,
+                    targetKey: `comment:${comment.id}`,
+                    targetAuthorName: comment.author_name,
+                    targetType: "comment",
+                  })}
                 </div>
               ) : null}
             </article>

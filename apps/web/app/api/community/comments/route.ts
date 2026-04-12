@@ -25,9 +25,11 @@ type CommentRow = {
 type CommentReplyRow = {
   id: string;
   comment_id: string;
+  parent_reply_id: string | null;
   body: string;
   author_name: string;
   created_at: string;
+  child_replies?: CommentReplyRow[];
 };
 
 function isMissingCommentsTable(error: { code?: string; message?: string } | null | undefined) {
@@ -36,11 +38,20 @@ function isMissingCommentsTable(error: { code?: string; message?: string } | nul
   }
 
   return (
-    error.code === "42P01" ||
+      error.code === "42P01" ||
     error.code === "PGRST205" ||
     /community_comments/i.test(error.message ?? "") ||
-    /community_comment_replies/i.test(error.message ?? "")
+    /community_comment_replies/i.test(error.message ?? "") ||
+    /parent_reply_id/i.test(error.message ?? "")
   );
+}
+
+function isMissingReplyTargetColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) {
+    return false;
+  }
+
+  return /parent_reply_id/i.test(error.message ?? "");
 }
 
 function parseKind(value: string | null): CatalogKind | null {
@@ -88,6 +99,56 @@ function buildContentPath(kind: CatalogKind, slug: string) {
   return kind === "chapter" ? `/learn/${slug}` : `/lab?lab=${encodeURIComponent(slug)}`;
 }
 
+function buildReplyTree(replies: CommentReplyRow[]) {
+  const nodes = replies.map((reply) => ({
+    ...reply,
+    child_replies: [] as CommentReplyRow[],
+  }));
+  const replyMap = new Map(nodes.map((reply) => [reply.id, reply]));
+  const roots: CommentReplyRow[] = [];
+
+  for (const reply of nodes) {
+    if (reply.parent_reply_id) {
+      const parent = replyMap.get(reply.parent_reply_id);
+      if (parent) {
+        parent.child_replies = [...(parent.child_replies ?? []), reply];
+        continue;
+      }
+    }
+
+    roots.push(reply);
+  }
+
+  return roots;
+}
+
+async function fetchCommentReplies(supabase: NonNullable<Awaited<ReturnType<typeof getServerSupabaseClient>>>) {
+  const repliesWithTargets = await supabase
+    .from("community_comment_replies")
+    .select("id, comment_id, parent_reply_id, body, author_name, created_at")
+    .eq("status", "published")
+    .order("created_at", { ascending: true })
+    .limit(300);
+  if (!isMissingReplyTargetColumn(repliesWithTargets.error)) {
+    return repliesWithTargets;
+  }
+
+  const legacyReplies = await supabase
+    .from("community_comment_replies")
+    .select("id, comment_id, body, author_name, created_at")
+    .eq("status", "published")
+    .order("created_at", { ascending: true })
+    .limit(300);
+
+  return {
+    ...legacyReplies,
+    data: ((legacyReplies.data ?? []) as Omit<CommentReplyRow, "parent_reply_id" | "child_replies">[]).map((reply) => ({
+      ...reply,
+      parent_reply_id: null,
+    })),
+  };
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const kind = parseKind(url.searchParams.get("kind"));
@@ -115,12 +176,7 @@ export async function GET(request: Request) {
       .eq("status", "published")
       .order("created_at", { ascending: false })
       .limit(100),
-    supabase
-      .from("community_comment_replies")
-      .select("id, comment_id, body, author_name, created_at")
-      .eq("status", "published")
-      .order("created_at", { ascending: true })
-      .limit(300),
+    fetchCommentReplies(supabase),
   ]);
 
   if (isMissingCommentsTable(commentsResult.error) || isMissingCommentsTable(repliesResult.error)) {
@@ -150,7 +206,7 @@ export async function GET(request: Request) {
     setupPending: false,
     comments: ((commentsResult.data ?? []) as CommentRow[]).map((comment) => ({
       ...comment,
-      community_comment_replies: repliesByCommentId.get(comment.id) ?? [],
+      community_comment_replies: buildReplyTree(repliesByCommentId.get(comment.id) ?? []),
     })),
   });
 }

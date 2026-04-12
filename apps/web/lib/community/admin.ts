@@ -13,6 +13,7 @@ type CommentRow = {
 type CommentReplyRow = {
   id: string;
   comment_id: string;
+  parent_reply_id: string | null;
   body: string;
   author_name: string;
   created_at: string;
@@ -133,7 +134,7 @@ export async function listRecentCommunityActivity(admin: any, limit = 80): Promi
       .limit(limit),
     adminDb
       .from("community_comment_replies")
-      .select("id, comment_id, body, author_name, created_at")
+      .select("id, comment_id, parent_reply_id, body, author_name, created_at")
       .eq("status", "published")
       .order("created_at", { ascending: false })
       .limit(limit),
@@ -162,7 +163,26 @@ export async function listRecentCommunityActivity(admin: any, limit = 80): Promi
     throw firstError;
   }
 
-  const commentItems = ((commentsResult.data ?? []) as CommentRow[]).map((comment) => ({
+  const recentComments = (commentsResult.data ?? []) as CommentRow[];
+  const recentReplies = (commentRepliesResult.data ?? []) as CommentReplyRow[];
+  const replyCommentIds = Array.from(new Set(recentReplies.map((reply) => reply.comment_id)));
+  const missingCommentIds = replyCommentIds.filter((commentId) => !recentComments.some((comment) => comment.id === commentId));
+
+  let relatedComments = recentComments;
+  if (missingCommentIds.length > 0) {
+    const { data: missingComments, error: missingCommentsError } = await adminDb
+      .from("community_comments")
+      .select("id, content_kind, content_slug, comment_type, body, author_name, created_at")
+      .in("id", missingCommentIds);
+
+    if (missingCommentsError) {
+      throw missingCommentsError;
+    }
+
+    relatedComments = [...recentComments, ...((missingComments ?? []) as CommentRow[])];
+  }
+
+  const commentItems = recentComments.map((comment) => ({
     id: `comment:${comment.id}`,
     createdAt: comment.created_at,
     authorName: comment.author_name,
@@ -173,21 +193,26 @@ export async function listRecentCommunityActivity(admin: any, limit = 80): Promi
     targetLabel: buildContentLabel(comment.content_kind, comment.content_slug),
   }));
 
-  const commentMap = new Map(((commentsResult.data ?? []) as CommentRow[]).map((comment) => [comment.id, comment]));
+  const commentMap = new Map(relatedComments.map((comment) => [comment.id, comment]));
+  const replyMap = new Map(recentReplies.map((reply) => [reply.id, reply]));
 
-  const commentReplyItems = ((commentRepliesResult.data ?? []) as CommentReplyRow[])
+  const commentReplyItems = recentReplies
     .map((reply) => {
       const parentComment = commentMap.get(reply.comment_id) ?? null;
       if (!parentComment) {
         return null;
       }
 
+      const parentReply = reply.parent_reply_id ? replyMap.get(reply.parent_reply_id) ?? null : null;
+
       return {
         id: `comment-reply:${reply.id}`,
         createdAt: reply.created_at,
         authorName: reply.author_name,
         type: "content_comment_reply" as const,
-        title: `Reply to ${parentComment.author_name}'s comment`,
+        title: parentReply
+          ? `Reply to ${parentReply.author_name}'s reply`
+          : `Reply to ${parentComment.author_name}'s comment`,
         body: reply.body,
         href: buildContentHref(parentComment.content_kind, parentComment.content_slug),
         targetLabel: buildContentLabel(parentComment.content_kind, parentComment.content_slug),

@@ -100,6 +100,17 @@ type AdminCommunityNotificationInput = {
   bodyPreview: string;
 };
 
+type CommentReplyTargetNotificationInput = {
+  recipientEmail: string | null;
+  recipientName: string;
+  actorEmail?: string | null;
+  actorName: string;
+  targetType: "comment" | "reply";
+  contentLabel: string;
+  targetUrl: string;
+  bodyPreview: string;
+};
+
 function getAdminNotificationRecipients() {
   const adminEnv = getAdminSupabaseEnv();
   if (!adminEnv) {
@@ -156,6 +167,33 @@ export async function notifyAdminsOfCommunityActivity(input: AdminCommunityNotif
           input.bodyPreview,
         ].join("\n"),
       }),
-    ),
+      ),
   );
+}
+
+export async function notifyCommentReplyTarget(input: CommentReplyTargetNotificationInput) {
+  const recipientEmail = input.recipientEmail?.trim().toLowerCase() ?? "";
+  const actorEmail = input.actorEmail?.trim().toLowerCase() ?? "";
+
+  if (!recipientEmail || recipientEmail === actorEmail) {
+    return;
+  }
+
+  const subjectTarget = input.targetType === "comment" ? "comment" : "reply";
+
+  await sendNotificationEmail({
+    to: recipientEmail,
+    subject: `[FabricLab] New reply to your ${subjectTarget}`,
+    text: [
+      `Hi ${input.recipientName},`,
+      "",
+      `${input.actorName} replied to your ${subjectTarget}.`,
+      "",
+      `Context: ${input.contentLabel}`,
+      `Open: ${input.targetUrl}`,
+      "",
+      "Reply preview:",
+      input.bodyPreview,
+    ].join("\n"),
+  });
 }
