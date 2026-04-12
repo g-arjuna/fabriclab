@@ -812,6 +812,58 @@ export const SOLUTION_GUIDES: Record<string, SolutionGuide> = {
       },
     ],
   },
+  "lab19-adaptive-routing-imbalance": {
+    labId: "lab19-adaptive-routing-imbalance",
+    title: "Step-by-step command guide",
+    steps: [
+      {
+        title: "Confirm AR is not actually running in the intended mode",
+        details: "Start on leaf-01 and verify the active AR mode, then inspect the detailed utilization spread that shows the fabric is still badly imbalanced.",
+        commands: [
+          { deviceId: "leaf-01", command: "nv show router adaptive-routing" },
+          { deviceId: "leaf-01", command: "nv show router adaptive-routing detail" },
+        ],
+      },
+      {
+        title: "Check the DGX B200 reorder-buffer prerequisite",
+        details: "Move to the DGX host and verify that the BF3 SuperNIC reorder buffer is disabled, which blocks per-packet AR from staying active.",
+        commands: [
+          {
+            deviceId: "dgx-node-01",
+            command: "mlxlink -d /dev/mst/mt41692_pciconf0 --show_module | grep -i reorder",
+          },
+          {
+            deviceId: "dgx-node-01",
+            command: "mlxconfig -d /dev/mst/mt41692_pciconf0 q ROCE_REORDER_BUFFER_SIZE",
+          },
+          { deviceId: "dgx-node-01", command: "nv show interface eth0 reorder-buffer" },
+          { deviceId: "dgx-node-01", command: "nv show interface eth1 reorder-buffer" },
+        ],
+      },
+      {
+        title: "Enable BF3 reorder on both DGX uplinks",
+        details: "Turn reorder on for eth0 and eth1, then apply the DGX-side configuration so the host is ready for per-packet AR.",
+        commands: [
+          { deviceId: "dgx-node-01", command: "nv set interface eth0 reorder-buffer enable" },
+          { deviceId: "dgx-node-01", command: "nv set interface eth1 reorder-buffer enable" },
+          { deviceId: "dgx-node-01", command: "nv config apply" },
+        ],
+      },
+      {
+        title: "Return the fabric to per-packet AR and verify balance",
+        details: "Switch leaf-01 back to per-packet mode, apply the config, then validate that the standard deviation and benchmark throughput now pass.",
+        commands: [
+          { deviceId: "leaf-01", command: "nv set router adaptive-routing mode per-packet" },
+          { deviceId: "leaf-01", command: "nv config apply" },
+          { deviceId: "leaf-01", command: "nv show router adaptive-routing detail" },
+          {
+            deviceId: "dgx-node-01",
+            command: "ib_write_bw -d mlx5_0 -x 3 --report_gbits -D 30 -q 16 10.100.1.2",
+          },
+        ],
+      },
+    ],
+  },
 };
 
 export function getSolutionGuide(labId: string): SolutionGuide | undefined {

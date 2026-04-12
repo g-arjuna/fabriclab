@@ -14,6 +14,7 @@ import { lab15 } from "@/data/labs/lab15-rdma-rkey-exposure";
 import { lab16 } from "@/data/labs/lab16-spectrum-x-platform-audit";
 import { lab17 } from "@/data/labs/lab17-roce-day-zero-config";
 import { lab18 } from "@/data/labs/lab18-ecn-threshold-tuning";
+import { lab19 } from "@/data/labs/lab19-adaptive-routing-imbalance";
 import {
   applyRouteMapSwp14,
   configureRouteMapDscp10,
@@ -57,6 +58,14 @@ import {
   handleLab18SetEcnMax,
   handleLab18SetEcnMin,
 } from "@/lib/commands/lab18Handlers";
+import {
+  handleDgxNvConfigApply,
+  handleLab19NvConfigApply,
+  handleSetARModePerFlowlet,
+  handleSetARModePerPacket,
+  handleSetFlowletTimer,
+  handleSetReorderBufferEnable,
+} from "@/lib/commands/lab19Handlers";
 import { useLabStore } from "@/store/labStore";
 
 const LAB_CONFIGS = {
@@ -72,6 +81,7 @@ const LAB_CONFIGS = {
   [lab16.id]: lab16,
   [lab17.id]: lab17,
   [lab18.id]: lab18,
+  [lab19.id]: lab19,
 };
 
 export function runMutation(command: string): CommandResult {
@@ -265,6 +275,11 @@ export function runMutation(command: string): CommandResult {
       if (store.lab.labId === lab11.id) {
         return handleLab11NvConfigApply();
       }
+      if (store.lab.labId === lab19.id) {
+        return store.activeDeviceId === "dgx-node-01"
+          ? handleDgxNvConfigApply()
+          : handleLab19NvConfigApply();
+      }
       return store.lab.labId === lab18.id ? handleLab18ConfigApply() : handleNvConfigApply();
     case "nv config save":
       return handleNvConfigSave();
@@ -276,6 +291,18 @@ export function runMutation(command: string): CommandResult {
       return handleLab18SetEcnMin();
     case "nv set qos congestion-control default-global traffic-class 3 max-threshold 1500000":
       return handleLab18SetEcnMax();
+    case "nv set router adaptive-routing mode per-packet":
+      return handleSetARModePerPacket();
+    case "nv set router adaptive-routing mode per-flowlet":
+      return handleSetARModePerFlowlet();
+    case "nv set router adaptive-routing flowlet-timer 100us":
+      return handleSetFlowletTimer("100us");
+    case "nv set router adaptive-routing flowlet-timer 1s":
+      return handleSetFlowletTimer("1s");
+    case "nv set interface eth0 reorder-buffer enable":
+      return handleSetReorderBufferEnable("eth0");
+    case "nv set interface eth1 reorder-buffer enable":
+      return handleSetReorderBufferEnable("eth1");
     case "enable gid filter":
       return enableGidFilter();
     case "ibv_reg_mr rotate":

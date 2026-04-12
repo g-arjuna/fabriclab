@@ -29,6 +29,7 @@ const SUPPORTED_LAB_IDS = new Set([
   "lab16-spectrum-x-platform-audit",
   "lab17-roce-day-zero-config",
   "lab18-ecn-threshold-tuning",
+  "lab19-adaptive-routing-imbalance",
 ]);
 
 function LabLoadingState() {

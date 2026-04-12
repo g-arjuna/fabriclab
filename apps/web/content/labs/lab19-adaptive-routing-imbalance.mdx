@@ -1,0 +1,195 @@
+---
+title: "Lab 19 - Adaptive Routing Imbalance"
+labNumber: 19
+slug: "lab19-adaptive-routing-imbalance"
+difficulty: "advanced"
+expectedMinutes: 40
+chapterRef: "ch26-adaptive-routing-spectrum-x"
+description: "A 256-GPU training job ran at 72% of expected throughput. Spine utilization is severely skewed. Adaptive Routing is configured but not functioning correctly. Find the root cause and fix it."
+published: true
+---
+
+import LabTerminal from '@/components/lab/LabTerminal'
+import LabHint from '@/components/lab/LabHint'
+import LabCheck from '@/components/lab/LabCheck'
+import LabAnswerBox from '@/components/lab/LabAnswerBox'
+
+## Scenario
+
+The 3:00 AM CloudAI benchmark run just completed on the production Spectrum-X SuperPOD and the result is alarming: **47.2 GB/s all-reduce bandwidth** against the 46.5 GB/s pass threshold - technically a pass, but only barely. More concerning, the operations team has pulled the Grafana spine utilization charts from the run period. Spine-02 peaked at **91% utilization** while spine-01, spine-03, and spine-04 sat between 19% and 24%. This is not a statistical outlier. Something is systematically wrong with traffic distribution.
+
+The fabric runbook says Adaptive Routing was enabled during the last maintenance window three weeks ago. The platform team believes the configuration is correct. Your job is to verify that, and if it is not, to identify the exact failure and fix it. The 256 DGX B200 nodes in this cluster are supposed to be leveraging per-packet AR with BF3 SuperNIC reorder buffers - the highest-performance AR mode available.
+
+You have access to `leaf-01` (the primary leaf serving the hot-spine links), `spine-02` (the overloaded spine), and `dgx-node-01` (a representative DGX B200 host).
+
+**Your mission:**
+
+1. Verify global AR status and identify the actual AR mode in effect
+2. Confirm whether the flowlet timer is set correctly
+3. Check SuperNIC reorder buffer configuration on the DGX B200 host
+4. Fix the root cause (there is one primary issue)
+5. Verify that spine utilization equalizes after the fix
+
+---
+
+## Task 1 - Check Adaptive Routing Status on `leaf-01`
+
+Start by establishing the current AR state on the leaf switch. Do not assume the configuration matches what was intended - verify it directly.
+
+<LabTerminal nodeId="leaf-01" prompt="cumulus@leaf-01:~$">
+nv show router adaptive-routing
+</LabTerminal>
+
+<LabHint level={1}>
+If the Mode field shows `per-flowlet` when you expected `per-packet`, investigate why the switch fell back to per-flowlet mode. AR performs an automatic safety check at enablement.
+</LabHint>
+
+<LabCheck taskId="arStatusChecked" nodeId="leaf-01">
+AR global status has been reviewed. Record the active `Mode` and `Flowlet Timer` values.
+</LabCheck>
+
+---
+
+## Task 2 - Identify the Traffic Imbalance Root Cause
+
+You now know the AR mode that is actually running. The next question is whether the flowlet timer is configured correctly for this mode.
+
+<LabTerminal nodeId="leaf-01" prompt="cumulus@leaf-01:~$">
+nv show router adaptive-routing detail
+</LabTerminal>
+
+<LabTerminal nodeId="spine-02" prompt="cumulus@spine-02:~$">
+nv show interface swp1 adaptive-routing
+nv show interface swp2 adaptive-routing
+nv show interface swp3 adaptive-routing
+nv show interface swp4 adaptive-routing
+</LabTerminal>
+
+<LabHint level={1}>
+The `Load Std Deviation` from `nv show router adaptive-routing detail` tells you how unevenly traffic is distributed right now. A value above 20% confirms the imbalance is structural, not transient.
+</LabHint>
+
+<LabHint level={2}>
+Per-flowlet AR distributes traffic across spines at the boundary between flowlets. A flowlet boundary occurs when a flow is quiet for longer than the flowlet timer. If the timer is set to `1s`, flows that sustain traffic for less than 1 second between bursts will never switch spines - they will stay pinned to their initial spine indefinitely. AI training collective flows are nearly continuous, so a `1s` timer means almost zero redistribution.
+</LabHint>
+
+<LabCheck taskId="imbalanceIdentified" nodeId="leaf-01">
+Root cause has been identified: per-flowlet AR is running with an excessively long flowlet timer, preventing flows from migrating to less-loaded spines.
+</LabCheck>
+
+---
+
+## Task 3 - Check SuperNIC Reorder Buffer on DGX B200
+
+Before fixing the flowlet timer, check whether the SuperNIC reorder buffer is configured on the DGX B200 hosts. This determines which AR mode is safe to use.
+
+<LabTerminal nodeId="dgx-node-01" prompt="root@dgx-node-01:~#">
+mlxlink -d /dev/mst/mt41692_pciconf0 --show_module | grep -i reorder
+mlxconfig -d /dev/mst/mt41692_pciconf0 q ROCE_REORDER_BUFFER_SIZE
+</LabTerminal>
+
+<LabTerminal nodeId="dgx-node-01" prompt="root@dgx-node-01:~#">
+nv show interface eth0 reorder-buffer
+nv show interface eth1 reorder-buffer
+</LabTerminal>
+
+<LabHint level={1}>
+If the reorder buffer is disabled on the BF3 interfaces, per-packet AR cannot be safely enabled - the switch correctly fell back to per-flowlet mode as a safety measure. The reorder buffer must be enabled on **all** host uplink interfaces before per-packet AR can be used.
+</LabHint>
+
+<LabHint level={2}>
+On DGX B200 systems, the BF3 uplinks are typically `eth0` and `eth1` (the SuperNIC RDMA interfaces). Check both. If either shows `Disabled`, that is a blocking condition for per-packet AR.
+</LabHint>
+
+<LabCheck taskId="supernicReorderChecked" nodeId="dgx-node-01">
+SuperNIC reorder buffer state has been verified on `dgx-node-01`. Note whether it is enabled or disabled on `eth0` and `eth1`.
+</LabCheck>
+
+---
+
+## Task 4 - Fix the Root Cause
+
+You now have the complete picture. Apply the correct fix based on what you found in Tasks 2 and 3.
+
+**If reorder buffer was disabled (expected finding):** Enable it on all DGX B200 host interfaces, then switch the fabric to per-packet AR mode.
+
+**If reorder buffer was already enabled:** The fix is purely a flowlet timer adjustment.
+
+Apply the fix in the correct order: host-side first, then switch.
+
+<LabTerminal nodeId="dgx-node-01" prompt="root@dgx-node-01:~#">
+nv set interface eth0 reorder-buffer enable
+nv set interface eth1 reorder-buffer enable
+nv config apply
+</LabTerminal>
+
+<LabTerminal nodeId="dgx-node-01" prompt="root@dgx-node-01:~#">
+mlxlink -d /dev/mst/mt41692_pciconf0 --show_module | grep -i reorder
+</LabTerminal>
+
+<LabTerminal nodeId="leaf-01" prompt="cumulus@leaf-01:~$">
+nv set router adaptive-routing mode per-packet
+nv config apply
+nv show router adaptive-routing
+</LabTerminal>
+
+<LabHint level={1}>
+Remember: you need to enable the reorder buffer on **all** DGX B200 nodes in the fabric, not just `dgx-node-01`. In production, this would be templated via Ansible across all 256 nodes. For this lab, `dgx-node-01` represents the fleet.
+</LabHint>
+
+<LabHint level={2}>
+After applying on `leaf-01`, also apply the same AR mode change on all other leaf switches and on the spine switches - AR must be consistently configured across the entire fabric. In this lab, applying to `leaf-01` is sufficient to demonstrate the fix.
+</LabHint>
+
+<LabCheck taskId="supernicReorderEnabled" nodeId="dgx-node-01">
+BF3 SuperNIC reorder buffer has been enabled on `eth0` and `eth1`, and the command has been applied.
+</LabCheck>
+
+<LabCheck taskId="flowletTimerFixed" nodeId="leaf-01">
+AR mode has been set to `per-packet` (or flowlet timer set to `100us` if per-packet was not available), and the change has been applied.
+</LabCheck>
+
+---
+
+## Task 5 - Verify Utilization Equalizes
+
+Trigger a short synthetic allreduce workload and observe whether spine utilization normalizes. Then validate with the show commands.
+
+<LabTerminal nodeId="dgx-node-01" prompt="root@dgx-node-01:~#">
+ib_write_bw -d mlx5_0 -x 3 --report_gbits -D 30 -q 16 10.100.1.2
+</LabTerminal>
+
+<LabTerminal nodeId="leaf-01" prompt="cumulus@leaf-01:~$">
+nv show router adaptive-routing detail
+</LabTerminal>
+
+<LabTerminal nodeId="spine-02" prompt="cumulus@spine-02:~$">
+nv show interface swp1 adaptive-routing
+nv show interface swp2 adaptive-routing
+</LabTerminal>
+
+<LabHint level={1}>
+After the fix, `nv show router adaptive-routing detail` should show `Load Std Deviation: < 5%`. If it is still high, check whether all leaf switches (not just `leaf-01`) have been updated to per-packet mode.
+</LabHint>
+
+<LabCheck taskId="balanceVerified" nodeId="leaf-01">
+Load Std Deviation is below 5%, and spine utilization has equalized. `AR Decisions` is non-zero and growing.
+</LabCheck>
+
+---
+
+## Debrief
+
+This lab surfaced a subtle but high-impact misconfiguration pattern that is easy to encounter in production: **AR mode was set to per-packet at the switch level, but the switch detected that BF3 reorder buffers were not configured on the hosts and automatically fell back to per-flowlet mode as a safety measure.** The fallback is correct behavior - running per-packet AR without host-side reorder would trigger a NAK storm that makes performance worse than hash ECMP. However, the fallback then compounded the problem because the flowlet timer defaulted to `1s`, which is far too long for continuous AI collective flows.
+
+**Key lessons:**
+
+1. **Always verify AR mode end to end**, not just the switch configuration. The actual running mode may differ from the configured mode if prerequisite conditions are not met.
+2. **Per-packet AR on Spectrum-X requires BF3 SuperNIC reorder buffers on every host in the fabric** - this is a hard requirement, not a recommendation. DGX H100 and H200 hosts with ConnectX-7 HCAs are permanently excluded from per-packet AR mode.
+3. **The flowlet timer is a critical tuning parameter.** For AI training workloads, `100us` is the recommended value. A `1s` timer defeats the purpose of per-flowlet AR entirely because training flows are longer-lived than any reasonable flowlet duration.
+4. **The `Load Std Deviation` metric in `nv show router adaptive-routing detail` is your primary health indicator.** Below 5% = healthy. Above 10% = investigate immediately. Pair it with Grafana spine utilization to get the complete picture.
+5. **Fix sequencing matters:** always enable SuperNIC reorder on hosts first, then switch the fabric to per-packet mode. The reverse order triggers a brief OOO condition that causes a DCQCN reaction across the fabric.
+
+<LabAnswerBox questionId="lab19-reflection">
+Explain in your own words why Spectrum-X automatically falls back to per-flowlet AR when it detects ConnectX-7 (non-BF3) endpoints, and what the consequences would be if this safety mechanism did not exist.
+</LabAnswerBox>

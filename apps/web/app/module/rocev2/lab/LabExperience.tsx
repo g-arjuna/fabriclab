@@ -30,6 +30,7 @@ import { lab15, lab15Devices } from "@/data/labs/lab15-rdma-rkey-exposure";
 import { lab16, lab16Devices } from "@/data/labs/lab16-spectrum-x-platform-audit";
 import { lab17, lab17Devices } from "@/data/labs/lab17-roce-day-zero-config";
 import { lab18, lab18Devices } from "@/data/labs/lab18-ecn-threshold-tuning";
+import { lab19, lab19Devices } from "@/data/labs/lab19-adaptive-routing-imbalance";
 import { handleLab6ReseatConnector } from "@/lib/commands/lab6Handlers";
 import { replaceOpticRail2 } from "@/lib/commands/lab9Handlers";
 import { isComplete } from "@/lib/labEngine";
@@ -59,6 +60,7 @@ const LABS = {
   [lab16.id]: lab16,
   [lab17.id]: lab17,
   [lab18.id]: lab18,
+  [lab19.id]: lab19,
 };
 
 const LAB_DEVICES = {
@@ -81,6 +83,7 @@ const LAB_DEVICES = {
   [lab16.id]: lab16Devices,
   [lab17.id]: lab17Devices,
   [lab18.id]: lab18Devices,
+  [lab19.id]: lab19Devices,
 };
 
 const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
@@ -111,6 +114,10 @@ const LAB_SOURCE_CHAPTERS: Record<string, { slug: string; label: string }> = {
   [lab18.id]: {
     slug: "ch25-roce-configuration-operations",
     label: "Chapter 25: RoCE Configuration and Operations on Spectrum-X",
+  },
+  [lab19.id]: {
+    slug: "ch26-adaptive-routing-spectrum-x",
+    label: "Chapter 26: Adaptive Routing and Per-Packet Spraying on Spectrum-X",
   },
 };
 

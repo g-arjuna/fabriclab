@@ -214,6 +214,10 @@ import ECNThresholdViz from "@/components/visualisations/ch25/ECNThresholdViz"
 import PFCStormProgressionViz from "@/components/visualisations/ch25/PFCStormProgressionViz"
 import RoCEVerificationFlowViz from "@/components/visualisations/ch25/RoCEVerificationFlowViz"
 import RoCEScenarioTroubleshootViz from "@/components/visualisations/ch25/RoCEScenarioTroubleshootViz"
+// === Ch26 -- Adaptive Routing and Per-Packet Spraying on Spectrum-X ===
+import ECMPCollisionViz from "@/components/visualisations/ch26/ECMPCollisionViz"
+import AdaptiveRoutingEngineViz from "@/components/visualisations/ch26/AdaptiveRoutingEngineViz"
+import SuperNICReorderBufferViz from "@/components/visualisations/ch26/SuperNICReorderBufferViz"
 
 // === Legacy components (no longer in active chapters, kept for reference) ===
 // ServerRackViz, NICCardViz, DGXNodeViz, HardwareComparison
@@ -415,4 +419,8 @@ export const mdxComponents: Record<string, React.ComponentType<any>> = {
   PFCStormProgressionViz,
   RoCEVerificationFlowViz,
   RoCEScenarioTroubleshootViz,
+  // Ch26
+  ECMPCollisionViz,
+  AdaptiveRoutingEngineViz,
+  SuperNICReorderBufferViz,
 }

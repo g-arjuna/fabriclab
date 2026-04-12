@@ -664,6 +664,32 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch25-roce-configuration-operations"
+    },
+    {
+      "kind": "chapter",
+      "slug": "ch26-adaptive-routing-spectrum-x",
+      "number": 26,
+      "title": "Adaptive Routing and Per-Packet Spraying on Spectrum-X",
+      "href": "/learn/ch26-adaptive-routing-spectrum-x",
+      "durationMinutes": 60,
+      "durationLabel": "60 min",
+      "partKey": "platform-integration",
+      "partTitle": "Part 6 - Platform Integration",
+      "partDescription": "Requires Part 5 - Ch 24+",
+      "tags": [
+        "Adaptive Routing",
+        "Spectrum-4",
+        "BlueField-3",
+        "Per-packet AR",
+        "Resilient hashing",
+        "Telemetry"
+      ],
+      "description": "Why flow-based ECMP fails AI collectives, how Spectrum-4 Adaptive Routing reacts to queue depth, and how BF3 reorder buffers make per-packet spraying viable on Spectrum-X.",
+      "previewSummary": "Learn how Spectrum-X fixes spine imbalance in collective workloads and how to validate AR safely in production fabrics.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch26-adaptive-routing-spectrum-x"
     }
   ],
   "labs": [
@@ -1060,6 +1086,28 @@
       "defaultAccessTier": "free",
       "defaultPreviewEnabled": true,
       "sourceChapterSlug": "ch25-roce-configuration-operations"
+    },
+    {
+      "kind": "lab",
+      "slug": "lab19-adaptive-routing-imbalance",
+      "number": 19,
+      "title": "Adaptive Routing Imbalance",
+      "href": "/lab?lab=lab19-adaptive-routing-imbalance",
+      "durationMinutes": 40,
+      "durationLabel": "40 min",
+      "tags": [
+        "Adaptive Routing",
+        "Spectrum-X",
+        "BlueField-3",
+        "Reorder buffer",
+        "Telemetry"
+      ],
+      "description": "Fix a Spectrum-X fabric where per-packet AR silently fell back to a broken per-flowlet setup because BF3 reorder buffers were never enabled on the DGX B200 hosts.",
+      "previewSummary": "Diagnose AR fallback, enable BF3 reorder, return the fabric to per-packet mode, and verify balanced spine utilization.",
+      "defaultPublished": false,
+      "defaultAccessTier": "free",
+      "defaultPreviewEnabled": true,
+      "sourceChapterSlug": "ch26-adaptive-routing-spectrum-x"
     }
   ]
 }

@@ -69,6 +69,20 @@ export interface TopologyState {
   ecnConfigPending?: boolean
   ucmpRouteMapPending?: boolean
   ucmpRouteMapApplied?: boolean
+  arEnabled?: boolean
+  arMode?: string
+  arModeConfigured?: string
+  flowletTimerMs?: number
+  supernicReorderEnabled?: boolean
+  supernicReorderEth0Enabled?: boolean
+  supernicReorderEth1Enabled?: boolean
+  arLoadStdDev?: number
+  spine01UtilPct?: number
+  spine02UtilPct?: number
+  spine03UtilPct?: number
+  spine04UtilPct?: number
+  arDecisions?: number
+  arRedirects?: number
   roceShorthandApplied?: boolean
   spineAAsnPending?: boolean
   spineBAsnPending?: boolean

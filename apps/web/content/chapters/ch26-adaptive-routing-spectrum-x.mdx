@@ -1,0 +1,367 @@
+---
+title: "Adaptive Routing and Per-Packet Spraying on Spectrum-X"
+chapterNumber: 26
+slug: "ch26-adaptive-routing-spectrum-x"
+description: "Why flow-based ECMP fails AI collectives, how Spectrum-4 Adaptive Routing solves traffic imbalance in real time, the role of BlueField-3 SuperNIC reorder buffers in DGX B200 clusters, and how to configure, verify, and validate AR in production."
+published: true
+prev: "ch25-roce-configuration-operations"
+next: "ch27-bgp-evpn-multitenancy"
+---
+
+## Act 1 - The Problem with Flow-Based ECMP in AI Fabrics
+
+Static ECMP has served data centre networks well for decades. The principle is simple: hash five-tuple fields (source IP, destination IP, source port, destination port, protocol) into a bucket, and send every packet in a flow down the same spine link. Consistency is the virtue - packets within a flow arrive in order, TCP stays happy, and the forwarding hardware is dead simple.
+
+But AI training fabrics are not web traffic. When 512 GPUs execute an `allreduce` collective - the synchronization barrier at the end of every backward pass - they all begin transmitting at roughly the same microsecond. The flow table at the leaf switch explodes with hundreds of simultaneous RDMA QPs, each assigned to a spine by hash. On a fabric with four spine switches, the ideal outcome is equal distribution: 25% of QPs per spine. Reality is different.
+
+Hash-based ECMP was designed for statistically independent flows arriving at random intervals. Collective operations are not statistically independent - they are synchronized by design. The NCCL ring-allreduce algorithm creates wave patterns where every node in the ring starts new QPs at nearly the same time. The five-tuple hash of these flows is dominated by the GPU rail IP addresses, which are assigned sequentially (`10.100.0.1`, `10.100.0.2`, ...). Sequential addresses produce hash collisions with alarming regularity.
+
+**Quantifying the imbalance.** In a 512-GPU cluster with four spines, each spine should carry exactly 25% of aggregate fabric bandwidth. Under hash-based ECMP with synchronized collective traffic, empirical measurements show variance of 18-25% across spines. In practice this means one spine at 91% utilization while adjacent spines sit at 22%. The overloaded spine becomes a bottleneck: ECN marks trigger DCQCN, send rates are throttled, and all-reduce completion time stretches because every node must wait for the slowest QP pair.
+
+The variance compounds with scale. At 128 GPUs the hash collision probability is manageable. At 512 GPUs you statistically guarantee severe collisions on every barrier. At 1024 GPUs (a full Spectrum-X SuperPOD) hash ECMP without adaptive routing is simply not viable for collective workloads.
+
+**Why per-packet spraying is theoretically ideal.** If every packet is independently forwarded to the least-loaded spine, load balances to within a few percent of perfect. The problem: if packet 1 takes spine-01 (4 us latency) and packet 2 takes spine-03 (4.1 us latency due to transient queue), the receiver sees out-of-order delivery. For RoCEv2 using Go-Back-N error recovery, receiving a packet out-of-sequence triggers a NAK - and the entire window retransmits. Per-packet spraying without receiver-side reordering collapses throughput worse than hash ECMP.
+
+Adaptive Routing on Spectrum-X solves this problem through two cooperating mechanisms: queue-depth-driven forwarding decisions in the Spectrum-4 ASIC, and a hardware reorder buffer in the BlueField-3 SuperNIC on DGX B200 hosts. Together they enable per-packet distribution with in-order delivery.
+
+<ECMPCollisionViz />
+
+---
+
+## Act 2 - Spectrum-4 Adaptive Routing Engine
+
+The Spectrum-4 ASIC (part number SN5600) integrates an Adaptive Routing engine directly into the forwarding pipeline. Unlike software-based traffic engineering, the AR engine operates at line rate - its decisions add zero latency to the forwarding path because queue-depth sampling runs in parallel with the route lookup, not in series with it.
+
+**How the AR engine makes forwarding decisions.** Every candidate next-hop in an ECMP group exposes its current egress queue occupancy to the AR engine. Queue depth is sampled in hardware at sub-microsecond intervals. When a packet arrives that belongs to an ECMP group, the AR engine reads the current queue depth of each eligible next-hop and selects the one with the lowest occupancy. No hash is computed. The decision is purely reactive to real-time queue state.
+
+This is fundamentally different from ECMP variants like WCMP (Weighted-Cost Multi-Path), which assigns static weights to links. AR weights are dynamic - they change every packet based on actual congestion state. A link that was lightly loaded 10 microseconds ago may be the most congested link now, and AR will already be avoiding it.
+
+**AR granularity modes.** Spectrum-4 supports two AR granularities:
+
+- **Per-packet mode**: every packet is independently routed to the best next-hop. Maximum load distribution, but produces out-of-order delivery. Requires BlueField-3 SuperNIC reorder buffer on hosts (DGX B200 only). This is the mode used in full SuperPOD deployments.
+- **Per-flowlet mode**: packets within a flow are routed consistently until a configurable inactivity timeout (the flowlet timer) expires. After the timeout, the next packet in the flow is re-evaluated against current queue depths and may be redirected to a different next-hop. Flowlets preserve intra-flow ordering (packets within a burst stay in order) while still rebalancing across flows over time. ConnectX-7 clusters (DGX H100, H200) must use per-flowlet mode because CX7 lacks a hardware reorder buffer.
+
+**Queue depth feedback loop.** The AR engine operates on a feedback loop: queue depth increases as the switch buffers packets, AR notices the increase and routes subsequent packets to less-loaded paths, queue depth decreases, other paths become eligible again. The loop converges in microseconds - faster than any software-driven traffic engineering system could respond. The 48MB shared buffer pool in Spectrum-4 provides enough headroom for the loop to operate without drops during convergence.
+
+**Protocol agnosticism.** AR is lossless-agnostic: it works identically with RoCEv2, standard UDP, and TCP. The AR engine does not inspect above L3. This matters for mixed-workload fabrics where the same leaf switch carries both RoCEv2 training traffic and TCP storage traffic. Both benefit from AR without requiring separate configuration.
+
+**Interaction with PFC lossless queues.** AR and PFC operate on orthogonal dimensions. PFC operates per-priority within a port (prevents buffer overflow on a specific queue class). AR operates across ports (routes packets to the least-loaded port). When AR redirects traffic to a different spine, the PFC priority of the packet is preserved end-to-end. A RoCEv2 packet in TC3 (PFC priority 3) routed by AR to a new spine arrives at the new spine still in TC3, still lossless.
+
+<AdaptiveRoutingEngineViz />
+
+---
+
+## Act 3 - BlueField-3 SuperNIC Reorder Engine (DGX B200 Only)
+
+Per-packet adaptive routing on Spectrum-X creates out-of-order (OOO) packet delivery at the receiver. Understanding why this matters requires a quick look at how RoCEv2 handles error recovery.
+
+**Go-Back-N in RoCEv2.** ConnectX-7 HCAs implement Go-Back-N (GBN) error recovery. When a receiver detects a sequence gap (packet 42 arrives but packet 41 did not), it sends a Negative Acknowledgement (NAK). The sender must retransmit from packet 41 - the entire outstanding window. For a fabric where packets arrive OOO routinely (as per-packet AR guarantees), the GBN mechanism triggers constantly. The result is catastrophic throughput collapse: measurements show ConnectX-7 all-reduce bandwidth dropping to 40-60% of link rate when per-packet AR is active and OOO rate exceeds 2%.
+
+This is why ConnectX-7 clusters (DGX H100, DGX H200) cannot use per-packet AR mode. They must use per-flowlet AR with a short flowlet timer (100-200 us) to limit OOO exposure.
+
+**The BlueField-3 SuperNIC reorder buffer.** DGX B200 uses BlueField-3 DPUs in SuperNIC mode. BF3 adds a hardware reorder buffer in the receive path that operates below the QP layer. When packets arrive OOO, BF3 holds them in the reorder buffer, reconstructs the original message sequence, and delivers a correctly ordered stream to the QP. From the QP's perspective, packets always arrive in order - no NAKs are ever triggered.
+
+The reorder buffer depth is configurable. Deeper buffers tolerate larger path-delay differentials (useful when spine-to-spine latency spread is high) but consume BF3 buffer memory. The default depth is sized for a 2-hop fabric (`leaf -> spine -> leaf`) with differential latency under 10 us, which covers all standard Spectrum-X SuperPOD topologies.
+
+**Configuring SuperNIC reorder in NVUE.** On each DGX B200 host, the BF3 reorder buffer is enabled through NVUE commands applied to the uplink interfaces:
+
+```bash
+# Enable SuperNIC reorder buffer on DGX B200 BF3 uplink interfaces
+nv set interface eth0 reorder-buffer enable
+nv set interface eth1 reorder-buffer enable
+nv config apply
+```
+
+**Verifying reorder buffer status:**
+
+```bash
+mlxlink -d /dev/mst/mt41692_pciconf0 --show_module | grep -i reorder
+# Expected: Reorder Buffer: Enabled
+
+# Check reorder buffer depth (in units of KB)
+mlxconfig -d /dev/mst/mt41692_pciconf0 q ROCE_REORDER_BUFFER_SIZE
+# Expected: ROCE_REORDER_BUFFER_SIZE 256
+```
+
+**Why you cannot run per-packet AR without SuperNIC.** The architecture is explicit: per-packet AR (AR mode = per-packet in NVUE) requires that every host NIC in the fabric has a hardware reorder buffer. In a mixed cluster where some nodes are DGX B200 (BF3) and others are DGX H100/H200 (CX7), per-packet AR is not supported. You must use per-flowlet AR for the entire fabric. Spectrum-X validates this at AR enablement time - if it detects CX7-only endpoints, it will override a per-packet AR configuration with a warning.
+
+**Comparing recovery behaviour.** With per-packet AR and BF3 reorder enabled, a 512-GPU all-reduce that previously took 182ms (with hash ECMP) completes in 134ms - a 26% improvement in collective throughput. The CloudAI benchmark (introduced in Ch25) sees a corresponding improvement in reported all-reduce bandwidth, crossing the 46.5 GB/s acceptance threshold comfortably.
+
+<SuperNICReorderBufferViz />
+
+---
+
+## Act 4 - Configuring Adaptive Routing on Spectrum-X (NVUE Full Walkthrough)
+
+With the conceptual foundation established, let us walk through the complete NVUE configuration sequence for enabling adaptive routing on a Spectrum-X leaf-spine fabric.
+
+**Step 1: Enable AR globally on the switch.**
+
+AR must be enabled globally before per-interface or per-VRF options are available. Apply to every spine and every leaf switch in the fabric:
+
+```bash
+# Enable Adaptive Routing globally
+nv set router adaptive-routing enable on
+nv config apply
+
+# Verify global AR state
+nv show router adaptive-routing
+```
+
+Expected output:
+
+```text
+Adaptive Routing
+================
+Enable: on
+Mode:   per-flowlet
+Flowlet Timer: 100us
+```
+
+**Step 2: Set AR mode (per-packet for B200 clusters, per-flowlet for CX7 clusters).**
+
+```bash
+# For DGX B200 clusters with BF3 SuperNIC reorder enabled:
+nv set router adaptive-routing mode per-packet
+nv config apply
+
+# For DGX H100/H200 clusters (CX7 only):
+nv set router adaptive-routing mode per-flowlet
+nv set router adaptive-routing flowlet-timer 100us
+nv config apply
+```
+
+**Step 3: Configure AR per-interface (uplink ports toward spines on leaf switches, downlink ports toward spines on spine switches).**
+
+```bash
+# On leaf-01: enable AR on uplink ports to spines
+nv set interface swp49 adaptive-routing enable on
+nv set interface swp50 adaptive-routing enable on
+nv set interface swp51 adaptive-routing enable on
+nv set interface swp52 adaptive-routing enable on
+nv config apply
+```
+
+Note: On Spectrum-X, AR is enabled on the egress interface, not the ingress. The AR engine is consulted when selecting the egress port from a set of ECMP candidates.
+
+**Step 4: Verify per-interface AR state.**
+
+```bash
+nv show interface swp49 adaptive-routing
+```
+
+Expected output (AR active, traffic being distributed):
+
+```text
+Interface swp49 Adaptive Routing
+================================
+Enable:             on
+Mode:               per-packet
+Current Queue Depth: 12 KB
+AR Decisions Today:  4,821,033
+Last AR Redirect:    0.2ms ago
+Peer:               spine-01 swp12
+```
+
+**Step 5: Verify AR is not active (before fix - what a learner sees when AR is misconfigured).**
+
+```bash
+nv show interface swp49 adaptive-routing
+```
+
+Output when AR disabled or misconfigured:
+
+```text
+Interface swp49 Adaptive Routing
+================================
+Enable:             off
+Mode:               N/A
+AR Decisions Today:  0
+Last AR Redirect:    N/A
+```
+
+**Step 6: Verify AR with show commands.**
+
+```bash
+nv show router adaptive-routing detail
+```
+
+```text
+Adaptive Routing Detail
+=======================
+Global Enable:        on
+Mode:                 per-flowlet
+Flowlet Timer:        100us
+ECMP Groups with AR:  8
+Active ECMP Paths:    32
+AR Decisions (total): 128,441,228
+AR Redirects (total): 7,332,018
+Redirect Rate:        5.71%
+Load Std Deviation:   2.8%   (target: <5%)
+```
+
+The `Load Std Deviation` metric is the key operational indicator: it measures how evenly AR is distributing traffic across ECMP paths. Values below 5% indicate healthy distribution. Values above 10% suggest AR is not functioning or the flowlet timer is misconfigured.
+
+**Interaction with PFC lossless queues in NVUE.** AR does not require any modification to the QoS NVUE configuration established in Ch25. The PFC priority mapping (TC3 for RoCEv2, TC6 for CNP) is applied per-port and is independent of the forwarding decision made by AR. Confirm no unintended interaction:
+
+```bash
+nv show qos roce
+```
+
+Output should show the same ROCE profile as configured in Ch25 - AR has not modified it.
+
+---
+
+## Act 5 - Resilient Hashing: Protecting Flows During Link Failures
+
+Even with AR enabled, there is a second ECMP problem to address: what happens to in-flight flows when a spine link fails? Standard ECMP remaps every flow across the remaining paths. If you have 32 active QPs and one of four spines fails, all 32 QPs are reassigned to new spines by rehashing. This disrupts every active flow simultaneously - a fabric-wide microshock that triggers DCQCN on all affected QPs at the same time.
+
+Resilient hashing solves this. Spectrum-4 maintains a fixed bucket table (512 or 1024 buckets). Each ECMP group maps flows to buckets; each bucket maps to a next-hop. When a link fails, only the buckets belonging to the failed next-hop are remapped. All other flows keep their bucket assignment unchanged.
+
+**Impact on a 4-spine fabric.** With 512 buckets and 4 equal-weight spines, each spine owns 128 buckets. If spine-02 fails, only the 128 buckets previously assigned to spine-02 are redistributed among the remaining three spines. 75% of active flows are completely undisturbed. With standard ECMP rehash, 100% of flows would experience disruption.
+
+**Flowlet interaction.** Resilient hashing and per-flowlet AR work together. Resilient hashing protects flows from link failure disruption. Per-flowlet AR continuously optimizes distribution across surviving paths. They address different timescales: resilient hashing is for fault events (millisecond-second scale), AR is for congestion events (microsecond scale).
+
+**NVUE configuration:**
+
+```bash
+# Enable resilient hashing with 512-bucket table
+nv set router adaptive-routing resilient-hash enable on
+nv set router adaptive-routing resilient-hash buckets 512
+nv config apply
+
+# Verify resilient hash state
+nv show router adaptive-routing resilient-hash
+```
+
+```text
+Resilient Hash
+==============
+Enable:   on
+Buckets:  512
+Current Utilization:
+  spine-01:  127 buckets (24.8%)
+  spine-02:  128 buckets (25.0%)
+  spine-03:  129 buckets (25.2%)
+  spine-04:  128 buckets (25.0%)
+```
+
+**Flow hash pinning for stateful services.** Some traffic (firewall bypass, NAT) requires strict flow affinity - the same five-tuple must always use the same spine to avoid asymmetric routing. NVUE supports flow hash pinning for specific prefix destinations:
+
+```bash
+# Pin flows to storage subnets to specific paths (avoids firewall asymmetry)
+nv set router adaptive-routing hash-pin destination 10.200.0.0/16 enable on
+nv config apply
+```
+
+Cross-reference Ch16 (ECMP and Load Balancing) for ECMP fundamentals and bucket table sizing guidance that applies here.
+
+---
+
+## Act 6 - Telemetry for AR Validation
+
+Deploying AR without telemetry validation is operating blind. The target state after AR enablement is measurable: all spine links should be within 5% utilization of each other during collective workloads, and all-reduce bandwidth should meet or exceed the CloudAI acceptance threshold.
+
+**NetQ per-link utilization queries.** The primary fabric-wide validation tool is NetQ (covered in depth in Ch28). Use it to query per-port utilization across all spine links simultaneously:
+
+```bash
+# On NetQ server - check spine link utilization balance
+netq show interfaces type swp node spine-01,spine-02,spine-03,spine-04 | grep -E "(swp|util)"
+```
+
+Expected output with AR healthy:
+
+```text
+Hostname  Interface  Speed   Util%   RX-Pkts         TX-Pkts
+spine-01  swp1       400G    61.2%   48,221,003      47,994,221
+spine-01  swp2       400G    59.8%   47,103,441      47,002,118
+spine-02  swp1       400G    62.1%   49,001,228      48,882,003
+spine-02  swp2       400G    58.9%   46,772,009      46,551,220
+```
+
+The utilization spread between 58.9% and 62.1% is 3.2% - well within the 5% target.
+
+**WJH drop detection for AR misconfiguration.** What Just Happened (WJH, covered in Ch29) can detect AR-related drops. When AR is misconfigured and per-packet mode is running without SuperNIC reorder, the resulting OOO triggers RoCEv2 NAKs. WJH reports these as RoCE retransmissions:
+
+```bash
+# On leaf-01 - check WJH for RDMA-related drops
+cat /var/log/mellanox/wjh/wjh_dropped_packets.log | grep -i "roce\|rdma\|reorder"
+```
+
+```text
+[2026-04-10 14:33:21] ROCE_OOO_NACK: src=10.100.0.4:port49 dst=10.100.0.19:port49
+  reason=out_of_order_sequence qp=0x3a8 psn_expected=1042 psn_received=1047
+  action=nak_sent count=1,228 last_seen=14:33:21.441
+```
+
+More than 100 `ROCE_OOO_NACK` entries per minute is a signal that per-packet AR is running without functioning SuperNIC reorder.
+
+**Grafana dashboard for AR balance.** A practical AR validation dashboard monitors `ifHCOutOctets` per spine port. With AR working correctly, all spine ports trend together during training jobs. A diverging port (one trending high, others low) indicates AR failure or a misconfigured flowlet timer.
+
+Key Grafana panels for AR validation:
+
+- `ifHCOutOctets` rate per-port, all spines, 1-minute resolution: should stay within 5% spread
+- `ar_redirect_count` gauge per switch: should show non-zero values when AR is active
+- `roce_nack_count` per DGX node: should be near-zero with AR + reorder functioning
+
+**CloudAI benchmark as the definitive AR test.** Run the benchmark with AR disabled, then with AR enabled and compare:
+
+```bash
+# On dgx-node-01 - run CloudAI allreduce benchmark
+python3 /opt/nvidia/cloudai/run_benchmark.py \
+  --test allreduce \
+  --num_gpus 512 \
+  --iterations 100 \
+  --output /tmp/ar_benchmark_results.json
+
+# Expected: AR enabled result
+# allreduce_bw_gbps: 48.3  (pass: >= 46.5 GB/s per Ch25 criteria)
+# allreduce_bw_gbps: 36.1  (fail: hash ECMP baseline without AR)
+```
+
+The benchmark result is the definitive validation artifact. Document it in the fabric commissioning record alongside the `nv show router adaptive-routing detail` output showing `Load Std Deviation < 5%`.
+
+---
+
+## Act 7 - AR Comparison: Spectrum-X vs InfiniBand Adaptive Routing
+
+Adaptive routing is not unique to Spectrum-X. InfiniBand has provided AR in ASIC hardware for multiple generations. Understanding the architectural differences is essential for both the NCP-AIN exam and for guiding customers in platform selection.
+
+**InfiniBand AR: credit-based architecture.** IB fabrics use a credit-based flow control system (described in Ch8). Credits are pre-allocated per Virtual Lane (VL) per port. A sender cannot transmit unless it holds credits from the receiver. This architecture has a profound implication for AR: because the credit system prevents buffer overflow at the receiver by design, out-of-order delivery between virtual lanes does not cause NAKs. IB AR can spray packets across multiple VLs freely, without a reorder buffer on the host.
+
+The IB Subnet Manager (OpenSM or NVIDIA UFM, covered in Ch13) orchestrates AR using the `dfsssp` routing algorithm, which computes minimum-congestion paths considering the full fabric topology. This is a centralized control-plane approach: the SM knows the entire fabric, computes optimal paths, and programs them into switch Local Routing Headers (LRH). When a link becomes congested, the SM recomputes paths and pushes updates.
+
+**Spectrum-X AR: distributed hardware approach.** Spectrum-X AR is entirely distributed. Each Spectrum-4 switch makes per-packet forwarding decisions independently based on local queue depth measurements. There is no central controller involved. This makes Spectrum-X AR faster to react (microsecond vs millisecond for SM path recomputation) but requires the host-side reorder buffer (BF3 SuperNIC) to handle OOO.
+
+**Key comparison table:**
+
+```text
+Property                  | Spectrum-X AR          | IB AR
+--------------------------|------------------------|----------------------
+Control plane             | Distributed (per-ASIC) | Centralized (SM)
+Reaction time             | Microseconds           | Milliseconds
+OOO handling              | BF3 SuperNIC buffer    | Built into credit system
+Host NIC requirement      | BF3 (B200) or          | Standard IB HCA
+                          | flowlet mode (CX7)     |
+Protocol support          | RoCEv2, UDP, TCP       | InfiniBand native
+ECMP group size           | 512/1024 buckets       | VL-based routing
+Failure recovery          | Resilient hashing      | SM reroutes
+Configuration interface   | NVUE                   | SM policy + UFM
+```
+
+**When to choose each.** For pure GPU training workloads requiring maximum collective bandwidth with DGX B200 hosts, per-packet Spectrum-X AR with BF3 reorder is competitive with IB AR. For mixed DGX H100/H200+B200 clusters, or clusters requiring strict per-flow ordering guarantees, IB AR or per-flowlet Spectrum-X AR is more appropriate. For multi-tenant GPU clouds where isolation is paramount alongside performance, Spectrum-X AR combined with BGP-EVPN (Ch27) is the preferred architecture.
+
+This chapter completes the core Spectrum-X operational stack: Ch24 established hardware, Ch25 configured RoCE, and Ch26 added adaptive routing for optimal load distribution. Ch27 will layer BGP-EVPN multi-tenancy on top of this foundation.
+
+---
+
+## Chapter 26 Summary
+
+Adaptive Routing on Spectrum-X addresses the fundamental limitation of hash-based ECMP in synchronized AI collective workloads. The key takeaways:
+
+- At scale (512+ GPUs), hash ECMP produces 18-25% load variance across spines; AR reduces this below 3%
+- Spectrum-4 AR engine samples queue depth at sub-microsecond intervals and makes per-packet forwarding decisions at line rate with zero added latency
+- Per-packet AR requires BF3 SuperNIC reorder buffers on DGX B200 hosts; DGX H100/H200 (CX7) clusters must use per-flowlet mode with a 100 us flowlet timer
+- Resilient hashing protects 75% of active flows from disruption during single-link failures in a 4-spine fabric
+- AR validation requires telemetry: NetQ per-port utilization spread <5%, CloudAI benchmark >=46.5 GB/s, WJH showing near-zero RoCE OOO NAKs
+- IB AR uses a centralized SM-based approach with credit-based OOO prevention; Spectrum-X AR is distributed with host-side reorder - different tradeoffs suited to different deployment models

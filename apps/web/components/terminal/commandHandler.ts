@@ -17,6 +17,7 @@ import { lab15, lab15Devices } from "@/data/labs/lab15-rdma-rkey-exposure";
 import { lab16, lab16Devices } from "@/data/labs/lab16-spectrum-x-platform-audit";
 import { lab17, lab17Devices } from "@/data/labs/lab17-roce-day-zero-config";
 import { lab18, lab18Devices } from "@/data/labs/lab18-ecn-threshold-tuning";
+import { lab19, lab19Devices } from "@/data/labs/lab19-adaptive-routing-imbalance";
 import { calculateOversubscriptionA, calculateOversubscriptionB } from "@/lib/commands/calculateOversubscription";
 import { compareProposals } from "@/lib/commands/compareProposals";
 import { ibstat } from "@/lib/commands/ibstat";
@@ -194,6 +195,23 @@ import {
   handleLab18ShowPoolMap,
   handleLab18ShowRoceCounters,
 } from "@/lib/commands/lab18Handlers";
+import {
+  handleIbWriteBw as handleLab19IbWriteBw,
+  handleMlxconfigQueryReorderSize,
+  handleMlxlinkShowReorder,
+  handleSetARModePerFlowlet,
+  handleSetARModePerPacket,
+  handleSetFlowletTimer,
+  handleSetReorderBufferEnable,
+  handleShowAdaptiveRouting,
+  handleShowAdaptiveRoutingDetail,
+  handleShowLeafInterfaceAdaptiveRouting,
+  handleShowQosRoce as handleLab19ShowQosRoce,
+  handleShowReorderBuffer,
+  handleShowResilientHash,
+  handleShowSpineInterfaceAdaptiveRouting,
+  handleSpineNetShowCounters,
+} from "@/lib/commands/lab19Handlers";
 import { ncclDebugTransport } from "@/lib/commands/ncclDebugTransport";
 import { recommendProposalA, recommendProposalB } from "@/lib/commands/recommendProposal";
 import { runMutation } from "@/lib/commands/mutations";
@@ -243,6 +261,7 @@ const LAB_CONFIGS: Record<string, LabConfig> = {
   [lab16.id]: lab16,
   [lab17.id]: lab17,
   [lab18.id]: lab18,
+  [lab19.id]: lab19,
 };
 
 const LAB_DEVICES: Record<string, LabDevice[]> = {
@@ -265,6 +284,7 @@ const LAB_DEVICES: Record<string, LabDevice[]> = {
   [lab16.id]: lab16Devices,
   [lab17.id]: lab17Devices,
   [lab18.id]: lab18Devices,
+  [lab19.id]: lab19Devices,
 };
 
 const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
@@ -287,6 +307,7 @@ const LAB_DEVICE_TYPES: Record<string, DeviceType[]> = {
   [lab16.id]: [...new Set(lab16Devices.map((device) => device.type))],
   [lab17.id]: [...new Set(lab17Devices.map((device) => device.type))],
   [lab18.id]: [...new Set(lab18Devices.map((device) => device.type))],
+  [lab19.id]: [...new Set(lab19Devices.map((device) => device.type))],
 };
 
 const LAB_CHAPTER_LINKS: Record<string, { slug: string; label: string }> = {
@@ -306,6 +327,7 @@ const LAB_CHAPTER_LINKS: Record<string, { slug: string; label: string }> = {
   [lab11.id]: { slug: "ch15-ip-routing-ai-fabrics", label: "Chapter 15: IP Routing for AI/ML Fabrics" },
   [lab17.id]: { slug: "ch25-roce-configuration-operations", label: "Chapter 25: RoCE Configuration and Operations on Spectrum-X" },
   [lab18.id]: { slug: "ch25-roce-configuration-operations", label: "Chapter 25: RoCE Configuration and Operations on Spectrum-X" },
+  [lab19.id]: { slug: "ch26-adaptive-routing-spectrum-x", label: "Chapter 26: Adaptive Routing and Per-Packet Spraying on Spectrum-X" },
 };
 
 function showActiveLeafSwitchPort(): CommandResult {
@@ -376,6 +398,12 @@ function showQosEcnProfileByLab(): CommandResult {
   return labId === lab18.id ? handleLab18ShowEcnProfile() : handleNvShowQosEcnProfile();
 }
 
+function showAdaptiveRoutingByLab(): CommandResult {
+  return useLabStore.getState().lab.labId === lab19.id
+    ? handleShowAdaptiveRouting()
+    : handleLab3NvShowRouterAdaptiveRouting();
+}
+
 function showNvInterfaceSwp1QosRoceCountersByLab(): CommandResult {
   const labId = useLabStore.getState().lab.labId;
   if (labId === lab0b.id) {
@@ -391,6 +419,9 @@ function showNvQosRoceByLab(): CommandResult {
   }
   if (labId === lab8.id) {
     return handleLab8NvShowQosRoce();
+  }
+  if (labId === lab19.id) {
+    return handleLab19ShowQosRoce();
   }
   return handleNvShowQosRoce();
 }
@@ -447,6 +478,20 @@ function showNvInterfaceSwp1LinkStatsByLab(): CommandResult {
   return useLabStore.getState().lab.labId === lab3.id
     ? handleLab3SpineSwp1Counters()
     : handleLab18ShowInterfaceCounters();
+}
+
+function handleNetShowInterfaceByLab(): CommandResult {
+  return {
+    output: `Interface    State  Peer
+-------------------------
+swp49        up     spine-01 swp12
+swp50        up     spine-02 swp11
+swp51        up     spine-03 swp13
+swp52        up     spine-04 swp14
+
+Adaptive Routing is enabled on all uplink interfaces.`,
+    type: "info",
+  };
 }
 
 function ibstatByLab(): CommandResult {
@@ -1342,7 +1387,9 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "nv show interface swp1 qos roce counters": showNvInterfaceSwp1QosRoceCountersByLab,
   "nv show qos pfc": handleNvShowQosPfc,
   "nv show qos scheduler": handleNvShowQosScheduler,
-  "nv show router adaptive-routing": handleLab3NvShowRouterAdaptiveRouting,
+  "nv show router adaptive-routing": showAdaptiveRoutingByLab,
+  "nv show router adaptive-routing detail": handleShowAdaptiveRoutingDetail,
+  "nv show router adaptive-routing resilient-hash": handleShowResilientHash,
   "nv show interface status": nvShowInterfaceStatusLab0,
   "nv show interface swp1 link": nvShowInterfaceSwp1LinkByLab,
   "nv show interface swp2 link": () => nvShowInterfaceLinkLab0("swp2"),
@@ -1382,21 +1429,42 @@ const EXACT_HANDLERS: Record<string, () => CommandResult> = {
   "nv show interface swp54 link stats": showNvInterfaceSwp54LinkStatsByLab,
   "nv show interface swp4 link stats": handleLab11SpineBInterfaceSwp4LinkStats,
   "nv show interface swp51 router adaptive-routing": handleLab3NvShowInterfaceAdaptiveRouting,
+  "nv show interface swp49 adaptive-routing": () => handleShowLeafInterfaceAdaptiveRouting("swp49"),
+  "nv show interface swp50 adaptive-routing": () => handleShowLeafInterfaceAdaptiveRouting("swp50"),
+  "nv show interface swp51 adaptive-routing": () => handleShowLeafInterfaceAdaptiveRouting("swp51"),
+  "nv show interface swp52 adaptive-routing": () => handleShowLeafInterfaceAdaptiveRouting("swp52"),
+  "nv show interface swp1 adaptive-routing": () => handleShowSpineInterfaceAdaptiveRouting("swp1"),
+  "nv show interface swp2 adaptive-routing": () => handleShowSpineInterfaceAdaptiveRouting("swp2"),
+  "nv show interface swp3 adaptive-routing": () => handleShowSpineInterfaceAdaptiveRouting("swp3"),
+  "nv show interface swp4 adaptive-routing": () => handleShowSpineInterfaceAdaptiveRouting("swp4"),
+  "net show counters": handleSpineNetShowCounters,
+  "net show interface": handleNetShowInterfaceByLab,
   "cl-resource-query": showClResourceQueryByLab,
   "sudo cl-resource-query": showClResourceQueryByLab,
   "ethtool -S swp1 | grep ecn": showEthtoolSwp1EcnByLab,
   "ib_write_bw -d mlx5_0 --iters 5000 --size 65536 192.168.100.2": ibWriteBwByLab,
+  "ib_write_bw -d mlx5_0 -x 3 --report_gbits -D 30 -q 16 10.100.1.2": handleLab19IbWriteBw,
   "ib_write_lat -d mlx5_0 --iters 10000 192.168.100.2": handleIbWriteLat,
   "ip link show eth0": ipLinkShowEth0ByLab,
   "ip link show eth1": () => handleLab0aIpLinkShow("eth1"),
   "ethtool -S mlx5_0 | grep -E 'ecn|pfc|retry'": handleEthtoolMlx5Grep,
   "ethtool -S eth0 | grep -E 'ecn|pfc|retry'": handleEthtoolMlx5Grep,
+  "mlxlink -d /dev/mst/mt41692_pciconf0 --show_module | grep -i reorder": handleMlxlinkShowReorder,
+  "mlxconfig -d /dev/mst/mt41692_pciconf0 q ROCE_REORDER_BUFFER_SIZE": handleMlxconfigQueryReorderSize,
+  "nv show interface eth0 reorder-buffer": () => handleShowReorderBuffer("eth0"),
+  "nv show interface eth1 reorder-buffer": () => handleShowReorderBuffer("eth1"),
   "nv set qos ecn profile roce min-threshold 500000": () => runMutation("nv set qos ecn profile roce min-threshold 500000"),
   "nv set qos ecn profile roce max-threshold 1500000": () => runMutation("nv set qos ecn profile roce max-threshold 1500000"),
   "nv set qos congestion-control default-global traffic-class 3 min-threshold 500000": () =>
     runMutation("nv set qos congestion-control default-global traffic-class 3 min-threshold 500000"),
   "nv set qos congestion-control default-global traffic-class 3 max-threshold 1500000": () =>
     runMutation("nv set qos congestion-control default-global traffic-class 3 max-threshold 1500000"),
+  "nv set router adaptive-routing mode per-packet": handleSetARModePerPacket,
+  "nv set router adaptive-routing mode per-flowlet": handleSetARModePerFlowlet,
+  "nv set router adaptive-routing flowlet-timer 100us": () => handleSetFlowletTimer("100us"),
+  "nv set router adaptive-routing flowlet-timer 1s": () => handleSetFlowletTimer("1s"),
+  "nv set interface eth0 reorder-buffer enable": () => handleSetReorderBufferEnable("eth0"),
+  "nv set interface eth1 reorder-buffer enable": () => handleSetReorderBufferEnable("eth1"),
   "sudo vtysh -f /etc/frr/checkpoint-segment-list.conf": configureSegmentList,
   "sudo vtysh -f /etc/frr/checkpoint-srte-policy.conf": configureSrtePolicy,
   "sudo vtysh -f /etc/frr/checkpoint-color-route-map.conf": configureRouteMapDscp10,
