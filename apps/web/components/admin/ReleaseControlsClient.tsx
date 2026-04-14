@@ -144,6 +144,8 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
           closedIssues?: number[];
           deletedThreads?: string[];
           deletedPosts?: number;
+          deletedUserEmails?: string[];
+          matchedUsers?: Array<{ id: string; email: string | null }>;
           skippedIssueClosures?: string[];
           matchedThreads?: Array<{ id: string; title: string }>;
         }
@@ -158,13 +160,19 @@ export function ReleaseControlsClient({ initialItems }: ReleaseControlsClientPro
 
     const lines = [
       `Matched threads: ${payload?.matchedThreads?.length ?? 0}`,
+      `Matched smoke users: ${payload?.matchedUsers?.length ?? 0}`,
       payload?.deletedThreads?.length ? `Deleted thread ids: ${payload.deletedThreads.join(", ")}` : null,
       payload?.deletedPosts != null ? `Deleted replies: ${payload.deletedPosts}` : null,
+      payload?.deletedUserEmails?.length
+        ? `Deleted smoke users: ${payload.deletedUserEmails.join(", ")}`
+        : null,
       payload?.closedIssues?.length ? `Closed GitHub issues: ${payload.closedIssues.join(", ")}` : null,
       payload?.skippedIssueClosures?.length
         ? `Skipped issue closures: ${payload.skippedIssueClosures.join(" | ")}`
         : null,
-      !(payload?.matchedThreads?.length ?? 0) ? "Nothing matched the smoke-artifact patterns." : null,
+      !(payload?.matchedThreads?.length ?? 0) && !(payload?.matchedUsers?.length ?? 0)
+        ? "Nothing matched the smoke-artifact patterns."
+        : null,
     ].filter(Boolean);
 
     setCleanupResult(lines.join("\n"));
