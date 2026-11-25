@@ -97,6 +97,7 @@ def main():
         sock = lab.ctrl_connect(args.ctrl_connect)
     f = sock.makefile("rw")
     peer = exchange_and_connect(ctx, qp, gid, gid_index, args, log, f, sock)
+    ok = True
 
     if args.role == "receiver":
         # ---- post the receive WR ------------------------------------
@@ -149,6 +150,7 @@ def main():
     sock.close()
     qp.close(); cq.close(); mr.close(); pd.close(); ctx.close()
     log.close()
+    raise SystemExit(0 if ok else 1)
 
 
 if __name__ == "__main__":

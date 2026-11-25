@@ -7,9 +7,9 @@ test.describe.serial("Deployed auth and sign-in gating smoke", () => {
     const tracker = trackErrors(page);
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: /Master the fabric/i })).toBeVisible();
-    await expect(page.getByText(/17 chapters\. 12 scenario labs\./i)).toBeVisible();
-    await expect(page.getByRole("link", { name: "GitHub" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /Learn the fabric that keeps AI clusters alive/i })).toBeVisible();
+    await expect(page.getByText(/\d+ chapters\. \d+ scenario labs\./i)).toBeVisible();
+    await expect(page.getByRole("link", { name: /View the repo/i })).toBeVisible();
 
     await page.goto("/learn/ch3-the-cli", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /The CLI - Reading the Fabric/i })).toBeVisible();

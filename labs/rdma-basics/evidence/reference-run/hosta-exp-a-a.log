@@ -1,0 +1,12 @@
+[hosta/exp-a-a] #1 open_device dev=rxe0 node_guid=0xa1300feff005450 vendor_id=0xffffff vendor_part_id=0 max_qp=1048560 max_cq=1048576 max_mr=524287 max_sge=32
+GID table:
+  index=0 type=RoCEv2 gid=fe80:0000:0000:0000:5054:00ff:fe00:130a
+  index=1 type=RoCEv2 gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01
+[hosta/exp-a-a] #2 port_info port_state=Active (4) active_mtu=1024 link_layer=Ethernet gid_index=1 gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01
+[hosta/exp-a-a] #3 resources pd=0x0 cq_cqe=31 mr_lkey=539 mr_rkey=539 mr_len=4096 mr_addr=985506032 qp_num=17 qp_state=Reset max_send_wr=8 max_recv_wr=8 sq_sig_all=True
+[hosta/exp-a-a] #4 metadata_exchange own_qpn=17 own_psn=256 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 peer_qpn=18 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_role=b
+[hosta/exp-a-a] #5 qp_state state=INIT->RTR->RTS qp_num=17 detail=RC QP driven to RTS
+[hosta/exp-a-a] #6 qp_ready qp_num=17 state=RTS dest_qpn=18 path_mtu=1024 timeout=14 retry_cnt=7 rnr_retry=7 sq_psn=256 rq_psn=256
+
+Experiment A complete on hosta: QP 17 is RTS toward QPN 18.
+No work requests were posted — this experiment only creates and inspects RDMA resources.

@@ -21,16 +21,11 @@ if ! rdma link show | grep -q "^link ${RXE}/"; then
     rdma link add "$RXE" type rxe netdev "$NETDEV"
 fi
 
-# udev normally creates /dev/infiniband/uverbsN; fall back to mknod.
+# udev should create /dev/infiniband/uverbsN. Do not broaden the device
+# permissions here; experiment processes run with sudo in this reference lab.
 if ! ls /dev/infiniband/uverbs* >/dev/null 2>&1; then
-    mkdir -p /dev/infiniband
-    for u in /sys/class/infiniband_verbs/uverbs*/uevent; do
-        n=$(basename "$(dirname "$u")")
-        maj=$(awk -F= '/^MAJOR/{print $2}' "$u")
-        min=$(awk -F= '/^MINOR/{print $2}' "$u")
-        mknod "/dev/infiniband/$n" c "$maj" "$min"
-        chmod 666 "/dev/infiniband/$n"
-    done
+    echo "error: udev did not create /dev/infiniband/uverbs*" >&2
+    exit 1
 fi
 
 echo "== RDMA ready =="
