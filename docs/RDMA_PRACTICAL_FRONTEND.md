@@ -34,6 +34,7 @@ apps/web/public/practical/rdma/rdma-read.pcap
         |
         v
 apps/web/lib/practical/rdmaEvidence.ts
+apps/web/lib/practical/rdmaCorrelations.ts
 apps/web/components/practical/RdmaPractical.tsx
         |
         v
@@ -124,6 +125,15 @@ The frontend intentionally distinguishes:
 
 `wr_id` and LKEY are application/verbs metadata and are not presented as RoCEv2 wire-header fields.
 
+Browser-side correlation is implemented in `apps/web/lib/practical/rdmaCorrelations.ts` as pure, independently testable logic. Relationships are explicitly qualified as direct, validated, causal or contextual:
+
+- **Direct** relationships are recorded object links, such as a completion's owning host and WR ID.
+- **Validated** relationships are checked through identifiers or protocol fields, including WR IDs, CQE IDs, QPNs, PSNs, RETH address/RKEY/length and packet direction.
+- **Causal** relationships are later protocol or application outcomes, such as a WRITE ACK and writer-local completion after posting a WRITE.
+- **Contextual** relationships are teaching-step context, including the guided step's packet focus. They are visibly labelled as context and must not be presented as record-level evidence.
+
+Selecting an event, packet or completion makes that record the primary selection. A previous manually inspected packet is cleared, so an unrelated packet cannot remain attached to a control event or completion. The active guided step may still contribute clearly qualified contextual relationships. Sender/receiver ownership is evaluated per local host; a CQE is never represented as transmitted on the wire or as the peer's completion.
+
 ## Clock and ordering limitations
 
 The two reference VMs did not have precision-synchronized clocks. Therefore the UI does not merge Host A, Host B and packet timestamps into a claimed nanosecond-accurate global trace.
@@ -148,6 +158,7 @@ Primary files:
 - `apps/web/app/practical/rdma/page.tsx` — RDMA route and metadata.
 - `apps/web/components/practical/RdmaPractical.tsx` — interactive client component.
 - `apps/web/lib/practical/rdmaEvidence.ts` — typed access to the generated bundle.
+- `apps/web/lib/practical/rdmaCorrelations.ts` — pure direct/contextual evidence-correlation model.
 - `apps/web/public/practical/rdma/reference-evidence.json` — generated browser bundle.
 - `apps/web/public/practical/rdma/*.pcap` — downloadable reference captures.
 - `apps/web/components/layout/PublicTopNav.tsx` — public navigation integration.
@@ -167,7 +178,15 @@ The client component coordinates a central evidence-selection model rather than 
 - control-plane versus data-plane emphasis
 - evidence provenance and pcap downloads
 
-In guided mode, memory, work requests and CQEs are shown only after their causal milestone has been reached. The WRITE target buffer therefore starts in its recorded pre-transfer state, the post-transfer bytes appear at the memory-mutation step, and the writer-local CQE appears only at the completion step. Packet details for steps without a packet are hidden rather than allowing a stale future packet to imply earlier presence. An explicit **Inspect full recording** mode is available for advanced users; it is labelled as independent recorded-artifact inspection and is visually distinct from the causal walkthrough.
+In guided mode, memory, work requests and CQEs are shown only after their causal milestone has been reached. The WRITE target buffer therefore starts in its recorded pre-transfer state, the post-transfer bytes may appear at the memory-mutation step, and the writer-local CQE appears only at the completion step. Packet details for steps without a packet are hidden rather than allowing a stale future packet to imply earlier presence. An explicit **Inspect full recording** mode is available for advanced users; it is labelled as independent recorded-artifact inspection and is visually distinct from the causal walkthrough.
+
+Memory display separates three facts that are easy to conflate:
+
+1. the transport-causal WRITE mutation inferred from the recorded WRITE semantics;
+2. the target memory bytes recorded later in the reference execution;
+3. the target application's explicit verification after its separate synchronisation step.
+
+At the WRITE memory-mutation milestone the UI labels the change as a protocol-causal illustration and explains that the displayed after-bytes were recorded later. It does not display payload verification, target-CQ polling results or application success there. Those results are derived from the recorded verification event and appear only once the target verification milestone has been reached. The same per-event rule is used for the receive-side memory check in SEND/RECEIVE and the reader-side memory check in RDMA READ.
 
 Selecting a supported application event highlights the corresponding work request, packet or packet exchange, memory regions and source context. Selecting a completion explains its local host ownership and links it through WR-ID correlation to the request and relevant packet exchange. Selecting a packet exposes reverse correlations to the work request, endpoint direction, memory metadata and local completion where evidence supports them. Control-channel events highlight metadata/synchronisation only; no TCP control packet is invented and control messages are not represented as RDMA payload carriers.
 
@@ -203,11 +222,19 @@ The exporter:
 5. verifies verification status for the four experiments;
 6. validates the generated bundle against the versioned JSON Schema;
 7. validates walkthrough source-reference bounds and lightweight semantic anchors against the embedded Python snapshots;
-8. writes deterministic JSON and copies the pcaps beside it.
+8. stages the JSON and capture copies, verifies staged capture digests and then replaces the published assets.
+
+The staging step prevents an export-time validation or copy failure from truncating the published JSON or captures in place. Individual file replacement uses `os.replace`; there is no portable multi-file atomic directory swap, but all output files are fully staged before replacement begins.
 
 Schema validation is mandatory. If `jsonschema` is missing, export fails explicitly with instructions to install `labs/rdma-basics/requirements-export.txt`; validation is never silently skipped. The command also fails with a clear error if evidence is missing, malformed, unverified, checksum-inconsistent, structurally invalid or contains stale source references. Do not hand-edit the generated JSON.
 
-The bundle records the Git checkout under which the VM experiment executed as the **execution source checkout**. The embedded Python snapshots are input source snapshots, not automatically identical merely because they have the same paths. At export time the exporter uses a best-effort Git comparison to record whether they match the execution checkout, differ from it, or remain unverified; the UI displays that relationship rather than inventing a generated-artifact commit. The evidence digest identifies the validated reference evidence manifest bytes, not the derived JSON or the current frontend commit.
+The bundle records the Git checkout under which the VM experiment executed as the **execution source checkout** (`a208af6ecf4e838d6d2c475ede366494de81a706`). The embedded Python snapshots are input source snapshots, not automatically identical merely because they have the same paths.
+
+Provenance is deterministic across full, shallow and isolated checkouts. While the execution Git object was available, every embedded Python source file was independently compared with `git show <execution-checkout>:labs/rdma-basics/python/<file>` by SHA-256 and line count. Those verified reference values are recorded in the version-controlled manifest:
+
+- `labs/rdma-basics/source-provenance.json`
+
+At export time the exporter compares the current embedded source hashes and line counts with that manifest. It does not inspect local Git history and therefore does not depend on checkout depth or object-database contents. Possible bundle states are `matches-verified-execution-source`, `differs-from-verified-execution-source` or `unverified` when the manifest/execution-checkout identity cannot genuinely be established. A source edit is honestly reported as different rather than as a match. The evidence digest identifies the validated reference evidence manifest bytes, not the derived JSON or the current frontend commit.
 
 ## Validation commands
 
@@ -238,20 +265,20 @@ npx tsc --noEmit --project tsconfig.json
 npm run build
 npm start
 npx playwright test tests/rdma.practical.smoke.spec.ts
+npx playwright test tests/rdma.correlations.spec.ts
 ```
 
-The Playwright suite covers public access, bundle availability and provenance, progressive WRITE memory/WR/CQE state, full-recording inspection mode, application-event selection, reverse packet correlation, completion ownership, SEND/RECEIVE host ownership, READ direction and response semantics, QP readiness, backward navigation/restart/experiment switching/deep links, playback and keyboard interaction without control hijacking, SHA-256 capture integrity, mobile overflow, accessibility labels/focus affordances and browser console/hydration errors.
+The smoke suite covers public access, bundle availability and provenance, progressive WRITE memory/WR/CQE state, delayed application verification, full-recording inspection mode, application-event selection, reverse packet correlation, completion ownership, SEND/RECEIVE host ownership, READ direction and response semantics, QP readiness, backward navigation/restart/experiment switching/deep links, playback and keyboard interaction without control hijacking, SHA-256 capture integrity, mobile overflow, accessibility labels/focus affordances and browser console/hydration errors. The pure correlation suite exercises direct/contextual qualifications, repeated selection, control events, packet/WR/CQE linkage and local completion ownership without a browser.
 
+## CI verification
 
-## Intended CI integration after PR #9
+PR #10 includes the focused workflow `.github/workflows/rdma-practical-verification.yml` because PR #9's broader quality workflow is still on an unmerged dependency branch. This is intentionally feature-scoped rather than a permanent duplicate security workflow. It runs on pushes to `feat/rdma-practical-frontend` and on pull requests targeting `feat/rdma-runtime-recovery`, `preview` or `main`.
 
-PR #9 introduces `.github/workflows/web-quality.yml`. While that dependency branch remains unmerged, PR #10 intentionally does not copy or duplicate the workflow into a conflicting implementation. Once PR #9 is integrated into `preview`, the existing workflow should be amended in this frontend branch to:
+The evidence job uses an explicit `fetch-depth: 1` shallow checkout, installs `tshark`, creates an isolated Python environment, installs `labs/rdma-basics/requirements-export.txt`, compiles the Python sources, runs the RDMA test suite, validates evidence and SHA256SUMS, and byte-compares a regenerated bundle with the committed JSON. It therefore exercises the original shallow-checkout provenance failure mode in hosted CI.
 
-1. install `labs/rdma-basics/requirements-export.txt` before evidence regression tests;
-2. run the exporter with `--no-copy-assets` and byte-compare the result with `apps/web/public/practical/rdma/reference-evidence.json`;
-3. keep the existing evidence validator and SHA256SUMS checks mandatory;
-4. start the production server and run `tests/rdma.practical.smoke.spec.ts` in addition to the public smoke suite;
-5. retain the patched Next.js dependency baseline and audit gates.
+The frontend job runs `npm ci`, TypeScript, the production build, production-server RDMA smoke tests and the pure correlation tests. It does not run dependency-audit gates as a substitute for PR #9 because this stacked branch still inherits the unpatched Next.js tree; the patched dependency baseline and audit gates remain PR #9's responsibility and are validated separately in disposable combined integration.
+
+Once PR #9 merges, the feature-specific workflow should be simplified or removed and the same evidence/frontend gates folded into the single `web-quality.yml` source of truth. Do not keep two permanent implementations of the same security or browser-quality gate.
 
 These checks require no KVM, privileged RDMA device, Docker lab execution or production services.
 
@@ -274,6 +301,7 @@ Pipeline and tests:
 - `labs/rdma-basics/requirements-export.txt`
 - `labs/rdma-basics/tests/test_browser_evidence_export.py`
 - `apps/web/tests/rdma.practical.smoke.spec.ts`
+- `apps/web/tests/rdma.correlations.spec.ts`
 
 ## Known limitations
 
@@ -282,6 +310,7 @@ Pipeline and tests:
 - QPNs, PSNs, memory addresses and keys are run-specific reference values, not reusable constants.
 - Cross-host timestamps are not precision-synchronized.
 - The control channel is separate TCP communication and is absent from the data-interface pcaps.
+- The WRITE memory-mutation milestone is causal protocol illustration; payload verification and target-CQ absence are application observations recorded later.
 - The browser replays committed evidence; it does not execute Python or control the lab VMs.
 - The packet inspector is Wireshark-like in presentation, but it is not a live Wireshark session.
 - Experiment A intentionally has no data-transfer capture.
