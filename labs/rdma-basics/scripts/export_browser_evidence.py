@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import json
 import shutil
 import struct
@@ -73,14 +74,14 @@ CODE_REFERENCE_ANCHORS = {
     "Open device and log capabilities": ("open_ib", "open_device"),
     "Query port and select RoCEv2 GID": ("query_port", "gid"),
     "local_gid helper": ("def local_gid", "GID"),
-    "Allocate resources": ("PD", "CQ", "QP"),
-    "Memory-region and QP helpers": ("def", "QP"),
+    "Allocate resources": ("pd_mod.PD", "new_memory_region", "make_qp"),
+    "Memory-region and QP helpers": ("def new_memory_region", "def make_qp"),
     "Control-channel metadata exchange": ("ctrl", "qpn"),
     "Bring QP to RTS": ("bring_qp_to_rts", "qp_ready"),
     "RESET → INIT → RTR → RTS helper": ("to_init", "to_rtr", "to_rts"),
     "QP state helper": ("to_init", "to_rtr", "to_rts"),
     "Create resources and connect control channel": ("build_resources", "ctrl"),
-    "build_resources helper": ("def build_resources", "mr"),
+    "build_resources helper": ("def build_resources", "new_memory_region", "make_qp"),
     "exchange_and_connect helper": ("exchange", "bring_qp_to_rts"),
     "Post receive WR and signal readiness": ("RecvWR", "post_recv"),
     "Write payload and post SEND": ("SendWR", "IBV_WR_SEND", "post_send"),
@@ -719,7 +720,7 @@ def build_walkthrough(key: str, events: list[dict[str, Any]], requests: list[dic
             step("c-03-qp-ready", "Both queue pairs reach RTS", "resource", "The writer QP knows the target QPN and initial packet sequence state.", "The forward WRITE packet will name the target's local QPN. The reverse ACK will name the writer's local QPN. Confusing those directions is a common RDMA diagnostic mistake.", events=ids(events, init_role, "qp_ready") + ids(events, resp_role, "qp_ready"), code=[code_ref(key, 111, 116, "Bring QP to RTS"), code_ref(key, 155, 191, "QP state helper", common=True)], focus_host="both", plane="control"),
             step("c-04-post-write", "Writer posts one RDMA WRITE work request", "work-request", "Host A posts a signalled WR whose local SGE points to its source buffer and whose remote fields name Host B memory.", "The work request combines local source metadata (address and LKEY) with remote destination metadata (address and RKEY). The WR ID is not a packet header field.", events=ids(events, init_role, "peer_ready") + ids(events, init_role, "post_send"), work_requests_=write_wr, memory=init_mem + resp_mem, code=[code_ref(key, 119, 139, "Build and post RDMA WRITE")], focus_host=init_host, plane="control"),
             step("c-05-write-packet", "RDMA WRITE Only packet crosses UDP/4791", "packet", "The genuine capture contains one RDMA WRITE Only packet carrying the target VA, RKEY, DMA length and payload bytes.", "Select the packet inspector to compare the RETH address and RKEY with the metadata Host B shared. They match because both came from the same validated run; they are not hard-coded teaching constants.", packets=request_pkt, work_requests_=write_wr, memory=resp_mem, focus_host="wire", plane="data"),
-            step("c-06-memory-after", "Remote memory changes without a receive WR", "memory", "The Soft-RoCE transport writes the payload directly into Host B's registered memory.", "Host B posted no receive work request. Ordinary RDMA WRITE does not consume a target receive WR and does not generate a normal receive CQE on the target. The mutation is performed by the RDMA transport, not by the TCP control channel.", memory=resp_mem, packets=request_pkt, memory_state="after", focus_host=resp_host, plane="data", points=["This is the defining one-sided property of RDMA WRITE.", "WRITE with immediate data has different receive-side semantics and is not what this experiment uses."]),
+            step("c-06-memory-after", "Remote memory changes without a receive WR", "memory", "The Soft-RoCE transport writes the payload directly into Host B's registered memory.", "Host B posted no receive work request. Ordinary RDMA WRITE does not consume a target receive WR and does not generate a normal receive CQE on the target. The mutation is performed by the RDMA transport, not by the TCP control channel. This step is a protocol-causal illustration rather than a separately timestamped application event; the displayed after-bytes were recorded later, while application verification is revealed only at the final verification milestone.", memory=resp_mem, packets=request_pkt, memory_state="after", focus_host=resp_host, plane="data", points=["This is the defining one-sided property of RDMA WRITE.", "WRITE with immediate data has different receive-side semantics and is not what this experiment uses."]),
             step("c-07-ack-completion", "ACK returns and writer completion is local", "completion", "The target transport acknowledges the request, and Host A receives its own signalled completion.", "The completion means the initiator's requested WRITE operation completed successfully. It is not evidence that the remote application has consumed the data, and it is not a target receive CQE.", packets=reverse_pkt, work_requests_=write_wr, completions_=cqe_ids(completion_list, init_host), events=ids(events, init_role, "cqe") + ids(events, init_role, "write_complete"), code=[code_ref(key, 140, 150, "Poll writer completion and signal target")], focus_host=init_host, plane="data"),
             step("c-08-synchronise-verify", "Separate synchronisation lets the target verify memory", "verification", "Only after an explicit application-level control message does Host B inspect memory.", "The target polls its CQ and observes zero completions, then verifies the payload. The control message is a notification mechanism only; it neither carried the payload nor caused the memory mutation.", events=ids(events, resp_role, "write_done_signal") + ids(events, resp_role, "target_cq_poll") + ids(events, resp_role, "buffer_after"), memory=resp_mem, completions_=[], code=[code_ref(key, 152, 176, "Synchronise, poll target CQ, verify memory")], memory_state="after", focus_host=resp_host, plane="control"),
         ]
@@ -942,38 +943,79 @@ def build_experiment(key: str, evidence: Path, all_events: dict[str, list[dict[s
     return exp
 
 
-def source_snapshot_relationship(lab_root: Path, execution_commit: str | None) -> dict[str, Any]:
-    """Best-effort deterministic provenance check for embedded Python snapshots.
+def source_snapshot_relationship(lab_root: Path, execution_commit: str | None, sources: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compare embedded sources with stable execution-source provenance.
 
-    The evidence records the checkout used when the VMs ran.  The exporter reads
-    source files from its input checkout.  When the execution commit is available
-    locally, compare those paths and report the result explicitly rather than
-    silently claiming capture-time source identity.
+    The provenance manifest was generated by comparing these files with the
+    recorded execution checkout while that Git object was available.  Export-time
+    validation deliberately uses the version-controlled manifest, so output does
+    not depend on checkout depth or on the local Git object database.
     """
+    unverified = {"relationship": "unverified", "method": "execution-source provenance manifest missing, malformed, or inconsistent with the recorded execution checkout"}
+    manifest_path = lab_root / "source-provenance.json"
     if not execution_commit:
         return {"relationship": "unverified", "method": "execution checkout missing from environment.json"}
-    repo_root = lab_root.parents[1]
+    if not manifest_path.exists():
+        return unverified
     try:
-        result = subprocess.run(
-            ["git", "-C", str(repo_root), "diff", "--quiet", execution_commit, "--", "labs/rdma-basics/python"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-    except (OSError, ValueError):
-        return {"relationship": "unverified", "method": "git execution-source comparison unavailable"}
-    if result.returncode == 0:
-        return {"relationship": "matches-execution-checkout", "method": "git diff <execution checkout> -- labs/rdma-basics/python"}
-    if result.returncode == 1:
-        return {"relationship": "differs-from-execution-checkout", "method": "git diff <execution checkout> -- labs/rdma-basics/python"}
-    return {"relationship": "unverified", "method": "execution checkout object unavailable locally"}
+        manifest = json.loads(manifest_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return unverified
+    if manifest.get("schemaVersion") != 1 or manifest.get("executionSourceCheckout") != execution_commit:
+        return unverified
+    manifest_files = manifest.get("files")
+    if not isinstance(manifest_files, dict):
+        return unverified
+
+    actual = {source["path"]: source for source in sources}
+    expected_paths = set(actual)
+    if set(manifest_files) != expected_paths:
+        return unverified
+    for path, expected in manifest_files.items():
+        if not isinstance(expected, dict):
+            return unverified
+        source = actual[path]
+        if expected.get("sha256") != source.get("sha256") or expected.get("lineCount") != source.get("lineCount"):
+            return {
+                "relationship": "differs-from-verified-execution-source",
+                "method": "embedded source SHA-256/line-count comparison against version-controlled execution-source provenance manifest",
+            }
+    return {
+        "relationship": "matches-verified-execution-source",
+        "method": "embedded source SHA-256/line-count comparison against version-controlled execution-source provenance manifest",
+    }
 
 
-def copy_capture_assets(evidence: Path, output_file: Path) -> None:
+def write_output_assets_atomically(evidence: Path, output_file: Path, bundle_text: str, *, copy_assets: bool) -> None:
+    """Stage complete generated files before atomically replacing public assets.
+
+    A failed write or copy therefore leaves the previously published set intact
+    rather than truncating the JSON or one of the captures in place. Individual
+    file replacement uses os.replace; there is no portable multi-file atomic
+    directory swap for this simple static asset layout.
+    """
     destination_dir = output_file.parent
     destination_dir.mkdir(parents=True, exist_ok=True)
-    for capture in CAPTURES.values():
-        shutil.copyfile(evidence / capture, destination_dir / capture)
+    suffix = f".tmp-{os.getpid()}"
+    staged: list[tuple[Path, Path]] = []
+    try:
+        json_staged = output_file.with_name(output_file.name + suffix)
+        json_staged.write_text(bundle_text)
+        staged.append((json_staged, output_file))
+        if copy_assets:
+            for capture in CAPTURES.values():
+                target = destination_dir / capture
+                staged_capture = target.with_name(target.name + suffix)
+                shutil.copyfile(evidence / capture, staged_capture)
+                if sha256_file(staged_capture) != sha256_file(evidence / capture):
+                    raise EvidenceExportError(f"staged capture checksum mismatch: {capture}")
+                staged.append((staged_capture, target))
+        for staged_path, target in staged:
+            os.replace(staged_path, target)
+    finally:
+        for staged_path, _target in staged:
+            if staged_path.exists():
+                staged_path.unlink()
 
 
 def export_bundle(evidence: Path, lab_root: Path, output_file: Path | None = None, *, copy_assets: bool = True) -> dict[str, Any]:
@@ -1010,7 +1052,7 @@ def export_bundle(evidence: Path, lab_root: Path, output_file: Path | None = Non
             "environmentDigest": sha256_bytes(environment_bytes),
             "gitCommit": environment.get("git_commit"),
             "executionSourceCheckout": environment.get("git_commit"),
-            "sourceSnapshot": source_snapshot_relationship(lab_root, environment.get("git_commit")),
+            "sourceSnapshot": source_snapshot_relationship(lab_root, environment.get("git_commit"), sources),
             "generatedAt": environment.get("created_at"),
             "referenceRunStartedAt": verification.get("started_at"),
             "referenceRunFinishedAt": verification.get("finished_at"),
@@ -1038,10 +1080,12 @@ def export_bundle(evidence: Path, lab_root: Path, output_file: Path | None = Non
     if schema_errors:
         raise EvidenceExportError("generated browser evidence failed schema/correlation validation: " + "; ".join(schema_errors))
     if output_file is not None:
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        output_file.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")
-        if copy_assets:
-            copy_capture_assets(evidence, output_file)
+        write_output_assets_atomically(
+            evidence,
+            output_file,
+            json.dumps(bundle, indent=2, sort_keys=True) + "\n",
+            copy_assets=copy_assets,
+        )
     return bundle
 
 

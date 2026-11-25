@@ -240,7 +240,7 @@ export type RdmaEvidenceBundle = {
     gitCommit: string;
     executionSourceCheckout: string;
     sourceSnapshot: {
-      relationship: "matches-execution-checkout" | "differs-from-execution-checkout" | "unverified";
+      relationship: "matches-verified-execution-source" | "differs-from-verified-execution-source" | "unverified";
       method: string;
     };
     generatedAt: string;

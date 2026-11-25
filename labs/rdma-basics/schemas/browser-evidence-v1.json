@@ -319,7 +319,7 @@
           "additionalProperties": false,
           "required": ["relationship", "method"],
           "properties": {
-            "relationship": {"enum": ["matches-execution-checkout", "differs-from-execution-checkout", "unverified"]},
+            "relationship": {"enum": ["matches-verified-execution-source", "differs-from-verified-execution-source", "unverified"]},
             "method": {"type": "string"}
           }
         },

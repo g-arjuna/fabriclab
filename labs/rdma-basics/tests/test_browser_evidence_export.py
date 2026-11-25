@@ -33,6 +33,16 @@ class BrowserEvidenceExportCase(unittest.TestCase):
         shutil.copytree(REFERENCE, dest)
         return dest
 
+    def copy_lab_export_inputs(self, *, include_provenance=True):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        dest = Path(tmp.name) / "lab"
+        shutil.copytree(ROOT / "python", dest / "python")
+        shutil.copytree(ROOT / "schemas", dest / "schemas")
+        if include_provenance:
+            shutil.copy2(ROOT / "source-provenance.json", dest / "source-provenance.json")
+        return dest
+
     def test_schema_version_and_complete_experiment_set(self):
         bundle = self.bundle
         self.assertEqual(1, bundle["schemaVersion"])
@@ -214,8 +224,45 @@ class BrowserEvidenceExportCase(unittest.TestCase):
     def test_source_snapshot_provenance_is_explicit(self):
         provenance = self.bundle["provenance"]
         self.assertEqual(provenance["gitCommit"], provenance["executionSourceCheckout"])
-        self.assertIn(provenance["sourceSnapshot"]["relationship"], {"matches-execution-checkout", "differs-from-execution-checkout", "unverified"})
+        self.assertIn(provenance["sourceSnapshot"]["relationship"], {"matches-verified-execution-source", "differs-from-verified-execution-source", "unverified"})
         self.assertTrue(provenance["sourceSnapshot"]["method"])
+
+
+    def test_source_provenance_matches_in_full_checkout(self):
+        self.assertEqual("matches-verified-execution-source", self.bundle["provenance"]["sourceSnapshot"]["relationship"])
+
+    def test_export_is_byte_identical_without_execution_git_object(self):
+        isolated_lab = self.copy_lab_export_inputs()
+        isolated = exporter.export_bundle(REFERENCE, isolated_lab, None, copy_assets=False)
+        self.assertEqual("matches-verified-execution-source", isolated["provenance"]["sourceSnapshot"]["relationship"])
+        self.assertEqual(json.dumps(self.bundle, sort_keys=True), json.dumps(isolated, sort_keys=True))
+
+    def test_source_file_mismatch_is_reported_honestly(self):
+        isolated_lab = self.copy_lab_export_inputs()
+        source = isolated_lab / "python" / "exp_c_write.py"
+        source.write_text(source.read_text() + "\n# deliberate test mutation\n")
+        bundle = exporter.export_bundle(REFERENCE, isolated_lab, None, copy_assets=False)
+        self.assertEqual("differs-from-verified-execution-source", bundle["provenance"]["sourceSnapshot"]["relationship"])
+
+    def test_missing_source_provenance_manifest_is_unverified(self):
+        isolated_lab = self.copy_lab_export_inputs(include_provenance=False)
+        bundle = exporter.export_bundle(REFERENCE, isolated_lab, None, copy_assets=False)
+        self.assertEqual("unverified", bundle["provenance"]["sourceSnapshot"]["relationship"])
+
+    def test_malformed_source_provenance_manifest_is_unverified(self):
+        isolated_lab = self.copy_lab_export_inputs()
+        (isolated_lab / "source-provenance.json").write_text("{not-json")
+        bundle = exporter.export_bundle(REFERENCE, isolated_lab, None, copy_assets=False)
+        self.assertEqual("unverified", bundle["provenance"]["sourceSnapshot"]["relationship"])
+
+    def test_execution_checkout_mismatch_is_unverified_not_matched(self):
+        isolated_lab = self.copy_lab_export_inputs()
+        manifest_path = isolated_lab / "source-provenance.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["executionSourceCheckout"] = "0" * 40
+        manifest_path.write_text(json.dumps(manifest))
+        bundle = exporter.export_bundle(REFERENCE, isolated_lab, None, copy_assets=False)
+        self.assertEqual("unverified", bundle["provenance"]["sourceSnapshot"]["relationship"])
 
     def test_generated_output_write_and_capture_copy(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -226,6 +273,7 @@ class BrowserEvidenceExportCase(unittest.TestCase):
                 self.assertEqual((REFERENCE / name).read_bytes(), (output.parent / name).read_bytes())
             written = json.loads(output.read_text())
             self.assertEqual(self.bundle["provenance"], written["provenance"])
+            self.assertEqual([], list(output.parent.glob("*.tmp-*")))
 
 
 if __name__ == "__main__":

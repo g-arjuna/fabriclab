@@ -2846,7 +2846,7 @@
           "codeRefs": [],
           "completionIds": [],
           "eventIds": [],
-          "explanation": "Host B posted no receive work request. Ordinary RDMA WRITE does not consume a target receive WR and does not generate a normal receive CQE on the target. The mutation is performed by the RDMA transport, not by the TCP control channel.",
+          "explanation": "Host B posted no receive work request. Ordinary RDMA WRITE does not consume a target receive WR and does not generate a normal receive CQE on the target. The mutation is performed by the RDMA transport, not by the TCP control channel. This step is a protocol-causal illustration rather than a separately timestamped application event; the displayed after-bytes were recorded later, while application verification is revealed only at the final verification milestone.",
           "focusHost": "hostb",
           "id": "c-06-memory-after",
           "kind": "memory",
@@ -4106,8 +4106,8 @@
     "referenceRunFinishedAt": "2026-11-25T09:52:35Z",
     "referenceRunStartedAt": "2026-11-25T09:52:09Z",
     "sourceSnapshot": {
-      "method": "git diff <execution checkout> -- labs/rdma-basics/python",
-      "relationship": "matches-execution-checkout"
+      "method": "embedded source SHA-256/line-count comparison against version-controlled execution-source provenance manifest",
+      "relationship": "matches-verified-execution-source"
     }
   },
   "schemaVersion": 1,
