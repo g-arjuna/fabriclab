@@ -1,0 +1,43 @@
+{
+  "experiments": {
+    "a": {
+      "hosta_exit": 0,
+      "hosta_role": "a",
+      "hostb_exit": 0,
+      "hostb_role": "b",
+      "required": true,
+      "script": "exp_a_resources.py",
+      "status": "pass"
+    },
+    "b": {
+      "hosta_exit": 0,
+      "hosta_role": "sender",
+      "hostb_exit": 0,
+      "hostb_role": "receiver",
+      "required": true,
+      "script": "exp_b_send_recv.py",
+      "status": "pass"
+    },
+    "c": {
+      "hosta_exit": 0,
+      "hosta_role": "writer",
+      "hostb_exit": 0,
+      "hostb_role": "target",
+      "required": true,
+      "script": "exp_c_write.py",
+      "status": "pass"
+    },
+    "d": {
+      "hosta_exit": 0,
+      "hosta_role": "reader",
+      "hostb_exit": 0,
+      "hostb_role": "source",
+      "required": false,
+      "script": "exp_d_read.py",
+      "status": "pass"
+    }
+  },
+  "finished_at": "2026-11-25T08:43:19Z",
+  "overall": "pass",
+  "started_at": "2026-11-25T08:42:52Z"
+}

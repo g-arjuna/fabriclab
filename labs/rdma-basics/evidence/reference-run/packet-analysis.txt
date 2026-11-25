@@ -1,0 +1,60 @@
+FabricLab rdma-basics packet analysis
+=====================================
+
+Captures were taken on hosta interface data0 (the isolated 10.10.10.0/24 data
+plane), not on the 192.168.100.0/24 TCP control network. tcpdump captured all
+frames on data0; the lines below are the UDP/4791 RoCEv2 frames.
+
+SEND/RECEIVE (send-recv.pcap)
+-----------------------------
+Application metadata: QPN 20 decimal (0x14), PSN 512, payload 50 bytes.
+
+  IP 10.10.10.1.49552 > 10.10.10.2.4791: UDP, length 68
+    Opcode: Reliable Connection (RC) - SEND Only (4)
+    Destination Queue Pair: 0x000014
+    Packet Sequence Number: 512
+  IP 10.10.10.2.49552 > 10.10.10.1.4791: UDP, length 20
+    Opcode: Reliable Connection (RC) - Acknowledge (17)
+    Destination Queue Pair: 0x000014
+    Packet Sequence Number: 512
+
+RDMA WRITE (rdma-write.pcap)
+----------------------------
+Application metadata: writer posted remote_addr=326883984 (0x137bda90),
+remote_rkey=1575 (0x0627), byte_len=53, QPN 21 decimal (0x15), PSN 768.
+The target log proves remote memory changed and target_cq_poll stayed empty.
+
+  IP 10.10.10.1.49593 > 10.10.10.2.4791: UDP, length 88
+    Opcode: Reliable Connection (RC) - RDMA WRITE Only (10)
+    Destination Queue Pair: 0x000015
+    Packet Sequence Number: 768
+    Virtual Address: 0x00000000137bda90
+    Remote Key: 0x00000627
+    DMA Length: 53
+    Payload begins: "RDMA WRITE landed in hostb memory without a recv WR!\n"
+  IP 10.10.10.2.49593 > 10.10.10.1.4791: UDP, length 20
+    Opcode: Reliable Connection (RC) - Acknowledge (17)
+    Destination Queue Pair: 0x000015
+    Packet Sequence Number: 768
+
+RDMA READ (rdma-read.pcap)
+--------------------------
+Application metadata: reader posted remote_addr=184110800 (0x0af94ed0),
+remote_rkey=1804 (0x070c), byte_len=46, QPN 22 decimal (0x16), PSN 1024.
+
+  IP 10.10.10.1.49636 > 10.10.10.2.4791: UDP, length 32
+    Opcode: Reliable Connection (RC) - RDMA READ Request (12)
+    Destination Queue Pair: 0x000016
+    Packet Sequence Number: 1024
+    Virtual Address: 0x000000000af94ed0
+    Remote Key: 0x0000070c
+    DMA Length: 46
+  IP 10.10.10.2.49636 > 10.10.10.1.4791: UDP, length 68
+    Opcode: Reliable Connection (RC) - RDMA READ response Only (16)
+    Destination Queue Pair: 0x000016
+    Packet Sequence Number: 1024
+
+The ICMP echo request/reply and occasional ARP/ICMPv6 frames in the pcaps are
+capture-readiness/neighbour-discovery traffic. They are not part of the RDMA
+operations. The ordinary TCP control channel uses ctrl0 (192.168.100.0/24) and
+is absent from these data0 captures by construction.

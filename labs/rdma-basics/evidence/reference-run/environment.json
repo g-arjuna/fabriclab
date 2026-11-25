@@ -1,0 +1,39 @@
+{
+  "architecture": "two Ubuntu 24.04 KVM/QEMU guests; QEMU packaged in Docker runner; dedicated direct socket-connected control and data NICs",
+  "base_image": {
+    "sha256": "d80fe50055e780901549d0dfab203551d79e31cb0fa9ac2b4d45efa1e8a51052",
+    "url": "https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img"
+  },
+  "commands": [
+    "./scripts/check-prereqs.sh",
+    "./scripts/setup-lab.sh",
+    "./scripts/verify-lab.sh",
+    "./scripts/run-experiments.sh",
+    "./scripts/collect-evidence.sh",
+    "./scripts/teardown-lab.sh"
+  ],
+  "created_at": "2026-11-25T08:43:20Z",
+  "git_commit": "850fb0d166a57b793880e07c6a538657755eeef6",
+  "guests": {
+    "hosta": {
+      "kernel": "6.8.0-151-generic",
+      "os_release": "Ubuntu 24.04.5 LTS",
+      "python": "Python 3.12.3",
+      "pyverbs": "50.0-2ubuntu0.2",
+      "rdma_core": "50.0-2ubuntu0.2"
+    },
+    "hostb": {
+      "kernel": "6.8.0-151-generic",
+      "os_release": "Ubuntu 24.04.5 LTS",
+      "python": "Python 3.12.3",
+      "pyverbs": "50.0-2ubuntu0.2",
+      "rdma_core": "50.0-2ubuntu0.2"
+    }
+  },
+  "host": {
+    "arch": "x86_64",
+    "docker": "Docker version 27.5.1, build 9f9e405",
+    "kernel": "7.0.0-44-generic",
+    "os": "Ubuntu 24.04.5 LTS"
+  }
+}

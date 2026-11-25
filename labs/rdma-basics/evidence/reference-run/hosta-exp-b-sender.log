@@ -1,0 +1,9 @@
+[hosta/exp-b-sender] #1 resources tag=sender mr_lkey=1421 mr_rkey=1421 mr_addr=532205488 qp_num=20 qp_state=Reset
+[hosta/exp-b-sender] #2 metadata_exchange own_qpn=20 own_psn=512 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 peer_qpn=20 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_role=receiver
+[hosta/exp-b-sender] #3 qp_ready qp_num=20 state=RTS dest_qpn=20 sq_psn=512 rq_psn=512
+[hosta/exp-b-sender] #4 peer_ready msg={'ready': True}
+[hosta/exp-b-sender] #5 post_send wr_id=81 opcode=SEND byte_len=50 lkey=1421 addr=532205488 payload=Hello RDMA - SEND/RECV over Soft-RoCE (FabricLab)
+[hosta/exp-b-sender] #6 cqe tag=send wr_id=81 opcode=Send byte_len=50 qp_num=20 src_qp=0 status=SUCCESS
+[hosta/exp-b-sender] #7 send_complete byte_len=50 status=SUCCESS
+
+Sender completion: SEND of 50 bytes, status SUCCESS

@@ -1,7 +1,7 @@
 # FabricLab engineering baseline
 
-Date: 2026-11-25  
-Machine: new Ubuntu recovery workstation  
+Date: 2026-11-25
+Machine: new Ubuntu recovery workstation
 Branch under test: `feat/rdma-runtime-recovery` based on `origin/preview` commit `1380424f59e9e65cd8b66d1aaee78b011439d2d8`
 
 This document is an evidence inventory, not a broad repair plan. It records
