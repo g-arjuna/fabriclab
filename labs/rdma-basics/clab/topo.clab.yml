@@ -1,0 +1,20 @@
+name: rdma-lab
+topology:
+  # NOTE: This Containerlab topology is provided for completeness, but
+  # Soft-RoCE (rdma_rxe) CANNOT pass traffic between network namespaces
+  # on any shipping kernel (<= 6.19).  The rxe UDP/4791 socket and route
+  # lookup are pinned to init_net; per-netns support was only merged in
+  # March 2026 and is not in any released kernel.
+  #
+  # Use the two-VM layout in ../vm/ for a working lab today.
+  # This file documents the intended container topology for when a
+  # kernel with per-netns rxe is available.
+  nodes:
+    hosta:
+      kind: linux
+      image: rdma-lab:24.04
+    hostb:
+      kind: linux
+      image: rdma-lab:24.04
+  links:
+    - endpoints: ["hosta:eth1", "hostb:eth1"]
