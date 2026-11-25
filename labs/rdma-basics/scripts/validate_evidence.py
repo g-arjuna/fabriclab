@@ -424,7 +424,12 @@ def validate_checksum_manifest(evidence: Path, errors: list[str]) -> None:
         fail(errors, "SHA256SUMS entries do not exactly cover the collected evidence files")
     import hashlib
     for name, digest in entries.items():
-        actual = hashlib.sha256((evidence / name).read_bytes()).hexdigest()
+        artifact = evidence / name
+        if not artifact.exists():
+            # The exact-coverage check above already reports the missing file;
+            # avoid turning a validation error into an uncaught exception.
+            continue
+        actual = hashlib.sha256(artifact.read_bytes()).hexdigest()
         if actual != digest:
             fail(errors, f"SHA256SUMS mismatch for {name}")
 

@@ -9,6 +9,7 @@ import { AuthControls } from "@/components/auth/AuthControls";
 const NAV_LINKS = [
   { href: "/curriculum", label: "Curriculum" },
   { href: "/lab", label: "Labs" },
+  { href: "/practical", label: "Practical" },
   { href: "/community", label: "Community" },
 ];
 

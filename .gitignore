@@ -179,3 +179,7 @@ repo-context.txt
 
 .vercel
 .env*.local
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
