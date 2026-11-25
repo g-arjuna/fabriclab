@@ -1,8 +1,8 @@
-[hosta/exp-b-sender] #1 resources tag=sender mr_lkey=894 mr_rkey=894 mr_addr=304091056 qp_num=18 qp_state=Reset
-[hosta/exp-b-sender] #2 metadata_exchange own_qpn=18 own_psn=512 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 peer_qpn=18 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_role=receiver
-[hosta/exp-b-sender] #3 qp_ready qp_num=18 state=RTS dest_qpn=18 sq_psn=512 rq_psn=512
+[hosta/exp-b-sender] #1 resources tag=sender mr_lkey=787 mr_rkey=787 mr_addr=235503536 qp_num=18 qp_state=Reset
+[hosta/exp-b-sender] #2 metadata_exchange own_qpn=18 own_psn=512 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 peer_qpn=19 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_role=receiver
+[hosta/exp-b-sender] #3 qp_ready qp_num=18 state=RTS dest_qpn=19 sq_psn=512 rq_psn=512
 [hosta/exp-b-sender] #4 peer_ready msg={'ready': True}
-[hosta/exp-b-sender] #5 post_send wr_id=81 opcode=SEND byte_len=50 lkey=894 addr=304091056 payload=Hello RDMA - SEND/RECV over Soft-RoCE (FabricLab)
+[hosta/exp-b-sender] #5 post_send wr_id=81 opcode=SEND byte_len=50 lkey=787 addr=235503536 payload=Hello RDMA - SEND/RECV over Soft-RoCE (FabricLab)
 [hosta/exp-b-sender] #6 cqe tag=send wr_id=81 opcode=Send byte_len=50 qp_num=18 src_qp=0 status=SUCCESS
 [hosta/exp-b-sender] #7 send_complete byte_len=50 status=SUCCESS
 

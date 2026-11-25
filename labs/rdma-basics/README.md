@@ -158,6 +158,36 @@ RKEY, and DMA length. The reference pcaps also include a small amount of ICMP,
 ARP, or ICMPv6 readiness/neighbour-discovery traffic; those frames are not RDMA
 operations.
 
+### Direction-aware QPN and PSN validation
+
+Each endpoint of a Reliable Connected pair owns an independent local QPN. The
+fact that the two guests often allocate the same number is coincidental. The
+validator therefore correlates `qp_ready` metadata from both sides and checks
+packet direction explicitly:
+
+- an initiator-to-responder SEND, WRITE, or READ request must use the
+  responder's local QPN in BTH.DestQP;
+- a responder-to-initiator ACK or READ response must use the initiator's local
+  QPN in BTH.DestQP.
+
+Initial SQ PSNs are endpoint properties. `rq_psn` on one endpoint is configured
+from the peer's initial `sq_psn`, but the two SQ initial values do not have to
+be numerically equal. For SEND and RDMA WRITE acknowledgements, the InfiniBand
+reliable-service rules put the PSN of the most recent acknowledged request in
+the ACK. For RDMA READ responses, response PSNs are sequential and begin at the
+originating READ request PSN; they are not drawn from the responder's own
+independent SQ initial value. The regression suite uses clearly labelled
+synthetic mutations of disposable evidence copies to test asymmetric endpoint
+QPNs and additional asymmetric-PSN negative cases without replacing the genuine
+reference captures. The committed reference pcaps themselves were regenerated
+from a real two-VM run in which hostb held one additional QP before the
+experiments, so the endpoint QPNs are genuinely asymmetric (for example WRITE
+initiator 0x13, target 0x14).
+
+Primary references: InfiniBand Architecture Specification Volume 1 sections
+9.7.5.1.1, 9.7.5.1.8, and 9.7.5.1.9; `ibv_modify_qp(3)` for `dest_qp_num`,
+`rq_psn`, and `sq_psn` connection semantics.
+
 ## Cleanup and safety
 
 `teardown-lab.sh` removes only the `fabriclab-rdma-vm-runner` container, its

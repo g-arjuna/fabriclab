@@ -1,6 +1,6 @@
 [hostb/exp-d-source] #1 buffer_before first64=52444d4120524541443a207468697320736563726574206c6976657320696e20686f737462206d656d6f72792e0a232323232323232323232323232323232323
-[hostb/exp-d-source] #2 resources tag=source mr_lkey=1455 mr_rkey=1455 mr_addr=286641872 qp_num=20 qp_state=Reset
-[hostb/exp-d-source] #3 metadata_exchange own_qpn=20 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_qpn=20 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 shared_rkey=1455 shared_addr=286641872 shared_len=46
-[hostb/exp-d-source] #4 qp_ready qp_num=20 state=RTS dest_qpn=20 sq_psn=1024 rq_psn=1024
+[hostb/exp-d-source] #2 resources tag=source mr_lkey=1299 mr_rkey=1299 mr_addr=488476368 qp_num=21 qp_state=Reset
+[hostb/exp-d-source] #3 metadata_exchange own_qpn=21 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_qpn=20 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 shared_rkey=1299 shared_addr=488476368 shared_len=46
+[hostb/exp-d-source] #4 qp_ready qp_num=21 state=RTS dest_qpn=20 sq_psn=1024 rq_psn=1024
 [hostb/exp-d-source] #5 read_done_signal msg={'read_done': True}
 [hostb/exp-d-source] #6 source_cq_poll npolled=0 ok=True note=RDMA READ responder side posts no WR, so no CQE is expected

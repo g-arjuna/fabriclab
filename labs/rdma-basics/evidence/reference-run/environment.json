@@ -12,7 +12,7 @@
     "./scripts/collect-evidence.sh",
     "./scripts/teardown-lab.sh"
   ],
-  "created_at": "2026-11-25T09:05:37Z",
+  "created_at": "2026-11-25T09:53:24Z",
   "evidence_scope": "complete",
   "experiments": [
     "a",
@@ -20,7 +20,7 @@
     "c",
     "d"
   ],
-  "git_commit": "c05a0010aa75d3a27b1b013b39bf3454035ca56b",
+  "git_commit": "a208af6ecf4e838d6d2c475ede366494de81a706",
   "guests": {
     "hosta": {
       "kernel": "6.8.0-151-generic",

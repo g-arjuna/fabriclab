@@ -192,45 +192,107 @@ def validate_freshness(evidence: Path, verification: dict, events: dict, packet_
             fail(errors, f"{CAPTURES[key]}: packet timestamps outside verification run window; possible stale capture")
 
 
+def endpoint_context(events: dict, key: str, errors: list[str], label: str) -> dict | None:
+    """Return direction-aware endpoint QPN/PSN metadata for one experiment.
+
+    In a Reliable Connected pair each endpoint owns an independent local QPN.
+    A packet travelling initiator -> responder must name the responder's local
+    QPN in BTH.DestQP; the reverse-direction response or acknowledgement must
+    name the initiator's local QPN.  Initial send PSNs are likewise endpoint
+    properties: rq_psn on one side is configured from the peer's sq_psn, but
+    there is no protocol requirement that the two send PSN sequences use the
+    same initial value.
+    """
+    initiator_role = f"exp-{key}-{ROLES[key][0]}"
+    responder_role = f"exp-{key}-{ROLES[key][1]}"
+    init_ready = first(events["hosta"], role=initiator_role, event="qp_ready")
+    resp_ready = first(events["hostb"], role=responder_role, event="qp_ready")
+    require(init_ready is not None and resp_ready is not None, errors, f"{label}: missing QP-ready metadata for one or both endpoints")
+    if not (init_ready and resp_ready):
+        return None
+
+    ctx = {
+        "initiator_qpn": int(init_ready["qp_num"]),
+        "responder_qpn": int(resp_ready["qp_num"]),
+        "initiator_sq_psn": int(init_ready["sq_psn"]),
+        "responder_sq_psn": int(resp_ready["sq_psn"]),
+        "initiator_rq_psn": int(init_ready["rq_psn"]),
+        "responder_rq_psn": int(resp_ready["rq_psn"]),
+    }
+    require(int(init_ready["dest_qpn"]) == ctx["responder_qpn"], errors, f"{label}: initiator dest_qpn {init_ready['dest_qpn']} != responder local QPN {ctx['responder_qpn']}")
+    require(int(resp_ready["dest_qpn"]) == ctx["initiator_qpn"], errors, f"{label}: responder dest_qpn {resp_ready['dest_qpn']} != initiator local QPN {ctx['initiator_qpn']}")
+    require(ctx["initiator_rq_psn"] == ctx["responder_sq_psn"], errors, f"{label}: initiator rq_psn {ctx['initiator_rq_psn']} != responder sq_psn {ctx['responder_sq_psn']}")
+    require(ctx["responder_rq_psn"] == ctx["initiator_sq_psn"], errors, f"{label}: responder rq_psn {ctx['responder_rq_psn']} != initiator sq_psn {ctx['initiator_sq_psn']}")
+
+    for host, role, ready, expected_qpn in (
+        ("hosta", initiator_role, init_ready, ctx["initiator_qpn"]),
+        ("hostb", responder_role, resp_ready, ctx["responder_qpn"]),
+    ):
+        resources = first(events[host], role=role, event="resources")
+        if resources is not None and "qp_num" in resources:
+            require(int(resources["qp_num"]) == expected_qpn, errors, f"{label}: {host} resources QPN {resources['qp_num']} != qp_ready QPN {expected_qpn}")
+    return ctx
+
+
+def validate_ack(packets: list[dict], *, opcode: int, src: str, dst: str, expected_qpn: int, expected_psn: int, errors: list[str], label: str) -> None:
+    acks = [p for p in packets if p["opcode"] == opcode and p["src"] == src and p["dst"] == dst]
+    require(len(acks) == 1, errors, f"{label}: expected one reverse-direction acknowledgement, decoded {len(acks)}")
+    if not acks:
+        return
+    pkt = acks[0]
+    require(pkt["udp_dstport"] == 4791, errors, f"{label}: destination UDP port is not 4791")
+    require(pkt["qpn"] == expected_qpn, errors, f"{label}: acknowledgement destination QPN {pkt['qpn']} != initiator local QPN {expected_qpn}")
+    require(pkt["psn"] == expected_psn, errors, f"{label}: acknowledgement PSN {pkt['psn']} != acknowledged request PSN {expected_psn}")
+
+
 def validate_send_recv(events: dict, packets: list[dict], errors: list[str]) -> dict:
     writer = first(events["hosta"], role="exp-b-sender", event="post_send")
-    ready = first(events["hosta"], role="exp-b-sender", event="qp_ready")
+    ctx = endpoint_context(events, "b", errors, "SEND/RECEIVE")
     recv_cqe = first(events["hostb"], role="exp-b-receiver", event="cqe", tag="recv")
     send_cqe = first(events["hosta"], role="exp-b-sender", event="cqe", tag="send")
     verify = first(events["hostb"], role="exp-b-receiver", event="verify")
-    require(writer is not None and ready is not None, errors, "SEND/RECEIVE: missing application post/qp metadata")
-    if not (writer and ready):
+    require(writer is not None and ctx is not None, errors, "SEND/RECEIVE: missing application post/qp metadata")
+    if not (writer and ctx):
         return {}
-    expected_qpn = int(ready["dest_qpn"])
-    expected_psn = int(ready["sq_psn"])
+    expected = {
+        **ctx,
+        "request_qpn": ctx["responder_qpn"],
+        "response_qpn": ctx["initiator_qpn"],
+        "psn": ctx["initiator_sq_psn"],
+        "length": writer.get("byte_len"),
+    }
     candidates = [p for p in packets if p["opcode"] == OPCODES["send_only"] and p["src"] == "10.10.10.1" and p["dst"] == "10.10.10.2"]
     require(len(candidates) == 1, errors, f"SEND/RECEIVE: expected one SEND Only request, decoded {len(candidates)}")
     if candidates:
         pkt = candidates[0]
-        require(pkt["udp_dstport"] == 4791, errors, "SEND/RECEIVE: destination UDP port is not 4791")
-        require(pkt["qpn"] == expected_qpn, errors, f"SEND/RECEIVE: packet QPN {pkt['qpn']} != application QPN {expected_qpn}")
-        require(pkt["psn"] == expected_psn, errors, f"SEND/RECEIVE: packet PSN {pkt['psn']} != application initial PSN {expected_psn}")
+        require(pkt["udp_dstport"] == 4791, errors, "SEND/RECEIVE request: destination UDP port is not 4791")
+        require(pkt["qpn"] == expected["request_qpn"], errors, f"SEND/RECEIVE request: destination QPN {pkt['qpn']} != receiver local QPN {expected['request_qpn']}")
+        require(pkt["psn"] == expected["psn"], errors, f"SEND/RECEIVE request: packet PSN {pkt['psn']} != sender initial SQ PSN {expected['psn']}")
+    if candidates:
+        validate_ack(packets, opcode=OPCODES["ack"], src="10.10.10.2", dst="10.10.10.1", expected_qpn=expected["response_qpn"], expected_psn=candidates[0]["psn"], errors=errors, label="SEND/RECEIVE ACK")
     require(send_cqe is not None and send_cqe.get("status") == "SUCCESS", errors, "SEND/RECEIVE: sender completion missing or unsuccessful")
     require(recv_cqe is not None and recv_cqe.get("status") == "SUCCESS", errors, "SEND/RECEIVE: receiver completion missing or unsuccessful")
     require(verify is not None and verify.get("ok") is True, errors, "SEND/RECEIVE: receiver payload verification did not pass")
-    return {"qpn": expected_qpn, "psn": expected_psn, "length": writer.get("byte_len")}
+    return expected
 
 
 def validate_write(events: dict, packets: list[dict], errors: list[str]) -> dict:
     post = first(events["hosta"], role="exp-c-writer", event="post_send", opcode="RDMA_WRITE")
-    ready = first(events["hosta"], role="exp-c-writer", event="qp_ready")
+    ctx = endpoint_context(events, "c", errors, "RDMA WRITE")
     cqe = first(events["hosta"], role="exp-c-writer", event="cqe", tag="write")
     complete = first(events["hosta"], role="exp-c-writer", event="write_complete")
     target_resources = first(events["hostb"], role="exp-c-target", event="resources") or first(events["hostb"], role="target", event="resources")
     target_verify = first(events["hostb"], role="exp-c-target", event="buffer_after")
     target_poll = first(events["hostb"], role="exp-c-target", event="target_cq_poll")
     target_recvs = all_events(events["hostb"], role="exp-c-target", event="post_recv")
-    require(post is not None and ready is not None and target_resources is not None, errors, "RDMA WRITE: missing application metadata")
-    if not (post and ready and target_resources):
+    require(post is not None and ctx is not None and target_resources is not None, errors, "RDMA WRITE: missing application metadata")
+    if not (post and ctx and target_resources):
         return {}
     expected = {
-        "qpn": int(ready["dest_qpn"]),
-        "psn": int(ready["sq_psn"]),
+        **ctx,
+        "request_qpn": ctx["responder_qpn"],
+        "response_qpn": ctx["initiator_qpn"],
+        "psn": ctx["initiator_sq_psn"],
         "va": int(post["remote_addr"]),
         "rkey": int(post["remote_rkey"]),
         "dmalen": int(post["byte_len"]),
@@ -241,11 +303,12 @@ def validate_write(events: dict, packets: list[dict], errors: list[str]) -> dict
     require(len(candidates) == 1, errors, f"RDMA WRITE: expected one RDMA WRITE Only packet, decoded {len(candidates)}")
     if candidates:
         pkt = candidates[0]
-        require(pkt["udp_dstport"] == 4791, errors, "RDMA WRITE: destination UDP port is not 4791")
-        for field, label in (("qpn", "QPN"), ("psn", "PSN"), ("va", "RETH VA"), ("rkey", "RETH RKEY"), ("dmalen", "RETH DMA length")):
-            require(pkt[field] == expected[field], errors, f"RDMA WRITE: packet {label} {pkt[field]} != application value {expected[field]}")
-    acks = [p for p in packets if p["opcode"] == OPCODES["ack"] and p["qpn"] == expected["qpn"] and p["psn"] == expected["psn"]]
-    require(bool(acks), errors, "RDMA WRITE: matching ACK packet not decoded")
+        require(pkt["udp_dstport"] == 4791, errors, "RDMA WRITE request: destination UDP port is not 4791")
+        require(pkt["qpn"] == expected["request_qpn"], errors, f"RDMA WRITE request: destination QPN {pkt['qpn']} != target local QPN {expected['request_qpn']}")
+        require(pkt["psn"] == expected["psn"], errors, f"RDMA WRITE request: packet PSN {pkt['psn']} != writer initial SQ PSN {expected['psn']}")
+        for field, label in (("va", "RETH VA"), ("rkey", "RETH RKEY"), ("dmalen", "RETH DMA length")):
+            require(pkt[field] == expected[field], errors, f"RDMA WRITE request: packet {label} {pkt[field]} != application value {expected[field]}")
+        validate_ack(packets, opcode=OPCODES["ack"], src="10.10.10.2", dst="10.10.10.1", expected_qpn=expected["response_qpn"], expected_psn=pkt["psn"], errors=errors, label="RDMA WRITE ACK")
     require(cqe is not None and cqe.get("status") == "SUCCESS", errors, "RDMA WRITE: initiator completion missing or unsuccessful")
     require(complete is not None and complete.get("status") == "SUCCESS", errors, "RDMA WRITE: application did not report successful completion")
     require(not target_recvs, errors, "RDMA WRITE: target posted a receive WR; ordinary-WRITE proof is invalid")
@@ -256,15 +319,17 @@ def validate_write(events: dict, packets: list[dict], errors: list[str]) -> dict
 
 def validate_read(events: dict, packets: list[dict], errors: list[str]) -> dict:
     post = first(events["hosta"], role="exp-d-reader", event="post_send", opcode="RDMA_READ")
-    ready = first(events["hosta"], role="exp-d-reader", event="qp_ready")
+    ctx = endpoint_context(events, "d", errors, "RDMA READ")
     cqe = first(events["hosta"], role="exp-d-reader", event="cqe", tag="read")
     complete = first(events["hosta"], role="exp-d-reader", event="read_complete")
-    require(post is not None and ready is not None, errors, "RDMA READ: missing application metadata")
-    if not (post and ready):
+    require(post is not None and ctx is not None, errors, "RDMA READ: missing application metadata")
+    if not (post and ctx):
         return {}
     expected = {
-        "qpn": int(ready["dest_qpn"]),
-        "psn": int(ready["sq_psn"]),
+        **ctx,
+        "request_qpn": ctx["responder_qpn"],
+        "response_qpn": ctx["initiator_qpn"],
+        "psn": ctx["initiator_sq_psn"],
         "va": int(post["remote_addr"]),
         "rkey": int(post["remote_rkey"]),
         "dmalen": int(post["byte_len"]),
@@ -273,16 +338,24 @@ def validate_read(events: dict, packets: list[dict], errors: list[str]) -> dict:
     responses = [p for p in packets if p["opcode"] == OPCODES["read_response_only"] and p["src"] == "10.10.10.2" and p["dst"] == "10.10.10.1"]
     require(len(requests) == 1, errors, f"RDMA READ: expected one READ Request, decoded {len(requests)}")
     require(len(responses) == 1, errors, f"RDMA READ: expected one READ response Only, decoded {len(responses)}")
-    for label, group in (("request", requests), ("response", responses)):
-        if group:
-            pkt = group[0]
-            require(pkt["udp_dstport"] == 4791, errors, f"RDMA READ {label}: destination UDP port is not 4791")
-            require(pkt["qpn"] == expected["qpn"], errors, f"RDMA READ {label}: packet QPN {pkt['qpn']} != application QPN {expected['qpn']}")
-            require(pkt["psn"] == expected["psn"], errors, f"RDMA READ {label}: packet PSN {pkt['psn']} != application PSN {expected['psn']}")
     if requests:
         pkt = requests[0]
+        require(pkt["udp_dstport"] == 4791, errors, "RDMA READ request: destination UDP port is not 4791")
+        require(pkt["qpn"] == expected["request_qpn"], errors, f"RDMA READ request: destination QPN {pkt['qpn']} != responder local QPN {expected['request_qpn']}")
+        require(pkt["psn"] == expected["psn"], errors, f"RDMA READ request: packet PSN {pkt['psn']} != reader initial SQ PSN {expected['psn']}")
         for field, label in (("va", "RETH VA"), ("rkey", "RETH RKEY"), ("dmalen", "RETH DMA length")):
             require(pkt[field] == expected[field], errors, f"RDMA READ request: packet {label} {pkt[field]} != application value {expected[field]}")
+    if responses:
+        pkt = responses[0]
+        require(pkt["udp_dstport"] == 4791, errors, "RDMA READ response: destination UDP port is not 4791")
+        require(pkt["qpn"] == expected["response_qpn"], errors, f"RDMA READ response: destination QPN {pkt['qpn']} != reader local QPN {expected['response_qpn']}")
+        # InfiniBand reliable-service rules require READ response PSNs to
+        # begin at the originating READ request PSN, incrementing for each
+        # response packet.  They are not drawn from the responder's own SQ
+        # initial PSN sequence.
+        require(pkt["psn"] == expected["psn"], errors, f"RDMA READ response: packet PSN {pkt['psn']} != originating request PSN {expected['psn']}")
+    if requests and responses:
+        require(responses[0]["psn"] == requests[0]["psn"], errors, "RDMA READ response: single-packet response PSN does not match request PSN")
     require(cqe is not None and cqe.get("status") == "SUCCESS", errors, "RDMA READ: reader completion missing or unsuccessful")
     require(complete is not None and complete.get("ok") is True and complete.get("verify") == "payload_match", errors, "RDMA READ: application data validation did not pass")
     return expected
@@ -294,7 +367,7 @@ def opcode_name(opcode: int) -> str:
 
 
 def packet_line(pkt: dict) -> str:
-    base = f"  frame {pkt['frame']}: {pkt['src']} -> {pkt['dst']} udp-dport={pkt['udp_dstport']} opcode={opcode_name(pkt['opcode'])} qpn=0x{pkt['qpn']:x} psn={pkt['psn']}"
+    base = f"  frame {pkt['frame']}: {pkt['src']} -> {pkt['dst']} udp-dport={pkt['udp_dstport']} opcode={opcode_name(pkt['opcode'])} dest_qpn=0x{pkt['qpn']:x} psn={pkt['psn']}"
     if pkt["dmalen"]:
         base += f" va=0x{pkt['va']:x} rkey=0x{pkt['rkey']:x} dmalen={pkt['dmalen']}"
     return base
@@ -315,7 +388,10 @@ def render_analysis(packet_data: dict[str, list[dict]], metadata: dict[str, dict
         meta = metadata.get(key, {})
         lines += [f"{title} ({capture})", "-" * (len(title) + len(capture) + 3)]
         if meta:
-            desc = f"Application metadata: qpn=0x{meta.get('qpn', 0):x} psn={meta.get('psn')}"
+            desc = (
+                f"Application metadata: initiator_qpn=0x{meta.get('initiator_qpn', 0):x} "
+                f"responder_qpn=0x{meta.get('responder_qpn', 0):x} request_psn={meta.get('psn')}"
+            )
             if meta.get("va") is not None:
                 desc += f" remote_addr=0x{meta.get('va', 0):x} remote_rkey=0x{meta.get('rkey', 0):x} byte_len={meta.get('dmalen')}"
             lines += [desc + ".", ""]

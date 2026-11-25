@@ -12,6 +12,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import struct
 import sys
 import tempfile
 import unittest
@@ -30,8 +31,96 @@ REFERENCE = ROOT / "evidence" / "reference-run"
 IMAGE = "ubuntu-24.04-minimal-cloudimg-amd64.img"
 GOOD_HASH = "d80fe50055e780901549d0dfab203551d79e31cb0fa9ac2b4d45efa1e8a51052"
 
+HOSTA_DATA_IP = "10.10.10.1"
+HOSTB_DATA_IP = "10.10.10.2"
+REQUEST_OPCODES = {4, 10, 12}  # SEND Only, RDMA WRITE Only, RDMA READ Request
 
-class EvidenceCase(unittest.TestCase):
+
+def experiment_key(role):
+    parts = str(role).split("-")
+    return parts[1] if len(parts) >= 3 and parts[0] == "exp" else None
+
+
+def make_asymmetric_qp_events(evidence, qpn_delta=8, psn_delta=128):
+    """Create a clearly labelled synthetic asymmetric endpoint fixture.
+
+    The genuine reference evidence is copied first and is never modified.  In
+    the synthetic copy hostb's local QPNs and initial SQ PSNs are shifted for
+    experiments b/c/d.  Reverse-direction packets still use hosta's QPN and
+    the originating request PSN, matching RC transport semantics.
+    """
+    for host in ("hosta", "hostb"):
+        path = evidence / f"{host}-events.jsonl"
+        rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        for row in rows:
+            key = experiment_key(row.get("role"))
+            if key not in ("b", "c", "d"):
+                continue
+            if host == "hostb":
+                for field in ("qp_num", "own_qpn"):
+                    if field in row:
+                        row[field] = int(row[field]) + qpn_delta
+                if row.get("event") == "qp_ready":
+                    row["sq_psn"] = int(row["sq_psn"]) + psn_delta
+                if "own_psn" in row:
+                    row["own_psn"] = int(row["own_psn"]) + psn_delta
+            else:
+                for field in ("dest_qpn", "peer_qpn"):
+                    if field in row:
+                        row[field] = int(row[field]) + qpn_delta
+                if row.get("event") == "qp_ready":
+                    row["rq_psn"] = int(row["rq_psn"]) + psn_delta
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+
+def mutate_roce_pcap(path, mutator):
+    """Mutate BTH QPN/PSN fields in a disposable synthetic pcap copy.
+
+    The captures in this lab use Ethernet/IPv4/UDP with a fixed 20-byte IPv4
+    header.  In the 12-byte BTH, byte 0 after the UDP header is the opcode,
+    bytes 5-7 are the 24-bit destination QPN, and bytes 9-11 are the 24-bit
+    PSN.  UDP checksums are zero in these captures, so changing the synthetic
+    fixture payload does not require a transport checksum update.
+    """
+    data = bytearray(path.read_bytes())
+    pos = 24
+    frame_index = 0
+    while pos + 16 <= len(data):
+        _sec, _usec, captured_len, _wire_len = struct.unpack_from("<IIII", data, pos)
+        frame_pos = pos + 16
+        frame = data[frame_pos:frame_pos+captured_len]
+        frame_index += 1
+        if len(frame) >= 54 and frame[12:14] == b"\x08\x00" and frame[23] == 17:
+            src = ".".join(str(x) for x in frame[26:30])
+            dst = ".".join(str(x) for x in frame[30:34])
+            opcode = frame[42]
+            qpn = int.from_bytes(frame[47:50], "big")
+            psn = int.from_bytes(frame[51:54], "big")
+            update = mutator(frame_index=frame_index, opcode=opcode, src=src, dst=dst, qpn=qpn, psn=psn) or {}
+            if "qpn" in update:
+                data[frame_pos+47:frame_pos+50] = int(update["qpn"]).to_bytes(3, "big")
+            if "psn" in update:
+                data[frame_pos+51:frame_pos+54] = int(update["psn"]).to_bytes(3, "big")
+        pos = frame_pos + captured_len
+    path.write_bytes(data)
+
+
+def make_asymmetric_qp_pcaps(evidence, qpn_delta=8):
+    def valid_directions(**kwargs):
+        if kwargs["src"] == HOSTA_DATA_IP and kwargs["dst"] == HOSTB_DATA_IP and kwargs["opcode"] in REQUEST_OPCODES:
+            return {"qpn": kwargs["qpn"] + qpn_delta}
+        return {}
+    for name in ("send-recv.pcap", "rdma-write.pcap", "rdma-read.pcap"):
+        mutate_roce_pcap(evidence / name, valid_directions)
+
+
+def make_asymmetric_fixture(evidence, qpn_delta=8, psn_delta=128):
+    make_asymmetric_qp_events(evidence, qpn_delta=qpn_delta, psn_delta=psn_delta)
+    make_asymmetric_qp_pcaps(evidence, qpn_delta=qpn_delta)
+
+
+class EvidenceTestMixin:
+
     def copy_evidence(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -42,6 +131,9 @@ class EvidenceCase(unittest.TestCase):
     def validate(self, evidence):
         return validate_evidence.validate_evidence(evidence, write_analysis=False)[0]
 
+
+
+class EvidenceCase(EvidenceTestMixin, unittest.TestCase):
     def test_reference_evidence_validates(self):
         evidence = self.copy_evidence()
         self.assertEqual([], self.validate(evidence))
@@ -109,6 +201,92 @@ class EvidenceCase(unittest.TestCase):
         (evidence / "rdma-read.pcap").write_bytes(b"not a real capture but long enough")
         errors = self.validate(evidence)
         self.assertTrue(any("corrupt or undecodable capture" in e for e in errors), errors)
+
+
+
+class AsymmetricQpnEvidenceCase(EvidenceTestMixin, unittest.TestCase):
+    """Synthetic asymmetric endpoint fixtures derived from genuine evidence.
+
+    These tests deliberately mutate only disposable copies.  The committed
+    reference-run pcaps and JSONL logs remain genuine integration output.
+    """
+
+    def test_valid_bidirectional_packets_with_distinct_qps_pass(self):
+        evidence = self.copy_evidence()
+        make_asymmetric_fixture(evidence)
+        self.assertEqual([], self.validate(evidence))
+
+    def test_incorrect_request_destination_qpn_fails(self):
+        evidence = self.copy_evidence()
+        make_asymmetric_fixture(evidence)
+
+        def corrupt_write_request(**kwargs):
+            if kwargs["opcode"] == 10 and kwargs["src"] == HOSTA_DATA_IP:
+                return {"qpn": kwargs["qpn"] + 1}
+            return {}
+
+        mutate_roce_pcap(evidence / "rdma-write.pcap", corrupt_write_request)
+        errors = self.validate(evidence)
+        self.assertTrue(any("RDMA WRITE request: destination QPN" in e for e in errors), errors)
+
+    def test_ack_destination_qpn_direction_is_enforced(self):
+        evidence = self.copy_evidence()
+        make_asymmetric_fixture(evidence, qpn_delta=8)
+
+        def corrupt_write_ack(**kwargs):
+            if kwargs["opcode"] == 17 and kwargs["src"] == HOSTB_DATA_IP:
+                # Incorrectly use the responder QPN in the B->A ACK.  The ACK
+                # is addressed to hosta, so it must use hosta's local QPN.
+                return {"qpn": kwargs["qpn"] + 8}
+            return {}
+
+        mutate_roce_pcap(evidence / "rdma-write.pcap", corrupt_write_ack)
+        errors = self.validate(evidence)
+        self.assertTrue(any("RDMA WRITE ACK: acknowledgement destination QPN" in e for e in errors), errors)
+
+    def test_read_response_destination_qpn_direction_is_enforced(self):
+        evidence = self.copy_evidence()
+        make_asymmetric_fixture(evidence, qpn_delta=8)
+
+        def corrupt_read_response(**kwargs):
+            if kwargs["opcode"] == 16 and kwargs["src"] == HOSTB_DATA_IP:
+                # Incorrectly use the responder QPN in the B->A response.  The
+                # response is addressed to the reader's local QP on hosta.
+                return {"qpn": kwargs["qpn"] + 8}
+            return {}
+
+        mutate_roce_pcap(evidence / "rdma-read.pcap", corrupt_read_response)
+        errors = self.validate(evidence)
+        self.assertTrue(any("RDMA READ response: destination QPN" in e for e in errors), errors)
+
+    def test_read_response_uses_originating_request_psn_not_responder_sq_psn(self):
+        evidence = self.copy_evidence()
+        make_asymmetric_fixture(evidence, psn_delta=128)
+
+        def corrupt_read_response_psn(**kwargs):
+            if kwargs["opcode"] == 16 and kwargs["src"] == HOSTB_DATA_IP:
+                # The responder's independent SQ PSN was shifted by 128 in the
+                # synthetic fixture.  Using it here is incorrect: reliable-
+                # service READ responses start at the originating request PSN.
+                return {"psn": kwargs["psn"] + 128}
+            return {}
+
+        mutate_roce_pcap(evidence / "rdma-read.pcap", corrupt_read_response_psn)
+        errors = self.validate(evidence)
+        self.assertTrue(any("RDMA READ response: packet PSN" in e for e in errors), errors)
+
+    def test_ack_psn_must_match_acknowledged_request_psn(self):
+        evidence = self.copy_evidence()
+        make_asymmetric_fixture(evidence)
+
+        def corrupt_send_ack_psn(**kwargs):
+            if kwargs["opcode"] == 17 and kwargs["src"] == HOSTB_DATA_IP:
+                return {"psn": kwargs["psn"] + 1}
+            return {}
+
+        mutate_roce_pcap(evidence / "send-recv.pcap", corrupt_send_ack_psn)
+        errors = self.validate(evidence)
+        self.assertTrue(any("SEND/RECEIVE ACK: acknowledgement PSN" in e for e in errors), errors)
 
 
 class ChecksumCase(unittest.TestCase):
