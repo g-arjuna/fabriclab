@@ -13,7 +13,7 @@ concurrency:
 jobs:
   web:
     name: Web build, audit, and public smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: apps/web
@@ -75,7 +75,7 @@ jobs:
 
   rdma-evidence:
     name: RDMA validator and evidence regression
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
