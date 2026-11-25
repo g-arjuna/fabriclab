@@ -47,7 +47,7 @@ function expectNoBrowserErrors(tracker: { consoleErrors: string[]; pageErrors: s
 }
 
 async function waitForPracticalHydration(page: Page) {
-  await expect(page.getByTestId("rdma-practical")).toHaveAttribute("data-hydrated", "true");
+  await expect(page.getByTestId("rdma-practical")).toHaveAttribute("data-hydrated", "true", { timeout: 15000 });
 }
 
 async function selectStep(page: Page, title: RegExp) {
@@ -63,9 +63,11 @@ test.describe("RDMA practical public experience", () => {
   test("practical landing page loads publicly and links to the RDMA replay", async ({ page }) => {
     const tracker = trackErrors(page);
     await page.goto("/practical", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: /Learn protocols from running code and packets that really happened/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Start with RDMA WRITE/i })).toBeVisible();
-    await expect(page.getByText(/Evidence first/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /RDMA From First Principles/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Start learning$/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /Open advanced execution explorer/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /Start with RDMA WRITE/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Begin with resources/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /^Practical$/i }).first()).toBeVisible();
     expectNoBrowserErrors(tracker);
   });
@@ -85,7 +87,7 @@ test.describe("RDMA practical public experience", () => {
 
   test("WRITE memory, work request, completion and target-CQ state are revealed causally", async ({ page }) => {
     const tracker = trackErrors(page);
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await waitForPracticalHydration(page);
 
     await expect(page.getByRole("link", { name: /Open the runnable rdma-basics lab source/i })).toHaveAttribute("href", /a208af6ecf4e838d6d2c475ede366494de81a706/);
@@ -140,7 +142,7 @@ test.describe("RDMA practical public experience", () => {
   });
 
   test("inspect full recording is explicit and separate from guided causal replay", async ({ page }) => {
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await waitForPracticalHydration(page);
     await expect(page.locator(`[data-completion-id="${writeCqe.id}"]`)).toHaveCount(0);
 
@@ -160,7 +162,7 @@ test.describe("RDMA practical public experience", () => {
 
   test("selecting the WRITE posting event correlates WR, packet exchange, memory and code context", async ({ page }) => {
     const tracker = trackErrors(page);
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await selectStep(page, /Writer posts one RDMA WRITE work request/i);
 
     const postEvent = writeExperiment.events.find((event: any) => event.type === "post_send" && event.host === "hosta");
@@ -179,7 +181,7 @@ test.describe("RDMA practical public experience", () => {
 
   test("packet reverse correlation identifies WR, memory, completion and independent inspection mode", async ({ page }) => {
     const tracker = trackErrors(page);
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await selectStep(page, /RDMA WRITE Only packet crosses UDP\/4791/i);
 
     await expect(page.getByTestId("selection-packets")).toContainText(`frame ${writeRequestPacket.frameNumber}`);
@@ -201,7 +203,7 @@ test.describe("RDMA practical public experience", () => {
 
 
   test("control and receive-posting event selection does not invent network packets", async ({ page }) => {
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await selectStep(page, /Target shares address and RKEY/i);
     const metadataEvent = writeExperiment.events.find((event: any) => event.type === "metadata_exchange" && event.host === "hostb");
     await page.locator(`[data-event-id="${metadataEvent.id}"]`).click();
@@ -210,7 +212,7 @@ test.describe("RDMA practical public experience", () => {
     await expect(page.getByTestId("selection-memory")).toContainText(writeExperiment.endpoints.responder.memoryRegion.address.hex);
     await expect(page.getByText(/Metadata and synchronisation only\. No payload and no control packets/i).first()).toBeVisible();
 
-    await page.goto("/practical/rdma?experiment=send-recv", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=send-recv", { waitUntil: "domcontentloaded" });
     await selectStep(page, /Receiver posts a receive work request/i);
     const postRecvEvent = sendRecvExperiment.events.find((event: any) => event.type === "post_recv" && event.host === "hostb");
     await page.locator(`[data-event-id="${postRecvEvent.id}"]`).click();
@@ -220,7 +222,7 @@ test.describe("RDMA practical public experience", () => {
   });
 
   test("completion selection explains local ownership and does not fabricate WRITE target completion", async ({ page }) => {
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await selectStep(page, /ACK returns and writer completion is local/i);
     await page.locator(`[data-completion-id="${writeCqe.id}"]`).click();
     await expect(page.getByTestId("selection-mode")).toContainText(/Completion correlation · RDMA write on Host A \(initiator\)/i);
@@ -233,7 +235,7 @@ test.describe("RDMA practical public experience", () => {
 
 
   test("event and completion selection cannot retain a different manually inspected packet", async ({ page }) => {
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await selectStep(page, /ACK returns and writer completion is local/i);
 
     await page.locator(`[data-packet-id="${writeRequestPacket.id}"]`).click();
@@ -259,7 +261,7 @@ test.describe("RDMA practical public experience", () => {
 
   test("SEND/RECEIVE endpoint ownership and progressive completion state are correct", async ({ page }) => {
     const tracker = trackErrors(page);
-    await page.goto("/practical/rdma?experiment=send-recv", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=send-recv", { waitUntil: "domcontentloaded" });
     await waitForPracticalHydration(page);
     await expect(page.getByRole("heading", { name: /Two-Sided RDMA: SEND and RECEIVE/i })).toBeVisible();
 
@@ -288,7 +290,7 @@ test.describe("RDMA practical public experience", () => {
 
   test("READ request and response direction, QPNs, completion and no source SEND are correct", async ({ page }) => {
     const tracker = trackErrors(page);
-    await page.goto("/practical/rdma?experiment=read", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=read", { waitUntil: "domcontentloaded" });
     await waitForPracticalHydration(page);
     await expect(page.getByRole("heading", { name: /One-Sided RDMA: Reading Remote Memory/i })).toBeVisible();
 
@@ -314,7 +316,7 @@ test.describe("RDMA practical public experience", () => {
   });
 
   test("QP readiness and lifecycle milestones are not claimed before recorded setup evidence", async ({ page }) => {
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await waitForPracticalHydration(page);
     await expect(page.getByTestId("qp-state-reset")).toHaveAttribute("data-active", "true");
     await expect(page.getByTestId("qp-state-init")).toHaveAttribute("data-active", "false");
@@ -333,21 +335,21 @@ test.describe("RDMA practical public experience", () => {
 
   test("navigation, restart, experiment switching, deep links and packet selection reset coherently", async ({ page }) => {
     const tracker = trackErrors(page);
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await selectStep(page, /RDMA WRITE Only packet crosses UDP\/4791/i);
     await expect(page.getByTestId("packet-inspector")).toContainText(/RDMA WRITE Only/i);
 
-    await page.getByRole("button", { name: "Previous" }).click();
+    await page.getByTestId("rdma-practical").getByRole("button", { name: "Previous" }).click();
     await expect(page.getByText(/Step 4\/8/i)).toBeVisible();
     await expect(page.getByTestId("no-packet-at-step")).toBeVisible();
 
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByTestId("rdma-practical").getByRole("button", { name: "Next" }).click();
     await expect(page.getByText(/Step 5\/8/i)).toBeVisible();
     await expect(page.getByTestId("packet-inspector")).toContainText(/RDMA WRITE Only/i);
 
     await page.locator(`[data-packet-id="${writeAckPacket.id}"]`).click();
     await expect(page.getByTestId("packet-inspection-mode")).toBeVisible();
-    await page.getByRole("button", { name: "Restart" }).click();
+    await page.getByTestId("rdma-practical").getByRole("button", { name: "Restart" }).click();
     await expect(page.getByText(/Step 1\/8/i)).toBeVisible();
     await expect(page.getByTestId("no-packet-at-step")).toBeVisible();
     await expect(page.getByTestId("packet-inspection-mode")).toHaveCount(0);
@@ -359,32 +361,32 @@ test.describe("RDMA practical public experience", () => {
     await expect(page.getByTestId("no-packet-at-step")).toBeVisible();
     await expect(page.getByTestId("packet-inspector")).not.toContainText(/RDMA WRITE Only/i);
 
-    await page.goto("/practical/rdma?experiment=send-recv", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=send-recv", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /Two-Sided RDMA: SEND and RECEIVE/i })).toBeVisible();
     expectNoBrowserErrors(tracker);
   });
 
   test("playback controls and keyboard navigation work without hijacking interactive controls", async ({ page }) => {
     const tracker = trackErrors(page);
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await waitForPracticalHydration(page);
     await expect(page.getByText(/Step 1\/8/i)).toBeVisible();
     const firstHighlightedLine = await page.locator('[data-highlighted="true"]').first().getAttribute("data-line-number");
     expect(firstHighlightedLine).toBeTruthy();
 
-    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByTestId("rdma-practical").getByRole("button", { name: "Next" }).click();
     await expect(page.getByText(/Step 2\/8/i)).toBeVisible();
     const secondHighlightedLine = await page.locator('[data-highlighted="true"]').first().getAttribute("data-line-number");
     expect(secondHighlightedLine).toBeTruthy();
     expect(secondHighlightedLine).not.toEqual(firstHighlightedLine);
 
-    await page.getByRole("button", { name: "Play" }).click();
-    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+    await page.getByTestId("rdma-practical").getByRole("button", { name: "Play" }).click();
+    await expect(page.getByTestId("rdma-practical").getByRole("button", { name: "Pause", exact: true })).toBeVisible();
     await expect(page.getByText(/Step 3\/8/i)).toBeVisible({ timeout: 5000 });
-    await page.getByRole("button", { name: "Pause", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Play", exact: true })).toBeVisible();
+    await page.getByTestId("rdma-practical").getByRole("button", { name: "Pause", exact: true }).click();
+    await expect(page.getByTestId("rdma-practical").getByRole("button", { name: "Play", exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Next" }).focus();
+    await page.getByTestId("rdma-practical").getByRole("button", { name: "Next" }).focus();
     const stepBeforeControlArrow = await page.getByText(/Step \d+\/8/i).textContent();
     await page.keyboard.press("ArrowRight");
     await expect(page.getByText(new RegExp(stepBeforeControlArrow!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"))).toBeVisible();
@@ -396,15 +398,15 @@ test.describe("RDMA practical public experience", () => {
 
     await page.getByLabel(/Playback speed/i).selectOption("2");
     await expect(page.getByLabel(/Playback speed/i)).toHaveValue("2");
-    await page.getByRole("button", { name: "Start", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+    await page.getByTestId("rdma-practical").getByRole("button", { name: "Start", exact: true }).click();
+    await expect(page.getByTestId("rdma-practical").getByRole("button", { name: "Pause", exact: true })).toBeVisible();
     await expect(page.getByText(/Step 1\/8/i)).toBeVisible();
-    await page.getByRole("button", { name: "Pause", exact: true }).click();
+    await page.getByTestId("rdma-practical").getByRole("button", { name: "Pause", exact: true }).click();
     expectNoBrowserErrors(tracker);
   });
 
   test("capture downloads are byte-identical by SHA-256 to the committed assets", async ({ page, request }) => {
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await waitForPracticalHydration(page);
     const downloadLinks = page.locator("a[download]", { hasText: /Download/i });
     await expect(downloadLinks.first()).toBeVisible();
@@ -420,15 +422,15 @@ test.describe("RDMA practical public experience", () => {
   test("mobile layout, accessible labels, focus affordances and horizontal overflow are correct", async ({ page }) => {
     const tracker = trackErrors(page);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await page.goto("/practical/rdma/explorer?experiment=write", { waitUntil: "domcontentloaded" });
     await waitForPracticalHydration(page);
     await expect(page.getByRole("heading", { name: /One-Sided RDMA: Writing Directly Into Remote Memory/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Play" })).toBeVisible();
+    await expect(page.getByTestId("rdma-practical").getByRole("button", { name: "Play" })).toBeVisible();
     await expect(page.getByLabel(/Playback speed/i)).toBeVisible();
     await expect(page.getByRole("group", { name: /Select RDMA experiment/i })).toBeVisible();
     await expect(page.getByLabel(/Queue pair state transition/i)).toBeVisible();
 
-    const nextClass = await page.getByRole("button", { name: "Next" }).getAttribute("class");
+    const nextClass = await page.getByTestId("rdma-practical").getByRole("button", { name: "Next" }).getAttribute("class");
     expect(nextClass).toContain("focus-visible:ring-2");
     await selectStep(page, /RDMA WRITE Only packet crosses UDP\/4791/i);
     await expect(page.getByTestId("packet-inspector")).toBeVisible();

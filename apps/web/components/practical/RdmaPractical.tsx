@@ -1401,7 +1401,8 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
 
   function selectExperiment(id: Experiment["id"]) {
     setExperimentId(id);
-    window.history.replaceState(null, "", `/practical/rdma?experiment=${encodeURIComponent(id)}`);
+    const basePath = window.location.pathname.startsWith("/practical/rdma/explorer") ? "/practical/rdma/explorer" : "/practical/rdma";
+    window.history.replaceState(null, "", `${basePath}?experiment=${encodeURIComponent(id)}`);
   }
 
   function selectPacket(id: string) {
