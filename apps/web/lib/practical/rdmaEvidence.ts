@@ -238,6 +238,11 @@ export type RdmaEvidenceBundle = {
     evidenceDigest: string;
     environmentDigest: string;
     gitCommit: string;
+    executionSourceCheckout: string;
+    sourceSnapshot: {
+      relationship: "matches-execution-checkout" | "differs-from-execution-checkout" | "unverified";
+      method: string;
+    };
     generatedAt: string;
     referenceRunStartedAt: string;
     referenceRunFinishedAt: string;

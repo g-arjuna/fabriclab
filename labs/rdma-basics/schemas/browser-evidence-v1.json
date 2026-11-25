@@ -308,11 +308,21 @@
     "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["evidenceDigest", "environmentDigest", "gitCommit", "generatedAt", "referenceRunStartedAt", "referenceRunFinishedAt", "exporter"],
+      "required": ["evidenceDigest", "environmentDigest", "gitCommit", "executionSourceCheckout", "sourceSnapshot", "generatedAt", "referenceRunStartedAt", "referenceRunFinishedAt", "exporter"],
       "properties": {
         "evidenceDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "environmentDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "gitCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "executionSourceCheckout": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "sourceSnapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["relationship", "method"],
+          "properties": {
+            "relationship": {"enum": ["matches-execution-checkout", "differs-from-execution-checkout", "unverified"]},
+            "method": {"type": "string"}
+          }
+        },
         "generatedAt": {"type": "string"},
         "referenceRunStartedAt": {"type": "string"},
         "referenceRunFinishedAt": {"type": "string"},

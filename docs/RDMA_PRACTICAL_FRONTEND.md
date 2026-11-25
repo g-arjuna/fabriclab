@@ -66,7 +66,7 @@ Top-level fields include:
 
 - `schemaVersion`
 - `source` metadata and validation status
-- `provenance`, including evidence and environment digests plus generation metadata
+- `provenance`, including evidence and environment digests, the execution source checkout, source-snapshot relationship and generation metadata
 - `clockModel`
 - `environment`
 - `hosts`
@@ -152,7 +152,7 @@ Primary files:
 - `apps/web/public/practical/rdma/*.pcap` — downloadable reference captures.
 - `apps/web/components/layout/PublicTopNav.tsx` — public navigation integration.
 
-The client component coordinates:
+The client component coordinates a central evidence-selection model rather than independent per-panel selection flags:
 
 - experiment selection and deep-link initialisation
 - start/previous/next/play/pause/restart controls
@@ -160,12 +160,18 @@ The client component coordinates:
 - direct step selection
 - source snippets and line highlighting
 - host/endpoint topology
-- endpoint resource state
-- event/packet/completion selection
+- progressive endpoint resource, work-request and completion state
+- application-event, packet and completion correlation
 - packet inspector protocol tree and capture-derived raw bytes
-- memory before/after panels
+- progressive memory before/after panels
 - control-plane versus data-plane emphasis
 - evidence provenance and pcap downloads
+
+In guided mode, memory, work requests and CQEs are shown only after their causal milestone has been reached. The WRITE target buffer therefore starts in its recorded pre-transfer state, the post-transfer bytes appear at the memory-mutation step, and the writer-local CQE appears only at the completion step. Packet details for steps without a packet are hidden rather than allowing a stale future packet to imply earlier presence. An explicit **Inspect full recording** mode is available for advanced users; it is labelled as independent recorded-artifact inspection and is visually distinct from the causal walkthrough.
+
+Selecting a supported application event highlights the corresponding work request, packet or packet exchange, memory regions and source context. Selecting a completion explains its local host ownership and links it through WR-ID correlation to the request and relevant packet exchange. Selecting a packet exposes reverse correlations to the work request, endpoint direction, memory metadata and local completion where evidence supports them. Control-channel events highlight metadata/synchronisation only; no TCP control packet is invented and control messages are not represented as RDMA payload carriers.
+
+Queue-pair state distinguishes resource creation, the source-illustrated RESET → INIT → RTR → RTS programming path and the recorded `qp_ready` milestone proving RTS. Intermediate states are explanatory programming transitions, not independently timestamped measurements.
 
 Panels use stable test ids for regression tests. Mobile layouts stack the workspace and prevent the source panel from forcing page-level horizontal scrolling.
 
@@ -180,9 +186,10 @@ For ordinary RDMA WRITE the UI explicitly teaches that the target does not post 
 
 ## Regenerating evidence
 
-From the repository root:
+From the repository root, first install the pinned exporter validation dependency and then run the exporter:
 
 ```bash
+python3 -m pip install -r labs/rdma-basics/requirements-export.txt
 python3 labs/rdma-basics/scripts/export_browser_evidence.py \
   --output apps/web/public/practical/rdma/reference-evidence.json
 ```
@@ -194,15 +201,20 @@ The exporter:
 3. parses `hosta-events.jsonl` and `hostb-events.jsonl`;
 4. decodes the three committed pcaps with `tshark`;
 5. verifies verification status for the four experiments;
-6. writes deterministic JSON and copies the pcaps beside it.
+6. validates the generated bundle against the versioned JSON Schema;
+7. validates walkthrough source-reference bounds and lightweight semantic anchors against the embedded Python snapshots;
+8. writes deterministic JSON and copies the pcaps beside it.
 
-The command fails with a clear error if evidence is missing, malformed, unverified or checksum-inconsistent. Do not hand-edit the generated JSON.
+Schema validation is mandatory. If `jsonschema` is missing, export fails explicitly with instructions to install `labs/rdma-basics/requirements-export.txt`; validation is never silently skipped. The command also fails with a clear error if evidence is missing, malformed, unverified, checksum-inconsistent, structurally invalid or contains stale source references. Do not hand-edit the generated JSON.
+
+The bundle records the Git checkout under which the VM experiment executed as the **execution source checkout**. The embedded Python snapshots are input source snapshots, not automatically identical merely because they have the same paths. At export time the exporter uses a best-effort Git comparison to record whether they match the execution checkout, differ from it, or remain unverified; the UI displays that relationship rather than inventing a generated-artifact commit. The evidence digest identifies the validated reference evidence manifest bytes, not the derived JSON or the current frontend commit.
 
 ## Validation commands
 
 Evidence exporter and Python regression suite:
 
 ```bash
+python3 -m pip install -r labs/rdma-basics/requirements-export.txt
 python3 -m unittest discover -s labs/rdma-basics/tests -v
 python3 labs/rdma-basics/scripts/export_browser_evidence.py --output /tmp/reference-evidence-check.json --no-copy-assets
 cmp /tmp/reference-evidence-check.json apps/web/public/practical/rdma/reference-evidence.json
@@ -228,7 +240,20 @@ npm start
 npx playwright test tests/rdma.practical.smoke.spec.ts
 ```
 
-The Playwright suite covers public access, bundle availability, experiment switching and deep links, playback controls, speed selection, code highlighting, packet-to-completion correlation, memory before/after, ordinary WRITE target-CQE semantics, capture downloads, mobile overflow and browser console/hydration errors.
+The Playwright suite covers public access, bundle availability and provenance, progressive WRITE memory/WR/CQE state, full-recording inspection mode, application-event selection, reverse packet correlation, completion ownership, SEND/RECEIVE host ownership, READ direction and response semantics, QP readiness, backward navigation/restart/experiment switching/deep links, playback and keyboard interaction without control hijacking, SHA-256 capture integrity, mobile overflow, accessibility labels/focus affordances and browser console/hydration errors.
+
+
+## Intended CI integration after PR #9
+
+PR #9 introduces `.github/workflows/web-quality.yml`. While that dependency branch remains unmerged, PR #10 intentionally does not copy or duplicate the workflow into a conflicting implementation. Once PR #9 is integrated into `preview`, the existing workflow should be amended in this frontend branch to:
+
+1. install `labs/rdma-basics/requirements-export.txt` before evidence regression tests;
+2. run the exporter with `--no-copy-assets` and byte-compare the result with `apps/web/public/practical/rdma/reference-evidence.json`;
+3. keep the existing evidence validator and SHA256SUMS checks mandatory;
+4. start the production server and run `tests/rdma.practical.smoke.spec.ts` in addition to the public smoke suite;
+5. retain the patched Next.js dependency baseline and audit gates.
+
+These checks require no KVM, privileged RDMA device, Docker lab execution or production services.
 
 ## Source files
 
@@ -246,6 +271,7 @@ Pipeline and tests:
 - `labs/rdma-basics/scripts/export_browser_evidence.py`
 - `labs/rdma-basics/scripts/validate_evidence.py`
 - `labs/rdma-basics/schemas/browser-evidence-v1.json`
+- `labs/rdma-basics/requirements-export.txt`
 - `labs/rdma-basics/tests/test_browser_evidence_export.py`
 - `apps/web/tests/rdma.practical.smoke.spec.ts`
 

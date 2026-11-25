@@ -4099,11 +4099,16 @@
   "provenance": {
     "environmentDigest": "6b524145e8858600c9f5d41fab0960bee4b4748e81939cc9e3d84e86e2a69292",
     "evidenceDigest": "c4feb017e809cb1e7ac4ceb8fc007adec72cd31a2a57018ccc227f715aa7bd9e",
+    "executionSourceCheckout": "a208af6ecf4e838d6d2c475ede366494de81a706",
     "exporter": "labs/rdma-basics/scripts/export_browser_evidence.py",
     "generatedAt": "2026-11-25T09:53:24Z",
     "gitCommit": "a208af6ecf4e838d6d2c475ede366494de81a706",
     "referenceRunFinishedAt": "2026-11-25T09:52:35Z",
-    "referenceRunStartedAt": "2026-11-25T09:52:09Z"
+    "referenceRunStartedAt": "2026-11-25T09:52:09Z",
+    "sourceSnapshot": {
+      "method": "git diff <execution checkout> -- labs/rdma-basics/python",
+      "relationship": "matches-execution-checkout"
+    }
   },
   "schemaVersion": 1,
   "source": {

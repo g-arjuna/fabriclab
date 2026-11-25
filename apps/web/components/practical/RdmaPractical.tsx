@@ -8,6 +8,7 @@ import {
   exact,
   formatUtcEpoch,
   rdmaEvidence,
+  type Completion,
   type EvidenceEvent,
   type Experiment,
   type MemoryRegion,
@@ -218,10 +219,12 @@ function TopologyPanel({
   experiment,
   step,
   selectedPacket,
+  selectedHost,
 }: {
   experiment: Experiment;
   step: WalkthroughStep;
   selectedPacket: PacketRecord | null;
+  selectedHost: string | null;
 }) {
   const dataActive = step.plane === "data" || selectedPacket !== null;
   const controlActive = step.plane === "control";
@@ -231,7 +234,7 @@ function TopologyPanel({
 
   function endpointCard(side: "initiator" | "responder") {
     const endpoint = side === "initiator" ? initiator : responder;
-    const focused = step.focusHost === endpoint.host || step.focusHost === "both";
+    const focused = step.focusHost === endpoint.host || step.focusHost === "both" || selectedHost === endpoint.host;
     return (
       <div className={cx(
         "min-w-0 flex-1 rounded-2xl border p-4 transition",
@@ -278,19 +281,24 @@ function TopologyPanel({
   );
 }
 
-function QpStateDiagram({ ready }: { ready: boolean }) {
+function QpStateDiagram({ created, ready }: { created: boolean; ready: boolean }) {
   const states = ["RESET", "INIT", "RTR", "RTS"];
   return (
     <div className="flex flex-wrap items-center gap-2" aria-label="Queue pair state transition reset to init to RTR to RTS">
       {states.map((state, index) => {
-        const active = ready || index === 0;
+        const active = ready || (created && index === 0);
         return (
           <div key={state} className="flex items-center gap-2">
-            <span className={cx(
-              "rounded-full border px-3 py-1.5 font-mono text-xs",
-              active ? "border-cyan-300/50 bg-cyan-400/10 text-cyan-100" : "border-white/10 bg-slate-950 text-slate-500",
-              state === "RTS" && ready && "border-emerald-300/60 bg-emerald-400/10 text-emerald-100",
-            )}>
+            <span
+              className={cx(
+                "rounded-full border px-3 py-1.5 font-mono text-xs",
+                active ? "border-cyan-300/50 bg-cyan-400/10 text-cyan-100" : "border-white/10 bg-slate-950 text-slate-500",
+                state === "RTS" && ready && "border-emerald-300/60 bg-emerald-400/10 text-emerald-100",
+              )}
+              data-qp-state={state}
+              data-active={active ? "true" : "false"}
+              data-testid={`qp-state-${state.toLowerCase()}`}
+            >
               {state}
             </span>
             {index < states.length - 1 ? <span className="text-slate-600">→</span> : null}
@@ -301,32 +309,64 @@ function QpStateDiagram({ ready }: { ready: boolean }) {
   );
 }
 
+function LifecycleMilestone({ label, reached }: { label: string; reached: boolean }) {
+  return (
+    <div className={cx("rounded-xl border px-2.5 py-2 text-xs", reached ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100" : "border-white/10 bg-slate-950/60 text-slate-500")}>
+      <span className="font-mono">{reached ? "reached" : "not reached"}</span> · {label}
+    </div>
+  );
+}
+
+
 function ResourcePanel({
   experiment,
   step,
   stepIndex,
   highlightedWrIds,
   highlightedCompletionIds,
+  visibleWorkRequestIds,
+  visibleCompletionIds,
+  inspectFullRecording,
+  targetCqeObservationReached,
+  selectedCompletionId,
+  onCompletion,
 }: {
   experiment: Experiment;
   step: WalkthroughStep;
   stepIndex: number;
   highlightedWrIds: Set<string>;
   highlightedCompletionIds: Set<string>;
+  visibleWorkRequestIds: Set<string>;
+  visibleCompletionIds: Set<string>;
+  inspectFullRecording: boolean;
+  targetCqeObservationReached: boolean;
+  selectedCompletionId: string | null;
+  onCompletion: (id: string) => void;
 }) {
+  const reachedSteps = experiment.walkthrough.slice(0, stepIndex + 1);
+  const resourceEventIds = new Set([experiment.endpoints.initiator.resourceEventId, experiment.endpoints.responder.resourceEventId]);
   const qpReadyIds = new Set([experiment.endpoints.initiator.qpReadyEventId, experiment.endpoints.responder.qpReadyEventId]);
-  const qpReadySeen = experiment.walkthrough.slice(0, stepIndex + 1).some((item) => item.eventIds.some((id) => qpReadyIds.has(id)));
+  const resourcesCreated = reachedSteps.some((item) => item.eventIds.some((id) => resourceEventIds.has(id)));
+  const qpReadySeen = reachedSteps.some((item) => item.eventIds.some((id) => qpReadyIds.has(id)));
   const writeExperiment = experiment.id === "write";
   const targetCompletions = experiment.completions.filter((completion) => completion.host === experiment.endpoints.responder.host);
+  const visibleWorkRequests = experiment.workRequests.filter((request) => inspectFullRecording || visibleWorkRequestIds.has(request.id));
+  const visibleCompletions = experiment.completions.filter((completion) => inspectFullRecording || visibleCompletionIds.has(completion.id));
+  const workPosted = visibleWorkRequests.length > 0;
 
   return (
-    <Panel title="Verbs resources and completions" eyebrow="Recorded endpoint state">
+    <Panel title="Verbs resources and completions" eyebrow={inspectFullRecording ? "Full recorded evidence" : "Progressive causal endpoint state"}>
       <div className="space-y-5">
         <div>
           <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Reliable Connected QP state</div>
-          <QpStateDiagram ready={qpReadySeen || experiment.id !== "resources"} />
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            The recorded end state is RTS. INIT/RTR/RTS are distinct programming steps in the helper source; this is not a packet exchange.
+          <QpStateDiagram created={resourcesCreated} ready={qpReadySeen} />
+          <div className="mt-3 grid gap-2 sm:grid-cols-3" data-testid="qp-lifecycle">
+            <LifecycleMilestone label="resources created" reached={resourcesCreated} />
+            <LifecycleMilestone label="QP ready at RTS" reached={qpReadySeen} />
+            <LifecycleMilestone label="data WR posted" reached={workPosted} />
+          </div>
+          <p className="mt-2 text-xs leading-5 text-slate-500" data-testid="qp-state-explanation">
+            RESET is shown only after resource creation. The INIT/RTR/RTS programming path is illustrated from the helper source; the independently recorded readiness milestone is the qp_ready event proving the RTS end state. Intermediate states are not claimed as separately timestamped network observations.
           </p>
         </div>
 
@@ -352,9 +392,9 @@ function ResourcePanel({
 
         <div>
           <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Work requests</div>
-          {experiment.workRequests.length ? (
+          {visibleWorkRequests.length ? (
             <div className="grid gap-2">
-              {experiment.workRequests.map((request) => (
+              {visibleWorkRequests.map((request) => (
                 <div
                   key={request.id}
                   className={cx(
@@ -377,8 +417,8 @@ function ResourcePanel({
               ))}
             </div>
           ) : (
-            <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-sm text-slate-400">
-              Experiment A posts no data work request. Resource setup is the entire demonstration.
+            <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-sm text-slate-400" data-testid="no-work-requests-reached">
+              {experiment.workRequests.length ? "No data work request has been reached at this point in the guided causal replay." : "Experiment A posts no data work request. Resource setup is the entire demonstration."}
             </p>
           )}
           <p className="mt-2 text-xs leading-5 text-slate-500">
@@ -388,14 +428,16 @@ function ResourcePanel({
 
         <div>
           <div className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Completion queue entries</div>
-          {experiment.completions.length ? (
+          {visibleCompletions.length ? (
             <div className="grid gap-2">
-              {experiment.completions.map((completion) => (
-                <div
+              {visibleCompletions.map((completion) => (
+                <button
                   key={completion.id}
+                  type="button"
+                  onClick={() => onCompletion(completion.id)}
                   className={cx(
-                    "rounded-2xl border p-3",
-                    highlightedCompletionIds.has(completion.id) ? "border-lime-300/60 bg-lime-400/10" : "border-white/10 bg-slate-950/60",
+                    "rounded-2xl border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-300",
+                    highlightedCompletionIds.has(completion.id) || selectedCompletionId === completion.id ? "border-lime-300/60 bg-lime-400/10" : "border-white/10 bg-slate-950/60 hover:border-white/25",
                   )}
                   data-completion-id={completion.id}
                 >
@@ -404,19 +446,27 @@ function ResourcePanel({
                     <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-xs text-emerald-200">{completion.status}</span>
                     <span className="text-xs text-slate-500">{hostLabel(completion.host)} · wr_id {exact(completion.wrId)}</span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           ) : (
-            <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-sm text-slate-400">No completion records: no work request was posted.</p>
+            <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-sm text-slate-400" data-testid="no-completions-reached">
+              {experiment.completions.length ? "No completion has been reached at this point in the guided causal replay." : "No completion records: no work request was posted."}
+            </p>
           )}
           {writeExperiment ? (
-            <div className="mt-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-3" data-testid="write-no-target-cqe">
-              <div className="text-sm font-semibold text-emerald-100">Ordinary WRITE target CQ: empty</div>
-              <p className="mt-1 text-xs leading-5 text-emerald-100/80">
-                Host B posted no receive WR, consumed no receive WR, and observed {targetCompletions.length} target CQEs. Host A can still receive its own signalled completion.
+            targetCqeObservationReached ? (
+              <div className="mt-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-3" data-testid="write-no-target-cqe">
+                <div className="text-sm font-semibold text-emerald-100">Ordinary WRITE target CQ: empty</div>
+                <p className="mt-1 text-xs leading-5 text-emerald-100/80">
+                  Host B posted no receive WR, consumed no receive WR, and observed {targetCompletions.length} target CQEs. Host A can still receive its own signalled completion.
+                </p>
+              </div>
+            ) : (
+              <p className="mt-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-xs leading-5 text-slate-500" data-testid="write-target-cqe-pending">
+                The recorded target-CQ observation is revealed at the final verification step; it is not treated as known before the application explicitly checks it.
               </p>
-            </div>
+            )
           ) : null}
         </div>
       </div>
@@ -424,19 +474,22 @@ function ResourcePanel({
   );
 }
 
+
 function CodePanel({
   experiment,
   step,
+  codeRefs,
   sources,
 }: {
   experiment: Experiment;
   step: WalkthroughStep;
+  codeRefs: WalkthroughStep["codeRefs"];
   sources: PythonSource[];
 }) {
   const experimentPath = `python/${experiment.script}`;
   const relevantPaths = Array.from(new Set([experimentPath, "python/rdma_common.py"]));
   const relevantSources = relevantPaths.map((path) => sources.find((source) => source.path === path)).filter((source): source is PythonSource => Boolean(source));
-  const firstRefPath = step.codeRefs[0]?.sourcePath;
+  const firstRefPath = codeRefs[0]?.sourcePath;
   const [selectedPath, setSelectedPath] = useState(firstRefPath ?? experimentPath);
 
   useEffect(() => {
@@ -444,7 +497,7 @@ function CodePanel({
   }, [firstRefPath, experimentPath]);
 
   const source = relevantSources.find((item) => item.path === selectedPath) ?? relevantSources[0];
-  const activeRefs = step.codeRefs.filter((reference) => reference.sourcePath === source?.path);
+  const activeRefs = codeRefs.filter((reference) => reference.sourcePath === source?.path);
 
   if (!source) {
     return <Panel title="Python source" eyebrow="Pyverbs"><p className="text-sm text-slate-400">Source snapshot unavailable.</p></Panel>;
@@ -696,46 +749,60 @@ function MemoryPanel({
   experiment,
   step,
   highlightedMemoryIds,
+  currentMemoryState,
+  inspectFullRecording,
 }: {
   experiment: Experiment;
   step: WalkthroughStep;
   highlightedMemoryIds: Set<string>;
+  currentMemoryState: "before" | "after";
+  inspectFullRecording: boolean;
 }) {
   const regions = experiment.memoryRegions.filter((region) => highlightedMemoryIds.has(region.id) || step.memoryRegionIds.includes(region.id));
   const displayRegions = regions.length ? regions : experiment.memoryRegions;
 
   return (
-    <Panel title="Registered memory" eyebrow="Recorded byte snapshots">
+    <Panel title="Registered memory" eyebrow={inspectFullRecording ? "Full recorded byte snapshots" : "Progressive causal byte snapshots"}>
       <div className="space-y-4">
         {displayRegions.map((region) => {
           const before = region.snapshots.find((snapshot) => snapshot.label === "before");
           const after = region.snapshots.find((snapshot) => snapshot.label !== "before");
-          const preferred = snapshotByPreference(region, step.memoryState === "before" ? "before" : step.memoryState === "after" ? "after" : "auto");
+          const showAfter = inspectFullRecording || currentMemoryState === "after";
           const highlighted = highlightedMemoryIds.has(region.id);
+          const writeTarget = experiment.id === "write" && region.host === "hostb";
           return (
             <article
               key={region.id}
               className={cx("rounded-2xl border p-3 transition", highlighted ? "border-emerald-300/50 bg-emerald-400/8" : "border-white/10 bg-slate-900/55")}
               data-memory-region-id={region.id}
+              data-memory-state={showAfter ? "after" : "before"}
             >
               <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold text-white">{hostLabel(region.host)} memory region</h3>
                   <p className="mt-1 font-mono text-xs text-slate-500">VA {exact(region.address)} · len {region.length} · LKEY {exact(region.lkey)} · RKEY {exact(region.rkey)}</p>
                 </div>
-                <span className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-400">
-                  showing {step.memoryState === "none" ? preferred?.label ?? "snapshot" : step.memoryState}
+                <span className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-slate-400" data-testid={writeTarget ? "write-memory-state-label" : undefined}>
+                  {inspectFullRecording ? "inspecting full recording" : `guided state: ${currentMemoryState}`}
                 </span>
               </div>
-              {before && after ? (
-                <div className="grid gap-3 xl:grid-cols-2">
-                  <MemoryBytes title="Before" hex={before.hex} testId={experiment.id === "write" && region.host === "hostb" ? "write-memory-before" : undefined} />
-                  <MemoryBytes title="After" hex={after.hex} compareHex={before.hex} testId={experiment.id === "write" && region.host === "hostb" ? "write-memory-after" : undefined} />
-                </div>
-              ) : (
-                <MemoryBytes title={preferred?.label ?? "Snapshot"} hex={preferred?.hex} />
-              )}
-              {after?.verification ? (
+              <div className="grid gap-3 xl:grid-cols-2">
+                {before ? (
+                  <MemoryBytes title="Before" hex={before.hex} testId={writeTarget ? "write-memory-before" : undefined} />
+                ) : (
+                  <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-slate-500">No pre-transfer byte snapshot was recorded for this region.</div>
+                )}
+                {after && showAfter ? (
+                  <MemoryBytes title="After" hex={after.hex} compareHex={before?.hex} testId={writeTarget ? "write-memory-after" : undefined} />
+                ) : after ? (
+                  <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-slate-500" data-testid={writeTarget ? "write-memory-after-pending" : undefined}>
+                    Recorded post-transfer bytes exist in the evidence but are not yet part of the reached causal state.
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-slate-500">No post-transfer byte snapshot recorded for this state.</div>
+                )}
+              </div>
+              {after?.verification && showAfter ? (
                 <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs leading-5 text-emerald-100">
                   Verification: {Object.entries(after.verification).map(([key, value]) => `${key}=${String(value)}`).join(" · ")}
                 </div>
@@ -747,6 +814,7 @@ function MemoryPanel({
     </Panel>
   );
 }
+
 
 function HexDump({ rawHex }: { rawHex: string }) {
   const bytes = bytesFromHex(rawHex);
@@ -779,6 +847,9 @@ function PacketInspector({
   highlightedWrIds,
   highlightedCompletionIds,
   highlightedMemoryIds,
+  currentStepPacketIds,
+  manualInspection,
+  inspectFullRecording,
 }: {
   experiment: Experiment;
   selectedPacket: PacketRecord | null;
@@ -786,6 +857,9 @@ function PacketInspector({
   highlightedWrIds: Set<string>;
   highlightedCompletionIds: Set<string>;
   highlightedMemoryIds: Set<string>;
+  currentStepPacketIds: string[];
+  manualInspection: boolean;
+  inspectFullRecording: boolean;
 }) {
   if (!experiment.packets.length) {
     return (
@@ -822,11 +896,21 @@ function PacketInspector({
               "rounded-full border px-3 py-1.5 font-mono text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300",
               selectedPacket?.id === packet.id ? "border-orange-300/70 bg-orange-400/10 text-orange-100" : "border-white/10 bg-slate-950/70 text-slate-400 hover:text-slate-200",
             )}
+            data-packet-id={packet.id}
+            data-step-packet={currentStepPacketIds.includes(packet.id) ? "true" : "false"}
           >
-            frame {packet.frameNumber} · {packet.opcodeName}
+            frame {packet.frameNumber} · {packet.opcodeName}{currentStepPacketIds.includes(packet.id) ? "" : " · recorded"}
           </button>
         ))}
       </div>
+
+      {manualInspection || inspectFullRecording ? (
+        <div className="mb-4 rounded-2xl border border-orange-400/25 bg-orange-400/10 p-3 text-sm leading-6 text-orange-100" data-testid="packet-inspection-mode">
+          {inspectFullRecording
+            ? "Inspect full recording mode: packet tabs are independent recorded artifacts, not claims that every packet has occurred at the current causal step."
+            : "Independent recorded artifact inspection: this packet is outside the current guided step and is not being presented as already reached by the causal replay."}
+        </div>
+      ) : null}
 
       <div data-testid="packet-inspector">
       {selectedPacket ? (
@@ -906,7 +990,10 @@ function PacketInspector({
           </div>
         </div>
       ) : (
-        <p className="text-sm text-slate-400">Select a packet in the timeline or packet tabs.</p>
+        <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4" data-testid="no-packet-at-step">
+          <h3 className="font-semibold text-white">No packet is part of the current guided step.</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-400">Earlier packets are hidden rather than silently presented as future state. Use Inspect full recording mode or select a packet tab to inspect the recording independently.</p>
+        </div>
       )}
       </div>
     </Panel>
@@ -967,8 +1054,12 @@ function ProvenancePanel({ bundle }: { bundle: RdmaEvidenceBundle }) {
           <div className="grid gap-2 sm:grid-cols-2">
             <SmallStat label="Validation" value={bundle.source.validationStatus} tone="green" />
             <SmallStat label="Schema" value={`v${bundle.schemaVersion}`} />
-            <SmallStat label="Evidence commit" value={`${bundle.provenance.gitCommit.slice(0, 12)}…`} />
+            <SmallStat label="Execution source checkout" value={`${bundle.provenance.executionSourceCheckout.slice(0, 12)}…`} />
             <SmallStat label="Evidence digest" value={`${bundle.provenance.evidenceDigest.slice(0, 16)}…`} />
+            <SmallStat label="Source snapshot" value={bundle.provenance.sourceSnapshot.relationship} tone={bundle.provenance.sourceSnapshot.relationship === "matches-execution-checkout" ? "green" : "amber"} />
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-4 text-sm leading-6 text-slate-400">
+            <strong className="font-semibold text-slate-200">Provenance meaning:</strong> the execution source checkout is the commit recorded when the VM experiment ran. The evidence digest is the SHA-256 of the committed SHA256SUMS manifest bytes, so it identifies the validated artifact manifest rather than this generated JSON. The browser bundle is generated offline; embedded source snapshot relationship: {bundle.provenance.sourceSnapshot.relationship} ({bundle.provenance.sourceSnapshot.method}).
           </div>
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm leading-6 text-amber-100">
             <strong className="font-semibold">Clock limitation:</strong> {bundle.clockModel.explanation}
@@ -1011,6 +1102,244 @@ function ProvenancePanel({ bundle }: { bundle: RdmaEvidenceBundle }) {
   );
 }
 
+type RelationshipModel = {
+  eventIds: Set<string>;
+  packetIds: Set<string>;
+  workRequestIds: Set<string>;
+  completionIds: Set<string>;
+  memoryRegionIds: Set<string>;
+  codeRefs: WalkthroughStep["codeRefs"];
+  basis: string[];
+};
+
+function emptyRelationships(): RelationshipModel {
+  return {
+    eventIds: new Set(),
+    packetIds: new Set(),
+    workRequestIds: new Set(),
+    completionIds: new Set(),
+    memoryRegionIds: new Set(),
+    codeRefs: [],
+    basis: [],
+  };
+}
+
+function mergeRelationships(target: RelationshipModel, source: RelationshipModel) {
+  source.eventIds.forEach((id) => target.eventIds.add(id));
+  source.packetIds.forEach((id) => target.packetIds.add(id));
+  source.workRequestIds.forEach((id) => target.workRequestIds.add(id));
+  source.completionIds.forEach((id) => target.completionIds.add(id));
+  source.memoryRegionIds.forEach((id) => target.memoryRegionIds.add(id));
+  const codeKeys = new Set(target.codeRefs.map((reference) => `${reference.sourcePath}:${reference.startLine}:${reference.endLine}:${reference.label}`));
+  source.codeRefs.forEach((reference) => {
+    const key = `${reference.sourcePath}:${reference.startLine}:${reference.endLine}:${reference.label}`;
+    if (!codeKeys.has(key)) target.codeRefs.push(reference);
+  });
+  target.basis.push(...source.basis.filter((item) => !target.basis.includes(item)));
+}
+
+function relationshipsForStep(step: WalkthroughStep): RelationshipModel {
+  const relationships = emptyRelationships();
+  step.eventIds.forEach((id) => relationships.eventIds.add(id));
+  step.packetIds.forEach((id) => relationships.packetIds.add(id));
+  step.workRequestIds.forEach((id) => relationships.workRequestIds.add(id));
+  step.completionIds.forEach((id) => relationships.completionIds.add(id));
+  step.memoryRegionIds.forEach((id) => relationships.memoryRegionIds.add(id));
+  relationships.codeRefs.push(...step.codeRefs);
+  relationships.basis.push("guided causal walkthrough step");
+  return relationships;
+}
+
+function memoryIdForHost(experiment: Experiment, host: string) {
+  return experiment.memoryRegions.find((region) => region.host === host)?.id ?? null;
+}
+
+function addWorkRequestRelationship(experiment: Experiment, relationships: RelationshipModel, request: WorkRequest) {
+  relationships.workRequestIds.add(request.id);
+  relationships.eventIds.add(request.eventId);
+  const localMemory = memoryIdForHost(experiment, request.host);
+  if (localMemory) relationships.memoryRegionIds.add(localMemory);
+  if (request.remoteAddress) {
+    const remoteHost = experiment.endpoints.initiator.host === request.host ? experiment.endpoints.responder.host : experiment.endpoints.initiator.host;
+    const remoteMemory = memoryIdForHost(experiment, remoteHost);
+    if (remoteMemory) relationships.memoryRegionIds.add(remoteMemory);
+  }
+  experiment.packets.forEach((packet) => {
+    if (packet.correlations.workRequestIds.includes(request.id)) {
+      relationships.packetIds.add(packet.id);
+      packet.correlations.memoryRegionIds.forEach((id) => relationships.memoryRegionIds.add(id));
+      packet.correlations.completionIds.forEach((id) => relationships.completionIds.add(id));
+    }
+  });
+  const postingStep = experiment.walkthrough.find((item) => item.workRequestIds.includes(request.id) && item.codeRefs.length);
+  if (postingStep) relationships.codeRefs.push(...postingStep.codeRefs);
+  relationships.basis.push("validated work-request event and WR-ID correlation");
+}
+
+function addCompletionRelationship(experiment: Experiment, relationships: RelationshipModel, completion: Completion) {
+  relationships.completionIds.add(completion.id);
+  relationships.eventIds.add(completion.eventId);
+  const owningMemory = memoryIdForHost(experiment, completion.host);
+  if (owningMemory) relationships.memoryRegionIds.add(owningMemory);
+  const request = experiment.workRequests.find((item) => item.id === completion.workRequestId);
+  if (request) addWorkRequestRelationship(experiment, relationships, request);
+  experiment.packets.forEach((packet) => {
+    if (packet.correlations.completionIds.includes(completion.id) || (request && packet.correlations.workRequestIds.includes(request.id))) {
+      relationships.packetIds.add(packet.id);
+      packet.correlations.memoryRegionIds.forEach((id) => relationships.memoryRegionIds.add(id));
+    }
+  });
+  const completionStep = experiment.walkthrough.find((item) => item.completionIds.includes(completion.id) && item.codeRefs.length);
+  if (completionStep) relationships.codeRefs.push(...completionStep.codeRefs);
+  relationships.basis.push("validated WR-ID to CQE correlation; completion ownership remains local to the polling host");
+}
+
+function relationshipsForPacket(experiment: Experiment, packetId: string): RelationshipModel {
+  const relationships = emptyRelationships();
+  const packet = experiment.packets.find((item) => item.id === packetId);
+  if (!packet) return relationships;
+  relationships.packetIds.add(packet.id);
+  packet.correlations.eventIds.forEach((id) => relationships.eventIds.add(id));
+  packet.correlations.memoryRegionIds.forEach((id) => relationships.memoryRegionIds.add(id));
+  packet.correlations.workRequestIds.forEach((id) => {
+    relationships.workRequestIds.add(id);
+    const request = experiment.workRequests.find((item) => item.id === id);
+    if (request) {
+      relationships.eventIds.add(request.eventId);
+      addWorkRequestRelationship(experiment, relationships, request);
+    }
+  });
+  packet.correlations.completionIds.forEach((id) => {
+    relationships.completionIds.add(id);
+    const completion = experiment.completions.find((item) => item.id === id);
+    if (completion) relationships.eventIds.add(completion.eventId);
+  });
+  relationships.basis.push("validated packet QPN/PSN/RETH and correlation IDs");
+  return relationships;
+}
+
+function relationshipsForEvent(experiment: Experiment, eventId: string): RelationshipModel {
+  const relationships = emptyRelationships();
+  const event = experiment.events.find((item) => item.id === eventId);
+  if (!event) return relationships;
+  relationships.eventIds.add(event.id);
+  const containingStep = experiment.walkthrough.find((item) => item.eventIds.includes(eventId));
+  if (containingStep) mergeRelationships(relationships, relationshipsForStep(containingStep));
+  const request = experiment.workRequests.find((item) => item.eventId === eventId);
+  if (request) addWorkRequestRelationship(experiment, relationships, request);
+  const completion = experiment.completions.find((item) => item.eventId === eventId);
+  if (completion) addCompletionRelationship(experiment, relationships, completion);
+  if (["resources", "buffer_before", "buffer_after", "metadata_exchange"].includes(event.type)) {
+    const memory = memoryIdForHost(experiment, event.host);
+    if (memory) relationships.memoryRegionIds.add(memory);
+  }
+  relationships.basis.push("selected application event; packet relationships use validated IDs, while step-only context is causal");
+  return relationships;
+}
+
+function relationshipsForCompletion(experiment: Experiment, completionId: string): RelationshipModel {
+  const relationships = emptyRelationships();
+  const completion = experiment.completions.find((item) => item.id === completionId);
+  if (completion) addCompletionRelationship(experiment, relationships, completion);
+  return relationships;
+}
+
+function RelationshipList({ label, testId, children }: { label: string; testId: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="mt-1 text-sm text-slate-200" data-testid={testId}>{children}</div>
+    </div>
+  );
+}
+
+function SelectionExplanation({
+  experiment,
+  step,
+  selectedEventId,
+  selectedCompletionId,
+  selectedPacket,
+  manualPacketInspection,
+  inspectFullRecording,
+  relationships,
+  onClearSelection,
+  onToggleFullRecording,
+}: {
+  experiment: Experiment;
+  step: WalkthroughStep;
+  selectedEventId: string | null;
+  selectedCompletionId: string | null;
+  selectedPacket: PacketRecord | null;
+  manualPacketInspection: boolean;
+  inspectFullRecording: boolean;
+  relationships: RelationshipModel;
+  onClearSelection: () => void;
+  onToggleFullRecording: () => void;
+}) {
+  const selectedEvent = experiment.events.find((event) => event.id === selectedEventId) ?? null;
+  const selectedCompletion = experiment.completions.find((completion) => completion.id === selectedCompletionId) ?? null;
+  const workRequests = experiment.workRequests.filter((request) => relationships.workRequestIds.has(request.id));
+  const packets = experiment.packets.filter((packet) => relationships.packetIds.has(packet.id));
+  const completions = experiment.completions.filter((completion) => relationships.completionIds.has(completion.id));
+  const memories = experiment.memoryRegions.filter((region) => relationships.memoryRegionIds.has(region.id));
+  const mode = selectedEvent
+    ? `Application event correlation · ${selectedEvent.type} on ${hostLabel(selectedEvent.host)}`
+    : selectedCompletion
+      ? `Completion correlation · ${selectedCompletion.opcode} on ${hostLabel(selectedCompletion.host)} (${selectedCompletion.host === experiment.endpoints.initiator.host ? "initiator" : "responder"})`
+      : manualPacketInspection
+        ? "Independent recorded packet inspection"
+        : inspectFullRecording
+          ? "Inspect full recording mode"
+          : `Guided causal step · ${step.title}`;
+
+  return (
+    <Panel title="Evidence relationships" eyebrow="Selection follows validated identifiers" className="border-cyan-400/15">
+      <div className="space-y-4" data-testid="selection-explanation">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-cyan-100" data-testid="selection-mode">{mode}</div>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Direct relationships come from recorded event IDs, WR IDs, CQE IDs, QPN/PSN/RETH matches and validated packet direction. Protocol-causal context is labelled rather than presented as exact cross-host timing.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={onToggleFullRecording} aria-pressed={inspectFullRecording} className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100 transition hover:bg-cyan-400/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" data-testid="inspect-full-recording-toggle">
+              {inspectFullRecording ? "Return to guided causal view" : "Inspect full recording"}
+            </button>
+            {selectedEventId || selectedCompletionId || manualPacketInspection ? (
+              <button type="button" onClick={onClearSelection} className="rounded-full border border-white/10 bg-slate-950/70 px-3 py-1.5 text-xs text-slate-300 transition hover:border-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+                Clear selection
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <RelationshipList label="Work requests" testId="selection-work-requests">
+            {workRequests.length ? workRequests.map((request) => `${request.opcode} · ${hostLabel(request.host)} · wr_id ${exact(request.wrId)}`).join(" · ") : "none linked"}
+          </RelationshipList>
+          <RelationshipList label="Packets" testId="selection-packets">
+            {packets.length ? packets.map((packet) => `frame ${packet.frameNumber} ${packet.opcodeName}`).join(" · ") : "none supported by evidence at this point"}
+          </RelationshipList>
+          <RelationshipList label="Completions" testId="selection-completions">
+            {completions.length ? completions.map((completion) => `${completion.opcode} · ${hostLabel(completion.host)} · ${completion.status}`).join(" · ") : "none reached or linked"}
+          </RelationshipList>
+          <RelationshipList label="Memory" testId="selection-memory">
+            {memories.length ? memories.map((region) => `${hostLabel(region.host)} VA ${exact(region.address)}`).join(" · ") : "no direct memory snapshot"}
+          </RelationshipList>
+        </div>
+        {relationships.codeRefs.length ? (
+          <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/8 p-3 text-xs leading-5 text-cyan-100" data-testid="selection-code-context">
+            Source context: {relationships.codeRefs.map((reference) => `${reference.label} (${reference.sourcePath}:${reference.startLine}–${reference.endLine})`).join(" · ")}
+          </div>
+        ) : null}
+        <div className="text-xs leading-5 text-slate-500">
+          Basis: {Array.from(new Set(relationships.basis)).join(" · ")}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 export function RdmaPractical({ initialExperiment }: { initialExperiment?: string }) {
   const [experimentId, setExperimentId] = useState<Experiment["id"]>(() => validExperimentId(initialExperiment));
   const experiment = useMemo(() => rdmaEvidence.experiments.find((item) => item.id === experimentId) ?? rdmaEvidence.experiments.find((item) => item.id === "write")!, [experimentId]);
@@ -1019,6 +1348,9 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
   const [speed, setSpeed] = useState(1);
   const [selectedPacketId, setSelectedPacketId] = useState<string | null>(experiment.walkthrough[0]?.packetIds[0] ?? null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedCompletionId, setSelectedCompletionId] = useState<string | null>(null);
+  const [manualPacketInspection, setManualPacketInspection] = useState(false);
+  const [inspectFullRecording, setInspectFullRecording] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const lastInitialExperiment = useRef(initialExperiment);
   const step = experiment.walkthrough[stepIndex] ?? experiment.walkthrough[0];
@@ -1039,12 +1371,17 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
     setStepIndex(0);
     setPlaying(false);
     setSelectedEventId(null);
+    setSelectedCompletionId(null);
+    setManualPacketInspection(false);
+    setInspectFullRecording(false);
     setSelectedPacketId(experiment.walkthrough[0]?.packetIds[0] ?? null);
   }, [experiment]);
 
   useEffect(() => {
-    const firstPacket = step.packetIds[0];
-    if (firstPacket) setSelectedPacketId(firstPacket);
+    setSelectedEventId(null);
+    setSelectedCompletionId(null);
+    setManualPacketInspection(false);
+    setSelectedPacketId(step.packetIds[0] ?? null);
   }, [step]);
 
   useEffect(() => {
@@ -1057,6 +1394,13 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
     return () => window.clearTimeout(timeout);
   }, [playing, stepIndex, stepCount, speed]);
 
+  const resetGuidedSelection = (index: number) => {
+    setSelectedEventId(null);
+    setSelectedCompletionId(null);
+    setManualPacketInspection(false);
+    setSelectedPacketId(experiment.walkthrough[index]?.packetIds[0] ?? null);
+  };
+
   const goPrevious = () => {
     setPlaying(false);
     setStepIndex((current) => Math.max(0, current - 1));
@@ -1068,16 +1412,18 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
   const restart = () => {
     setPlaying(false);
     setStepIndex(0);
+    resetGuidedSelection(0);
   };
   const start = () => {
     setStepIndex(0);
+    resetGuidedSelection(0);
     setPlaying(true);
   };
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
-      if (target && (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable)) return;
+      if (target?.closest("button,a,input,select,textarea,summary,[contenteditable='true']")) return;
       if (event.key === "ArrowRight") {
         event.preventDefault();
         goNext();
@@ -1094,13 +1440,94 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
   });
 
   const selectedPacket = experiment.packets.find((packet) => packet.id === selectedPacketId) ?? null;
-  const highlightedWrIds = new Set([...(step.workRequestIds ?? []), ...(selectedPacket?.correlations.workRequestIds ?? [])]);
-  const highlightedCompletionIds = new Set([...(step.completionIds ?? []), ...(selectedPacket?.correlations.completionIds ?? [])]);
-  const highlightedMemoryIds = new Set([...(step.memoryRegionIds ?? []), ...(selectedPacket?.correlations.memoryRegionIds ?? [])]);
+  const selectedHost = useMemo(() => {
+    if (selectedCompletionId) return experiment.completions.find((completion) => completion.id === selectedCompletionId)?.host ?? null;
+    if (selectedEventId) return experiment.events.find((event) => event.id === selectedEventId)?.host ?? null;
+    return null;
+  }, [experiment, selectedCompletionId, selectedEventId]);
+
+  const reachedProgress = useMemo(() => {
+    const reachedSteps = experiment.walkthrough.slice(0, stepIndex + 1);
+    const eventIds = new Set<string>();
+    const workRequestIds = new Set<string>();
+    const completionIds = new Set<string>();
+    reachedSteps.forEach((item) => {
+      item.eventIds.forEach((id) => eventIds.add(id));
+      item.workRequestIds.forEach((id) => workRequestIds.add(id));
+      item.completionIds.forEach((id) => completionIds.add(id));
+    });
+    experiment.workRequests.forEach((request) => {
+      if (eventIds.has(request.eventId)) workRequestIds.add(request.id);
+    });
+    experiment.completions.forEach((completion) => {
+      if (eventIds.has(completion.eventId)) completionIds.add(completion.id);
+    });
+    return { eventIds, workRequestIds, completionIds };
+  }, [experiment, stepIndex]);
+
+  const currentMemoryState = useMemo<"before" | "after">(() => {
+    for (let index = stepIndex; index >= 0; index -= 1) {
+      const state = experiment.walkthrough[index]?.memoryState;
+      if (state === "before" || state === "after") return state;
+    }
+    return "before";
+  }, [experiment, stepIndex]);
+
+  const relationships = useMemo(() => {
+    const result = relationshipsForStep(step);
+    if (selectedPacketId) mergeRelationships(result, relationshipsForPacket(experiment, selectedPacketId));
+    if (selectedEventId) mergeRelationships(result, relationshipsForEvent(experiment, selectedEventId));
+    if (selectedCompletionId) mergeRelationships(result, relationshipsForCompletion(experiment, selectedCompletionId));
+    return result;
+  }, [experiment, step, selectedPacketId, selectedEventId, selectedCompletionId]);
+
+  const highlightedWrIds = relationships.workRequestIds;
+  const highlightedCompletionIds = relationships.completionIds;
+  const highlightedMemoryIds = relationships.memoryRegionIds;
+
+  const effectiveCodeRefs = useMemo(() => {
+    const eventStep = selectedEventId ? experiment.walkthrough.find((item) => item.eventIds.includes(selectedEventId) && item.codeRefs.length) : undefined;
+    if (eventStep?.codeRefs.length) return eventStep.codeRefs;
+    const completionEvent = selectedCompletionId ? experiment.completions.find((completion) => completion.id === selectedCompletionId)?.eventId : null;
+    const completionStep = completionEvent ? experiment.walkthrough.find((item) => item.eventIds.includes(completionEvent) && item.codeRefs.length) : undefined;
+    if (completionStep?.codeRefs.length) return completionStep.codeRefs;
+    if (step.codeRefs.length) return step.codeRefs;
+    const wrStep = experiment.walkthrough.find((item) => item.codeRefs.length && [...relationships.workRequestIds].some((id) => item.workRequestIds.includes(id)));
+    return wrStep?.codeRefs ?? step.codeRefs;
+  }, [experiment, step, selectedEventId, selectedCompletionId, relationships.workRequestIds]);
+
+  const targetCqeObservationReached = inspectFullRecording || experiment.events.some((event) => event.type === "target_cq_poll" && reachedProgress.eventIds.has(event.id));
 
   function selectExperiment(id: Experiment["id"]) {
     setExperimentId(id);
     window.history.replaceState(null, "", `/practical/rdma?experiment=${encodeURIComponent(id)}`);
+  }
+
+  function selectPacket(id: string) {
+    setSelectedEventId(null);
+    setSelectedCompletionId(null);
+    setSelectedPacketId(id);
+    setManualPacketInspection(inspectFullRecording || !step.packetIds.includes(id));
+  }
+
+  function selectEvent(id: string) {
+    setSelectedCompletionId(null);
+    setSelectedEventId(id);
+  }
+
+  function selectCompletion(id: string) {
+    setSelectedEventId(null);
+    setSelectedCompletionId(id);
+  }
+
+  function clearSelection() {
+    resetGuidedSelection(stepIndex);
+  }
+
+  function toggleFullRecording() {
+    const next = !inspectFullRecording;
+    setInspectFullRecording(next);
+    if (!next) resetGuidedSelection(stepIndex);
   }
 
   return (
@@ -1141,28 +1568,53 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
           onRestart={restart}
           onSpeed={setSpeed}
         />
-        <p className="mt-3 text-xs leading-5 text-slate-500">Keyboard: ← previous, → next, space play/pause when the page body has focus.</p>
+        <p className="mt-3 text-xs leading-5 text-slate-500">Keyboard: ← previous, → next, space play/pause when the page body has focus. Arrow keys inside buttons, links, tabs and form controls are left to those controls.</p>
       </div>
 
+      <SelectionExplanation
+        experiment={experiment}
+        step={step}
+        selectedEventId={selectedEventId}
+        selectedCompletionId={selectedCompletionId}
+        selectedPacket={selectedPacket}
+        manualPacketInspection={manualPacketInspection}
+        inspectFullRecording={inspectFullRecording}
+        relationships={relationships}
+        onClearSelection={clearSelection}
+        onToggleFullRecording={toggleFullRecording}
+      />
+
       <ExplanationPanel step={step} experiment={experiment} />
-      <TopologyPanel experiment={experiment} step={step} selectedPacket={selectedPacket} />
+      <TopologyPanel experiment={experiment} step={step} selectedPacket={selectedPacket} selectedHost={selectedHost} />
 
       <div className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1.05fr)_minmax(430px,0.95fr)]">
         <div className="min-w-0 space-y-5">
-          <CodePanel experiment={experiment} step={step} sources={rdmaEvidence.sources} />
-          <MemoryPanel experiment={experiment} step={step} highlightedMemoryIds={highlightedMemoryIds} />
+          <CodePanel experiment={experiment} step={step} codeRefs={effectiveCodeRefs} sources={rdmaEvidence.sources} />
+          <MemoryPanel experiment={experiment} step={step} highlightedMemoryIds={highlightedMemoryIds} currentMemoryState={currentMemoryState} inspectFullRecording={inspectFullRecording} />
         </div>
         <div className="min-w-0 space-y-5">
-          <ResourcePanel experiment={experiment} step={step} stepIndex={stepIndex} highlightedWrIds={highlightedWrIds} highlightedCompletionIds={highlightedCompletionIds} />
+          <ResourcePanel
+            experiment={experiment}
+            step={step}
+            stepIndex={stepIndex}
+            highlightedWrIds={highlightedWrIds}
+            highlightedCompletionIds={highlightedCompletionIds}
+            visibleWorkRequestIds={reachedProgress.workRequestIds}
+            visibleCompletionIds={reachedProgress.completionIds}
+            inspectFullRecording={inspectFullRecording}
+            targetCqeObservationReached={targetCqeObservationReached}
+            selectedCompletionId={selectedCompletionId}
+            onCompletion={selectCompletion}
+          />
           <TimelinePanel
             experiment={experiment}
             step={step}
             stepIndex={stepIndex}
             onStep={(index) => { setPlaying(false); setStepIndex(index); }}
             selectedPacketId={selectedPacketId}
-            onPacket={setSelectedPacketId}
+            onPacket={selectPacket}
             selectedEventId={selectedEventId}
-            onEvent={setSelectedEventId}
+            onEvent={selectEvent}
           />
         </div>
       </div>
@@ -1170,10 +1622,13 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
       <PacketInspector
         experiment={experiment}
         selectedPacket={selectedPacket}
-        onPacket={setSelectedPacketId}
+        onPacket={selectPacket}
         highlightedWrIds={highlightedWrIds}
         highlightedCompletionIds={highlightedCompletionIds}
         highlightedMemoryIds={highlightedMemoryIds}
+        currentStepPacketIds={step.packetIds}
+        manualInspection={manualPacketInspection}
+        inspectFullRecording={inspectFullRecording}
       />
 
       <ProvenancePanel bundle={rdmaEvidence} />

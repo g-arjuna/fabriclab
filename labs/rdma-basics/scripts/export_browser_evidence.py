@@ -66,6 +66,40 @@ OPCODE_ROLES = {
     17: "acknowledgement",
 }
 
+# Lightweight semantic anchors for important generated source references.  This
+# deliberately avoids a Python parser while still catching stale hard-coded line
+# ranges when the underlying Pyverbs implementation changes.
+CODE_REFERENCE_ANCHORS = {
+    "Open device and log capabilities": ("open_ib", "open_device"),
+    "Query port and select RoCEv2 GID": ("query_port", "gid"),
+    "local_gid helper": ("def local_gid", "GID"),
+    "Allocate resources": ("PD", "CQ", "QP"),
+    "Memory-region and QP helpers": ("def", "QP"),
+    "Control-channel metadata exchange": ("ctrl", "qpn"),
+    "Bring QP to RTS": ("bring_qp_to_rts", "qp_ready"),
+    "RESET → INIT → RTR → RTS helper": ("to_init", "to_rtr", "to_rts"),
+    "QP state helper": ("to_init", "to_rtr", "to_rts"),
+    "Create resources and connect control channel": ("build_resources", "ctrl"),
+    "build_resources helper": ("def build_resources", "mr"),
+    "exchange_and_connect helper": ("exchange", "bring_qp_to_rts"),
+    "Post receive WR and signal readiness": ("RecvWR", "post_recv"),
+    "Write payload and post SEND": ("SendWR", "IBV_WR_SEND", "post_send"),
+    "Poll receive completion and verify payload": ("poll_one_cqe", "recv_complete"),
+    "poll_one_cqe helper": ("def poll_one_cqe", "cq.poll"),
+    "Poll sender completion": ("poll_one_cqe", "send_complete"),
+    "Initialise target buffer and register memory": ("buffer_before", "new_memory_region"),
+    "exchange_meta helper": ("def exchange_meta", "rkey"),
+    "Exchange metadata and reach RTS": ("exchange_meta", "bring_qp_to_rts"),
+    "Build and post RDMA WRITE": ("IBV_WR_RDMA_WRITE", "set_wr_rdma", "post_send"),
+    "Poll writer completion and signal target": ("poll_one_cqe", "write_done"),
+    "Synchronise, poll target CQ, verify memory": ("target_cq_poll", "buffer_after"),
+    "Populate source memory and create resources": ("buffer_before", "new_memory_region"),
+    "Share metadata and bring QP to RTS": ("metadata_exchange", "bring_qp_to_rts"),
+    "Build and post RDMA READ": ("IBV_WR_RDMA_READ", "set_wr_rdma", "post_send"),
+    "Poll read completion and verify bytes": ("poll_one_cqe", "read_complete"),
+    "Source waits and confirms no CQE": ("source_cq_poll", "read_done"),
+}
+
 
 class EvidenceExportError(RuntimeError):
     pass
@@ -704,12 +738,11 @@ def build_walkthrough(key: str, events: list[dict[str, Any]], requests: list[dic
 
 
 def validate_json_schema_document(bundle: dict[str, Any], lab_root: Path) -> list[str]:
-    """Validate against the versioned JSON Schema when jsonschema is installed.
+    """Validate against the versioned JSON Schema.
 
-    The exporter's own correlation checks are mandatory and dependency-free.
-    The JSON Schema adds a strict structural contract in development and CI
-    environments where jsonschema is available, without making a normal web
-    build depend on Python packages.
+    Schema validation is mandatory for the offline evidence pipeline.  Install
+    labs/rdma-basics/requirements-export.txt before running the exporter; a
+    missing dependency is an explicit validation failure rather than a skip.
     """
     schema_path = lab_root / "schemas" / "browser-evidence-v1.json"
     if not schema_path.exists():
@@ -717,12 +750,18 @@ def validate_json_schema_document(bundle: dict[str, Any], lab_root: Path) -> lis
     try:
         import jsonschema  # type: ignore
     except ImportError:
-        return []
+        return ["missing required schema-validation dependency: install jsonschema from labs/rdma-basics/requirements-export.txt"]
     try:
-        jsonschema.validate(bundle, json.loads(schema_path.read_text()))
+        schema_document = json.loads(schema_path.read_text())
+    except json.JSONDecodeError as exc:
+        return [f"schema document is malformed JSON: {exc}"]
+    try:
+        jsonschema.validate(bundle, schema_document)
     except jsonschema.ValidationError as exc:
         location = ".".join(str(part) for part in exc.absolute_path) or "<root>"
         return [f"schema validation failed at {location}: {exc.message}"]
+    except jsonschema.SchemaError as exc:
+        return [f"schema document is invalid: {exc.message}"]
     return []
 
 
@@ -806,6 +845,35 @@ def validate_bundle(bundle: dict[str, Any]) -> list[str]:
             for memory_id in item.get("memoryRegionIds", []):
                 if memory_id not in memory_id_set:
                     errors.append(f"{item['id']}: unknown memory id {memory_id}")
+
+    sources_by_path = {source.get("path"): source for source in bundle.get("sources", [])}
+    for exp in experiments:
+        for item in exp.get("walkthrough", []):
+            for reference in item.get("codeRefs", []):
+                label = reference.get("label", "<unlabelled>")
+                prefix = f"{item['id']} code reference {label!r}"
+                source_path = reference.get("sourcePath")
+                source = sources_by_path.get(source_path)
+                if not source:
+                    errors.append(f"{prefix}: source file missing from bundle: {source_path}")
+                    continue
+                start_line = reference.get("startLine")
+                end_line = reference.get("endLine")
+                if not isinstance(start_line, int) or not isinstance(end_line, int):
+                    errors.append(f"{prefix}: line numbers must be integers")
+                    continue
+                if start_line < 1:
+                    errors.append(f"{prefix}: startLine must be >= 1")
+                if end_line < start_line:
+                    errors.append(f"{prefix}: endLine must be >= startLine")
+                if end_line > source.get("lineCount", 0):
+                    errors.append(f"{prefix}: endLine exceeds source line count")
+                    continue
+                lines = source.get("lines", [])
+                text = "\n".join(str(line.get("text", "")) for line in lines if start_line <= int(line.get("number", 0)) <= end_line)
+                for anchor in CODE_REFERENCE_ANCHORS.get(str(reference.get("label")), ()):
+                    if anchor not in text:
+                        errors.append(f"{prefix}: semantic anchor {anchor!r} not present in referenced lines")
     return errors
 
 
@@ -874,6 +942,33 @@ def build_experiment(key: str, evidence: Path, all_events: dict[str, list[dict[s
     return exp
 
 
+def source_snapshot_relationship(lab_root: Path, execution_commit: str | None) -> dict[str, Any]:
+    """Best-effort deterministic provenance check for embedded Python snapshots.
+
+    The evidence records the checkout used when the VMs ran.  The exporter reads
+    source files from its input checkout.  When the execution commit is available
+    locally, compare those paths and report the result explicitly rather than
+    silently claiming capture-time source identity.
+    """
+    if not execution_commit:
+        return {"relationship": "unverified", "method": "execution checkout missing from environment.json"}
+    repo_root = lab_root.parents[1]
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "diff", "--quiet", execution_commit, "--", "labs/rdma-basics/python"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except (OSError, ValueError):
+        return {"relationship": "unverified", "method": "git execution-source comparison unavailable"}
+    if result.returncode == 0:
+        return {"relationship": "matches-execution-checkout", "method": "git diff <execution checkout> -- labs/rdma-basics/python"}
+    if result.returncode == 1:
+        return {"relationship": "differs-from-execution-checkout", "method": "git diff <execution checkout> -- labs/rdma-basics/python"}
+    return {"relationship": "unverified", "method": "execution checkout object unavailable locally"}
+
+
 def copy_capture_assets(evidence: Path, output_file: Path) -> None:
     destination_dir = output_file.parent
     destination_dir.mkdir(parents=True, exist_ok=True)
@@ -914,6 +1009,8 @@ def export_bundle(evidence: Path, lab_root: Path, output_file: Path | None = Non
             "evidenceDigest": sha256_bytes(sums_bytes),
             "environmentDigest": sha256_bytes(environment_bytes),
             "gitCommit": environment.get("git_commit"),
+            "executionSourceCheckout": environment.get("git_commit"),
+            "sourceSnapshot": source_snapshot_relationship(lab_root, environment.get("git_commit")),
             "generatedAt": environment.get("created_at"),
             "referenceRunStartedAt": verification.get("started_at"),
             "referenceRunFinishedAt": verification.get("finished_at"),

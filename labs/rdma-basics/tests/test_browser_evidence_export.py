@@ -1,6 +1,8 @@
 """Regression tests for the deterministic browser evidence exporter."""
 from __future__ import annotations
 
+import builtins
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -136,6 +138,84 @@ class BrowserEvidenceExportCase(unittest.TestCase):
             handle.write("not-json\n")
         with self.assertRaisesRegex(exporter.EvidenceExportError, "validation failed"):
             exporter.export_bundle(evidence, ROOT, None, copy_assets=False)
+
+
+    def schema_errors(self, mutate):
+        bundle = copy.deepcopy(self.bundle)
+        mutate(bundle)
+        return exporter.validate_json_schema_document(bundle, ROOT)
+
+    def test_schema_validation_dependency_is_mandatory(self):
+        real_import = builtins.__import__
+        def blocked_import(name, *args, **kwargs):
+            if name == "jsonschema":
+                raise ImportError("blocked for test")
+            return real_import(name, *args, **kwargs)
+        builtins.__import__ = blocked_import
+        try:
+            errors = exporter.validate_json_schema_document(self.bundle, ROOT)
+        finally:
+            builtins.__import__ = real_import
+        self.assertTrue(any("missing required schema-validation dependency" in error for error in errors))
+
+    def test_malformed_schema_document_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lab = Path(tmp) / "lab"
+            schema_dir = lab / "schemas"
+            schema_dir.mkdir(parents=True)
+            (schema_dir / "browser-evidence-v1.json").write_text("{not-json")
+            errors = exporter.validate_json_schema_document(self.bundle, lab)
+        self.assertTrue(any("malformed JSON" in error for error in errors))
+
+    def test_missing_required_schema_field_fails(self):
+        errors = self.schema_errors(lambda bundle: bundle.pop("schemaVersion"))
+        self.assertTrue(any("schemaVersion" in error for error in errors))
+
+    def test_invalid_enum_value_fails_schema(self):
+        def mutate(bundle):
+            bundle["experiments"][2]["walkthrough"][0]["memoryState"] = "future"
+        errors = self.schema_errors(mutate)
+        self.assertTrue(any("memoryState" in error or "future" in error for error in errors))
+
+    def test_invalid_exact_integer_representation_fails_schema(self):
+        def mutate(bundle):
+            bundle["experiments"][2]["packets"][0]["psn"]["hex"] = "768"
+        errors = self.schema_errors(mutate)
+        self.assertTrue(any("psn" in error or "hex" in error or "768" in error for error in errors))
+
+    def test_malformed_bundle_type_fails_schema(self):
+        errors = self.schema_errors(lambda bundle: bundle.__setitem__("experiments", "not-an-array"))
+        self.assertTrue(errors)
+
+    def test_incorrect_packet_relationship_fails_correlation_validation(self):
+        bundle = copy.deepcopy(self.bundle)
+        write = next(e for e in bundle["experiments"] if e["id"] == "write")
+        write["packets"][0]["destinationQpn"]["decimal"] = write["endpoints"]["initiator"]["qpn"]["decimal"]
+        errors = exporter.validate_bundle(bundle)
+        self.assertTrue(any("request packet does not use responder local QPN" in error for error in errors))
+
+    def test_invalid_source_reference_bounds_fail_validation(self):
+        bundle = copy.deepcopy(self.bundle)
+        write = next(e for e in bundle["experiments"] if e["id"] == "write")
+        reference = write["walkthrough"][3]["codeRefs"][0]
+        reference["endLine"] = 100000
+        errors = exporter.validate_bundle(bundle)
+        self.assertTrue(any("endLine exceeds source line count" in error for error in errors))
+
+    def test_stale_source_reference_semantics_fail_validation(self):
+        bundle = copy.deepcopy(self.bundle)
+        write = next(e for e in bundle["experiments"] if e["id"] == "write")
+        reference = write["walkthrough"][3]["codeRefs"][0]
+        reference["startLine"] = 1
+        reference["endLine"] = 2
+        errors = exporter.validate_bundle(bundle)
+        self.assertTrue(any("semantic anchor" in error for error in errors))
+
+    def test_source_snapshot_provenance_is_explicit(self):
+        provenance = self.bundle["provenance"]
+        self.assertEqual(provenance["gitCommit"], provenance["executionSourceCheckout"])
+        self.assertIn(provenance["sourceSnapshot"]["relationship"], {"matches-execution-checkout", "differs-from-execution-checkout", "unverified"})
+        self.assertTrue(provenance["sourceSnapshot"]["method"])
 
     def test_generated_output_write_and_capture_copy(self):
         with tempfile.TemporaryDirectory() as tmp:
