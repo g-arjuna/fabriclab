@@ -126,10 +126,13 @@ function addWorkRequestRelationship(experiment: Experiment, relationships: Relat
   experiment.packets.forEach((packet) => {
     if (packet.correlations.workRequestIds.includes(request.id)) {
       relationships.packetIds.add(packet.id);
-      const qualification = packet.correlations.completionIds.length
-        ? "later causal outcome for the same work request"
-        : "validated WR/QPN/PSN/RETH correlation";
+      const qualification = packet.role === "request"
+        ? "validated WR/QPN/PSN/RETH correlation"
+        : "later causal outcome for the same work request";
       qualify(relationships, "packets", packet.id, qualification);
+      if (packet.role === "request" && packet.correlations.completionIds.length) {
+        qualify(relationships, "packets", packet.id, "causal precursor to a later completion outcome");
+      }
       packet.correlations.memoryRegionIds.forEach((id) => {
         relationships.memoryRegionIds.add(id);
         qualify(relationships, "memoryRegions", id, "validated packet/RETH memory correlation");

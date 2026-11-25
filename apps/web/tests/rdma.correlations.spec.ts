@@ -30,6 +30,16 @@ test.describe("RDMA evidence correlation model", () => {
     expect(qualificationText(relationships, "workRequests", completion.workRequestId!)).toContain("validated application work-request");
   });
 
+  test("SEND request packet remains a direct WR correlation even though a receive CQE follows", () => {
+    const event = sendRecvExperiment.events.find((item) => item.type === "post_send" && item.host === "hosta")!;
+    const relationships = relationshipsForEvent(sendRecvExperiment, event.id);
+    const requestPacket = sendRecvExperiment.packets.find((packet) => packet.role === "request")!;
+    const ackPacket = sendRecvExperiment.packets.find((packet) => packet.role === "acknowledgement")!;
+    expect(qualificationText(relationships, "packets", requestPacket.id)).toContain("validated WR/QPN/PSN/RETH correlation");
+    expect(qualificationText(relationships, "packets", requestPacket.id)).toContain("causal precursor to a later completion outcome");
+    expect(qualificationText(relationships, "packets", ackPacket.id)).toContain("later causal outcome");
+  });
+
   test("metadata and receive-posting events do not fabricate packet relationships", () => {
     const metadata = writeExperiment.events.find((item) => item.type === "metadata_exchange" && item.host === "hostb")!;
     const metadataRelationships = relationshipsForEvent(writeExperiment, metadata.id);
