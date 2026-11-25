@@ -58,9 +58,11 @@ def main():
     ctx = lab.open_ib(args.dev)
     dev_attr = ctx.query_device()
     log.emit("open_device", dev=args.dev,
-             node_type=device_mod.translate_node_type(dev_attr.node_type),
-             transport=device_mod.translate_transport_type(
-                 dev_attr.transport_type))
+             node_guid=hex(dev_attr.node_guid),
+             vendor_id=hex(dev_attr.vendor_id),
+             vendor_part_id=dev_attr.vendor_part_id,
+             max_qp=dev_attr.max_qp, max_cq=dev_attr.max_cq,
+             max_mr=dev_attr.max_mr, max_sge=dev_attr.max_sge)
 
     # ---- 2. port + GID table ----------------------------------------
     port = ctx.query_port(lab.PORT)

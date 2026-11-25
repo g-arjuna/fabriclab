@@ -1,0 +1,10 @@
+[hosta/exp-d-reader] #1 resources tag=reader mr_lkey=1533 mr_rkey=1533 mr_addr=612278096 qp_num=20 qp_state=Reset
+[hosta/exp-d-reader] #2 metadata_exchange own_qpn=20 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 peer_qpn=21 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 shared_rkey=None shared_addr=None shared_len=None
+[hosta/exp-d-reader] #3 qp_ready qp_num=20 state=RTS dest_qpn=21 sq_psn=1024 rq_psn=1024
+[hosta/exp-d-reader] #4 peer_ready msg={'ready': True}
+[hosta/exp-d-reader] #5 post_send wr_id=113 opcode=RDMA_READ local_sge_addr=612278096 local_lkey=1533 remote_addr=488476368 remote_rkey=1299 byte_len=46
+[hosta/exp-d-reader] #6 cqe tag=read wr_id=113 opcode=RDMA read byte_len=46 qp_num=20 src_qp=0 status=SUCCESS
+[hosta/exp-d-reader] #7 read_complete byte_len=46 data=52444d4120524541443a207468697320736563726574206c6976657320696e20686f737462206d656d6f72792e0a verify=payload_match ok=True
+
+Reader got 46 bytes: b'RDMA READ: this secret lives in hostb memory.\n'
+Remote READ verified
