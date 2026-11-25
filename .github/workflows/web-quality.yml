@@ -1,0 +1,109 @@
+name: Web quality gates
+
+on:
+  pull_request:
+    branches:
+      - preview
+      - main
+
+concurrency:
+  group: web-quality-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web build, audit, and public smoke
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.3"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web dependencies deterministically
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Audit full dependency tree
+        run: npm audit --audit-level=moderate
+
+      - name: Type-check TypeScript
+        run: npx tsc --noEmit --project tsconfig.json
+
+      - name: Build production application
+        run: npm run build
+
+      - name: Install Chromium for public smoke tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Start production server
+        run: |
+          npm start > /tmp/fabriclab-next.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/auth/session >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/fabriclab-next.log
+          exit 1
+
+      - name: Run safe public browser smoke tests
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+        run: npm run test:browser:public
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-public-smoke
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          if-no-files-found: ignore
+
+  rdma-evidence:
+    name: RDMA validator and evidence regression
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Note RDMA evidence suite availability
+        if: hashFiles('labs/rdma-basics/tests/**/*.py') == ''
+        run: echo "RDMA validator evidence suite is not present on this branch; it becomes mandatory after the runtime PR is integrated."
+
+      - name: Install packet-analysis dependencies
+        if: hashFiles('labs/rdma-basics/tests/**/*.py') != ''
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tshark
+
+      - name: Compile RDMA Python sources
+        if: hashFiles('labs/rdma-basics/tests/**/*.py') != ''
+        working-directory: labs/rdma-basics
+        run: python3 -m compileall -q python scripts tests
+
+      - name: Run RDMA regression tests
+        if: hashFiles('labs/rdma-basics/tests/**/*.py') != ''
+        working-directory: labs/rdma-basics
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Validate reference evidence and checksums
+        if: hashFiles('labs/rdma-basics/evidence/reference-run/SHA256SUMS') != ''
+        working-directory: labs/rdma-basics
+        run: |
+          ./scripts/validate-evidence.sh evidence/reference-run --verify-checksums
+          cd evidence/reference-run
+          sha256sum -c SHA256SUMS

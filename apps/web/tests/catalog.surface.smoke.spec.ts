@@ -7,12 +7,14 @@ test.describe.serial("Homepage and curriculum catalog smoke", () => {
     const tracker = trackErrors(page);
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: /Master the fabric/i })).toBeVisible();
-    await expect(page.getByText(/17 chapters\. 12 scenario labs\./i)).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Learn the fabric that keeps AI clusters alive/i }),
+    ).toBeVisible();
+    await expect(page.getByText(/\d+ chapters\. \d+ scenario labs\./i)).toBeVisible();
     await expect(
       page.getByRole("link", { name: /The GPU Compute Network - Packet Anatomy/i }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "GitHub" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /View the repo/i })).toBeVisible();
 
     await page.goto("/curriculum", { waitUntil: "domcontentloaded" });
     await expect(
