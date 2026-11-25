@@ -1,7 +1,8 @@
 "use client";
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
-import { EvidenceNote, exactValue, FactGrid, SourceExcerpt, TwoServerVisual } from "./visuals";
+import { EvidenceNote, exactValue, FactGrid, SourceExcerpt } from "./visuals";
+import { CodeOperationChain, RdmaSystemDiagram, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
 import { rdmaEvidence } from "@/lib/practical/rdmaEvidence";
 
 const resources = rdmaEvidence.experiments.find((experiment) => experiment.id === "resources")!;
@@ -9,48 +10,60 @@ const a = resources.endpoints.initiator;
 const b = resources.endpoints.responder;
 
 function queuesVisual(stage: number) {
-  const work = "WR: operation · buffer · length · LKEY";
-  const completion = "CQE: local outcome";
+  const wr: WorkVisual = {
+    id: "conceptual-send-wr",
+    label: "WR · operation · buffer · length · LKEY",
+    detail: "conceptual instruction object",
+    lifecycle: stage < 2 ? "constructed" : stage < 6 ? "posted" : "completed",
+  };
+  const queueNowEmpty: QueueVisualModel = { state: "empty", entries: stage >= 6 ? [wr] : [] };
+  const pendingQueue: QueueVisualModel = { state: "occupied", entries: stage >= 2 ? [wr] : [] };
   return (
-    <TwoServerVisual
-      caption={stage >= 6 ? "Mechanical diagram of the RDMA programming model. A Work Request is application intent, a packet is network evidence of transport execution, an acknowledgement is transport behavior, and a Completion Queue Entry is a local application-observable result." : "Persistent mechanical diagram. Components appear as the lesson establishes why they are needed."}
-      transfer={{
-        active: stage === 6,
-        direction: stage === 6 ? "both" : "none",
-        packet: stage === 6 ? <span>A → B: operation packet<br />B → A: transport acknowledgement</span> : undefined,
-        label: stage >= 4 ? "Two endpoints are prepared using control-plane metadata" : "Memory preparation alone does not describe work",
-        detail: stage >= 4 ? "The laboratory exchanges QPN, PSN and GID over a separate TCP control mechanism." : undefined,
-      }}
-      a={{
-        emphasis: stage === 0 ? ["memory"] : stage === 1 ? ["application", "memory"] : stage <= 3 ? ["os"] : stage === 4 ? ["os", "nic"] : ["os"],
-        application: stage >= 1 ? "describes the desired operation in a Work Request" : "has registered memory but has not described any work",
-        memory: stage >= 1 ? "registered buffer · address · length · LKEY" : "registered buffer ready for use",
-        memoryTone: "locked",
-        os: stage >= 4 ? `endpoint ready for peer QPN ${exactValue(b.qpn)}` : "verbs resources managed by the application",
-        nic: stage >= 4 ? "RDMA device can use the programmed endpoint" : "RDMA device present",
-        queues: stage >= 2 ? {
-          label: stage >= 3 ? `Queue Pair · local QPN ${exactValue(a.qpn)}` : "queues inside the endpoint",
-          send: stage >= 2 ? [work] : [],
-          receive: stage >= 2 ? [] : undefined,
-          completion: stage >= 6 ? [completion] : stage >= 4 ? [] : undefined,
-        } : undefined,
-      }}
-      b={{
-        dimmed: stage < 4,
-        emphasis: stage >= 4 ? ["os", "nic"] : [],
-        application: stage >= 4 ? "has also prepared an endpoint" : "not relevant until connection setup",
-        memory: stage >= 4 ? "registered buffer" : "—",
-        memoryTone: stage >= 4 ? "locked" : "empty",
-        os: stage >= 4 ? `endpoint ready for peer QPN ${exactValue(a.qpn)}` : "waiting",
-        nic: stage >= 4 ? "RDMA device can use the programmed endpoint" : "RDMA device present",
-        queues: stage >= 4 ? {
-          label: `Queue Pair · local QPN ${exactValue(b.qpn)}`,
-          send: [],
-          receive: [],
-          completion: [],
-        } : undefined,
-      }}
-    />
+    <div className="space-y-3">
+      {stage >= 2 ? (
+        <CodeOperationChain items={[{ path: "python/exp_b_send_recv.py", line: 139, effect: "a real SEND Work Request enters the sender Send Queue" }]} />
+      ) : null}
+      <RdmaSystemDiagram
+        caption={stage >= 6 ? "Logical mechanical diagram. The Work Request is application intent, the packet and ACK are wire objects, and the Completion Queue Entry is a separate local application-observable result." : "Logical resource diagram. Components appear as the lesson establishes why they are needed; queue placement is not a claim about physical storage inside a particular NIC."}
+        transfer={{
+          visible: stage === 4,
+          direction: stage === 4 ? "both" : "none",
+          kind: stage === 4 ? "control" : "none",
+          label: stage === 4 ? <span>TCP control channel: endpoint metadata only</span> : undefined,
+          detail: stage === 6 ? "The conceptual operation packet and reverse ACK have already occurred; they are not still in flight while the completion is inspected." : stage >= 4 ? "QPN, PSN and network identity are programmed through a separate control mechanism." : "Memory preparation alone does not describe work.",
+        }}
+        a={{
+          host: "hosta",
+          name: "Server A",
+          role: "endpoint example",
+          qpn: stage >= 3 ? exactValue(a.qpn) : undefined,
+          application: stage >= 1 ? "constructs a Work Request describing the desired operation" : "has registered memory but has not described any work",
+          memory: stage >= 1 ? "registered buffer · address · length · LKEY" : "registered buffer ready for use",
+          provider: stage >= 4 ? "Soft-RoCE provider can use the programmed endpoint" : "RDMA provider present",
+          softRoce: true,
+          constructedWork: stage === 1 ? [wr] : undefined,
+          sendQueue: stage >= 2 ? (stage >= 6 ? queueNowEmpty : pendingQueue) : { state: "not-introduced" },
+          receiveQueue: stage >= 2 ? { state: "empty" } : { state: "not-introduced" },
+          completionQueue: stage >= 5 ? (stage >= 6 ? { state: "occupied", entries: [{ id: "conceptual-cqe", label: "CQE · local outcome", detail: "conceptual signalled send completion", evidence: "conceptual" }] } : { state: "empty" }) : { state: "not-introduced" },
+          emphasize: stage === 0 ? ["memory"] : stage === 1 ? ["application"] : stage <= 3 ? ["qp"] : stage === 4 ? ["provider"] : stage >= 5 ? ["cq"] : [],
+        }}
+        b={{
+          host: "hostb",
+          name: "Server B",
+          role: "peer endpoint",
+          qpn: stage >= 4 ? exactValue(b.qpn) : undefined,
+          application: stage >= 4 ? "has also prepared an endpoint" : "not relevant until endpoint setup",
+          memory: stage >= 4 ? "registered buffer" : "—",
+          provider: stage >= 4 ? "Soft-RoCE provider can use the programmed endpoint" : "RDMA provider present",
+          softRoce: true,
+          sendQueue: stage >= 4 ? { state: "empty" } : { state: "not-introduced" },
+          receiveQueue: stage >= 4 ? { state: "empty" } : { state: "not-introduced" },
+          completionQueue: stage >= 5 ? { state: "empty" } : { state: "not-introduced" },
+          emphasize: stage === 4 ? ["provider"] : [],
+          dimmed: stage < 4,
+        }}
+      />
+    </div>
   );
 }
 
@@ -158,6 +171,7 @@ export function Lesson4Queues({ onComplete }: { onComplete: () => void }) {
       body: (
         <>
           <p>Posting work is not the same as knowing the outcome. When a signalled operation completes, the device or provider places a <strong className="text-slate-100">Completion Queue Entry</strong> into a Completion Queue. The application polls that queue and interprets the entry.</p>
+          <p>A Completion Queue is an independently created resource associated with one or more Queue Pairs. Multiple QPs may share a CQ, and send and receive completions may use the same or different CQs depending on the design. A QP itself consists of its Send Queue and Receive Queue.</p>
           <p>A completion is local application evidence. It is not a network packet and it is not the peer’s completion. A transport acknowledgement can contribute to the reliable-transport outcome, but the acknowledgement on the wire and the completion observed by the application are different objects.</p>
         </>
       ),

@@ -91,7 +91,8 @@ function PacketInvestigator({ stage }: { stage: number }) {
       return (
         <div className="space-y-4">
           <p>The opcode identifies the RDMA transport operation in this packet. The exporter validates its relationship to the application Work Request rather than treating every packet as an independent unexplained artifact.</p>
-          {correlatedWr ? <WorkRequestSummary request={correlatedWr} title="Correlated application Work Request" /> : <p>No application Work Request correlation exists for this packet.</p>}
+          {packet.role !== "request" ? <p><strong className="text-slate-100">This is not a new application-issued operation.</strong> It is a reverse-direction transport consequence correlated with the originating Work Request shown below.</p> : null}
+          {correlatedWr ? <WorkRequestSummary request={correlatedWr} title={packet.role === "request" ? "Correlated application Work Request" : "Originating application Work Request"} /> : <p>No application Work Request correlation exists for this packet.</p>}
           {experiment.id === "send-recv" ? <SourceExcerpt path="python/exp_b_send_recv.py" start={135} end={143} title="Relevant SEND source" /> : null}
           {experiment.id === "write" ? <SourceExcerpt path="python/exp_c_write.py" start={126} end={139} title="Relevant WRITE source" /> : null}
           {experiment.id === "read" ? <SourceExcerpt path="python/exp_d_read.py" start={113} end={124} title="Relevant READ source" /> : null}
@@ -171,13 +172,12 @@ function PacketInvestigator({ stage }: { stage: number }) {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Captured packets">
+      <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Captured packets">
         {experiment.packets.map((item) => (
           <button
             key={item.id}
             type="button"
-            role="tab"
-            aria-selected={packet.id === item.id}
+            aria-pressed={packet.id === item.id}
             onClick={() => { setPacketId(item.id); setSelection(null); }}
             className={cx(
               "rounded-xl border px-3 py-2 text-left text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
@@ -244,81 +244,155 @@ function PacketInvestigator({ stage }: { stage: number }) {
   );
 }
 
-function FinalInvestigation() {
-  const [packetChoice, setPacketChoice] = useState<"send" | "write" | "read">("write");
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const packetMap = {
-    send: rdmaEvidence.experiments.find((item) => item.id === "send-recv")!.packets[0],
-    write: rdmaEvidence.experiments.find((item) => item.id === "write")!.packets[0],
-    read: rdmaEvidence.experiments.find((item) => item.id === "read")!.packets[0],
-  };
-  const packet = packetMap[packetChoice];
-  const correct = {
-    operation: packetChoice,
-    initiator: "server-a",
-    target: "server-b",
-    memoryAccess: packetChoice === "send" ? "no" : "yes",
-    completion: packetChoice === "send" ? "both-local" : "initiator-local",
-    evidence: "wire-only",
-  };
-  const groups = [
-    { id: "operation", label: "Which RDMA operation does it represent?", options: [["send", "SEND"], ["write", "ordinary WRITE"], ["read", "READ"]] },
-    { id: "initiator", label: "Which endpoint initiated the operation?", options: [["server-a", "Server A"], ["server-b", "Server B"]] },
-    { id: "target", label: "Which endpoint does this forward packet target?", options: [["server-a", "Server A"], ["server-b", "Server B"]] },
-    { id: "memoryAccess", label: "Does it directly access named registered remote memory?", options: [["yes", "Yes — RETH names remote memory"], ["no", "No — no RETH/remote memory fields"]] },
-    { id: "completion", label: "Where should application completion be expected?", options: [["initiator-local", "Initiator-local completion"], ["both-local", "Separate local completions on both endpoints"], ["network", "Inside the packet itself"]] },
-    { id: "evidence", label: "What does the capture alone prove?", options: [["wire-only", "Wire direction, headers and payload bytes only"], ["memory-proof", "Exact application memory contents and completion timing"]] },
+type InvestigationCase = {
+  id: string;
+  label: string;
+  experiment: Experiment;
+  packet: PacketRecord;
+};
+
+function investigationCases(): InvestigationCase[] {
+  const send = rdmaEvidence.experiments.find((item) => item.id === "send-recv")!;
+  const write = rdmaEvidence.experiments.find((item) => item.id === "write")!;
+  const read = rdmaEvidence.experiments.find((item) => item.id === "read")!;
+  const specs = [
+    ["case-1", "Case 1", send, "request"],
+    ["case-2", "Case 2", write, "request"],
+    ["case-3", "Case 3", read, "request"],
+    ["case-4", "Case 4", read, "response"],
+    ["case-5", "Case 5", write, "acknowledgement"],
   ] as const;
+  return specs.map(([id, label, experiment, role]) => ({
+    id,
+    label,
+    experiment,
+    packet: experiment.packets.find((packet) => packet.role === role)!,
+  }));
+}
+
+function hostLabel(host: string | null | undefined) {
+  return host === "hosta" ? "Server A" : host === "hostb" ? "Server B" : "unknown host";
+}
+
+function FinalInvestigation() {
+  const cases = useMemo(() => investigationCases(), []);
+  const [caseId, setCaseId] = useState(cases[0].id);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const selectedCase = cases.find((item) => item.id === caseId) || cases[0];
+  const { experiment, packet } = selectedCase;
+  const correlatedWr = experiment.workRequests.find((item) => packet.correlations.workRequestIds.includes(item.id));
+  const destinationEndpoint = endpointForQpn(experiment, packet);
+  const correct = {
+    role: packet.role,
+    transmitter: packet.sourceHost || "unknown",
+    target: packet.destinationHost || "unknown",
+    initiator: correlatedWr?.host || "unknown",
+    payload: packet.payloadText ? "yes" : "no",
+    reth: packet.reth ? "yes" : "no",
+    evidence: "application-correlation",
+  } as const;
+
+  const groups = [
+    { id: "role", label: "Is this a request, response or acknowledgement?", options: [["request", "Operation request"], ["response", "Data-carrying response"], ["acknowledgement", "Transport acknowledgement"]] },
+    { id: "transmitter", label: "Which host transmitted this packet?", options: [["hosta", "Server A"], ["hostb", "Server B"]] },
+    { id: "target", label: "Which endpoint host does this packet target?", options: [["hosta", "Server A endpoint"], ["hostb", "Server B endpoint"]] },
+    { id: "initiator", label: "Which application initiated the associated operation?", options: [["hosta", "Server A application"], ["hostb", "Server B application"]] },
+    { id: "payload", label: "Is application payload present in this packet?", options: [["yes", "Yes"], ["no", "No"]] },
+    { id: "reth", label: "Does this packet contain remote memory fields in RETH?", options: [["yes", "Yes"], ["no", "No"]] },
+    { id: "evidence", label: "What is needed to establish completion or verified memory?", options: [["application-correlation", "Correlated application completion/memory evidence"], ["packet-alone", "This packet alone proves both"], ["peer-assumption", "Assume the peer application noticed"]] },
+  ] as const;
+
+  function explanation(groupId: string, selected: string) {
+    const expected = correct[groupId as keyof typeof correct];
+    const right = selected === expected;
+    const prefix = right ? "Correct. " : "Not correct. ";
+    if (groupId === "role") {
+      return `${prefix}The decoded opcode is ${packet.opcodeName}. Interpret its consequence: operation requests initiate transport work, a READ response returns requested data, and an Acknowledge packet is reliable-transport evidence rather than a new application-issued operation.`;
+    }
+    if (groupId === "transmitter") {
+      return `${prefix}The source IP is ${packet.sourceIp}, which the validated topology maps to ${hostLabel(packet.sourceHost)}. Wire direction is determined by the actual source and destination, not by which application originally posted the Work Request.`;
+    }
+    if (groupId === "target") {
+      return `${prefix}The packet travels to ${packet.destinationIp} and destination QPN ${exact(packet.destinationQpn)}. That QPN correlates with the ${destinationEndpoint?.label || "recorded endpoint"} on ${hostLabel(packet.destinationHost)}. Reverse-direction responses and ACKs therefore target a different endpoint from the forward request.`;
+    }
+    if (groupId === "initiator") {
+      return `${prefix}The correlated Work Request is ${correlatedWr ? correlatedWr.id : "not available"} on ${hostLabel(correlatedWr?.host)}. A response or ACK travels backward as a consequence of that original work; it is not a new operation initiated by the responding application.`;
+    }
+    if (groupId === "payload") {
+      return `${prefix}${packet.payloadText ? `This packet carries captured payload bytes beginning with “${packet.payloadText.slice(0, 42)}”.` : "This packet carries no application payload bytes."} A READ request asks for memory but does not carry the memory contents; the response carries them instead.`;
+    }
+    if (groupId === "reth") {
+      return `${prefix}${packet.reth ? `This packet contains RETH: remote address ${exact(packet.reth.virtualAddress)}, RKEY ${exact(packet.reth.rkey)}, DMA length ${exact(packet.reth.dmaLength, "decimal")}.` : "This packet has no RETH."} In these captures, only WRITE and READ request packets carry those remote-memory fields; SEND, ACK and READ-response packets do not.`;
+    }
+    return `${prefix}The capture proves wire direction, headers and carried bytes. Completion ownership, completion timing and application memory verification require correlated application event and memory evidence.`;
+  }
+
   const answered = groups.every((group) => answers[group.id]);
   const correctCount = groups.filter((group) => answers[group.id] === correct[group.id as keyof typeof correct]).length;
 
   return (
-    <section className="rounded-[1.5rem] border border-white/10 bg-slate-950/45 p-4" data-testid="final-packet-investigation">
+    <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4" data-testid="final-packet-investigation">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-slate-100">Final guided investigation</h3>
-          <p className="mt-1 text-sm text-slate-400">Choose one genuine forward request packet, then determine what it proves.</p>
+          <h3 className="font-semibold text-slate-100">Packet interpretation exercise</h3>
+          <p className="mt-1 text-sm text-slate-400">Cases are neutrally labelled. Interpret the decoded fields and direction instead of relying on the case selector.</p>
         </div>
-        <div className="flex gap-2">
-          {(["send", "write", "read"] as const).map((choice) => (
-            <button key={choice} type="button" onClick={() => { setPacketChoice(choice); setAnswers({}); }} className={cx("rounded-full border px-3 py-1.5 text-xs", packetChoice === choice ? "border-cyan-300/60 bg-cyan-300/12 text-cyan-100" : "border-white/10 text-slate-400")}>{choice.toUpperCase()}</button>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Choose packet case">
+          {cases.map((item) => (
+            <button key={item.id} type="button" onClick={() => { setCaseId(item.id); setAnswers({}); }} aria-pressed={item.id === caseId} className={cx("rounded-full border px-3 py-1.5 text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300", item.id === caseId ? "border-cyan-300/60 bg-cyan-300/12 text-cyan-100" : "border-white/10 text-slate-400 hover:text-slate-200")}>
+              {item.label}
+            </button>
           ))}
         </div>
       </div>
-      <div className="mt-4 rounded-xl border border-orange-300/20 bg-orange-300/6 p-3 font-mono text-sm text-orange-100">
-        {packet.captureFile} frame {packet.frameNumber}: {packet.opcodeName}, {packet.sourceIp} → {packet.destinationIp}, destination QPN {exact(packet.destinationQpn)}, PSN {exact(packet.psn)}{packet.reth ? `, remote address ${exact(packet.reth.virtualAddress)}, RKEY ${exact(packet.reth.rkey)}, DMA length ${exact(packet.reth.dmaLength, "decimal")}` : ", no RETH"}
+
+      <div className="mt-4 overflow-hidden rounded-xl border border-orange-300/20 bg-orange-300/6" data-testid="decoded-investigation-packet">
+        <header className="border-b border-orange-300/15 px-3 py-2 text-sm font-semibold text-orange-100">Wireshark-style decoded packet · frame {packet.frameNumber}</header>
+        <dl className="grid gap-2 p-3 font-mono text-xs text-orange-50 sm:grid-cols-2">
+          <div><dt className="text-orange-200/70">capture</dt><dd>{packet.captureFile}</dd></div>
+          <div><dt className="text-orange-200/70">Ethernet/IP direction</dt><dd>{packet.sourceIp} → {packet.destinationIp}</dd></div>
+          <div><dt className="text-orange-200/70">UDP destination port</dt><dd>{packet.udp.destinationPort}</dd></div>
+          <div><dt className="text-orange-200/70">BTH opcode</dt><dd>{packet.opcodeName}</dd></div>
+          <div><dt className="text-orange-200/70">Destination QPN</dt><dd>{exact(packet.destinationQpn)}</dd></div>
+          <div><dt className="text-orange-200/70">PSN</dt><dd>{exact(packet.psn)}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-orange-200/70">Operation-specific fields</dt><dd>{packet.reth ? `RETH remote address ${exact(packet.reth.virtualAddress)} · RKEY ${exact(packet.reth.rkey)} · DMA length ${exact(packet.reth.dmaLength, "decimal")}` : "no RETH"}{packet.payloadText ? ` · payload “${packet.payloadText}”` : " · no application payload"}</dd></div>
+        </dl>
       </div>
+
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {groups.map((group) => (
-          <fieldset key={group.id} className="rounded-xl border border-white/10 bg-slate-900/40 p-3">
-            <legend className="px-1 text-sm font-medium text-slate-200">{group.label}</legend>
-            <div className="mt-2 grid gap-2">
-              {group.options.map(([value, label]) => {
-                const selectedAnswer = answers[group.id] === value;
-                const showCorrectness = selectedAnswer;
-                const isCorrect = correct[group.id as keyof typeof correct] === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setAnswers((current) => ({ ...current, [group.id]: value }))}
-                    aria-pressed={selectedAnswer}
-                    className={cx(
-                      "rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
-                      selectedAnswer ? isCorrect ? "border-emerald-300/45 bg-emerald-300/10 text-emerald-100" : "border-amber-300/45 bg-amber-300/10 text-amber-100" : "border-white/10 text-slate-300 hover:border-white/25",
-                    )}
-                  >
-                    {label}{showCorrectness ? <span className="ml-2 text-xs">{isCorrect ? "correct" : "check the mechanism again"}</span> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
-        ))}
+        {groups.map((group) => {
+          const selected = answers[group.id];
+          return (
+            <fieldset key={group.id} className="rounded-xl border border-white/10 bg-slate-900/40 p-3" data-testid={`investigation-${group.id}`}>
+              <legend className="px-1 text-sm font-medium text-slate-200">{group.label}</legend>
+              <div className="mt-2 grid gap-2">
+                {group.options.map(([value, label]) => {
+                  const selectedAnswer = selected === value;
+                  const isCorrect = correct[group.id as keyof typeof correct] === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setAnswers((current) => ({ ...current, [group.id]: value }))}
+                      aria-pressed={selectedAnswer}
+                      className={cx(
+                        "rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+                        selectedAnswer ? isCorrect ? "border-emerald-300/45 bg-emerald-300/10 text-emerald-100" : "border-amber-300/45 bg-amber-300/10 text-amber-100" : "border-white/10 text-slate-300 hover:border-white/25",
+                      )}
+                    >
+                      {label}{selectedAnswer ? <span className="ml-2 text-xs">{isCorrect ? "correct" : "incorrect"}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {selected ? <p className="mt-3 rounded-lg border border-white/10 bg-slate-950/55 p-2.5 text-xs leading-5 text-slate-300" data-testid={`feedback-${group.id}`}>{explanation(group.id, selected)}</p> : null}
+            </fieldset>
+          );
+        })}
       </div>
       {answered ? (
         <p className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-300/8 p-3 text-sm leading-6 text-cyan-100" data-testid="final-investigation-result">
-          You answered {correctCount} of {groups.length} correctly. The capture proves wire-level direction, operation headers and carried bytes. Application memory contents, completion ownership and verification require the correlated application evidence you inspected in earlier lessons.
+          You answered {correctCount} of {groups.length} correctly. The important skill is not naming the displayed opcode; it is interpreting direction, endpoint targeting, payload presence, RETH presence and the boundary between wire evidence and application evidence.
         </p>
       ) : null}
     </section>
@@ -431,7 +505,7 @@ export function Lesson8Packets({ onComplete }: { onComplete: () => void }) {
       actionLabel: "Connect the model to AI data-centre networking",
       body: (
         <>
-          <p>Examine one genuine forward request packet and answer the operational questions. The point is not test performance; it is to practice separating wire evidence from application evidence.</p>
+          <p>Examine genuine forward and reverse-direction packets and answer the operational questions. The point is not test performance; it is to practice interpreting direction, endpoint targeting and the boundary between wire evidence and application evidence.</p>
         </>
       ),
       visual: <FinalInvestigation />,

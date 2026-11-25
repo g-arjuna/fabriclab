@@ -2,7 +2,8 @@
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { CompletionSummary, PacketSummary, PayloadMemory, WorkRequestSummary } from "./operationVisuals";
-import { EvidenceNote, exactValue, OperationComparisonTable, SourceExcerpt, TwoServerVisual } from "./visuals";
+import { CodeOperationChain, RdmaSystemDiagram, type CompletionQueueVisualModel, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
+import { EvidenceNote, exactValue, OperationComparisonTable, SourceExcerpt } from "./visuals";
 import { rdmaEvidence } from "@/lib/practical/rdmaEvidence";
 
 const experiment = rdmaEvidence.experiments.find((item) => item.id === "read")!;
@@ -15,51 +16,103 @@ const remoteMemory = experiment.memoryRegions.find((item) => item.host === "host
 const localAfter = localMemory.snapshots.find((item) => item.id.includes("read-result"))?.text;
 const remoteBefore = remoteMemory.snapshots.find((item) => item.id.includes("before"))?.text;
 
+function lifecycleForRead(stage: number): WorkVisual["lifecycle"] {
+  if (stage === 3) return "constructed";
+  if (stage === 4) return "posted";
+  if (stage >= 5 && stage <= 7) return "in-flight";
+  if (stage >= 8) return "completed";
+  return "not-created";
+}
+
+function queueFor(entry: WorkVisual, lifecycle: WorkVisual["lifecycle"]): QueueVisualModel {
+  if (lifecycle === "not-created" || lifecycle === "constructed") return { state: "empty" };
+  if (lifecycle === "posted" || lifecycle === "in-flight") return { state: "occupied", entries: [entry] };
+  return { state: "empty", entries: [entry] };
+}
+
 function visual(stage: number) {
-  const constructed = stage >= 3;
-  const posted = stage >= 4;
-  const requestOnWire = stage === 5;
-  const responseOnWire = stage === 6;
-  const completed = stage >= 8;
-  const localData = stage >= 7;
+  const readLifecycle = lifecycleForRead(stage);
+  const readWork: WorkVisual = {
+    id: readWr.id,
+    label: `WR ${exactValue(readWr.wrId)} · RDMA READ`,
+    detail: `${readWr.byteLength} bytes · remote source into local destination`,
+    lifecycle: readLifecycle,
+  };
+  const readerCq: CompletionQueueVisualModel = stage >= 8
+    ? { state: "occupied", entries: [{ id: readCqe.id, label: `CQE · RDMA read · WR ${exactValue(readCqe.wrId)}`, detail: "polled by Server A", evidence: "recorded" }] }
+    : { state: "unknown" };
+  const sourceCq: CompletionQueueVisualModel = stage >= 8 ? { state: "empty" } : { state: "unknown" };
+  const requestInFlight = stage === 5;
+  const responseInFlight = stage === 6;
+  const chain = stage === 4
+    ? [{ path: "python/exp_d_read.py", line: 120, effect: "posts the READ request into Server A’s Send Queue even though payload will return inward" }]
+    : stage === 8
+      ? [{ path: "python/exp_d_read.py", line: 126, effect: "Server A polls and observes the reader-local completion" }]
+      : [];
+
   return (
-    <TwoServerVisual
-      caption="Guided replay of the validated RDMA READ reference execution. The request travels from reader to source; the payload response travels back from source to reader. Those directions are deliberately shown as separate states."
-      transfer={{
-        active: requestOnWire || responseOnWire || stage === 2,
-        direction: requestOnWire ? "a-to-b" : responseOnWire || stage === 2 ? "b-to-a" : "none",
-        packet: requestOnWire ? <span>{readRequest.opcodeName}<br />request only · no payload data</span> : responseOnWire ? <span>{readResponse.opcodeName}<br />payload returns to reader</span> : stage === 2 ? <span>TCP control channel: remote address + RKEY metadata</span> : undefined,
-        label: requestOnWire ? "Request direction: reader asks source transport for memory" : responseOnWire ? "Payload direction: source memory returns to reader memory" : stage === 2 ? "The reader learns which remote region it may read" : "READ reverses the data-availability problem",
-      }}
-      a={{
-        emphasis: stage === 1 ? ["memory"] : stage === 3 ? ["application", "memory"] : stage === 4 ? ["application", "os"] : requestOnWire ? ["nic"] : responseOnWire ? ["nic", "memory"] : localData ? ["memory", "application"] : completed ? ["os"] : [],
-        application: stage >= 3 ? "reader initiates the operation" : "reader application",
-        memory: localData ? localAfter : "local destination buffer waiting",
-        memoryTone: localData ? "changed" : "ready",
-        os: "reader endpoint and Completion Queue",
-        nic: requestOnWire ? "emits READ request" : responseOnWire ? "places response bytes into local memory" : "reader RDMA device",
-        queues: stage >= 3 ? {
-          label: `Reader QP ${exactValue(experiment.endpoints.initiator.qpn)}`,
-          send: posted ? [`WR ${exactValue(readWr.wrId)} · RDMA READ`] : [],
-          receive: [],
-          completion: completed ? [`CQE · RDMA read · ${exactValue(readCqe.wrId)}`] : [],
-        } : undefined,
-      }}
-      b={{
-        emphasis: stage === 1 ? ["memory"] : stage === 2 ? ["memory", "application"] : requestOnWire ? ["nic", "memory"] : responseOnWire ? ["nic", "memory"] : [],
-        application: stage >= 4 ? "source application owns the data but does not post a data Work Request for this READ" : "source application owns the data",
-        memory: stage >= 2 ? remoteBefore : "registered source memory not yet inspected",
-        memoryTone: "source",
-        os: "source endpoint; responder transport services the read",
-        nic: requestOnWire ? "receives the READ request" : responseOnWire ? "returns memory contents in a READ response" : "source RDMA device",
-        queues: stage >= 3 ? {
-          label: `Source QP ${exactValue(experiment.endpoints.responder.qpn)}`,
-          send: [],
-          receive: [],
-          completion: [],
-        } : undefined,
-      }}
-    />
+    <div className="space-y-3">
+      {chain.length ? <CodeOperationChain items={chain} /> : null}
+      <RdmaSystemDiagram
+        caption="Guided replay of the validated RDMA READ reference execution. The request travels from reader to source; the payload response travels back from source to reader. Queue lifecycle is a logical instructional reconstruction tied to recorded events."
+        transfer={{
+          visible: requestInFlight || responseInFlight || stage === 2,
+          direction: requestInFlight ? "a-to-b" : responseInFlight || stage === 2 ? "b-to-a" : "none",
+          kind: requestInFlight ? "request" : responseInFlight ? "response" : stage === 2 ? "control" : "none",
+          label: requestInFlight
+            ? <span>{readRequest.opcodeName}<br />request only · no payload data</span>
+            : responseInFlight
+              ? <span>{readResponse.opcodeName}<br />payload returns to reader</span>
+              : stage === 2
+                ? <span>TCP control channel: remote address + RKEY metadata</span>
+                : undefined,
+          detail: requestInFlight
+            ? "Request direction: reader asks source transport for memory."
+            : responseInFlight
+              ? "Payload direction: source memory returns to reader memory."
+              : stage === 2
+                ? "The reader learns which remote region it may read."
+                : stage >= 8
+                  ? "The READ request/response exchange has completed; the learner is inspecting application completion and memory evidence."
+                  : stage === 7
+                    ? "The response has arrived; local memory placement is causally illustrated before completion inspection."
+                    : "READ reverses the data-availability problem.",
+        }}
+        a={{
+          host: "hosta",
+          name: "Server A",
+          role: "reader / initiator",
+          qpn: exactValue(experiment.endpoints.initiator.qpn),
+          application: stage >= 3 ? "reader initiates the operation" : "reader application",
+          memory: stage >= 9
+            ? `${localAfter}\n[recorded memory verification after completion]`
+            : stage >= 7
+              ? `${remoteBefore?.split("#")[0] || "remote data"}\n[causal memory-placement illustration]`
+              : "local destination buffer waiting",
+          provider: requestInFlight ? "emits READ request" : responseInFlight ? "places response bytes into local memory" : "Soft-RoCE provider implementing RDMA transport",
+          softRoce: true,
+          constructedWork: readLifecycle === "constructed" ? [readWork] : undefined,
+          sendQueue: stage >= 3 ? queueFor(readWork, readLifecycle) : { state: "not-introduced" },
+          receiveQueue: stage >= 3 ? { state: "empty" } : { state: "not-introduced" },
+          completionQueue: readerCq,
+          emphasize: stage === 1 ? ["memory"] : stage === 3 ? ["application", "memory"] : stage === 4 ? ["application", "qp"] : requestInFlight ? ["provider"] : responseInFlight ? ["provider", "memory"] : stage >= 8 ? ["cq"] : [],
+        }}
+        b={{
+          host: "hostb",
+          name: "Server B",
+          role: "source / responder",
+          qpn: exactValue(experiment.endpoints.responder.qpn),
+          application: stage >= 4 ? "source application owns the data but posts no data Work Request for this READ" : "source application owns the data",
+          memory: stage >= 2 ? `${remoteBefore}\n[recorded remote source memory]` : "registered source memory not yet inspected",
+          provider: requestInFlight ? "receives the READ request" : responseInFlight ? "returns memory contents in a READ response" : "Soft-RoCE provider implementing RDMA transport",
+          softRoce: true,
+          sendQueue: stage >= 3 ? { state: "empty" } : { state: "not-introduced" },
+          receiveQueue: stage >= 3 ? { state: "empty" } : { state: "not-introduced" },
+          completionQueue: sourceCq,
+          emphasize: stage === 1 || stage === 2 ? ["memory"] : requestInFlight ? ["provider", "memory"] : responseInFlight ? ["provider", "memory"] : [],
+        }}
+      />
+    </div>
   );
 }
 
@@ -84,7 +137,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
       body: (
         <>
           <p>Server A needs somewhere for the requested bytes to land. It registers a local destination buffer and uses that buffer’s address, length and LKEY in the local part of the READ Work Request.</p>
-          <p>This local memory description is necessary even though the payload currently resides on Server B. The initiating endpoint must still define where incoming data belongs.</p>
+          <p>This local memory description is necessary even though the payload currently resides on Server B.</p>
         </>
       ),
       visual: visual(1),
@@ -128,7 +181,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
       actionLabel: "Follow the READ request",
       body: (
         <>
-          <p>Posting the READ makes the instruction visible to Server A’s endpoint. No payload has moved yet. The source application on Server B has not posted a data Work Request for this transfer.</p>
+          <p>Posting the READ makes the instruction pending in Server A’s Send Queue. No payload has moved yet. The source application on Server B has not posted a data Work Request for this transfer.</p>
           <p>The responder transport will service the read because the QP and memory permissions were established beforehand.</p>
         </>
       ),
@@ -151,7 +204,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
     {
       id: "read-response",
       title: "The response travels from source to reader and carries the payload",
-      actionLabel: "Inspect the reader’s destination memory",
+      actionLabel: "Observe causal local memory placement",
       body: (
         <>
           <p>The captured READ Response Only packet travels in the reverse direction, from {readResponse.sourceIp} to {readResponse.destinationIp}. Its destination QPN is {exactValue(readResponse.destinationQpn)}, the reader endpoint on Server A.</p>
@@ -163,26 +216,25 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
       inspect: <PacketSummary packet={readResponse}>Response direction is B → A. The response payload is the data being read from Server B’s memory.</PacketSummary>,
     },
     {
-      id: "local-memory",
-      title: "Server A’s local destination memory now contains the remote data",
+      id: "local-placement",
+      title: "Local memory placement is separate from completion observation",
       actionLabel: "Inspect the reader’s completion",
       body: (
         <>
-          <p>The verified reader memory begins with <span className="font-mono text-emerald-100">{localAfter}</span>. This is local memory evidence recorded after the reader completion.</p>
-          <p>The source memory on Server B was not “sent” by the source application in a two-sided operation. The responder transport read it because the initiator presented the correct remote memory description and permission.</p>
+          <p>The response payload can now be placed into the reader’s registered destination memory. This is shown as a causal illustration of transport execution.</p>
+          <p>The application has not yet been shown polling its completion or verifying memory. Those are distinct observations.</p>
         </>
       ),
       visual: visual(7),
-      evidence: <EvidenceNote kind="Verified through application memory inspection">The reader compared its local buffer with the expected bytes and logged a successful payload verification.</EvidenceNote>,
-      inspect: <PayloadMemory label="Recorded reader memory after READ" value={localAfter} />,
+      evidence: <EvidenceNote kind="Causal illustration bounded by evidence">The captured response and correlated completion establish the transfer relationship. The exact memory instant is not independently timestamped.</EvidenceNote>,
     },
     {
       id: "reader-completion",
       title: "The initiating reader owns the completion",
-      actionLabel: "Compare the three operations",
+      actionLabel: "Verify the reader memory",
       body: (
         <>
-          <p>Server A observes a successful RDMA read completion for WR ID {exactValue(readCqe.wrId)} and byte length {readCqe.byteLength}. The source application does not receive a completion for this responder-side activity because it did not post a Work Request for the READ.</p>
+          <p>Server A polls and observes a successful RDMA read completion for WR ID {exactValue(readCqe.wrId)} and byte length {readCqe.byteLength}. The source application does not receive a completion for this responder-side activity because it did not post a Work Request for the READ.</p>
           <p>Completion ownership therefore follows the initiating application’s posted work, not simply the direction in which payload bytes travelled.</p>
         </>
       ),
@@ -195,6 +247,20 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
           </SourceExcerpt>
         </div>
       ),
+    },
+    {
+      id: "verify-memory",
+      title: "After completion, the reader verifies local memory",
+      actionLabel: "Compare the three operations",
+      body: (
+        <>
+          <p>The verified reader memory begins with <span className="font-mono text-emerald-100">{localAfter}</span>. This is local memory evidence recorded after the reader completion.</p>
+          <p>The source memory on Server B was not “sent” by the source application in a two-sided operation. The responder transport read it because the initiator presented the correct remote memory description and permission.</p>
+        </>
+      ),
+      visual: visual(9),
+      evidence: <EvidenceNote kind="Verified through application memory inspection">The reader compared its local buffer with the expected bytes and logged a successful payload verification.</EvidenceNote>,
+      inspect: <PayloadMemory label="Recorded reader memory after READ" value={localAfter} />,
     },
     {
       id: "operation-comparison",

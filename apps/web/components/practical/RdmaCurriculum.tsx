@@ -36,17 +36,32 @@ const LESSONS: LessonMeta[] = [
 
 const CURRENT_KEY = "fabriclab.rdma.curriculum.current";
 const COMPLETED_KEY = "fabriclab.rdma.curriculum.completed";
+const FINISHED_KEY = "fabriclab.rdma.curriculum.finished";
 
 function validLessonIndex(value: string | undefined) {
   const index = LESSONS.findIndex((lesson) => lesson.id === value);
   return index >= 0 ? index : 0;
 }
 
+function lessonProgressPrefix(lessonId: string) {
+  return `fabriclab.rdma.lesson.${lessonId}`;
+}
+
+function clearLessonProgress(lessonId: string) {
+  const prefix = lessonProgressPrefix(lessonId);
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index);
+    if (key?.startsWith(prefix)) window.localStorage.removeItem(key);
+  }
+}
+
 export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
   const [lessonIndex, setLessonIndex] = useState(() => validLessonIndex(initialLesson));
   const [completed, setCompleted] = useState<string[]>([]);
   const [finished, setFinished] = useState(false);
+  const [showCompletion, setShowCompletion] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [resetVersion, setResetVersion] = useState(0);
   const lesson = LESSONS[lessonIndex];
   const Lesson = lesson.component;
 
@@ -65,6 +80,9 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
         const parsed = JSON.parse(storedCompleted);
         if (Array.isArray(parsed)) setCompleted(parsed.filter((id) => LESSONS.some((item) => item.id === id)));
       }
+      const storedFinished = window.localStorage.getItem(FINISHED_KEY) === "true";
+      setFinished(storedFinished);
+      setShowCompletion(storedFinished);
     } catch {
       // Progress persistence is non-invasive and optional.
     }
@@ -77,80 +95,130 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
     try {
       window.localStorage.setItem(CURRENT_KEY, lesson.id);
       window.localStorage.setItem(COMPLETED_KEY, JSON.stringify(completed));
+      window.localStorage.setItem(FINISHED_KEY, finished ? "true" : "false");
       const url = `/practical/rdma?lesson=${encodeURIComponent(lesson.id)}`;
       window.history.replaceState(null, "", url);
     } catch {
       // Ignore storage/history failures.
     }
-  }, [completed, hydrated, lesson.id]);
+  }, [completed, finished, hydrated, lesson.id]);
 
   const progressText = useMemo(() => `${lessonIndex + 1} of ${LESSONS.length}`, [lessonIndex]);
 
   function completeLesson() {
-    setCompleted((current) => current.includes(lesson.id) ? current : [...current, lesson.id]);
-    if (lessonIndex < LESSONS.length - 1) {
-      setFinished(false);
-      setLessonIndex(lessonIndex + 1);
-    } else {
+    const nextCompleted = completed.includes(lesson.id) ? completed : [...completed, lesson.id];
+    setCompleted(nextCompleted);
+    const practicalComplete = LESSONS.every((item) => nextCompleted.includes(item.id));
+    if (practicalComplete) {
       setFinished(true);
+      setShowCompletion(true);
+    } else if (lessonIndex < LESSONS.length - 1) {
+      setLessonIndex(lessonIndex + 1);
     }
   }
 
   function selectLesson(index: number) {
-    setFinished(false);
+    setShowCompletion(false);
     setLessonIndex(index);
   }
 
+  function restartLesson(index = lessonIndex) {
+    try {
+      clearLessonProgress(LESSONS[index].id);
+    } catch {
+      // Restart remains possible without storage access.
+    }
+    setShowCompletion(false);
+    setLessonIndex(index);
+    setResetVersion((current) => current + 1);
+  }
+
+  function startPracticalAgain() {
+    try {
+      LESSONS.forEach((item) => clearLessonProgress(item.id));
+      window.localStorage.removeItem(COMPLETED_KEY);
+      window.localStorage.removeItem(FINISHED_KEY);
+    } catch {
+      // Restart remains possible without storage access.
+    }
+    setCompleted([]);
+    setFinished(false);
+    setShowCompletion(false);
+    setLessonIndex(0);
+    setResetVersion((current) => current + 1);
+  }
+
+  const lessonNav = (compact: boolean) => (
+    <ol className={compact ? "mt-3 grid gap-1" : "flex gap-1 overflow-x-auto pb-1 lg:block lg:space-y-1 lg:overflow-visible lg:pb-0"}>
+      {LESSONS.map((item, index) => {
+        const active = index === lessonIndex;
+        const done = completed.includes(item.id);
+        return (
+          <li key={item.id}>
+            <button
+              type="button"
+              onClick={() => selectLesson(index)}
+              aria-current={active ? "page" : undefined}
+              className={cx(
+                "flex w-full shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-left text-sm transition lg:whitespace-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 motion-reduce:transition-none",
+                active ? "bg-cyan-300/12 text-cyan-100" : done ? "text-emerald-100/80 hover:bg-white/5" : "text-slate-400 hover:bg-white/5 hover:text-slate-200",
+              )}
+            >
+              <span className={cx("w-5 font-mono text-xs", done ? "text-emerald-300" : active ? "text-cyan-300" : "text-slate-600")} aria-hidden="true">
+                {done ? "✓" : active ? "●" : "○"}
+              </span>
+              <span>{item.nav}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+
   return (
     <div data-testid="rdma-curriculum" data-hydrated={hydrated ? "true" : "false"}>
-      <div className="border-b border-white/8 pb-5">
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">FabricLab / Practicals / RDMA From First Principles</div>
-        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="border-b border-white/8 pb-3 sm:pb-5">
+        <div className="hidden text-xs uppercase tracking-[0.2em] text-slate-500 sm:block">FabricLab / Practicals / RDMA From First Principles</div>
+        <div className="mt-2 flex flex-col gap-2.5 sm:mt-4 sm:gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-sm font-semibold text-cyan-300">Lesson {progressText}</div>
-            <h1 className="mt-2 max-w-4xl text-3xl font-semibold tracking-tight text-white sm:text-4xl">{lesson.title}</h1>
-            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-400">{lesson.question}</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <div className="text-xs font-semibold text-cyan-300 sm:text-sm">Lesson {progressText}</div>
+              {completed.includes(lesson.id) ? <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-300/80">Previously completed · review/reference access</div> : null}
+            </div>
+            <h1 className="mt-1.5 max-w-4xl text-[1.55rem] font-semibold leading-8 tracking-tight text-white sm:mt-2 sm:text-4xl sm:leading-tight">{lesson.title}</h1>
+            <p className="mt-3 hidden max-w-3xl text-base leading-7 text-slate-400 sm:block">{lesson.question}</p>
           </div>
-          <Link
-            href="/practical/rdma/explorer"
-            className="w-fit rounded-full border border-white/10 px-4 py-2 text-sm text-slate-400 transition hover:border-white/25 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
-          >
-            Open advanced execution explorer
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => restartLesson()}
+              className="w-fit rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-500 transition hover:border-white/25 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:px-4 sm:py-2 sm:text-sm"
+            >
+              <span className="sm:hidden">Restart</span><span className="hidden sm:inline">Restart this lesson</span>
+            </button>
+            <Link
+              href="/practical/rdma/explorer"
+              className="w-fit rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-400 transition hover:border-white/25 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 sm:px-4 sm:py-2 sm:text-sm"
+            >
+              <span className="sm:hidden">Explorer</span><span className="hidden sm:inline">Open advanced execution explorer</span>
+            </Link>
+          </div>
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)]">
-        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
-          <nav aria-label="Learning path" className="rounded-[1.35rem] border border-white/10 bg-slate-950/40 p-3">
+      <div className="mt-4 grid gap-6 sm:mt-6 lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)]">
+        <aside className="order-2 min-w-0 lg:order-1 lg:sticky lg:top-24 lg:self-start">
+          <details className="rounded-xl border border-white/10 bg-slate-950/40 p-3 lg:hidden" data-testid="mobile-learning-path">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Learning path · lesson {progressText}</summary>
+            {lessonNav(true)}
+          </details>
+
+          <nav aria-label="Learning path" className="hidden rounded-xl border border-white/10 bg-slate-950/40 p-3 lg:block">
             <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Learning path</div>
-            <ol className="flex gap-1 overflow-x-auto pb-1 lg:block lg:space-y-1 lg:overflow-visible lg:pb-0">
-              {LESSONS.map((item, index) => {
-                const active = index === lessonIndex;
-                const done = completed.includes(item.id);
-                return (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => selectLesson(index)}
-                      aria-current={active ? "page" : undefined}
-                      className={cx(
-                        "flex w-full shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-left text-sm transition lg:whitespace-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
-                        active ? "bg-cyan-300/12 text-cyan-100" : done ? "text-emerald-100/80 hover:bg-white/5" : "text-slate-400 hover:bg-white/5 hover:text-slate-200",
-                      )}
-                    >
-                      <span className={cx("w-5 font-mono text-xs", done ? "text-emerald-300" : active ? "text-cyan-300" : "text-slate-600")} aria-hidden="true">
-                        {done ? "✓" : active ? "●" : "○"}
-                      </span>
-                      <span>{item.nav}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
+            {lessonNav(false)}
           </nav>
 
-          <section className="mt-4 hidden rounded-[1.35rem] border border-white/10 bg-slate-950/35 p-4 text-sm leading-6 text-slate-400 lg:block">
+          <section className="mt-4 hidden rounded-xl border border-white/10 bg-slate-950/35 p-4 text-sm leading-6 text-slate-400 lg:block">
             <h2 className="font-semibold text-slate-200">Reproduce the evidence</h2>
             <p className="mt-2">The guided lesson replays validated recorded evidence in your browser; it does not execute live RDMA operations.</p>
             <div className="mt-3 grid gap-2">
@@ -159,7 +227,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
             </div>
           </section>
 
-          <details className="mt-4 rounded-[1.35rem] border border-white/10 bg-slate-950/35 p-4 text-sm leading-6 text-slate-400 lg:hidden">
+          <details className="mt-4 rounded-xl border border-white/10 bg-slate-950/35 p-4 text-sm leading-6 text-slate-400 lg:hidden">
             <summary className="cursor-pointer font-semibold text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Reproduce the evidence</summary>
             <p className="mt-2">The guided lesson replays validated recorded evidence in your browser; it does not execute live RDMA operations.</p>
             <div className="mt-3 grid gap-2">
@@ -169,21 +237,23 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
           </details>
         </aside>
 
-        <main className="min-w-0">
-          {finished ? (
-            <section className="rounded-[1.75rem] border border-emerald-300/20 bg-emerald-300/7 p-6 sm:p-8" data-testid="rdma-curriculum-complete">
-              <div className="text-xs uppercase tracking-[0.2em] text-emerald-300">Practical complete</div>
+        <main className="order-1 min-w-0 lg:order-2">
+          {showCompletion ? (
+            <section className="rounded-2xl border border-emerald-300/20 bg-emerald-300/7 p-6 sm:p-8" data-testid="rdma-curriculum-complete">
+              <div className="text-xs uppercase tracking-[0.2em] text-emerald-300">Guided sequence completed</div>
               <h2 className="mt-3 text-3xl font-semibold text-white">You followed application memory all the way to genuine RoCEv2 packets</h2>
               <p className="mt-4 max-w-3xl text-base leading-8 text-slate-300">
-                You can revisit any lesson without losing the causal sequence, inspect the advanced execution replay, or reproduce the laboratory evidence using the preserved source and captures.
+                This completion marker means the guided sequence was viewed; it is not proof of subject mastery. You can review any lesson from its beginning, resume direct reference access, inspect the advanced execution replay, or reproduce the laboratory evidence.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <button type="button" onClick={() => selectLesson(0)} className="rounded-full border border-white/10 px-5 py-3 text-sm text-slate-200 transition hover:border-white/25">Review from Lesson 1</button>
+                <button type="button" onClick={() => selectLesson(lessonIndex)} className="rounded-full border border-white/10 px-5 py-3 text-sm text-slate-200 transition hover:border-white/25">Resume current lesson</button>
+                <button type="button" onClick={() => restartLesson(0)} className="rounded-full border border-white/10 px-5 py-3 text-sm text-slate-200 transition hover:border-white/25">Review Lesson 1 from the beginning</button>
+                <button type="button" onClick={startPracticalAgain} className="rounded-full border border-white/10 px-5 py-3 text-sm text-slate-200 transition hover:border-white/25">Start the practical again</button>
                 <Link href="/practical/rdma/explorer" className="rounded-full bg-cyan-300 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200">Open advanced execution explorer</Link>
               </div>
             </section>
           ) : (
-            <Lesson key={lesson.id} onComplete={completeLesson} />
+            <Lesson key={`${lesson.id}:${resetVersion}`} onComplete={completeLesson} />
           )}
         </main>
       </div>

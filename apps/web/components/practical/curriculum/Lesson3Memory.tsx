@@ -2,81 +2,69 @@
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { cx, EvidenceNote, exactValue, FactGrid, SourceExcerpt } from "./visuals";
+import { ResourceRelationshipDiagram } from "./rdmaDiagrams";
 import { rdmaEvidence } from "@/lib/practical/rdmaEvidence";
 
 const resources = rdmaEvidence.experiments.find((experiment) => experiment.id === "resources")!;
 const endpoint = resources.endpoints.initiator;
 
-function MemoryRegistrationDiagram({ stage }: { stage: number }) {
-  const registered = stage >= 3;
-  const prepared = stage >= 2;
+function ProcessMemoryScope({ stage }: { stage: number }) {
   const allocated = stage >= 1;
+  const registered = stage >= 3;
   return (
-    <figure className="rounded-[1.6rem] border border-white/10 bg-slate-950/35 p-4" data-testid="memory-registration-diagram">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.72fr)]">
-        <section className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-semibold text-slate-100">Application process memory</h3>
-            <span className="text-[10px] uppercase tracking-[0.16em] text-slate-500">one process, several regions</span>
-          </div>
-          <div className="mt-4 space-y-3">
-            <div className="rounded-xl border border-white/10 bg-slate-950/55 p-3">
-              <div className="text-xs font-semibold text-slate-400">Private application state</div>
-              <div className="mt-1 font-mono text-sm text-slate-600">authentication state · parser state · unrelated data</div>
-            </div>
-            <div className={cx("rounded-xl border p-3 transition", allocated ? "border-amber-300/35 bg-amber-300/10" : "border-dashed border-white/10 bg-slate-950/45")}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-xs font-semibold text-amber-100">Intended transfer buffer</div>
-                {allocated ? <span className="font-mono text-xs text-amber-100/80">length {endpoint.memoryRegion.length} bytes</span> : <span className="text-xs text-slate-600">not allocated yet</span>}
-              </div>
-              <div className="mt-2 font-mono text-sm text-slate-300">
-                {allocated ? "space available to the application" : "—"}
-              </div>
-              <div className={cx("mt-2 rounded-lg border px-2 py-1.5 text-xs", registered ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100" : "border-white/8 text-slate-500")}>
-                {registered ? "registered for explicitly permitted RDMA access" : allocated ? "not registered: the RDMA device has no authority to use it" : "the security problem exists before any registration"}
-              </div>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-slate-950/55 p-3">
-              <div className="text-xs font-semibold text-slate-400">Other process memory</div>
-              <div className="mt-1 font-mono text-sm text-slate-600">must remain outside this operation</div>
-            </div>
-          </div>
-        </section>
+    <section className="mb-3 rounded-xl border border-white/10 bg-slate-950/45 p-3" data-testid="process-memory-scope">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Application process memory</div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-slate-900/35 p-2 text-xs text-slate-500">private state<br /><span className="font-mono">must remain outside</span></div>
+        <div className={cx("rounded-lg border p-2 text-xs", registered ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-100" : allocated ? "border-amber-300/35 bg-amber-300/10 text-amber-100" : "border-dashed border-white/10 text-slate-600")}>
+          intended transfer buffer<br />
+          <span className="font-mono">{registered ? "registered for permitted access" : allocated ? "allocated, not yet registered" : "not allocated yet"}</span>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-slate-900/35 p-2 text-xs text-slate-500">unrelated memory<br /><span className="font-mono">outside this operation</span></div>
+      </div>
+    </section>
+  );
+}
 
-        <section className="rounded-2xl border border-white/10 bg-slate-900/45 p-4">
-          <h3 className="font-semibold text-slate-100">RDMA device resource context</h3>
-          <div className="mt-4 space-y-3">
-            <div className={cx("rounded-xl border p-3", prepared ? "border-cyan-300/35 bg-cyan-300/10" : "border-dashed border-white/10 text-slate-600")}>
-              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">{prepared ? "Device context" : "No device context yet"}</div>
-              <div className="mt-1 text-sm text-slate-200">{prepared ? "an open handle through which the application uses the RDMA device" : "the application has not established a resource context"}</div>
-            </div>
-            <div className={cx("rounded-xl border p-3", prepared ? "border-violet-300/35 bg-violet-300/10" : "border-dashed border-white/10 text-slate-600")}>
-              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">{prepared ? "Protection domain" : "No protection boundary yet"}</div>
-              <div className="mt-1 text-sm text-slate-200">{prepared ? "the resource boundary that associates memory, queues and permissions for this application context" : "the need for a boundary is visible before its technical name"}</div>
-            </div>
-            <div className={cx("rounded-xl border p-3", registered ? "border-emerald-300/35 bg-emerald-300/10" : "border-dashed border-white/10 text-slate-600")}>
-              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Registered memory region</div>
-              {registered ? (
-                <dl className="mt-2 grid gap-2 font-mono text-xs text-slate-200">
-                  <div className="flex justify-between gap-2"><dt>address</dt><dd>{exactValue(endpoint.memoryRegion.address)}</dd></div>
-                  <div className="flex justify-between gap-2"><dt>length</dt><dd>{endpoint.memoryRegion.length}</dd></div>
-                  {stage >= 5 ? <div className="flex justify-between gap-2"><dt>LKEY</dt><dd>{exactValue(endpoint.memoryRegion.lkey)}</dd></div> : null}
-                  {stage >= 5 ? <div className="flex justify-between gap-2"><dt>RKEY</dt><dd>{exactValue(endpoint.memoryRegion.rkey)}</dd></div> : null}
-                </dl>
-              ) : <div className="mt-1 text-sm">no memory region registered</div>}
+function MemoryRegistrationDiagram({ stage }: { stage: number }) {
+  const allocated = stage >= 1;
+  const registered = stage >= 3;
+  return (
+    <div data-testid="memory-registration-diagram">
+      <ProcessMemoryScope stage={stage} />
+      {stage < 2 ? (
+        <figure className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+          <div className="mx-auto max-w-xl text-center">
+            <div className="rounded-xl border border-amber-300/25 bg-amber-300/8 p-4">
+              <div className="text-sm font-semibold text-amber-100">The safety problem</div>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                {allocated
+                  ? "The application owns the intended buffer, but the RDMA device has no registered description of it and no authority to use it."
+                  : "If a device can access memory, the application needs a way to authorize exactly one region rather than expose the whole process."}
+              </p>
+              {allocated ? <div className="mt-3 font-mono text-xs text-amber-100/80">buffer length {endpoint.memoryRegion.length} bytes · address exists in the process, but is not yet device-authorized</div> : null}
             </div>
           </div>
-          {stage >= 4 ? (
-            <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/55 p-3 text-sm leading-6 text-slate-300">
-              <strong className="text-slate-100">Access is explicit:</strong> local write, remote write and remote read are separate permissions. Registering memory does not make all memory accessible and does not make every operation permitted.
+          <figcaption className="mt-3 text-center text-xs text-slate-500">Conceptual memory layout. Registration metadata appears only after the real registration operation.</figcaption>
+        </figure>
+      ) : (
+        <div>
+          <ResourceRelationshipDiagram stage={stage} />
+          {registered ? (
+            <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-300/7 p-3" data-testid="registered-memory-evidence">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-100">Recorded registered memory metadata</div>
+              <dl className="mt-2 grid gap-2 font-mono text-xs text-slate-200 sm:grid-cols-2">
+                <div className="flex justify-between gap-2"><dt>address</dt><dd>{exactValue(endpoint.memoryRegion.address)}</dd></div>
+                <div className="flex justify-between gap-2"><dt>length</dt><dd>{endpoint.memoryRegion.length}</dd></div>
+                {stage >= 5 ? <div className="flex justify-between gap-2"><dt>LKEY</dt><dd>{exactValue(endpoint.memoryRegion.lkey)}</dd></div> : null}
+                {stage >= 5 ? <div className="flex justify-between gap-2"><dt>RKEY</dt><dd>{exactValue(endpoint.memoryRegion.rkey)}</dd></div> : null}
+              </dl>
+              {stage >= 4 ? <p className="mt-2 text-xs leading-5 text-emerald-100/80">Local write, remote write and remote read are distinct permissions. Registration does not authorize unrelated memory or every operation.</p> : null}
             </div>
           ) : null}
-        </section>
-      </div>
-      <figcaption className="mt-3 text-xs leading-5 text-slate-500">
-        The memory layout is conceptual; the registered-region metadata shown after registration comes from the validated resource-creation reference run. Run-specific addresses and keys are evidence values, not permanent values learners should expect on another execution.
-      </figcaption>
-    </figure>
+        </div>
+      )}
+    </div>
   );
 }
 
