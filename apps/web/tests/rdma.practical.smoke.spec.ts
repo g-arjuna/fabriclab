@@ -267,6 +267,8 @@ test.describe("RDMA practical public experience", () => {
     await expect(page.locator(`[data-work-request-id="${recvWr.id}"]`)).toContainText(/Host B/i);
     await expect(page.locator(`[data-work-request-id="${sendWr.id}"]`)).toHaveCount(0);
     await expect(page.getByTestId("selection-packets")).toContainText(/none supported by evidence/i);
+    await expect(page.locator('[data-memory-region-id="b:memory:hostb"]')).toHaveAttribute("data-memory-state", "before");
+    await expect(page.locator('[data-memory-region-id="b:memory:hostb"]')).not.toContainText(/Verification:/i);
 
     await selectStep(page, /Sender posts a signalled SEND/i);
     await expect(page.locator(`[data-work-request-id="${sendWr.id}"]`)).toContainText(/Host A/i);
@@ -275,6 +277,8 @@ test.describe("RDMA practical public experience", () => {
     await selectStep(page, /Receiver memory and receive completion/i);
     await expect(page.locator(`[data-completion-id="${recvCqe.id}"]`)).toContainText(/Host B/i);
     await expect(page.locator(`[data-completion-id="${sendCqe.id}"]`)).toHaveCount(0);
+    await expect(page.locator('[data-memory-region-id="b:memory:hostb"]')).toHaveAttribute("data-memory-state", "after");
+    await expect(page.locator('[data-memory-region-id="b:memory:hostb"]')).toContainText(/Verification: byteLength=50/i);
 
     await selectStep(page, /ACK returns; sender completion is local/i);
     await expect(page.locator(`[data-completion-id="${sendCqe.id}"]`)).toContainText(/Host A/i);
@@ -298,10 +302,14 @@ test.describe("RDMA practical public experience", () => {
     await expect(page.getByTestId("packet-inspector")).toContainText(readResponsePacket.opcodeName);
     await expect(page.getByTestId("packet-inspector")).toContainText(readExperiment.endpoints.initiator.qpn.hex);
     await expect(page.getByText(/did not post a send WR for this response/i).first()).toBeVisible();
+    await expect(page.locator('[data-memory-region-id="d:memory:hosta"]')).toHaveAttribute("data-memory-state", "before");
+    await expect(page.locator('[data-memory-region-id="d:memory:hosta"]')).not.toContainText(/Verification:/i);
 
     await selectStep(page, /Reader completion and payload verification/i);
     await expect(page.locator(`[data-completion-id="${readCqe.id}"]`)).toContainText(/Host A/i);
     await expect(page.getByTestId("selection-completions")).toContainText(/Host A · SUCCESS/i);
+    await expect(page.locator('[data-memory-region-id="d:memory:hosta"]')).toHaveAttribute("data-memory-state", "after");
+    await expect(page.locator('[data-memory-region-id="d:memory:hosta"]')).toContainText(/Verification: check=payload_match · ok=true/i);
     expectNoBrowserErrors(tracker);
   });
 
