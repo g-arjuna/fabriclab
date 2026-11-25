@@ -24,7 +24,7 @@ test.describe("RDMA evidence correlation model", () => {
     expect([...relationships.workRequestIds]).toEqual([request.id]);
     expect(relationships.packetIds.has(requestPacket.id)).toBe(true);
     expect(relationships.packetIds.has(ackPacket.id)).toBe(true);
-    expect(qualificationText(relationships, "packets", requestPacket.id)).toContain("validated WR/QPN/PSN/RETH correlation");
+    expect(qualificationText(relationships, "packets", requestPacket.id)).toContain("validated RDMA_WRITE WR/opcode/QPN/PSN/RETH correlation");
     expect(qualificationText(relationships, "packets", ackPacket.id)).toContain("later causal outcome");
     expect(qualificationText(relationships, "completions", completion.id)).toContain("later completion outcome");
     expect(qualificationText(relationships, "workRequests", completion.workRequestId!)).toContain("validated application work-request");
@@ -35,9 +35,27 @@ test.describe("RDMA evidence correlation model", () => {
     const relationships = relationshipsForEvent(sendRecvExperiment, event.id);
     const requestPacket = sendRecvExperiment.packets.find((packet) => packet.role === "request")!;
     const ackPacket = sendRecvExperiment.packets.find((packet) => packet.role === "acknowledgement")!;
-    expect(qualificationText(relationships, "packets", requestPacket.id)).toContain("validated WR/QPN/PSN/RETH correlation");
+    expect(qualificationText(relationships, "packets", requestPacket.id)).toContain("validated SEND WR/opcode/QPN/PSN correlation");
     expect(qualificationText(relationships, "packets", requestPacket.id)).toContain("causal precursor to a later completion outcome");
     expect(qualificationText(relationships, "packets", ackPacket.id)).toContain("later causal outcome");
+  });
+
+
+  test("READ request uses RETH terminology while ACK and READ response do not", () => {
+    const readExperiment = rdmaEvidence.experiments.find((experiment) => experiment.id === "read")!;
+    const event = readExperiment.events.find((item) => item.type === "post_send" && item.host === "hosta")!;
+    const relationships = relationshipsForEvent(readExperiment, event.id);
+    const requestPacket = readExperiment.packets.find((packet) => packet.role === "request")!;
+    const responsePacket = readExperiment.packets.find((packet) => packet.role === "response")!;
+    const readQualification = qualificationText(relationships, "packets", requestPacket.id);
+    const responseQualification = qualificationText(relationships, "packets", responsePacket.id);
+    expect(readQualification).toContain("validated RDMA_READ WR/opcode/QPN/PSN/RETH correlation");
+    expect(responseQualification).not.toContain("RETH");
+
+    const writeEvent = writeExperiment.events.find((item) => item.type === "post_send" && item.host === "hosta")!;
+    const writeRelationships = relationshipsForEvent(writeExperiment, writeEvent.id);
+    const ackQualification = qualificationText(writeRelationships, "packets", writeExperiment.packets[1].id);
+    expect(ackQualification).not.toContain("RETH");
   });
 
   test("metadata and receive-posting events do not fabricate packet relationships", () => {

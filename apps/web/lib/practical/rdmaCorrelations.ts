@@ -126,8 +126,9 @@ function addWorkRequestRelationship(experiment: Experiment, relationships: Relat
   experiment.packets.forEach((packet) => {
     if (packet.correlations.workRequestIds.includes(request.id)) {
       relationships.packetIds.add(packet.id);
+      const requestFields = request.opcode === "SEND" ? "opcode/QPN/PSN" : "opcode/QPN/PSN/RETH";
       const qualification = packet.role === "request"
-        ? "validated WR/QPN/PSN/RETH correlation"
+        ? `validated ${request.opcode} WR/${requestFields} correlation`
         : "later causal outcome for the same work request";
       qualify(relationships, "packets", packet.id, qualification);
       if (packet.role === "request" && packet.correlations.completionIds.length) {
