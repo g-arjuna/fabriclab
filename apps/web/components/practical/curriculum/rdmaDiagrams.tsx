@@ -327,7 +327,7 @@ export type EndpointVisualProps = {
 export function EndpointResourceDiagram(props: EndpointVisualProps) {
   const emphasize = (part: NonNullable<EndpointVisualProps["emphasize"]>[number]) => props.emphasize?.includes(part) || false;
   return (
-    <section aria-label={props.name} data-testid={`endpoint-${props.host}`} className={cx("min-w-0 rounded-2xl border border-white/10 bg-slate-900/35 p-3", props.dimmed && "opacity-55")}> 
+    <section aria-label={props.name} data-testid={`endpoint-${props.host}`} className={cx("min-w-0 rounded-2xl border border-white/10 bg-slate-900/35 p-3", props.dimmed && "opacity-55")}>
       <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/8 pb-2">
         <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-200">{props.name}</h3>
         <span className="text-[10px] uppercase tracking-[0.12em] text-slate-500">{props.role}</span>
