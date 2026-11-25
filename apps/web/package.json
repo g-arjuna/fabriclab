@@ -18,18 +18,20 @@
     "test:browser:entitlements": "playwright test tests/entitlement.revoke.smoke.spec.ts",
     "test:browser:labs": "playwright test tests/lab.release.smoke.spec.ts",
     "test:browser:notifications": "playwright test tests/notifications.smoke.spec.ts",
-    "test:browser:release": "npm run test:browser:deploy && npm run test:browser:admin && npm run test:browser:progress && npm run test:browser:catalog && npm run test:browser:entitlements && npm run test:browser:labs"
+    "test:browser:release": "npm run test:browser:deploy && npm run test:browser:admin && npm run test:browser:progress && npm run test:browser:catalog && npm run test:browser:entitlements && npm run test:browser:labs",
+    "test:browser:ch16": "playwright test tests/ch16.rdma-write.smoke.spec.ts",
+    "test:browser:public": "playwright test tests/public.smoke.spec.ts"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.57.4",
     "@mdx-js/loader": "^3.1.1",
     "@mdx-js/react": "^3.1.1",
-    "@next/mdx": "^16.2.3",
+    "@next/mdx": "^16.4.6",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.119.2",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "gray-matter": "^4.0.3",
-    "next": "16.2.3",
+    "next": "^16.4.6",
     "next-mdx-remote": "^6.0.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
@@ -39,11 +41,11 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "@tailwindcss/postcss": "4.1.13",
+    "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "24.5.2",
     "@types/react": "19.2.1",
     "@types/react-dom": "19.2.1",
-    "tailwindcss": "4.1.13",
+    "tailwindcss": "^4.3.5",
     "typescript": "5.9.2"
   }
 }

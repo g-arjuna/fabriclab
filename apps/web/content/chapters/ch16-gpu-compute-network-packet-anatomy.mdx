@@ -60,16 +60,16 @@ To understand the packet, understand what creates it. NCCL's AllReduce operation
 
 <QueuePairMechanicsViz />
 
-A Queue Pair (QP) is a pair of circular ring buffers -- the Send Queue (SQ) and the Receive Queue (RQ) -- that live in pinned, physically-contiguous memory on the host (or in GPU HBM, with GPUDirect RDMA). The ConnectX-7's DMA engine reads Work Queue Entries (WQEs) from the SQ at line rate, builds the corresponding packets, and places them on the wire. The RQ holds pre-posted Receive Work Requests (RWRs) that tell the HCA where in memory to DMA incoming payload.
+A Queue Pair (QP) is a pair of circular ring buffers -- the Send Queue (SQ) and the Receive Queue (RQ) -- that live in pinned, physically-contiguous memory on the host (or in GPU HBM, with GPUDirect RDMA). The ConnectX-7's DMA engine reads Work Queue Entries (WQEs) from the SQ at line rate, builds the corresponding packets, and places them on the wire. The RQ holds pre-posted Receive Work Requests (RWRs) for operations that consume them, principally SEND and WRITE-with-immediate operations. An ordinary RDMA WRITE names its destination memory in the RETH header and does **not** consume an RQ entry.
 
 When NCCL initialises a communicator between 128 GPUs, it creates one QP per remote peer per GPU. For a 128-GPU ring AllReduce, each GPU maintains 127 remote QPs. Each QP has:
 
 - A local QPN (Queue Pair Number) -- a 24-bit identifier that is unique within the HCA. This is what appears in the RoCEv2 BTH header's destination QPN field.
-- A remote QPN -- the peer HCA's QPN for the corresponding Receive Queue.
+- A remote QPN -- the peer HCA's Queue Pair Number. It identifies the remote QP context; it is not, by itself, a pointer to a posted receive buffer.
 - A remote GID (Global Identifier) -- the 128-bit IPv6-format address of the peer HCA port. In RoCEv2, the GID maps directly to the peer's IP address via a specific encoding.
 - An RKEY (Remote Key) -- a capability token that authorises writing to a specific Memory Region (MR) on the remote side.
 
-When NCCL posts an RDMA Write, it fills a WQE specifying: remote address, remote RKEY, local source VA (virtual address in pinned GPU HBM), length, and signalling flags. The HCA DMA-reads the source data from GPU HBM, constructs the RoCEv2 packet stream, and DMAs it onto the wire. When the last packet of the RDMA Write reaches the destination HCA, that HCA DMAs the payload into the destination GPU HBM at the address the sender specified -- and the destination CPU never wakes up.
+When NCCL posts an ordinary RDMA Write, it fills a WQE specifying: remote address, remote RKEY, local source VA (virtual address in pinned GPU HBM), length, and signalling flags. The HCA DMA-reads the source data from GPU HBM, constructs the RoCEv2 packet stream, and DMAs it onto the wire. When the last packet of the RDMA Write reaches the destination HCA, that HCA DMAs the payload into the destination GPU HBM at the address the sender specified. No remote CPU copy or socket processing is involved. That absence of CPU data-path work is not the same as application notification: the destination application still needs a protocol-level synchronisation mechanism before it may safely consume the new data.
 
 This is why the kernel network stack is irrelevant: there is no socket, no `sendmsg()`, no kernel buffer copy. The path is: GPU kernel -> CUDA -> NCCL -> libibverbs -> HCA firmware -> wire.
 
@@ -77,7 +77,7 @@ This is why the kernel network stack is irrelevant: there is no socket, no `send
 
 In a TCP connection, the kernel manages buffers, the kernel performs the socket system call, the kernel's NIC driver submits DMA descriptors. The CPU is involved at every stage. An `iperf3` test at 400G would require the CPU to process millions of interrupts per second and copy data between socket buffers and application memory.
 
-In RDMA, the CPU posts a single Work Request and reads a single completion entry when it is done. The HCA handles everything in between. A 400G RDMA write of a 128 MB tensor involves zero CPU copies and zero CPU interrupts during the transfer itself.
+In RDMA, the initiating CPU posts a Work Request and, if that send WR is signalled (or the QP uses `sq_sig_all`), can later read a work completion from its own Completion Queue. The HCA handles the packetisation, retransmission machinery, and memory transfer in between. A 400G RDMA write of a 128 MB tensor involves zero CPU copies and zero CPU interrupts during the transfer itself. The initiator-side completion is local completion of the posted WR; it is not a receive CQE generated on the remote application.
 
 ## Act 3 -- Inside the ConnectX-7: the NIC's packet construction pipeline
 
@@ -99,14 +99,14 @@ The HCA builds the Base Transport Header. For an RDMA Write operation:
 
 ```
 BTH fields:
-  Opcode:        RDMA Write First (0x06), Middle (0x07), Last (0x08), Only (0x00)
+  Opcode:        RDMA Write First (0x06), Middle (0x07), Last (0x08), Only (0x0A)
   Partition Key: 0xFFFF (default partition)
   Destination QPN: 24-bit remote QP number
   Packet Seq Num:  24-bit PSN, incremented per packet
   Acknowledgement: not requested on middle packets (reduces ACK traffic)
 ```
 
-The PSN (Packet Sequence Number) is how the destination HCA detects packet loss and out-of-order delivery. If PSN arrives out of order, the HCA either holds it in a reorder buffer (if RSHP/adaptive routing is enabled on the Spectrum-X NIC) or marks it as a NAK (Negative Acknowledgement) and triggers retransmission. The PSN is also what the switch's adaptive routing -- per the QPair field in the BTH -- uses for entropy in the ECMP hash. More on this in Act 4.
+The PSN (Packet Sequence Number) is how the destination HCA detects packet loss and out-of-order delivery. If PSN arrives out of order, the HCA either holds it in a reorder buffer (if RSHP/adaptive routing is enabled on the Spectrum-X NIC) or marks it as a NAK (Negative Acknowledgement) and triggers retransmission. The destination QPN field in the BTH can also provide additional entropy for RoCE-aware ECMP/adaptive-routing hashes. More on this in Act 4.
 
 **Stage 4: UDP and IP header construction (RoCEv2 mode)**
 
@@ -318,7 +318,13 @@ The HCA's receive pipeline:
 4. **PSN check**: expected PSN = current PSN + 1? If yes, proceed. If out of order and RSHP enabled: hold in reorder buffer. If out of order and no RSHP: send NACK, trigger retransmission.
 5. **RKEY validation**: for RDMA Write, the incoming packet carries a virtual address and RKEY. HCA validates RKEY against the local Memory Region table. If valid, proceed.
 6. **DMA to GPU HBM**: HCA DMA-writes the payload to the virtual address specified in the RDMA Write header, translated through the MR's page table to a physical GPU HBM address.
-7. **Completion**: when the last segment (opcode "RDMA Write Last" or "Only") is received, the HCA posts a completion entry to the destination's Completion Queue. NCCL's background thread sees this completion and knows the write succeeded.
+7. **Ordinary WRITE completion semantics**: when the last segment (opcode "RDMA Write Last" or "Only") is received and the payload has been placed, the destination HCA is finished with the data transfer. An ordinary RDMA WRITE does not consume a receive WR and does **not** post a normal receive completion entry to the destination application's Completion Queue.
+
+   The initiator is different: a signalled WRITE can produce a successful work completion on the initiator's send CQ, which the initiator polls with `ibv_poll_cq()`. That completion tells the initiator that its posted WR completed; it is not a notification delivered to the remote application.
+
+   Before the remote application consumes the memory, it needs an explicit synchronisation or notification protocol. Depending on the design, that may be an application message, a doorbell/flag protocol with appropriate memory-ordering rules, or a different verbs operation. **RDMA WRITE with immediate data** is the relevant verbs variant with different receive-side semantics: it consumes a posted receive WR and can generate a receive completion carrying the immediate value. It is not the behaviour of an ordinary WRITE.
+
+   This distinction is specified by the verbs programming model: [`ibv_post_send(3)`](https://man7.org/linux/man-pages/man3/ibv_post_send.3.html) defines the WRITE and WRITE-with-immediate opcodes and the signalling flag, while [`ibv_poll_cq(3)`](https://man7.org/linux/man-pages/man3/ibv_poll_cq.3.html) defines the local work-completion interface. NVIDIA's [RDMA-aware networks programming guide](https://networking-docs.nvidia.com/doca/archive/3-5-0/rdma-aware-networks-programming-guide) states the same operational distinction: ordinary RDMA writes are performed without notification to the remote host, whereas write-with-immediate operations notify the remote host of the immediate value. The executable Soft-RoCE implementation in `labs/rdma-basics/python/exp_c_write.py` and the validated evidence in PR #7 demonstrate the same behaviour: no target receive WR, no target CQE, an initiator-side successful completion, and explicit control-channel synchronisation before the target verifies memory.
 
 **The full latency budget**
 
