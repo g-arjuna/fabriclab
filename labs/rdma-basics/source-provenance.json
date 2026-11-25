@@ -1,0 +1,31 @@
+{
+  "executionSourceCheckout": "a208af6ecf4e838d6d2c475ede366494de81a706",
+  "files": {
+    "python/exp_a_resources.py": {
+      "lineCount": 134,
+      "sha256": "6349a2b07d45abc94017d1465f106d8d82c918feef9f4c8768f0c657c6946711"
+    },
+    "python/exp_b_send_recv.py": {
+      "lineCount": 157,
+      "sha256": "246d28ca34d0d683e3eb22eebcd696fd8b7678d954ef29c8bfebd897ae6c4993"
+    },
+    "python/exp_c_write.py": {
+      "lineCount": 185,
+      "sha256": "e015eaef32bbd0d95f82d37e9b6484a70ab9b61c3bcc8783270830c54e6aa81a"
+    },
+    "python/exp_d_read.py": {
+      "lineCount": 153,
+      "sha256": "7a127401e8dfd809498ca40bb51c14453c095a795206d403339a5de5b406d9b2"
+    },
+    "python/rdma_common.py": {
+      "lineCount": 256,
+      "sha256": "2646acc1a770b16eee861ea26af9cc3308b8eb7c84bd49d0d94ef0b4bf5bd6dd"
+    }
+  },
+  "schemaVersion": 1,
+  "verification": {
+    "method": "SHA-256 and line count of each Python source file were compared with git show <executionSourceCheckout>:labs/rdma-basics/python/<file> while the execution object was available; export-time validation uses this version-controlled manifest rather than local Git history",
+    "sourceTree": "labs/rdma-basics/python",
+    "verifiedRepository": "g-arjuna/fabriclab"
+  }
+}

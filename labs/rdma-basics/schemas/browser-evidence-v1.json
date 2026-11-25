@@ -1,0 +1,377 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/g-arjuna/fabriclab/labs/rdma-basics/schemas/browser-evidence-v1.json",
+  "title": "FabricLab browser RDMA reference evidence, schema version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "source", "provenance", "clockModel", "environment", "hosts", "sources", "experiments"],
+  "definitions": {
+    "exactInteger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decimal", "hex"],
+      "properties": {
+        "decimal": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+        "hex": {"type": "string", "pattern": "^0x[0-9a-f]+$"}
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "host", "role", "type", "sequence", "tUnixNs", "fields"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "host": {"enum": ["hosta", "hostb"]},
+        "role": {"type": "string"},
+        "type": {"type": "string"},
+        "sequence": {"type": "integer", "minimum": 1},
+        "tUnixNs": {"type": "string", "pattern": "^[0-9]+$"},
+        "fields": {"type": "object"}
+      }
+    },
+    "memoryRegionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "length", "lkey", "rkey"],
+      "properties": {
+        "address": {"$ref": "#/definitions/exactInteger"},
+        "length": {"type": "integer", "minimum": 1},
+        "lkey": {"$ref": "#/definitions/exactInteger"},
+        "rkey": {"$ref": "#/definitions/exactInteger"}
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "hostLabel", "role", "roleName", "qpn", "destinationQpn", "sqPsn", "rqPsn", "qpState", "memoryRegion", "resourceEventId", "qpReadyEventId", "metadataEventId"],
+      "properties": {
+        "host": {"enum": ["hosta", "hostb"]},
+        "hostLabel": {"type": "string"},
+        "role": {"type": "string"},
+        "roleName": {"type": "string"},
+        "qpn": {"$ref": "#/definitions/exactInteger"},
+        "destinationQpn": {"$ref": "#/definitions/exactInteger"},
+        "sqPsn": {"$ref": "#/definitions/exactInteger"},
+        "rqPsn": {"$ref": "#/definitions/exactInteger"},
+        "qpState": {"type": ["string", "null"]},
+        "gid": {"type": ["string", "null"]},
+        "peerGid": {"type": ["string", "null"]},
+        "memoryRegion": {"$ref": "#/definitions/memoryRegionRef"},
+        "resourceEventId": {"type": "string"},
+        "qpReadyEventId": {"type": "string"},
+        "metadataEventId": {"type": ["string", "null"]}
+      }
+    },
+    "workRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "eventId", "host", "role", "kind", "opcode", "wrId", "byteLength"],
+      "properties": {
+        "id": {"type": "string"},
+        "eventId": {"type": "string"},
+        "host": {"enum": ["hosta", "hostb"]},
+        "role": {"type": "string"},
+        "kind": {"enum": ["send", "receive", "rdma-write", "rdma-read"]},
+        "opcode": {"type": "string"},
+        "wrId": {"$ref": "#/definitions/exactInteger"},
+        "byteLength": {"type": ["integer", "null"], "minimum": 0},
+        "localAddress": {"$ref": "#/definitions/exactInteger"},
+        "localLkey": {"$ref": "#/definitions/exactInteger"},
+        "remoteAddress": {"$ref": "#/definitions/exactInteger"},
+        "remoteRkey": {"$ref": "#/definitions/exactInteger"},
+        "payloadText": {"type": "string"}
+      }
+    },
+    "completion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "eventId", "host", "role", "tag", "wrId", "workRequestId", "opcode", "status", "byteLength", "qpNum", "isTargetCompletion"],
+      "properties": {
+        "id": {"type": "string"},
+        "eventId": {"type": "string"},
+        "host": {"enum": ["hosta", "hostb"]},
+        "role": {"type": "string"},
+        "tag": {"type": ["string", "null"]},
+        "wrId": {"$ref": "#/definitions/exactInteger"},
+        "workRequestId": {"type": ["string", "null"]},
+        "opcode": {"type": "string"},
+        "status": {"type": "string"},
+        "byteLength": {"type": "integer", "minimum": 0},
+        "qpNum": {"$ref": "#/definitions/exactInteger"},
+        "isTargetCompletion": {"type": "boolean"}
+      }
+    },
+    "treeField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": {"type": "string"},
+        "value": {"type": "string"},
+        "annotation": {"type": "string"}
+      }
+    },
+    "packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "captureFile", "downloadPath", "frameNumber", "timeEpoch", "direction", "sourceIp", "destinationIp", "sourceHost", "destinationHost", "role", "frameLength", "capturedLength", "opcode", "opcodeName", "destinationQpn", "psn", "udp", "bth", "dataHex", "dataLength", "payloadHex", "payloadText", "rawHex", "correlations", "protocolTree"],
+      "properties": {
+        "id": {"type": "string"},
+        "captureFile": {"type": "string"},
+        "downloadPath": {"type": "string", "pattern": "^/practical/rdma/"},
+        "frameNumber": {"type": "integer", "minimum": 1},
+        "timeEpoch": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+        "direction": {"type": "string"},
+        "sourceIp": {"type": "string"},
+        "destinationIp": {"type": "string"},
+        "sourceHost": {"enum": ["hosta", "hostb", null]},
+        "destinationHost": {"enum": ["hosta", "hostb", null]},
+        "role": {"enum": ["request", "response", "acknowledgement", "transport"]},
+        "frameLength": {"type": "integer", "minimum": 1},
+        "capturedLength": {"type": "integer", "minimum": 1},
+        "opcode": {"$ref": "#/definitions/exactInteger"},
+        "opcodeName": {"type": "string"},
+        "destinationQpn": {"$ref": "#/definitions/exactInteger"},
+        "psn": {"$ref": "#/definitions/exactInteger"},
+        "udp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourcePort", "destinationPort", "length", "checksum"],
+          "properties": {
+            "sourcePort": {"type": "integer"},
+            "destinationPort": {"const": 4791},
+            "length": {"type": "integer"},
+            "checksum": {"type": ["string", "null"]}
+          }
+        },
+        "bth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["padCount", "pKey", "ackRequested"],
+          "properties": {
+            "padCount": {"type": "integer", "minimum": 0, "maximum": 3},
+            "pKey": {"$ref": "#/definitions/exactInteger"},
+            "ackRequested": {"type": "boolean"}
+          }
+        },
+        "reth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["virtualAddress", "rkey", "dmaLength"],
+          "properties": {
+            "virtualAddress": {"$ref": "#/definitions/exactInteger"},
+            "rkey": {"$ref": "#/definitions/exactInteger"},
+            "dmaLength": {"$ref": "#/definitions/exactInteger"}
+          }
+        },
+        "dataHex": {"type": ["string", "null"], "pattern": "^([0-9a-f]{2})*$"},
+        "dataLength": {"type": "integer", "minimum": 0},
+        "payloadHex": {"type": ["string", "null"], "pattern": "^([0-9a-f]{2})*$"},
+        "payloadText": {"type": ["string", "null"]},
+        "rawHex": {"type": "string", "pattern": "^([0-9a-f]{2})+$"},
+        "correlations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workRequestIds", "completionIds", "eventIds", "memoryRegionIds"],
+          "properties": {
+            "workRequestIds": {"type": "array", "items": {"type": "string"}},
+            "completionIds": {"type": "array", "items": {"type": "string"}},
+            "eventIds": {"type": "array", "items": {"type": "string"}},
+            "memoryRegionIds": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "protocolTree": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["protocol", "fields"],
+            "properties": {
+              "protocol": {"type": "string"},
+              "fields": {"type": "array", "items": {"$ref": "#/definitions/treeField"}}
+            }
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "eventId", "hex", "text"],
+      "properties": {
+        "id": {"type": "string"},
+        "label": {"type": "string"},
+        "eventId": {"type": "string"},
+        "hex": {"type": ["string", "null"]},
+        "text": {"type": ["string", "null"]},
+        "verification": {"type": "object"}
+      }
+    },
+    "memoryRegion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "host", "role", "address", "length", "lkey", "rkey", "resourceEventId", "snapshots"],
+      "properties": {
+        "id": {"type": "string"},
+        "host": {"enum": ["hosta", "hostb"]},
+        "role": {"type": "string"},
+        "address": {"$ref": "#/definitions/exactInteger"},
+        "length": {"type": "integer", "minimum": 1},
+        "lkey": {"$ref": "#/definitions/exactInteger"},
+        "rkey": {"$ref": "#/definitions/exactInteger"},
+        "resourceEventId": {"type": "string"},
+        "snapshots": {"type": "array", "items": {"$ref": "#/definitions/snapshot"}}
+      }
+    },
+    "codeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourcePath", "startLine", "endLine", "label"],
+      "properties": {
+        "sourcePath": {"type": "string", "pattern": "^python/.*\\.py$"},
+        "startLine": {"type": "integer", "minimum": 1},
+        "endLine": {"type": "integer", "minimum": 1},
+        "label": {"type": "string"}
+      }
+    },
+    "walkthroughStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "kind", "simpleExplanation", "explanation", "eventIds", "packetIds", "workRequestIds", "completionIds", "memoryRegionIds", "codeRefs", "memoryState", "focusHost", "plane", "teachingPoints"],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "kind": {"enum": ["code", "resource", "control", "memory", "work-request", "packet", "completion", "verification"]},
+        "simpleExplanation": {"type": "string"},
+        "explanation": {"type": "string"},
+        "eventIds": {"type": "array", "items": {"type": "string"}},
+        "packetIds": {"type": "array", "items": {"type": "string"}},
+        "workRequestIds": {"type": "array", "items": {"type": "string"}},
+        "completionIds": {"type": "array", "items": {"type": "string"}},
+        "memoryRegionIds": {"type": "array", "items": {"type": "string"}},
+        "codeRefs": {"type": "array", "items": {"$ref": "#/definitions/codeRef"}},
+        "memoryState": {"enum": ["none", "before", "after", "unchanged"]},
+        "focusHost": {"type": ["string", "null"]},
+        "plane": {"enum": ["control", "data"]},
+        "teachingPoints": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "experiment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "key", "title", "objective", "default", "script", "hosts", "endpoints", "events", "resources", "workRequests", "completions", "packets", "memoryRegions", "controlEvents", "verification", "captureDownload", "noDataCapture", "walkthrough"],
+      "properties": {
+        "id": {"enum": ["resources", "send-recv", "write", "read"]},
+        "key": {"enum": ["a", "b", "c", "d"]},
+        "title": {"type": "string"},
+        "objective": {"type": "string"},
+        "default": {"type": "boolean"},
+        "script": {"type": "string"},
+        "hosts": {"type": "object"},
+        "endpoints": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["initiator", "responder"],
+          "properties": {
+            "initiator": {"$ref": "#/definitions/endpoint"},
+            "responder": {"$ref": "#/definitions/endpoint"}
+          }
+        },
+        "events": {"type": "array", "items": {"$ref": "#/definitions/event"}},
+        "resources": {"type": "array"},
+        "workRequests": {"type": "array", "items": {"$ref": "#/definitions/workRequest"}},
+        "completions": {"type": "array", "items": {"$ref": "#/definitions/completion"}},
+        "packets": {"type": "array", "items": {"$ref": "#/definitions/packet"}},
+        "memoryRegions": {"type": "array", "items": {"$ref": "#/definitions/memoryRegion"}},
+        "controlEvents": {"type": "array", "items": {"type": "object"}},
+        "verification": {"type": "object"},
+        "captureDownload": {"type": ["object", "null"]},
+        "noDataCapture": {"type": "boolean"},
+        "walkthrough": {"type": "array", "minItems": 1, "items": {"$ref": "#/definitions/walkthroughStep"}}
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lab", "transport", "validationStatus", "captureInterface", "controlInterface"],
+      "properties": {
+        "lab": {"const": "rdma-basics"},
+        "transport": {"const": "Soft-RoCE"},
+        "validationStatus": {"const": "pass"},
+        "captureInterface": {"type": "string"},
+        "controlInterface": {"type": "string"}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceDigest", "environmentDigest", "gitCommit", "executionSourceCheckout", "sourceSnapshot", "generatedAt", "referenceRunStartedAt", "referenceRunFinishedAt", "exporter"],
+      "properties": {
+        "evidenceDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "environmentDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "gitCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "executionSourceCheckout": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "sourceSnapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["relationship", "method"],
+          "properties": {
+            "relationship": {"enum": ["matches-verified-execution-source", "differs-from-verified-execution-source", "unverified"]},
+            "method": {"type": "string"}
+          }
+        },
+        "generatedAt": {"type": "string"},
+        "referenceRunStartedAt": {"type": "string"},
+        "referenceRunFinishedAt": {"type": "string"},
+        "exporter": {"const": "labs/rdma-basics/scripts/export_browser_evidence.py"}
+      }
+    },
+    "clockModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["crossHostSynchronized", "ordering", "explanation"],
+      "properties": {
+        "crossHostSynchronized": {"const": false},
+        "ordering": {"const": "causal-and-per-process"},
+        "explanation": {"type": "string"}
+      }
+    },
+    "environment": {"type": "object"},
+    "hosts": {"type": "object"},
+    "sources": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "lineCount", "lines"],
+        "properties": {
+          "path": {"type": "string", "pattern": "^python/.*\\.py$"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "lineCount": {"type": "integer", "minimum": 1},
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["number", "text"],
+              "properties": {
+                "number": {"type": "integer", "minimum": 1},
+                "text": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "experiments": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {"$ref": "#/definitions/experiment"}
+    }
+  }
+}
