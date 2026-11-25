@@ -105,6 +105,7 @@ def main():
     log.emit("qp_ready", qp_num=qp.qp_num, state=lab.qp_state_name(qp),
              dest_qpn=peer["qpn"], sq_psn=PSN, rq_psn=PSN)
 
+    ok = True
     if args.role == "reader":
         msg = lab.ctrl_recv(f)   # {"ready": true} from source
         log.emit("peer_ready", msg=msg)
@@ -137,13 +138,15 @@ def main():
         msg = lab.ctrl_recv(f)
         log.emit("read_done_signal", msg=msg)
         npolled, _ = cq.poll(1)
-        log.emit("source_cq_poll", npolled=npolled,
+        ok = npolled == 0
+        log.emit("source_cq_poll", npolled=npolled, ok=ok,
                  note="RDMA READ responder side posts no WR, "
                       "so no CQE is expected")
 
     sock.close()
     qp.close(); cq.close(); mr.close(); pd.close(); ctx.close()
     log.close()
+    raise SystemExit(0 if ok else 1)
 
 
 if __name__ == "__main__":

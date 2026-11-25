@@ -58,6 +58,9 @@ class EventLog:
         self.path = path or os.environ.get(
             "RDMA_EVENT_LOG", "/tmp/rdma-events.jsonl")
         self.seq = 0
+        parent = os.path.dirname(os.path.abspath(self.path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         self._fh = open(self.path, "a", buffering=1)
 
     def emit(self, event, **fields):
@@ -206,9 +209,15 @@ def poll_one_cqe(cq, tag="", timeout=5.0, log=None):
                              qp_num=wc.qp_num, src_qp=wc.src_qp,
                              status="SUCCESS")
                 return wc
+            status_name = cq_mod.cqe_status_to_str(wc.status)
             if log:
                 log.emit("cqe_error", tag=tag, wr_id=wc.wr_id,
-                         status=wc.status, opcode=wc.opcode)
+                         status=status_name, status_code=int(wc.status),
+                         opcode=cq_mod.cqe_opcode_to_str(wc.opcode),
+                         vendor_err=wc.vendor_err)
+            raise RuntimeError(
+                f"completion error on CQ ({tag}): {status_name} "
+                f"status={int(wc.status)} vendor_err={wc.vendor_err}")
         if time.monotonic() >= deadline:
             raise TimeoutError(
                 f"no completion on CQ within {timeout}s ({tag})")
@@ -227,18 +236,21 @@ def ctrl_recv(sock_file):
     return json.loads(line)
 
 
-def ctrl_listen(port=CTRL_PORT):
+def ctrl_listen(port=CTRL_PORT, timeout=20.0):
     """Server side of the control channel. Returns a connected socket."""
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.settimeout(timeout)
     srv.bind(("0.0.0.0", port))
     srv.listen(1)
     conn, addr = srv.accept()
+    conn.settimeout(timeout)
     srv.close()
     return conn
 
 
-def ctrl_connect(host, port=CTRL_PORT):
+def ctrl_connect(host, port=CTRL_PORT, timeout=20.0):
     """Client side of the control channel."""
-    sock = socket.create_connection((host, port), timeout=10)
+    sock = socket.create_connection((host, port), timeout=timeout)
+    sock.settimeout(timeout)
     return sock

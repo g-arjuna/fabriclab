@@ -111,6 +111,7 @@ def main():
     log.emit("qp_ready", qp_num=qp.qp_num, state=lab.qp_state_name(qp),
              dest_qpn=peer["qpn"], sq_psn=PSN, rq_psn=PSN)
 
+    ok = True
     if args.role == "writer":
         # Wait for target to confirm it is in RTS and watching.
         msg = lab.ctrl_recv(f)
@@ -157,15 +158,21 @@ def main():
 
         after = bytes(buf.raw[:len(PAYLOAD)])
         expected = PAYLOAD
-        ok = after == expected
+        payload_ok = after == expected
+        ok = payload_ok and npolled == 0
         log.emit("buffer_after", first64=after.hex(),
-                 verify="payload_match", ok=ok)
+                 verify="payload_match_and_no_target_cqe",
+                 payload_ok=payload_ok, target_cqe_count=npolled, ok=ok)
         print(f"\nTarget buffer now starts with: {after!r}")
-        print("Remote WRITE verified" if ok else "VERIFY FAILED")
+        if ok:
+            print("Remote WRITE verified; target CQ remained empty")
+        else:
+            print("VERIFY FAILED")
 
     sock.close()
     qp.close(); cq.close(); mr.close(); pd.close(); ctx.close()
     log.close()
+    raise SystemExit(0 if ok else 1)
 
 
 if __name__ == "__main__":
