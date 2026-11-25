@@ -1,7 +1,7 @@
 [hostb/exp-c-target] #1 buffer_before first64=2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e
-[hostb/exp-c-target] #2 resources role=target mr_lkey=1575 mr_rkey=1575 mr_addr=326883984 qp_num=21 qp_state=Reset
-[hostb/exp-c-target] #3 metadata_exchange own_qpn=21 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_qpn=21 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 shared_rkey=1575 shared_addr=326883984 shared_len=4096
-[hostb/exp-c-target] #4 qp_ready qp_num=21 state=RTS dest_qpn=21 sq_psn=768 rq_psn=768
+[hostb/exp-c-target] #2 resources tag=target mr_lkey=1113 mr_rkey=1113 mr_addr=236812480 qp_num=19 qp_state=Reset
+[hostb/exp-c-target] #3 metadata_exchange own_qpn=19 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_qpn=19 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 shared_rkey=1113 shared_addr=236812480 shared_len=4096
+[hostb/exp-c-target] #4 qp_ready qp_num=19 state=RTS dest_qpn=19 sq_psn=768 rq_psn=768
 [hostb/exp-c-target] #5 write_done_signal msg={'write_done': True}
 [hostb/exp-c-target] #6 target_cq_poll npolled=0 note=ordinary RDMA WRITE produces no CQE on target
 [hostb/exp-c-target] #7 buffer_after first64=52444d41205752495445206c616e64656420696e20686f737462206d656d6f727920776974686f757420612072656376205752210a verify=payload_match_and_no_target_cqe payload_ok=True target_cqe_count=0 ok=True

@@ -59,6 +59,7 @@ From `labs/rdma-basics`:
 ./scripts/verify-lab.sh
 ./scripts/run-experiments.sh
 ./scripts/collect-evidence.sh
+./scripts/validate-evidence.sh --verify-checksums
 ```
 
 When finished:
@@ -105,9 +106,10 @@ observes zero target CQEs, demonstrating that ordinary RDMA WRITE completion is
 a sender-side operation. After explicit control-channel synchronisation, the
 target verifies that memory contains the exact payload.
 
-The capture validates the wire metadata. In the committed reference run the
-RETH values match the application metadata exactly: VA `0x1d1b3a90`, RKEY
-`0x14cf`, DMA length 53, destination QPN `0x23`, PSN 768.
+The capture validates the wire metadata. `packet-analysis.txt` is generated
+from the application event logs and packet decode in the same evidence set; it
+records the exact VA, RKEY, DMA length, destination QPN, and PSN for that run.
+These values are runtime-specific and must not be copied as constants.
 
 ### D — RDMA READ
 
@@ -117,7 +119,16 @@ the READ request and READ response.
 
 ## Evidence
 
-`collect-evidence.sh` writes `evidence/reference-run/` containing:
+`collect-evidence.sh` stages artifacts in a fresh temporary directory,
+validates application-to-packet correlation and freshness, regenerates
+`packet-analysis.txt`, writes an exact checksum manifest, and only then
+publishes `evidence/reference-run/`. `validate-evidence.sh` repeats the same
+application/packet correlation checks without starting the VMs. Missing host
+evidence, missing expected files, empty/corrupt captures, failed experiment status, stale artifacts, or
+metadata mismatches make collection return nonzero without replacing the
+previously validated evidence. Partial experiment selections are published
+under a clearly named `partial-run-*` directory rather than as a complete
+A/B/C/D reference run. The evidence directory contains:
 
 - `environment.json` — host/guest OS, kernel, rdma-core, Pyverbs, image hash,
   commands, and architecture.
@@ -125,7 +136,8 @@ the READ request and READ response.
 - `hosta-events.jsonl` and `hostb-events.jsonl` — structured Pyverbs events.
 - `hosta-*.log` and `hostb-*.log` — human-readable application output.
 - `send-recv.pcap`, `rdma-write.pcap`, `rdma-read.pcap` — data-plane captures.
-- `packet-analysis.txt` — decoded opcode/QPN/PSN/RETH correlation.
+- `packet-analysis.txt` — generated decoded opcode/QPN/PSN/RETH correlation
+  for the same execution represented by the event logs and pcaps.
 - `SHA256SUMS` — integrity manifest.
 
 Open a capture in Wireshark, for example:

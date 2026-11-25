@@ -1,9 +1,9 @@
-[hosta/exp-c-writer] #1 resources role=writer mr_lkey=1720 mr_rkey=1720 mr_addr=519998640 qp_num=21 qp_state=Reset
-[hosta/exp-c-writer] #2 metadata_exchange own_qpn=21 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 peer_qpn=21 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 shared_rkey=None shared_addr=None shared_len=None
-[hosta/exp-c-writer] #3 qp_ready qp_num=21 state=RTS dest_qpn=21 sq_psn=768 rq_psn=768
+[hosta/exp-c-writer] #1 resources tag=writer mr_lkey=1232 mr_rkey=1232 mr_addr=989338336 qp_num=19 qp_state=Reset
+[hosta/exp-c-writer] #2 metadata_exchange own_qpn=19 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 peer_qpn=19 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 shared_rkey=None shared_addr=None shared_len=None
+[hosta/exp-c-writer] #3 qp_ready qp_num=19 state=RTS dest_qpn=19 sq_psn=768 rq_psn=768
 [hosta/exp-c-writer] #4 peer_ready msg={'ready': True}
-[hosta/exp-c-writer] #5 post_send wr_id=97 opcode=RDMA_WRITE local_sge_addr=519998640 local_lkey=1720 remote_addr=326883984 remote_rkey=1575 byte_len=53 payload=RDMA WRITE landed in hostb memory without a recv WR!
-[hosta/exp-c-writer] #6 cqe tag=write wr_id=97 opcode=RDMA write byte_len=53 qp_num=21 src_qp=0 status=SUCCESS
+[hosta/exp-c-writer] #5 post_send wr_id=97 opcode=RDMA_WRITE local_sge_addr=989338336 local_lkey=1232 remote_addr=236812480 remote_rkey=1113 byte_len=53 payload=RDMA WRITE landed in hostb memory without a recv WR!
+[hosta/exp-c-writer] #6 cqe tag=write wr_id=97 opcode=RDMA write byte_len=53 qp_num=19 src_qp=0 status=SUCCESS
 [hosta/exp-c-writer] #7 write_complete byte_len=53 status=SUCCESS
 
-Writer completion: RDMA_WRITE of 53 bytes to remote addr 0x137bda90 rkey 1575, status SUCCESS
+Writer completion: RDMA_WRITE of 53 bytes to remote addr 0xe1d78c0 rkey 1113, status SUCCESS

@@ -3,10 +3,10 @@ GID table:
   index=0 type=RoCEv2 gid=fe80:0000:0000:0000:5054:00ff:fe00:130b
   index=1 type=RoCEv2 gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02
 [hostb/exp-a-b] #2 port_info port_state=Active (4) active_mtu=1024 link_layer=Ethernet gid_index=1 gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02
-[hostb/exp-a-b] #3 resources pd=0x0 cq_cqe=31 mr_lkey=1130 mr_rkey=1130 mr_len=4096 mr_addr=520604896 qp_num=19 qp_state=Reset max_send_wr=8 max_recv_wr=8 sq_sig_all=True
-[hostb/exp-a-b] #4 metadata_exchange own_qpn=19 own_psn=256 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_qpn=19 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 peer_role=a
-[hostb/exp-a-b] #5 qp_state state=INIT->RTR->RTS qp_num=19 detail=RC QP driven to RTS
-[hostb/exp-a-b] #6 qp_ready qp_num=19 state=RTS dest_qpn=19 path_mtu=1024 timeout=14 retry_cnt=7 rnr_retry=7 sq_psn=256 rq_psn=256
+[hostb/exp-a-b] #3 resources pd=0x0 cq_cqe=31 mr_lkey=732 mr_rkey=732 mr_len=4096 mr_addr=578099776 qp_num=17 qp_state=Reset max_send_wr=8 max_recv_wr=8 sq_sig_all=True
+[hostb/exp-a-b] #4 metadata_exchange own_qpn=17 own_psn=256 own_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a02 peer_qpn=17 peer_gid=0000:0000:0000:0000:0000:ffff:0a0a:0a01 peer_role=a
+[hostb/exp-a-b] #5 qp_state state=INIT->RTR->RTS qp_num=17 detail=RC QP driven to RTS
+[hostb/exp-a-b] #6 qp_ready qp_num=17 state=RTS dest_qpn=17 path_mtu=1024 timeout=14 retry_cnt=7 rnr_retry=7 sq_psn=256 rq_psn=256
 
-Experiment A complete on hostb: QP 19 is RTS toward QPN 19.
+Experiment A complete on hostb: QP 17 is RTS toward QPN 17.
 No work requests were posted — this experiment only creates and inspects RDMA resources.

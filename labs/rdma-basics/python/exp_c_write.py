@@ -22,11 +22,15 @@ What happens:
   4. Soft-RoCE emits a RoCEv2 WRITE packet (UDP dport 4791) whose
      RETH header carries the remote virtual address, remote key
      and transfer length — visible in the packet capture.
-  5. The NIC (here: Soft-RoCE) writes the payload directly into the
-     target's registered memory.  The target's application observes
-     the change only after the writer signals completion over the
-     TCP control channel — in a real program you would use a
-     signalled write, immediate data, or an event.
+  5. The RNIC (here: Soft-RoCE) writes the payload directly into the
+     target's registered memory.  The target application does not
+     receive an ordinary-WRITE CQE and therefore needs a separate
+     protocol-level synchronisation mechanism before consuming the
+     data.  This lab uses the TCP control message only for that
+     synchronisation; it does not carry or cause the RDMA payload
+     transfer.  WRITE with immediate data has different receive-side
+     semantics: it consumes a posted receive WR and can generate a
+     receive completion containing the immediate value.
 
 The packet's RETH rkey/address are the same numbers printed by the
 target in step 1 — that is the correlation the packet explorer in
@@ -89,7 +93,7 @@ def main():
         log.emit("buffer_before", first64=before.hex())
     mr = lab.new_memory_region(pd, buf, BUF_LEN)
     qp = lab.make_qp(pd, cq)
-    log.emit("resources", role=args.role, mr_lkey=mr.lkey,
+    log.emit("resources", tag=args.role, mr_lkey=mr.lkey,
              mr_rkey=mr.rkey, mr_addr=lab.buf_addr(buf),
              qp_num=qp.qp_num, qp_state=lab.qp_state_name(qp))
 
@@ -140,12 +144,14 @@ def main():
               f"to remote addr {peer['addr']:#x} rkey {peer['rkey']}, "
               "status SUCCESS")
 
-        # Only AFTER our completion is signalled may the target trust
-        # that the remote memory has been updated.
+        # The successful initiator completion is local evidence that the
+        # WRITE operation completed.  The TCP message is only application-
+        # level synchronisation telling the target it may now inspect memory.
         lab.ctrl_send(sock, {"write_done": True})
 
     else:  # target
-        # Signal readiness, then wait for the writer's completion.
+        # Signal readiness, then wait for explicit synchronisation sent
+        # after the writer's local completion.
         lab.ctrl_send(sock, {"ready": True})
         msg = lab.ctrl_recv(f)
         log.emit("write_done_signal", msg=msg)

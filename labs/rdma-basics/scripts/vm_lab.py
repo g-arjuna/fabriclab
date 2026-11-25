@@ -14,12 +14,15 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+
+import validate_evidence as evidence_validator
 
 LAB_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = LAB_ROOT.parents[1]
@@ -163,7 +166,7 @@ def check_prereqs():
         failures.append("/dev/kvm is missing; enable CPU virtualisation and KVM")
     elif not os.access("/dev/kvm", os.R_OK | os.W_OK):
         failures.append("/dev/kvm exists but is not readable/writable by this user")
-    for tool in ("ssh", "ssh-keygen", "curl", "tar"):
+    for tool in ("ssh", "ssh-keygen", "curl", "tar", "tshark"):
         if not shutil.which(tool):
             failures.append(f"required host tool is missing: {tool}")
     kernel = os.uname().release
@@ -184,24 +187,52 @@ def ensure_key():
     KEY.chmod(0o600)
 
 
+def checksum_for_image(checksum_text, image_name):
+    """Return the strictly formatted SHA256 entry for ``image_name``.
+
+    Ubuntu's SHA256SUMS format is ``<64 lowercase hex><space><space-or-asterisk><name>``.
+    A missing or malformed entry is a verification failure, not a reason to
+    skip verification.
+    """
+    matches = []
+    malformed = []
+    for line in checksum_text.splitlines():
+        if line.strip().endswith(image_name):
+            matches.append(line)
+            if not re.fullmatch(r"[0-9a-f]{64} [ *]" + re.escape(image_name), line):
+                malformed.append(line)
+    if not matches:
+        raise RuntimeError(f"no checksum entry found for {image_name}")
+    if malformed or len(matches) != 1:
+        raise RuntimeError(f"invalid checksum entry for {image_name}")
+    return matches[0].split()[0]
+
+
+def verify_image_checksum(image_path, checksum_text, image_name=None):
+    expected = checksum_for_image(checksum_text, image_name or image_path.name)
+    actual = sha256_file(image_path)
+    if actual != expected:
+        raise RuntimeError(f"cloud image checksum mismatch: expected {expected}, got {actual}")
+    return actual
+
+
 def download_base_image():
     CACHE.mkdir(parents=True, exist_ok=True)
-    if not BASE_IMAGE.exists():
+    checksums = CACHE / "SHA256SUMS.cloudimg"
+    run(["curl", "-fsSL", "--retry", "3", "-o", str(checksums), CHECKSUMS_URL], timeout=120)
+    checksum_text = checksums.read_text()
+    # Validate that a usable entry exists before either trusting a cached image
+    # or writing a downloaded image into the cache.
+    checksum_for_image(checksum_text, BASE_IMAGE.name)
+    if BASE_IMAGE.exists():
+        actual = verify_image_checksum(BASE_IMAGE, checksum_text)
+    else:
         tmp = BASE_IMAGE.with_suffix(".img.download")
         if tmp.exists():
             tmp.unlink()
         run(["curl", "-fL", "--retry", "3", "-o", str(tmp), BASE_IMAGE_URL], capture=False, timeout=1800)
+        actual = verify_image_checksum(tmp, checksum_text, BASE_IMAGE.name)
         tmp.rename(BASE_IMAGE)
-    checksums = CACHE / "SHA256SUMS.cloudimg"
-    run(["curl", "-fsSL", "--retry", "3", "-o", str(checksums), CHECKSUMS_URL], timeout=120)
-    expected = None
-    for line in checksums.read_text().splitlines():
-        if line.strip().endswith(BASE_IMAGE.name):
-            expected = line.split()[0]
-            break
-    actual = sha256_file(BASE_IMAGE)
-    if expected and actual != expected:
-        raise RuntimeError(f"cloud image checksum mismatch: expected {expected}, got {actual}")
     print(f"base image: {BASE_IMAGE} sha256={actual}")
 
 
@@ -502,14 +533,17 @@ def experiment_order(selected):
 
 
 def run_experiments(selected=None):
+    selected_keys = experiment_order(selected)
     verification = {
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "requested_experiments": selected_keys,
+        "complete_reference_run": sorted(selected_keys) == sorted(EXPERIMENTS),
         "experiments": {},
         "overall": "pass",
     }
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     failures = []
-    for exp_key in experiment_order(selected):
+    for exp_key in selected_keys:
         if exp_key not in EXPERIMENTS:
             print(f"unknown experiment: {exp_key}", file=sys.stderr)
             failures.append(exp_key)
@@ -559,13 +593,20 @@ def run_experiments(selected=None):
 
 
 def collect_remote_run(host, destination):
+    """Retrieve one host's run directory or raise a descriptive error."""
     destination.mkdir(parents=True, exist_ok=True)
-    command = "tar -C /home/fabriclab/lab/run -cf - . 2>/dev/null"
+    probe = ssh(host, "test -d /home/fabriclab/lab/run", check=False)
+    if probe.returncode != 0:
+        raise RuntimeError(f"failed to retrieve {host} evidence: remote run directory is missing")
+    command = "tar -C /home/fabriclab/lab/run -cf - ."
     proc = subprocess.Popen([*ssh_target(host), command], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     tar = subprocess.run(["tar", "-xf", "-", "-C", str(destination)], stdin=proc.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    proc.stderr.read()
+    remote_err = proc.stderr.read().decode(errors="replace").strip()
     proc.wait()
-    return tar.returncode == 0
+    if proc.returncode != 0:
+        raise RuntimeError(f"failed to retrieve {host} evidence over SSH ({proc.returncode}): {remote_err}")
+    if tar.returncode != 0:
+        raise RuntimeError(f"failed to unpack {host} evidence tar stream ({tar.returncode}): {tar.stderr.decode(errors='replace')}")
 
 
 def host_facts(host):
@@ -583,58 +624,131 @@ def host_facts(host):
 
 
 def collect(output_name="reference-run"):
-    out = LAB_ROOT / "evidence" / output_name
-    out.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmp:
-        tmpdir = Path(tmp)
-        for host in VMS:
-            collect_remote_run(host, tmpdir / host)
-        for host in VMS:
-            host_src = tmpdir / host
-            events_out = out / f"{host}-events.jsonl"
-            with events_out.open("w") as dst:
-                for exp_key in EXPERIMENTS:
-                    src = host_src / f"exp-{exp_key}-events.jsonl"
-                    if src.exists():
-                        dst.write(src.read_text())
-            for src in sorted(host_src.glob("exp-*-*.log")):
-                shutil.copy2(src, out / f"{host}-{src.name}")
-        hosta = tmpdir / "hosta"
-        for exp in EXPERIMENTS.values():
-            capture = exp.get("capture")
-            if capture and (hosta / capture).exists() and (hosta / capture).stat().st_size > 24:
-                shutil.copy2(hosta / capture, out / capture)
+    """Collect, validate, and then publish an evidence directory.
+
+    Evidence is assembled in a fresh staging directory.  The published output
+    is not touched until required files, application/packet correlation, and
+    freshness checks have all passed.  This prevents stale artifacts from a
+    previous run being mixed into a new run.
+    """
+    evidence_root = LAB_ROOT / "evidence"
+    evidence_root.mkdir(parents=True, exist_ok=True)
     verification_src = RUN_DIR / "verification.json"
-    if verification_src.exists():
-        shutil.copy2(verification_src, out / "verification.json")
-    environment = {
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "git_commit": run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"]).stdout.strip(),
-        "architecture": "two Ubuntu 24.04 KVM/QEMU guests; QEMU packaged in Docker runner; dedicated direct socket-connected control and data NICs",
-        "host": {
-            "os": open("/etc/os-release").read().split('PRETTY_NAME="')[1].split('"')[0] if Path("/etc/os-release").exists() else "unknown",
-            "kernel": os.uname().release,
-            "arch": os.uname().machine,
-            "docker": docker("--version").stdout.strip(),
-        },
-        "guests": {host: host_facts(host) for host in VMS},
-        "base_image": {"url": BASE_IMAGE_URL, "sha256": sha256_file(BASE_IMAGE) if BASE_IMAGE.exists() else None},
-        "commands": [
-            "./scripts/check-prereqs.sh",
-            "./scripts/setup-lab.sh",
-            "./scripts/verify-lab.sh",
-            "./scripts/run-experiments.sh",
-            "./scripts/collect-evidence.sh",
-            "./scripts/teardown-lab.sh",
-        ],
-    }
-    (out / "environment.json").write_text(json.dumps(environment, indent=2, sort_keys=True) + "\n")
-    sums = []
-    for path in sorted(p for p in out.iterdir() if p.is_file() and p.name != "SHA256SUMS"):
-        sums.append(f"{sha256_file(path)}  {path.name}")
-    (out / "SHA256SUMS").write_text("\n".join(sums) + "\n")
-    print(f"evidence written to {out}")
-    return 0
+    if not verification_src.exists():
+        print("ERROR: missing run verification.json; run ./scripts/run-experiments.sh first", file=sys.stderr)
+        return 1
+    try:
+        verification = json.loads(verification_src.read_text())
+    except json.JSONDecodeError as exc:
+        print(f"ERROR: corrupt run verification.json: {exc}", file=sys.stderr)
+        return 1
+    requested = verification.get("requested_experiments") or list((verification.get("experiments") or {}).keys())
+    requested = [key for key in EXPERIMENTS if key in requested]
+    complete = sorted(requested) == sorted(EXPERIMENTS)
+    default_output = output_name == "reference-run"
+    if not complete and default_output:
+        output_name = "partial-run-" + "-".join(requested or ["none"])
+    final_out = evidence_root / output_name
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_name}.staging-", dir=evidence_root))
+    errors = []
+    try:
+        shutil.copy2(verification_src, staging / "verification.json")
+        remote_roots = {}
+        for host in VMS:
+            remote_roots[host] = staging / ".remote" / host
+            collect_remote_run(host, remote_roots[host])
+        for host in VMS:
+            host_src = remote_roots[host]
+            with (staging / f"{host}-events.jsonl").open("w") as dst:
+                for exp_key in requested:
+                    src = host_src / f"exp-{exp_key}-events.jsonl"
+                    if not src.exists() or src.stat().st_size == 0:
+                        errors.append(f"{host}: missing or empty event log for experiment {exp_key}")
+                        continue
+                    dst.write(src.read_text())
+            for exp_key in requested:
+                role = EXPERIMENTS[exp_key]["connector_role"] if host == "hosta" else EXPERIMENTS[exp_key]["listener_role"]
+                src = host_src / f"exp-{exp_key}-{role}.log"
+                if not src.exists() or src.stat().st_size == 0:
+                    errors.append(f"{host}: missing or empty application log exp-{exp_key}-{role}.log")
+                else:
+                    shutil.copy2(src, staging / f"{host}-{src.name}")
+        hosta = remote_roots["hosta"]
+        for exp_key in requested:
+            capture = EXPERIMENTS[exp_key].get("capture")
+            if not capture:
+                continue
+            src = hosta / capture
+            if not src.exists() or src.stat().st_size <= 24:
+                errors.append(f"missing or empty capture for experiment {exp_key}: {capture}")
+            else:
+                shutil.copy2(src, staging / capture)
+        environment = {
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "git_commit": run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"]).stdout.strip(),
+            "architecture": "two Ubuntu 24.04 KVM/QEMU guests; QEMU packaged in Docker runner; dedicated direct socket-connected control and data NICs",
+            "evidence_scope": "complete" if complete else "partial",
+            "experiments": requested,
+            "host": {
+                "os": open("/etc/os-release").read().split('PRETTY_NAME="')[1].split('"')[0] if Path("/etc/os-release").exists() else "unknown",
+                "kernel": os.uname().release,
+                "arch": os.uname().machine,
+                "docker": docker("--version").stdout.strip(),
+            },
+            "guests": {host: host_facts(host) for host in VMS},
+            "base_image": {"url": BASE_IMAGE_URL, "sha256": sha256_file(BASE_IMAGE) if BASE_IMAGE.exists() else None},
+            "commands": [
+                "./scripts/check-prereqs.sh",
+                "./scripts/setup-lab.sh",
+                "./scripts/verify-lab.sh",
+                "./scripts/run-experiments.sh",
+                "./scripts/collect-evidence.sh",
+                "./scripts/teardown-lab.sh",
+            ],
+        }
+        (staging / "environment.json").write_text(json.dumps(environment, indent=2, sort_keys=True) + "\n")
+        validation_errors, _analysis, captured = evidence_validator.validate_evidence(
+            staging, write_analysis=True, require_complete=complete
+        )
+        errors.extend(validation_errors)
+        if errors:
+            for error in errors:
+                print(f"ERROR: {error}", file=sys.stderr)
+            print(f"evidence collection failed; staged artifacts retained at {staging}", file=sys.stderr)
+            return 1
+        shutil.rmtree(staging / ".remote")
+        sums = []
+        for path in sorted(p for p in staging.iterdir() if p.is_file() and p.name != "SHA256SUMS"):
+            sums.append(f"{sha256_file(path)}  {path.name}")
+        (staging / "SHA256SUMS").write_text("\n".join(sums) + "\n")
+        checksum_errors = []
+        evidence_validator.validate_checksum_manifest(staging, checksum_errors)
+        if checksum_errors:
+            for error in checksum_errors:
+                print(f"ERROR: {error}", file=sys.stderr)
+            print(f"evidence collection failed; staged artifacts retained at {staging}", file=sys.stderr)
+            return 1
+        backup = None
+        if final_out.exists():
+            backup = evidence_root / f".{output_name}.replaced-{int(time.time())}"
+            final_out.rename(backup)
+        staging.chmod(0o755)
+        try:
+            staging.rename(final_out)
+        except Exception:
+            if backup is not None and backup.exists():
+                backup.rename(final_out)
+            raise
+        if backup is not None:
+            shutil.rmtree(backup)
+        print(f"evidence written to {final_out}")
+        print("captured experiments: " + ", ".join(captured))
+        print("evidence scope: " + ("complete A/B/C/D reference run" if complete else "partial run " + ",".join(requested)))
+        return 0
+    except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
+        print(f"ERROR: evidence collection failed: {exc}", file=sys.stderr)
+        print(f"staged artifacts retained at {staging}", file=sys.stderr)
+        return 1
 
 
 def teardown():

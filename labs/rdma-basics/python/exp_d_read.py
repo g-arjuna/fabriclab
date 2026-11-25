@@ -77,7 +77,7 @@ def main():
         share = False
 
     qp = lab.make_qp(pd, cq)
-    log.emit("resources", role=args.role, mr_lkey=mr.lkey,
+    log.emit("resources", tag=args.role, mr_lkey=mr.lkey,
              mr_rkey=mr.rkey, mr_addr=lab.buf_addr(buf),
              qp_num=qp.qp_num, qp_state=lab.qp_state_name(qp))
 
