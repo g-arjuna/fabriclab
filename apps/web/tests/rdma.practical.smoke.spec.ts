@@ -78,7 +78,7 @@ test.describe("RDMA practical public experience", () => {
     expect(body.source.validationStatus).toBe("pass");
     expect(body.provenance.evidenceDigest).toBe(evidence.provenance.evidenceDigest);
     expect(body.provenance.executionSourceCheckout).toBe(evidence.provenance.gitCommit);
-    expect(body.provenance.sourceSnapshot.relationship).toBe("matches-execution-checkout");
+    expect(body.provenance.sourceSnapshot.relationship).toBe("matches-verified-execution-source");
     expect(body.experiments.map((experiment: any) => experiment.id)).toEqual(["resources", "send-recv", "write", "read"]);
     expect(body.experiments.map((experiment: any) => experiment.packets.length)).toEqual([0, 2, 2, 2]);
   });
@@ -88,6 +88,7 @@ test.describe("RDMA practical public experience", () => {
     await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
     await waitForPracticalHydration(page);
 
+    await expect(page.getByRole("link", { name: /Open the runnable rdma-basics lab source/i })).toHaveAttribute("href", /a208af6ecf4e838d6d2c475ede366494de81a706/);
     await expect(page.getByTestId("write-memory-before")).toBeVisible();
     await expect(page.getByTestId("write-memory-after")).toHaveCount(0);
     await expect(page.getByTestId("write-memory-after-pending")).toBeVisible();
@@ -114,6 +115,9 @@ test.describe("RDMA practical public experience", () => {
     await selectStep(page, /Remote memory changes without a receive WR/i);
     await expect(page.getByTestId("write-memory-after")).toBeVisible();
     await expect(page.getByTestId("write-memory-state-label")).toContainText(/guided state: after/i);
+    await expect(page.getByTestId("write-verification-pending")).toBeVisible();
+    await expect(page.getByTestId("write-verification-result")).toHaveCount(0);
+    await expect(page.getByTestId("write-verification-pending")).toContainText(/Application verification was recorded later/i);
     const changedByteCount = await page.getByTestId("write-memory-after").locator("span").evaluateAll(
       (spans) => spans.filter((span) => span.className.includes("bg-emerald-400/25")).length,
     );
@@ -122,10 +126,14 @@ test.describe("RDMA practical public experience", () => {
     await selectStep(page, /ACK returns and writer completion is local/i);
     await expect(page.locator(`[data-completion-id="${writeCqe.id}"]`)).toBeVisible();
     await expect(page.locator(`[data-completion-id="${writeCqe.id}"]`)).toContainText(/Host A/i);
+    await expect(page.getByTestId("write-verification-pending")).toBeVisible();
+    await expect(page.getByTestId("write-verification-result")).toHaveCount(0);
     await expect(page.getByTestId("write-target-cqe-pending")).toBeVisible();
     expect(writeExperiment.completions.some((completion: any) => completion.host === "hostb")).toBe(false);
 
     await selectStep(page, /Separate synchronisation lets the target verify memory/i);
+    await expect(page.getByTestId("write-verification-result")).toContainText(/payloadOk=true/i);
+    await expect(page.getByTestId("write-verification-result")).toContainText(/targetCqeCount=0/i);
     await expect(page.getByTestId("write-no-target-cqe")).toContainText(/observed 0 target CQEs/i);
     await expect(page.getByText(/Separate synchronisation/i).first()).toBeVisible();
     expectNoBrowserErrors(tracker);
@@ -221,6 +229,32 @@ test.describe("RDMA practical public experience", () => {
     await expect(page.getByTestId("selection-packets")).toContainText(`frame ${writeAckPacket.frameNumber}`);
     await expect(page.getByText(/completion ownership remains local/i).first()).toBeVisible();
     await expect(page.getByText(/normal target receive CQE/i).first()).toBeVisible();
+  });
+
+
+  test("event and completion selection cannot retain a different manually inspected packet", async ({ page }) => {
+    await page.goto("/practical/rdma?experiment=write", { waitUntil: "domcontentloaded" });
+    await selectStep(page, /ACK returns and writer completion is local/i);
+
+    await page.locator(`[data-packet-id="${writeRequestPacket.id}"]`).click();
+    await expect(page.getByTestId("packet-inspection-mode")).toContainText(/Independent recorded artifact inspection/i);
+    await expect(page.getByTestId("packet-inspector")).toContainText(/RDMA WRITE Only/i);
+
+    const cqeEvent = writeExperiment.events.find((event: any) => event.type === "cqe" && event.host === "hosta");
+    await page.locator(`[data-event-id="${cqeEvent.id}"]`).click();
+    await expect(page.getByTestId("selection-mode")).toContainText(/Application event correlation · cqe on Host A/i);
+    await expect(page.getByTestId("packet-inspector")).toContainText(/Acknowledge/i);
+    await expect(page.getByTestId("packet-inspector")).not.toContainText(/RDMA WRITE Only/i);
+    await expect(page.getByTestId("packet-inspection-mode")).toHaveCount(0);
+    await expect(page.getByTestId("selection-work-requests")).toContainText(`wr_id ${writeWr.wrId.hex}`);
+    await expect(page.getByTestId("selection-completions")).toContainText(/Host A · SUCCESS/i);
+
+    await page.locator(`[data-packet-id="${writeRequestPacket.id}"]`).click();
+    await expect(page.getByTestId("packet-inspector")).toContainText(/RDMA WRITE Only/i);
+    await page.locator(`[data-completion-id="${writeCqe.id}"]`).click();
+    await expect(page.getByTestId("selection-mode")).toContainText(/Completion correlation · RDMA write on Host A \(initiator\)/i);
+    await expect(page.getByTestId("packet-inspector")).toContainText(/Acknowledge/i);
+    await expect(page.getByTestId("packet-inspection-mode")).toHaveCount(0);
   });
 
   test("SEND/RECEIVE endpoint ownership and progressive completion state are correct", async ({ page }) => {

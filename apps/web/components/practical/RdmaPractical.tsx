@@ -18,6 +18,15 @@ import {
   type WalkthroughStep,
   type WorkRequest,
 } from "@/lib/practical/rdmaEvidence";
+import {
+  mergeRelationships,
+  qualificationText,
+  relationshipsForCompletion,
+  relationshipsForEvent,
+  relationshipsForPacket,
+  relationshipsForStep,
+  type RelationshipModel,
+} from "@/lib/practical/rdmaCorrelations";
 
 const EXPERIMENT_LABELS: Record<Experiment["id"], string> = {
   resources: "A · Resources",
@@ -751,12 +760,14 @@ function MemoryPanel({
   highlightedMemoryIds,
   currentMemoryState,
   inspectFullRecording,
+  reachedEventIds,
 }: {
   experiment: Experiment;
   step: WalkthroughStep;
   highlightedMemoryIds: Set<string>;
   currentMemoryState: "before" | "after";
   inspectFullRecording: boolean;
+  reachedEventIds: Set<string>;
 }) {
   const regions = experiment.memoryRegions.filter((region) => highlightedMemoryIds.has(region.id) || step.memoryRegionIds.includes(region.id));
   const displayRegions = regions.length ? regions : experiment.memoryRegions;
@@ -768,6 +779,7 @@ function MemoryPanel({
           const before = region.snapshots.find((snapshot) => snapshot.label === "before");
           const after = region.snapshots.find((snapshot) => snapshot.label !== "before");
           const showAfter = inspectFullRecording || currentMemoryState === "after";
+          const verificationReached = inspectFullRecording || (after?.eventId ? reachedEventIds.has(after.eventId) : false);
           const highlighted = highlightedMemoryIds.has(region.id);
           const writeTarget = experiment.id === "write" && region.host === "hostb";
           return (
@@ -802,8 +814,13 @@ function MemoryPanel({
                   <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-slate-500">No post-transfer byte snapshot recorded for this state.</div>
                 )}
               </div>
-              {after?.verification && showAfter ? (
-                <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs leading-5 text-emerald-100">
+              {after && showAfter && !verificationReached ? (
+                <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100" data-testid={writeTarget ? "write-verification-pending" : undefined}>
+                  Recorded after-state bytes are shown to explain the inferred transport mutation. Application verification was recorded later and is not yet part of the reached guided state.
+                </div>
+              ) : null}
+              {after?.verification && showAfter && verificationReached ? (
+                <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs leading-5 text-emerald-100" data-testid={writeTarget ? "write-verification-result" : undefined}>
                   Verification: {Object.entries(after.verification).map(([key, value]) => `${key}=${String(value)}`).join(" · ")}
                 </div>
               ) : null}
@@ -848,6 +865,7 @@ function PacketInspector({
   highlightedCompletionIds,
   highlightedMemoryIds,
   currentStepPacketIds,
+  highlightedPacketIds,
   manualInspection,
   inspectFullRecording,
 }: {
@@ -858,6 +876,7 @@ function PacketInspector({
   highlightedCompletionIds: Set<string>;
   highlightedMemoryIds: Set<string>;
   currentStepPacketIds: string[];
+  highlightedPacketIds: Set<string>;
   manualInspection: boolean;
   inspectFullRecording: boolean;
 }) {
@@ -894,7 +913,11 @@ function PacketInspector({
             onClick={() => onPacket(packet.id)}
             className={cx(
               "rounded-full border px-3 py-1.5 font-mono text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300",
-              selectedPacket?.id === packet.id ? "border-orange-300/70 bg-orange-400/10 text-orange-100" : "border-white/10 bg-slate-950/70 text-slate-400 hover:text-slate-200",
+              selectedPacket?.id === packet.id
+                ? "border-orange-300/70 bg-orange-400/10 text-orange-100"
+                : highlightedPacketIds.has(packet.id)
+                  ? "border-cyan-300/50 bg-cyan-400/10 text-cyan-100"
+                  : "border-white/10 bg-slate-950/70 text-slate-400 hover:text-slate-200",
             )}
             data-packet-id={packet.id}
             data-step-packet={currentStepPacketIds.includes(packet.id) ? "true" : "false"}
@@ -1056,7 +1079,7 @@ function ProvenancePanel({ bundle }: { bundle: RdmaEvidenceBundle }) {
             <SmallStat label="Schema" value={`v${bundle.schemaVersion}`} />
             <SmallStat label="Execution source checkout" value={`${bundle.provenance.executionSourceCheckout.slice(0, 12)}…`} />
             <SmallStat label="Evidence digest" value={`${bundle.provenance.evidenceDigest.slice(0, 16)}…`} />
-            <SmallStat label="Source snapshot" value={bundle.provenance.sourceSnapshot.relationship} tone={bundle.provenance.sourceSnapshot.relationship === "matches-execution-checkout" ? "green" : "amber"} />
+            <SmallStat label="Source snapshot" value={bundle.provenance.sourceSnapshot.relationship} tone={bundle.provenance.sourceSnapshot.relationship === "matches-verified-execution-source" ? "green" : "amber"} />
           </div>
           <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-4 text-sm leading-6 text-slate-400">
             <strong className="font-semibold text-slate-200">Provenance meaning:</strong> the execution source checkout is the commit recorded when the VM experiment ran. The evidence digest is the SHA-256 of the committed SHA256SUMS manifest bytes, so it identifies the validated artifact manifest rather than this generated JSON. The browser bundle is generated offline; embedded source snapshot relationship: {bundle.provenance.sourceSnapshot.relationship} ({bundle.provenance.sourceSnapshot.method}).
@@ -1091,7 +1114,7 @@ function ProvenancePanel({ bundle }: { bundle: RdmaEvidenceBundle }) {
             </dl>
           </div>
           <a
-            href="https://github.com/g-arjuna/fabriclab/tree/preview/labs/rdma-basics"
+            href="https://github.com/g-arjuna/fabriclab/tree/a208af6ecf4e838d6d2c475ede366494de81a706/labs/rdma-basics"
             className="block rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-4 text-sm leading-6 text-cyan-100 transition hover:bg-cyan-400/15"
           >
             Open the runnable rdma-basics lab source and reproduction instructions on GitHub →
@@ -1100,148 +1123,6 @@ function ProvenancePanel({ bundle }: { bundle: RdmaEvidenceBundle }) {
       </div>
     </Panel>
   );
-}
-
-type RelationshipModel = {
-  eventIds: Set<string>;
-  packetIds: Set<string>;
-  workRequestIds: Set<string>;
-  completionIds: Set<string>;
-  memoryRegionIds: Set<string>;
-  codeRefs: WalkthroughStep["codeRefs"];
-  basis: string[];
-};
-
-function emptyRelationships(): RelationshipModel {
-  return {
-    eventIds: new Set(),
-    packetIds: new Set(),
-    workRequestIds: new Set(),
-    completionIds: new Set(),
-    memoryRegionIds: new Set(),
-    codeRefs: [],
-    basis: [],
-  };
-}
-
-function mergeRelationships(target: RelationshipModel, source: RelationshipModel) {
-  source.eventIds.forEach((id) => target.eventIds.add(id));
-  source.packetIds.forEach((id) => target.packetIds.add(id));
-  source.workRequestIds.forEach((id) => target.workRequestIds.add(id));
-  source.completionIds.forEach((id) => target.completionIds.add(id));
-  source.memoryRegionIds.forEach((id) => target.memoryRegionIds.add(id));
-  const codeKeys = new Set(target.codeRefs.map((reference) => `${reference.sourcePath}:${reference.startLine}:${reference.endLine}:${reference.label}`));
-  source.codeRefs.forEach((reference) => {
-    const key = `${reference.sourcePath}:${reference.startLine}:${reference.endLine}:${reference.label}`;
-    if (!codeKeys.has(key)) target.codeRefs.push(reference);
-  });
-  target.basis.push(...source.basis.filter((item) => !target.basis.includes(item)));
-}
-
-function relationshipsForStep(step: WalkthroughStep): RelationshipModel {
-  const relationships = emptyRelationships();
-  step.eventIds.forEach((id) => relationships.eventIds.add(id));
-  step.packetIds.forEach((id) => relationships.packetIds.add(id));
-  step.workRequestIds.forEach((id) => relationships.workRequestIds.add(id));
-  step.completionIds.forEach((id) => relationships.completionIds.add(id));
-  step.memoryRegionIds.forEach((id) => relationships.memoryRegionIds.add(id));
-  relationships.codeRefs.push(...step.codeRefs);
-  relationships.basis.push("guided causal walkthrough step");
-  return relationships;
-}
-
-function memoryIdForHost(experiment: Experiment, host: string) {
-  return experiment.memoryRegions.find((region) => region.host === host)?.id ?? null;
-}
-
-function addWorkRequestRelationship(experiment: Experiment, relationships: RelationshipModel, request: WorkRequest) {
-  relationships.workRequestIds.add(request.id);
-  relationships.eventIds.add(request.eventId);
-  const localMemory = memoryIdForHost(experiment, request.host);
-  if (localMemory) relationships.memoryRegionIds.add(localMemory);
-  if (request.remoteAddress) {
-    const remoteHost = experiment.endpoints.initiator.host === request.host ? experiment.endpoints.responder.host : experiment.endpoints.initiator.host;
-    const remoteMemory = memoryIdForHost(experiment, remoteHost);
-    if (remoteMemory) relationships.memoryRegionIds.add(remoteMemory);
-  }
-  experiment.packets.forEach((packet) => {
-    if (packet.correlations.workRequestIds.includes(request.id)) {
-      relationships.packetIds.add(packet.id);
-      packet.correlations.memoryRegionIds.forEach((id) => relationships.memoryRegionIds.add(id));
-      packet.correlations.completionIds.forEach((id) => relationships.completionIds.add(id));
-    }
-  });
-  const postingStep = experiment.walkthrough.find((item) => item.workRequestIds.includes(request.id) && item.codeRefs.length);
-  if (postingStep) relationships.codeRefs.push(...postingStep.codeRefs);
-  relationships.basis.push("validated work-request event and WR-ID correlation");
-}
-
-function addCompletionRelationship(experiment: Experiment, relationships: RelationshipModel, completion: Completion) {
-  relationships.completionIds.add(completion.id);
-  relationships.eventIds.add(completion.eventId);
-  const owningMemory = memoryIdForHost(experiment, completion.host);
-  if (owningMemory) relationships.memoryRegionIds.add(owningMemory);
-  const request = experiment.workRequests.find((item) => item.id === completion.workRequestId);
-  if (request) addWorkRequestRelationship(experiment, relationships, request);
-  experiment.packets.forEach((packet) => {
-    if (packet.correlations.completionIds.includes(completion.id) || (request && packet.correlations.workRequestIds.includes(request.id))) {
-      relationships.packetIds.add(packet.id);
-      packet.correlations.memoryRegionIds.forEach((id) => relationships.memoryRegionIds.add(id));
-    }
-  });
-  const completionStep = experiment.walkthrough.find((item) => item.completionIds.includes(completion.id) && item.codeRefs.length);
-  if (completionStep) relationships.codeRefs.push(...completionStep.codeRefs);
-  relationships.basis.push("validated WR-ID to CQE correlation; completion ownership remains local to the polling host");
-}
-
-function relationshipsForPacket(experiment: Experiment, packetId: string): RelationshipModel {
-  const relationships = emptyRelationships();
-  const packet = experiment.packets.find((item) => item.id === packetId);
-  if (!packet) return relationships;
-  relationships.packetIds.add(packet.id);
-  packet.correlations.eventIds.forEach((id) => relationships.eventIds.add(id));
-  packet.correlations.memoryRegionIds.forEach((id) => relationships.memoryRegionIds.add(id));
-  packet.correlations.workRequestIds.forEach((id) => {
-    relationships.workRequestIds.add(id);
-    const request = experiment.workRequests.find((item) => item.id === id);
-    if (request) {
-      relationships.eventIds.add(request.eventId);
-      addWorkRequestRelationship(experiment, relationships, request);
-    }
-  });
-  packet.correlations.completionIds.forEach((id) => {
-    relationships.completionIds.add(id);
-    const completion = experiment.completions.find((item) => item.id === id);
-    if (completion) relationships.eventIds.add(completion.eventId);
-  });
-  relationships.basis.push("validated packet QPN/PSN/RETH and correlation IDs");
-  return relationships;
-}
-
-function relationshipsForEvent(experiment: Experiment, eventId: string): RelationshipModel {
-  const relationships = emptyRelationships();
-  const event = experiment.events.find((item) => item.id === eventId);
-  if (!event) return relationships;
-  relationships.eventIds.add(event.id);
-  const containingStep = experiment.walkthrough.find((item) => item.eventIds.includes(eventId));
-  if (containingStep) mergeRelationships(relationships, relationshipsForStep(containingStep));
-  const request = experiment.workRequests.find((item) => item.eventId === eventId);
-  if (request) addWorkRequestRelationship(experiment, relationships, request);
-  const completion = experiment.completions.find((item) => item.eventId === eventId);
-  if (completion) addCompletionRelationship(experiment, relationships, completion);
-  if (["resources", "buffer_before", "buffer_after", "metadata_exchange"].includes(event.type)) {
-    const memory = memoryIdForHost(experiment, event.host);
-    if (memory) relationships.memoryRegionIds.add(memory);
-  }
-  relationships.basis.push("selected application event; packet relationships use validated IDs, while step-only context is causal");
-  return relationships;
-}
-
-function relationshipsForCompletion(experiment: Experiment, completionId: string): RelationshipModel {
-  const relationships = emptyRelationships();
-  const completion = experiment.completions.find((item) => item.id === completionId);
-  if (completion) addCompletionRelationship(experiment, relationships, completion);
-  return relationships;
 }
 
 function RelationshipList({ label, testId, children }: { label: string; testId: string; children: ReactNode }) {
@@ -1315,16 +1196,36 @@ function SelectionExplanation({
         </div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           <RelationshipList label="Work requests" testId="selection-work-requests">
-            {workRequests.length ? workRequests.map((request) => `${request.opcode} · ${hostLabel(request.host)} · wr_id ${exact(request.wrId)}`).join(" · ") : "none linked"}
+            {workRequests.length ? workRequests.map((request) => (
+              <div key={request.id} className="mb-2 last:mb-0">
+                <div>{request.opcode} · {hostLabel(request.host)} · wr_id {exact(request.wrId)}</div>
+                <div className="mt-0.5 text-[11px] leading-4 text-slate-500">{qualificationText(relationships, "workRequests", request.id)}</div>
+              </div>
+            )) : "none linked"}
           </RelationshipList>
           <RelationshipList label="Packets" testId="selection-packets">
-            {packets.length ? packets.map((packet) => `frame ${packet.frameNumber} ${packet.opcodeName}`).join(" · ") : "none supported by evidence at this point"}
+            {packets.length ? packets.map((packet) => (
+              <div key={packet.id} className="mb-2 last:mb-0">
+                <div>frame {packet.frameNumber} {packet.opcodeName}</div>
+                <div className="mt-0.5 text-[11px] leading-4 text-slate-500">{qualificationText(relationships, "packets", packet.id)}</div>
+              </div>
+            )) : "none supported by evidence at this point"}
           </RelationshipList>
           <RelationshipList label="Completions" testId="selection-completions">
-            {completions.length ? completions.map((completion) => `${completion.opcode} · ${hostLabel(completion.host)} · ${completion.status}`).join(" · ") : "none reached or linked"}
+            {completions.length ? completions.map((completion) => (
+              <div key={completion.id} className="mb-2 last:mb-0">
+                <div>{completion.opcode} · {hostLabel(completion.host)} · {completion.status}</div>
+                <div className="mt-0.5 text-[11px] leading-4 text-slate-500">{qualificationText(relationships, "completions", completion.id)}</div>
+              </div>
+            )) : "none reached or linked"}
           </RelationshipList>
           <RelationshipList label="Memory" testId="selection-memory">
-            {memories.length ? memories.map((region) => `${hostLabel(region.host)} VA ${exact(region.address)}`).join(" · ") : "no direct memory snapshot"}
+            {memories.length ? memories.map((region) => (
+              <div key={region.id} className="mb-2 last:mb-0">
+                <div>{hostLabel(region.host)} VA {exact(region.address)}</div>
+                <div className="mt-0.5 text-[11px] leading-4 text-slate-500">{qualificationText(relationships, "memoryRegions", region.id)}</div>
+              </div>
+            )) : "no direct memory snapshot"}
           </RelationshipList>
         </div>
         {relationships.codeRefs.length ? (
@@ -1510,14 +1411,21 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
     setManualPacketInspection(inspectFullRecording || !step.packetIds.includes(id));
   }
 
+  function clearNonGuidedPacketSelection() {
+    setSelectedPacketId(step.packetIds[0] ?? null);
+    setManualPacketInspection(false);
+  }
+
   function selectEvent(id: string) {
     setSelectedCompletionId(null);
     setSelectedEventId(id);
+    clearNonGuidedPacketSelection();
   }
 
   function selectCompletion(id: string) {
     setSelectedEventId(null);
     setSelectedCompletionId(id);
+    clearNonGuidedPacketSelection();
   }
 
   function clearSelection() {
@@ -1590,7 +1498,7 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
       <div className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1.05fr)_minmax(430px,0.95fr)]">
         <div className="min-w-0 space-y-5">
           <CodePanel experiment={experiment} step={step} codeRefs={effectiveCodeRefs} sources={rdmaEvidence.sources} />
-          <MemoryPanel experiment={experiment} step={step} highlightedMemoryIds={highlightedMemoryIds} currentMemoryState={currentMemoryState} inspectFullRecording={inspectFullRecording} />
+          <MemoryPanel experiment={experiment} step={step} highlightedMemoryIds={highlightedMemoryIds} currentMemoryState={currentMemoryState} inspectFullRecording={inspectFullRecording} reachedEventIds={reachedProgress.eventIds} />
         </div>
         <div className="min-w-0 space-y-5">
           <ResourcePanel
@@ -1627,6 +1535,7 @@ export function RdmaPractical({ initialExperiment }: { initialExperiment?: strin
         highlightedCompletionIds={highlightedCompletionIds}
         highlightedMemoryIds={highlightedMemoryIds}
         currentStepPacketIds={step.packetIds}
+        highlightedPacketIds={relationships.packetIds}
         manualInspection={manualPacketInspection}
         inspectFullRecording={inspectFullRecording}
       />
