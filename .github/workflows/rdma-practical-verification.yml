@@ -15,6 +15,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  patch-whitespace:
+    name: Validate submitted patch whitespace
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out complete patch history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate pull-request diff against its actual base
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "$BASE_SHA^{commit}"
+          git cat-file -e "$HEAD_SHA^{commit}"
+          git diff --check "$BASE_SHA...$HEAD_SHA"
+
+      - name: Validate every new commit in a branch push
+        if: github.event_name == 'push'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "Cannot identify the previous branch commit for push whitespace validation" >&2
+            exit 1
+          fi
+          git cat-file -e "$BEFORE_SHA^{commit}"
+          git cat-file -e "$HEAD_SHA^{commit}"
+          git rev-list --reverse "$BEFORE_SHA..$HEAD_SHA" | while read -r commit; do
+            echo "checking $commit"
+            git diff --check "$commit^" "$commit"
+          done
+
   evidence-pipeline:
     name: Evidence pipeline in a shallow checkout
     runs-on: ubuntu-24.04
@@ -23,9 +61,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Check patch whitespace
-        run: git diff --check HEAD^ HEAD 2>/dev/null || git diff --check
 
       - name: Install packet-analysis dependency
         run: |
