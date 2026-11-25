@@ -2,58 +2,74 @@
 import { useState } from "react"
 
 // -- QueuePairMechanicsViz -------------------------
-// Shows the RDMA Queue Pair model: how NCCL posts WQEs, HCA DMAs from GPU HBM,
-// constructs BTH, sends, and posts completion -- zero CPU in data path
+// Ordinary RDMA WRITE data movement, initiator completion, and remote
+// notification are related but distinct mechanisms.  The animation keeps them
+// visually separate because confusing them is a common RDMA programming error.
 
 const steps = [
   {
-    id: 0, phase: "GPU kernel completes AllReduce",
-    actor: "CUDA / NCCL",
-    desc: "NCCL's AllReduce kernel finishes computing partial gradients. NCCL now needs to synchronise with 127 remote GPUs. It calls into libibverbs to post RDMA Write operations.",
-    active: { gpu: true, sq: false, hca: false, wire: false, rq: false, remotegpu: false },
-    detail: "No network packet yet. Still in GPU compute domain.",
+    id: 0,
+    phase: "Application posts an ordinary RDMA WRITE",
+    actor: "CUDA / NCCL / libibverbs",
+    desc: "The application asks the verbs layer to write local memory directly into a remote registered memory region. This is an ordinary WRITE, not WRITE with immediate data.",
+    active: { gpu: true, sq: false, hca: false, wire: false, dest: false, mem: false, cq: false, notify: false },
+    detail: "The WR names the remote virtual address and RKEY. No remote receive WR is involved in the payload placement.",
   },
   {
-    id: 1, phase: "NCCL posts Work Queue Entry (WQE)",
-    actor: "libibverbs -> pinned memory",
-    desc: "NCCL writes a WQE into the Send Queue ring buffer in pinned, GPU-accessible memory. The WQE specifies: remote virtual address (destination GPU HBM), RKEY, local scatter-gather VA, message length, QPN of remote QP. NCCL then rings the HCA doorbell register (a single memory-mapped write). No system call. No kernel. No interrupt.",
-    active: { gpu: true, sq: true, hca: false, wire: false, rq: false, remotegpu: false },
-    detail: "WQE content: {op: RDMA_WRITE, remote_va: 0x7f3a..., rkey: 0x1, sge: [{va: 0x6f00..., len: 128M}], qpn: 0x42, signal: false}",
+    id: 1,
+    phase: "Work Queue Entry enters the Send Queue",
+    actor: "libibverbs -> SQ / WQE",
+    desc: "The WQE in the Send Queue specifies the operation, local scatter-gather memory, remote virtual address, RKEY, length, destination QP, and whether this send WR is signalled. Signalling controls initiator-side completion; it does not create a remote receive completion.",
+    active: { gpu: true, sq: true, hca: false, wire: false, dest: false, mem: false, cq: false, notify: false },
+    detail: "Example WQE: {op: RDMA_WRITE, remote_va, rkey, local_sge, len, dest_qpn, signalled: true}. sq_sig_all is an alternative CQ-signalling model.",
   },
   {
-    id: 2, phase: "HCA DMA-reads WQE + payload from GPU HBM",
-    actor: "ConnectX-7 DMA engine",
-    desc: "The HCA's send engine polls the SQ head pointer and finds a valid WQE (ownership bit set by NCCL). It DMA-reads the WQE, then DMA-reads the payload data from GPU HBM via the scatter-gather VA. This is GPUDirect RDMA: PCIe peer-to-peer between the NIC and the GPU, no system RAM involved.",
-    active: { gpu: true, sq: true, hca: true, wire: false, rq: false, remotegpu: false },
-    detail: "DMA path: GPU HBM -> NVLink -> NVSwitch -> PCIe -> ConnectX-7 TX buffer. CPU does zero work here.",
+    id: 2,
+    phase: "Initiator RNIC consumes the WQE",
+    actor: "Initiator RNIC",
+    desc: "The initiator RNIC reads the WQE and DMA-reads the payload described by the local scatter-gather entries. With GPUDirect RDMA that source can be GPU memory; the CPU still does not copy the payload.",
+    active: { gpu: true, sq: true, hca: true, wire: false, dest: false, mem: false, cq: false, notify: false },
+    detail: "Application -> Send Queue/WQE -> Initiator RNIC.",
   },
   {
-    id: 3, phase: "HCA constructs headers: BTH + UDP + IP + Ethernet",
-    actor: "ConnectX-7 firmware",
-    desc: "With payload in TX buffer, HCA constructs all headers in one pass: BTH (QPN from WQE, PSN from QP state, opcode RDMA_WRITE_FIRST), UDP (dst 4791, src from QPN hash), IP (src/dst from GID lookup, DSCP 46), Ethernet (dst = leaf switch gateway MAC from ARP cache). Segments into MTU-sized packets (4200B) automatically.",
-    active: { gpu: false, sq: true, hca: true, wire: false, rq: false, remotegpu: false },
-    detail: "Header construction is in firmware -- no driver, no kernel. Each 4200B packet gets its own BTH with sequential PSN.",
+    id: 3,
+    phase: "RoCEv2 packets cross the fabric",
+    actor: "RoCEv2 / UDP 4791",
+    desc: "The RNIC constructs the transport and network headers and transmits MTU-sized packets. The first or only WRITE packet carries the RETH fields: remote virtual address, RKEY, and DMA length.",
+    active: { gpu: false, sq: true, hca: true, wire: true, dest: false, mem: false, cq: false, notify: false },
+    detail: "Initiator RNIC -> RoCEv2 -> Destination RNIC.",
   },
   {
-    id: 4, phase: "Packets transmitted at 400G",
-    actor: "ConnectX-7 SerDes -> PAM-4 -> wire",
-    desc: "Packets are serialised at 400 Gbps over 8 lanes x 50G PAM-4. A 128 MB RDMA Write produces approximately 32,000 packets at a 4096B MTU (exact count varies with MTU setting and RETH overhead on first packet). At 400G, this takes approximately 2.5 ms of NIC TX time. The leaf switch, spine switch, and destination leaf each forward at line rate -- the full transfer crosses the fabric in approximately 2.5 ms plus a few microseconds of switch latency.",
-    active: { gpu: false, sq: true, hca: true, wire: true, rq: false, remotegpu: false },
-    detail: "128 MB / 400 Gbps = 2.56 ms transmission time. Actual observed AllReduce throughput ~390 Gbps (accounting for BTH/UDP/IP/Ethernet header overhead).",
+    id: 4,
+    phase: "Destination RNIC validates and places payload",
+    actor: "Destination RNIC",
+    desc: "The destination RNIC validates the packet sequence, destination QP, RKEY, and memory-region bounds, then DMA-writes the payload into the registered memory region named by the RETH. An ordinary WRITE does not consume a receive WR while doing this.",
+    active: { gpu: false, sq: false, hca: false, wire: true, dest: true, mem: false, cq: false, notify: false },
+    detail: "Destination RNIC -> Registered Memory. No RQ entry is needed for the ordinary-WRITE payload.",
   },
   {
-    id: 5, phase: "Destination HCA validates + DMA to GPU HBM",
-    actor: "Remote ConnectX-7 firmware",
-    desc: "Destination HCA receives each packet. Validates: FCS OK, dst MAC OK, dst IP OK, UDP port 4791 OK. Looks up QPN 0x42 in local QP table. Checks PSN in-order. Validates RKEY against MR table. DMA-writes payload to remote VA in destination GPU HBM. No completion posted yet -- waiting for RDMA_WRITE_LAST packet.",
-    active: { gpu: false, sq: false, hca: true, wire: true, rq: true, remotegpu: false },
-    detail: "Out-of-order: with RSHP enabled, packets may arrive out of PSN order. HCA reorder buffer holds them until sequence is complete before DMAing.",
+    id: 5,
+    phase: "Remote payload is available in memory",
+    actor: "Registered memory",
+    desc: "After placement, the new bytes are present in the remote registered memory region. No normal receive CQE has been generated on the remote target, so memory presence alone is not an application-level synchronisation protocol.",
+    active: { gpu: false, sq: false, hca: false, wire: false, dest: true, mem: true, cq: false, notify: false },
+    detail: "Registered Memory -> remote payload available. Destination CQ remains silent for ordinary WRITE.",
   },
   {
-    id: 6, phase: "RDMA_WRITE_LAST received -- completion posted",
-    actor: "Remote ConnectX-7 -> NCCL",
-    desc: "When the last packet (opcode RDMA_WRITE_LAST) is received and validated, the destination HCA posts a Completion Queue Entry (CQE) to the destination NCCL's Completion Queue. NCCL's background thread polls the CQ and sees the completion -- gradient data is now in destination GPU HBM. NCCL signals the GPU kernel to continue. CPU was not involved in any data transfer.",
-    active: { gpu: false, sq: false, hca: false, wire: false, rq: true, remotegpu: true },
-    detail: "Completion is posted after ALL packets of the RDMA Write are received and DMAed. The GPU kernel on the remote side continues processing the gradient update.",
+    id: 6,
+    phase: "Initiator receives its own signalled completion",
+    actor: "Initiator RNIC -> initiator CQ",
+    desc: "If the WRITE WR was signalled (or the QP uses sq_sig_all), the initiator can poll a successful work completion from its own CQ. That local completion concerns the posted send WR. It is not a receive CQE on the destination and does not by itself notify the remote application.",
+    active: { gpu: false, sq: false, hca: true, wire: false, dest: false, mem: false, cq: true, notify: false },
+    detail: "Initiator RNIC -> signalled completion -> Initiator CQ / Work Completion (WC).",
+  },
+  {
+    id: 7,
+    phase: "Remote application notification is a separate protocol step",
+    actor: "Application protocol",
+    desc: "Before consuming the data, the remote application must learn that the transfer is ready through an explicit synchronisation design. Examples include an application message or a carefully ordered doorbell/flag protocol. WRITE with immediate data is a different verbs operation: it consumes a posted receive WR and can produce a receive completion carrying the immediate value.",
+    active: { gpu: false, sq: false, hca: false, wire: false, dest: false, mem: true, cq: false, notify: true },
+    detail: "Do not treat the ordinary WRITE itself as remote notification. The FabricLab lab uses a TCP control message only as demonstration synchronisation.",
   },
 ]
 
@@ -76,27 +92,49 @@ export function QueuePairMechanicsViz() {
     color: active ? "#e2e8f0" : "#475569",
   })
 
+  const flowStyle = (active: boolean) => ({
+    background: active ? "#0c3260" : "#111827",
+    border: `1px solid ${active ? "#378ADD" : "#334155"}`,
+    borderRadius: 8,
+    padding: "8px 10px",
+    fontSize: 10,
+    color: active ? "#bfdbfe" : "#64748b",
+    lineHeight: 1.5,
+    transition: "all 0.25s",
+  })
+
   const a = s.active
 
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
-      <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">Queue pair mechanics -- RDMA Write pipeline</div>
-      <div className="mb-5 text-xs text-slate-600">Step through the journey from NCCL to GPU HBM. Zero CPU instructions touch the data.</div>
+      <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">Queue pair mechanics -- ordinary RDMA WRITE</div>
+      <div className="mb-5 text-xs text-slate-600">Payload placement, initiator completion, and remote notification are distinct. Step through each concept.</div>
 
-      <div style={{ overflowX: "auto", paddingBottom: 6, marginBottom: 20 }}>
+      <div style={{ overflowX: "auto", paddingBottom: 6, marginBottom: 14 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(92px, 1fr))", gap: 6, alignItems: "center", minWidth: 600 }}>
-          <div style={nodeStyle(a.gpu, "#9333EA", "#2e1065")}>GPU<br/><span style={{ fontSize: 9, fontWeight: 400 }}>HBM + NCCL</span></div>
-          <div style={nodeStyle(a.sq, "#185FA5", "#0c3260")}>Send Queue<br/><span style={{ fontSize: 9, fontWeight: 400 }}>WQE ring buffer</span></div>
-          <div style={nodeStyle(a.hca, "#0F6E56", "#0a2e22")}>ConnectX-7<br/><span style={{ fontSize: 9, fontWeight: 400 }}>HCA firmware</span></div>
-          <div style={nodeStyle(a.wire, "#854F0B", "#2a1a06")}>Fabric<br/><span style={{ fontSize: 9, fontWeight: 400 }}>400G PAM-4</span></div>
-          <div style={nodeStyle(a.rq, "#0F6E56", "#0a2e22")}>Remote HCA<br/><span style={{ fontSize: 9, fontWeight: 400 }}>Recv Queue</span></div>
-          <div style={nodeStyle(a.remotegpu, "#9333EA", "#2e1065")}>Remote GPU<br/><span style={{ fontSize: 9, fontWeight: 400 }}>HBM target</span></div>
+          <div style={nodeStyle(a.gpu, "#9333EA", "#2e1065")}>Application<br/><span style={{ fontSize: 9, fontWeight: 400 }}>posts WRITE</span></div>
+          <div style={nodeStyle(a.sq, "#185FA5", "#0c3260")}>Send Queue<br/><span style={{ fontSize: 9, fontWeight: 400 }}>WQE</span></div>
+          <div style={nodeStyle(a.hca, "#0F6E56", "#0a2e22")}>Initiator RNIC<br/><span style={{ fontSize: 9, fontWeight: 400 }}>send side</span></div>
+          <div style={nodeStyle(a.wire, "#854F0B", "#2a1a06")}>RoCEv2<br/><span style={{ fontSize: 9, fontWeight: 400 }}>UDP 4791</span></div>
+          <div style={nodeStyle(a.dest, "#0F6E56", "#0a2e22")}>Destination RNIC<br/><span style={{ fontSize: 9, fontWeight: 400 }}>QP + MR validation</span></div>
+          <div style={nodeStyle(a.mem, "#9333EA", "#2e1065")}>Registered Memory<br/><span style={{ fontSize: 9, fontWeight: 400 }}>payload available</span></div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 8, marginBottom: 16 }}>
+        <div style={flowStyle(a.cq)} aria-live="polite">
+          <strong>Initiator completion path</strong><br />
+          Initiator RNIC → signalled completion → Initiator CQ / WC
+        </div>
+        <div style={flowStyle(a.notify)} aria-live="polite">
+          <strong>Remote notification concept</strong><br />
+          Registered memory ready → explicit application synchronisation → remote application consumes data
         </div>
       </div>
 
       <div style={{ background: "#1e293b", borderRadius: 10, padding: "14px 16px", marginBottom: 14, minHeight: 110 }}>
         <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 6 }}>
-          <div style={{ background: "#0c3260", border: "1px solid #378ADD", borderRadius: 5, padding: "2px 8px", fontSize: 10, color: "#93c5fd", flexShrink: 0 }}>Phase {step + 1}/7</div>
+          <div style={{ background: "#0c3260", border: "1px solid #378ADD", borderRadius: 5, padding: "2px 8px", fontSize: 10, color: "#93c5fd", flexShrink: 0 }}>Phase {step + 1}/{steps.length}</div>
           <div style={{ fontSize: 12, fontWeight: 500, color: "#e2e8f0" }}>{s.phase}</div>
         </div>
         <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>Actor: {s.actor}</div>
@@ -114,7 +152,7 @@ export function QueuePairMechanicsViz() {
         <button onClick={() => setStep(Math.min(steps.length - 1, step + 1))} disabled={step === steps.length - 1} style={{ flex: 1, padding: "8px 0", background: "transparent", border: "1px solid #334155", borderRadius: 8, color: step === steps.length - 1 ? "#334155" : "#94a3b8", fontSize: 12, cursor: step === steps.length - 1 ? "not-allowed" : "pointer" }}>{"Next ->"}</button>
       </div>
       <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
-        {steps.map((_, i) => <button key={i} onClick={() => setStep(i)} style={{ width: 8, height: 8, borderRadius: "50%", background: i === step ? "#378ADD" : "#334155", border: "none", cursor: "pointer", padding: 0 }} />)}
+        {steps.map((_, i) => <button key={i} aria-label={`Go to queue-pair step ${i + 1}`} onClick={() => setStep(i)} style={{ width: 8, height: 8, borderRadius: "50%", background: i === step ? "#378ADD" : "#334155", border: "none", cursor: "pointer", padding: 0 }} />)}
       </div>
     </div>
   )

@@ -158,12 +158,12 @@ export function DestinationNICDeliveryViz() {
     { title: "QP lookup", detail: "Read BTH.DstQPN = 0x000042. Look up in local QP table: QPN 0x42 -> connected QP state (RTS), associated with NCCL's receive buffer. PSN check: expected 0x001F3A, received 0x001F3A -> in-order OK." },
     { title: "RKEY + VA validation", detail: "For RDMA Write: read RETH header. RKEY 0x00000001 -> look up in MR (Memory Region) table. MR 0x01 covers VA range 0x7f3a00000000 -> 0x7f3a07ffffff. Write address is within MR OK. Proceed to DMA." },
     { title: "DMA to GPU HBM", detail: "HCA DMA-writes 4172B payload to physical page corresponding to VA 0x7f3a00000000. Uses IOMMU/SMMU page table registered by NCCL. Data lands in destination GPU HBM. CPU never wakes up. Same DMA engine, same PCIe peer-to-peer path." },
-    { title: "Completion posted", detail: "Last packet (opcode RDMA_WRITE_LAST) received. DMA complete. HCA writes Completion Queue Entry (CQE) to CQ ring buffer. NCCL background thread polls CQ, reads CQE, signals GPU kernel: 'receive complete'. GPU AllReduce continues." },
+    { title: "Memory ready", detail: "Last packet (opcode RDMA_WRITE_LAST) received and payload placed. For an ordinary RDMA WRITE, the destination posts no receive CQE and consumes no receive WR. A signalled WR can complete on the initiator's CQ instead; the remote application needs separate synchronisation before consuming the data." },
   ]
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <div className="mb-1 text-xs uppercase tracking-widest text-slate-500">Destination NIC receive pipeline</div>
-      <div className="mb-5 text-xs text-slate-600">6 stages from frame arrival to GPU kernel continuation. Click each stage.</div>
+      <div className="mb-5 text-xs text-slate-600">6 stages from frame arrival to registered-memory availability. Click each stage.</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         {rxStages.map((s, i) => (
           <button key={i} onClick={() => setStage(i)} style={{ padding: "6px 10px", background: stage === i ? "#185FA5" : "#1e293b", border: `1px solid ${stage === i ? "#378ADD" : "#334155"}`, borderRadius: 6, color: stage === i ? "#fff" : "#64748b", fontSize: 10, cursor: "pointer" }}>
@@ -176,7 +176,7 @@ export function DestinationNICDeliveryViz() {
         <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7, fontFamily: "monospace" }}>{rxStages[stage].detail}</div>
       </div>
       <div style={{ marginTop: 12, background: "#0c3260", border: "1px solid #378ADD", borderRadius: 8, padding: "10px 14px", fontSize: 11, color: "#93c5fd" }}>
-        Full path latency: NIC RX pipeline ~400ns + DMA ~200ns + completion ~100ns = ~700ns at destination (plus ~2-2.5us in-flight time).
+        Full destination data-path latency: NIC RX pipeline ~400ns + DMA ~200ns = ~600ns (plus in-flight time). Application synchronisation is protocol-dependent and is not included.
       </div>
     </div>
   )

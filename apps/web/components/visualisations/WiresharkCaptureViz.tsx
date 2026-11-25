@@ -93,7 +93,7 @@ const CAPTURES: Record<string, CaptureData> = {
           ]},
           { name: "Partition Key", value: "0xFFFF (default partition)", bytes: "ff ff" },
           { name: "Destination QPN", value: "0x000042 (66 decimal)", bytes: "00 00 42", highlight: "key", children: [
-            { name: "->", value: "Identifies the remote Receive Queue. ECMP hash includes this field when 'show ecmp hash roce' is enabled." }
+            { name: "->", value: "Identifies the destination QP context. It does not imply use of a receive WR for an ordinary WRITE. ECMP hash includes this field when 'show ecmp hash roce' is enabled." }
           ]},
           { name: "Ack Request", value: "0 (not requested on middle packets)", bytes: "00" },
           { name: "Packet Seq Num", value: "0x001F3A (8,506 decimal)", bytes: "00 1f 3a", highlight: "same", children: [
