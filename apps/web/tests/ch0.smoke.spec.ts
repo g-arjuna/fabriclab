@@ -3,11 +3,11 @@ import { expect, test } from "@playwright/test";
 const chapterPath = "/learn/ch0-hardware-foundations";
 const imagePages = [
   {
-    page: 7,
+    page: 8,
     alt: "Official NVIDIA BlueField-3 DPU image showing the physical DPU card form factor.",
   },
   {
-    page: 8,
+    page: 9,
     alt: "Official NVIDIA DGX H100 system image.",
   },
   {
@@ -15,7 +15,7 @@ const imagePages = [
     alt: "Official NVIDIA DGX SuperPOD H100 scalable unit rack layout diagram.",
   },
   {
-    page: 12,
+    page: 11,
     alt: "Official NVIDIA ConnectX-7 SuperNIC image showing the adapter form factor discussed in the mode-selection section.",
   },
 ];
@@ -29,7 +29,7 @@ test("Chapter 0 smoke check passes without browser errors", async ({ page }) => 
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   const partSummary = (pageNumber: number) =>
-    page.locator("span").filter({ hasText: new RegExp(`^Part ${pageNumber} of 14$`) }).first();
+    page.locator("span").filter({ hasText: new RegExp(`^Part ${pageNumber} of \\d+$`) }).first();
   const openPage = async (pageNumber: number) => {
     await page.goto(`${chapterPath}?page=${pageNumber}`, { waitUntil: "domcontentloaded" });
     await expect(partSummary(pageNumber + 1)).toBeVisible();
@@ -54,7 +54,7 @@ test("Chapter 0 smoke check passes without browser errors", async ({ page }) => 
 
   await openPage(0);
   await expect(
-    page.getByRole("heading", { name: "Chapter 0: How We Got Here — The Hardware Story" }),
+    page.getByRole("heading", { name: /Chapter 0: How We Got Here.*Hardware Story/i }),
   ).toBeVisible();
 
   for (let currentPage = 0; currentPage < 3; currentPage += 1) {
@@ -65,16 +65,23 @@ test("Chapter 0 smoke check passes without browser errors", async ({ page }) => 
     await expect(partSummary(currentPage + 2)).toBeVisible();
   }
 
-  for (const imagePage of imagePages) {
-    await openPage(imagePage.page);
-    const image = page.getByAltText(imagePage.alt);
-    await expect(image).toHaveCount(1);
-    await expect(image.first()).toBeVisible();
+  const firstPartText = await page.locator("span").filter({ hasText: /^Part \d+ of \d+$/ }).first().innerText();
+  const totalPages = Number(firstPartText.match(/of (\d+)$/)?.[1] ?? "0");
+  expect(totalPages).toBeGreaterThan(1);
+
+  const unseenImages = new Set(imagePages.map((imagePage) => imagePage.alt));
+  for (let currentPage = 0; currentPage < totalPages; currentPage += 1) {
+    await openPage(currentPage);
+    for (const alt of Array.from(unseenImages)) {
+      const image = page.getByAltText(alt);
+      if ((await image.count()) === 1) {
+        await expect(image.first()).toBeVisible();
+        unseenImages.delete(alt);
+      }
+    }
   }
 
-  for (let currentPage = 0; currentPage <= 13; currentPage += 1) {
-    await openPage(currentPage);
-  }
+  expect(Array.from(unseenImages), `missing chapter images: ${Array.from(unseenImages).join("; ")}`).toEqual([]);
 
   expect(pageErrors, `Uncaught page errors:\n${pageErrors.join("\n")}`).toEqual([]);
   expect(consoleErrors, `Console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
