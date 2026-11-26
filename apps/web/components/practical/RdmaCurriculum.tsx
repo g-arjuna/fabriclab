@@ -63,6 +63,40 @@ function clearLessonProgress(lessonId: string) {
   }
 }
 
+const OPERATION_QUIZ_IDS_BY_LESSON: Record<string, string[]> = {
+  "send-receive": ["send-destination-review", "send-evidence-review"],
+  write: ["write-evidence-review"],
+  read: ["read-direction-review"],
+  packets: ["case-a-destination", "case-a-additional-record", "case-b-ack-meaning", "case-b-target-poll", "case-c-completion-owner", "case-c-initiator", "case-c-target-endpoint", "final-distinction-review"],
+};
+const OPERATION_SECTION_PREFIX_BY_LESSON: Record<string, string> = {
+  "send-receive": "5.",
+  write: "6.",
+  read: "7.",
+  packets: "8.",
+};
+
+function removeStorageKeysMatching(predicate: (key: string) => boolean) {
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index);
+    if (key && predicate(key)) window.localStorage.removeItem(key);
+  }
+}
+
+function clearOperationInteractionState(lessonId: string) {
+  const sectionPrefix = OPERATION_SECTION_PREFIX_BY_LESSON[lessonId];
+  const quizIds = OPERATION_QUIZ_IDS_BY_LESSON[lessonId] || [];
+  removeStorageKeysMatching((key) => {
+    if (sectionPrefix && key.startsWith(`fabriclab.rdma.operations-v2.interaction.${sectionPrefix}`)) return true;
+    if (quizIds.some((id) => key === `fabriclab.rdma.operations-v2.quiz.${id}`)) return true;
+    return lessonId === "write" && key === "fabriclab.rdma.operations-v2.6.6.prediction";
+  });
+}
+
+function clearAllOperationInteractionState() {
+  removeStorageKeysMatching((key) => key.startsWith("fabriclab.rdma.operations-v2."));
+}
+
 export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
   const [lessonIndex, setLessonIndex] = useState(() => validLessonIndex(initialLesson));
   const [completed, setCompleted] = useState<string[]>([]);
@@ -173,10 +207,13 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
   function restartLesson(index = lessonIndex) {
     try {
       clearLessonProgress(LESSONS[index].id);
+      clearOperationInteractionState(LESSONS[index].id);
     } catch {
       // Restart remains possible without storage access.
     }
     markLessonExplicit(LESSONS[index].id);
+    setCompleted((currentCompleted) => currentCompleted.filter((id) => id !== LESSONS[index].id));
+    setFinished(false);
     setShowCompletion(false);
     setLessonIndex(index);
     setResetVersion((current) => current + 1);
@@ -185,6 +222,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
   function startPracticalAgain() {
     try {
       LESSONS.forEach((item) => clearLessonProgress(item.id));
+      clearAllOperationInteractionState();
       window.localStorage.removeItem(COMPLETED_KEY);
       window.localStorage.removeItem(COMPLETED_V2_KEY);
       window.localStorage.removeItem(COMPLETED_V3_KEY);

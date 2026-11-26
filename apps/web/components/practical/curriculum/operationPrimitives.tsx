@@ -191,26 +191,93 @@ export function PacketInspector({ packetValue, testId = "operations-packet-inspe
   );
 }
 
+export function completionWorkRequest(completion: Completion) {
+  for (const experimentValue of rdmaEvidence.experiments) {
+    const request = experimentValue.workRequests.find((item) => item.id === completion.workRequestId);
+    if (request) return request;
+  }
+  return undefined;
+}
+
+function completionTitle(completion: Completion) {
+  const host = completion.host === "hosta" ? "Server A" : "Server B";
+  const opcode = completion.opcode.toLowerCase();
+  if (opcode.includes("receive")) return `${host} receive completion`;
+  if (opcode.includes("read")) return `${host} READ completion`;
+  if (opcode.includes("write")) return `${host} WRITE completion`;
+  return `${host} send completion`;
+}
+
+function completionByteSemantics(completion: Completion) {
+  const opcode = completion.opcode.toLowerCase();
+  const request = completionWorkRequest(completion);
+  if (opcode.includes("receive")) {
+    return {
+      label: "Received message length",
+      value: completion.byteLength,
+      explanation: "The successful receive completion supplies the byte count used by this application when reading its buffer.",
+    };
+  }
+  if (opcode.includes("read")) {
+    return {
+      label: "Requested transfer length / recorded reader completion byte_len",
+      value: `${request?.byteLength ?? "—"} / ${completion.byteLength}`,
+      explanation: "The requested transfer length comes from the READ memory descriptions. The reference reader uses the successful completion byte_len to read that many local bytes and then verifies the returned data.",
+    };
+  }
+  return {
+    label: "Recorded RXE completion byte_len",
+    value: completion.byteLength,
+    explanation: "This is a value recorded from the software provider in our reference run. Do not treat the send-side byte_len field as a portable guarantee of remote memory contents or target application consumption.",
+  };
+}
+
+function CompletionLifecycleNote() {
+  return (
+    <div className="mt-3 rounded-lg border border-lime-300/20 bg-slate-950/45 p-2.5" data-testid="completion-cq-lifecycle">
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-lime-100/90">
+        <span>Provider reports eligible completion</span><span aria-hidden="true">→</span>
+        <span>Completion Queue</span><span aria-hidden="true">→</span>
+        <span>Application polls</span><span aria-hidden="true">→</span>
+        <span>Retrieved Work Completion</span>
+      </div>
+      <p className="mt-1.5 text-[11px] leading-4 text-lime-100/70">
+        Once retrieved, the completion is outside the pending CQ. Where the pre-poll CQE was not independently observed, that intermediate state is conceptual; the recorded event represents the application's retrieval of the result. A captured ACK packet is not itself inserted into the Completion Queue.
+      </p>
+    </div>
+  );
+}
+
 export function CompletionCard({ completion, testId }: { completion: Completion; testId?: string }) {
+  const byteSemantics = completionByteSemantics(completion);
   return (
     <section className="rounded-xl border border-lime-300/25 bg-lime-300/8 p-3" data-testid={testId || "recorded-completion-card"}>
-      <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-lime-100">{completion.id}</div><ProvenanceTag kind="recorded" /></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-lime-100">{completionTitle(completion)}</div><ProvenanceTag kind="recorded" /></div>
       <dl className="mt-2 grid gap-1 font-mono text-xs text-lime-50/90 sm:grid-cols-2">
         <div>host: {completion.host === "hosta" ? "Server A" : "Server B"}</div>
         <div>status: {completion.status}</div>
         <div>opcode: {completion.opcode}</div>
-        <div>byte length: {completion.byteLength}</div>
+        <div>{byteSemantics.label}: {byteSemantics.value}</div>
         <div>WR ID: {exactValue(completion.wrId)}</div>
         <div>QP: {exactValue(completion.qpNum)}</div>
       </dl>
+      <p className="mt-2 text-xs leading-5 text-lime-100/75" data-testid="completion-byte-semantics">{byteSemantics.explanation}</p>
+      <CompletionLifecycleNote />
+      <details className="mt-2 text-[11px] text-lime-100/65"><summary className="cursor-pointer">Evidence identifier</summary><div className="mt-1 break-all font-mono">{completion.id}</div></details>
     </section>
   );
+}
+
+function workRequestTitle(request: WorkRequest) {
+  const host = request.host === "hosta" ? "Server A" : "Server B";
+  const kind = request.kind === "receive" ? "receive" : request.kind === "rdma-write" ? "WRITE" : request.kind === "rdma-read" ? "READ" : "SEND";
+  return `${host} ${kind} work request`;
 }
 
 export function WorkRequestCard({ request, testId }: { request: WorkRequest; testId?: string }) {
   return (
     <section className="rounded-xl border border-cyan-300/25 bg-cyan-300/8 p-3" data-testid={testId || "recorded-wr-card"}>
-      <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-cyan-100">{request.id}</div><ProvenanceTag kind="recorded" /></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-cyan-100">{workRequestTitle(request)}</div><ProvenanceTag kind="recorded" /></div>
       <dl className="mt-2 grid gap-1 font-mono text-xs text-cyan-50/90 sm:grid-cols-2">
         <div>kind: {request.kind}</div>
         <div>opcode: {request.opcode}</div>
@@ -221,6 +288,7 @@ export function WorkRequestCard({ request, testId }: { request: WorkRequest; tes
         {request.remoteAddress ? <div>remote addr: {exactValue(request.remoteAddress)}</div> : null}
         {request.remoteRkey ? <div>RKEY: {exactValue(request.remoteRkey)}</div> : null}
       </dl>
+      <details className="mt-2 text-[11px] text-cyan-100/65"><summary className="cursor-pointer">Evidence identifier</summary><div className="mt-1 break-all font-mono">{request.id}</div></details>
     </section>
   );
 }
@@ -250,41 +318,65 @@ export function Quiz({
   const [selected, setSelected] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [skipped, setSkipped] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(storageKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { selected?: number | null; revealed?: boolean; skipped?: boolean };
-      if (typeof parsed.selected === "number") setSelected(parsed.selected);
-      setRevealed(Boolean(parsed.revealed));
-      setSkipped(Boolean(parsed.skipped));
+      if (raw) {
+        const parsed = JSON.parse(raw) as { selected?: number | null; revealed?: boolean; skipped?: boolean; revision?: string };
+        if (parsed.revision === "operations-v2" || parsed.revision === "operations-v2-quiz-r1") {
+          const validSelected = typeof parsed.selected === "number" && Number.isInteger(parsed.selected) && parsed.selected >= 0 && parsed.selected < options.length ? parsed.selected : null;
+          const validRevealed = Boolean(parsed.revealed) && validSelected !== null;
+          const validSkipped = Boolean(parsed.skipped) && !validRevealed;
+          setSelected(validSelected);
+          setRevealed(validRevealed);
+          setSkipped(validSkipped);
+        }
+      }
     } catch {
       // Optional local progress.
     }
-  }, [storageKey]);
+    setHydrated(true);
+  }, [options.length, storageKey]);
+
   useEffect(() => {
+    if (!hydrated) return;
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify({ selected, revealed, skipped, revision: "operations-v2" }));
+      window.localStorage.setItem(storageKey, JSON.stringify({ selected, revealed, skipped, revision: "operations-v2-quiz-r1" }));
     } catch {
       // Optional local progress.
     }
-  }, [storageKey, selected, revealed, skipped]);
+  }, [hydrated, storageKey, selected, revealed, skipped]);
+
   const answerVisible = revealed || skipped;
+  const answeredCorrectly = selected === correct && revealed && !skipped;
+  function choose(index: number) {
+    if (answerVisible) return;
+    setSelected(index);
+  }
+  function retry() {
+    setSelected(null);
+    setRevealed(false);
+    setSkipped(false);
+  }
+
   return (
-    <section className="rounded-2xl border border-violet-300/20 bg-violet-300/7 p-4" data-testid={`${id}-quiz`}>
+    <section className="rounded-2xl border border-violet-300/20 bg-violet-300/7 p-4" data-testid={`${id}-quiz`} data-hydrated={hydrated ? "true" : "false"}>
       <div className="font-semibold text-violet-100">{question}</div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {options.map((option, index) => (
-          <ActionButton key={option} testId={`${id}-option-${index}`} active={selected === index} onClick={() => setSelected(index)}>{option}</ActionButton>
+          <ActionButton key={option} testId={`${id}-option-${index}`} active={selected === index} disabled={answerVisible} onClick={() => choose(index)}>{option}</ActionButton>
         ))}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <ActionButton testId={`${id}-check`} disabled={selected === null || !checkEnabled} onClick={() => setRevealed(true)}>Check answer</ActionButton>
-        {skippable ? <ActionButton testId={`${id}-skip`} onClick={() => setSkipped(true)}>Skip review</ActionButton> : null}
+        <ActionButton testId={`${id}-check`} disabled={selected === null || !checkEnabled || answerVisible} onClick={() => setRevealed(true)}>Check answer</ActionButton>
+        {skippable && !answerVisible ? <ActionButton testId={`${id}-skip`} onClick={() => setSkipped(true)}>Skip review</ActionButton> : null}
+        {answerVisible ? <ActionButton testId={`${id}-retry`} onClick={retry}>Retry or review again</ActionButton> : null}
       </div>
       {answerVisible ? (
-        <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-sm leading-6 text-slate-300" data-testid={`${id}-feedback`} data-correct={selected === correct ? "true" : "false"}>
-          {selected === correct && revealed ? <span className="font-semibold text-emerald-100">Correct. </span> : selected !== null && revealed ? <span className="font-semibold text-amber-100">Not quite. </span> : <span className="font-semibold text-sky-100">Review explanation. </span>}
+        <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-sm leading-6 text-slate-300" data-testid={`${id}-feedback`} data-correct={answeredCorrectly ? "true" : "false"}>
+          {answeredCorrectly ? <span className="font-semibold text-emerald-100">Correct. </span> : selected !== null && revealed ? <span className="font-semibold text-amber-100">Not quite. </span> : <span className="font-semibold text-sky-100">Review explanation. </span>}
           {feedback}{skipped ? " Skipping does not record mastery." : ""}
         </div>
       ) : <div className="mt-3 text-xs text-slate-500" data-testid={`${id}-answer-hidden`}>{answerHiddenReason}</div>}

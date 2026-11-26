@@ -15,10 +15,33 @@ async function advance(page: Page, count: number) {
 test.describe("Operations V2 evidence semantics", () => {
   test("SEND setup, RNR fork, packet, independent completions and exact verified bytes are evidence-bound", async ({ page }) => {
     await openOperations(page, "send-receive");
-    await advance(page, 2);
+    await advance(page, 1);
 
+    await expect(page.getByTestId("visual-5-2")).not.toContainText("recorded final QP RTS");
+    await page.getByTestId("open-device-resources").click();
+    await expect(page.getByTestId("visual-5-2")).toContainText("QP created in RESET");
+    await expect(page.getByTestId("visual-5-2")).not.toContainText("recorded final QP RTS");
+    await expect(page.getByTestId("focus-transfer")).toHaveAttribute("data-kind", "none");
+    await page.getByTestId("exchange-endpoint-metadata").click();
+    await expect(page.getByTestId("visual-5-2")).toContainText("metadata known · QP not yet configured as ready");
+    await expect(page.getByTestId("visual-5-2")).not.toContainText("recorded final QP RTS");
+    await expect(page.getByTestId("focus-transfer")).toHaveAttribute("data-kind", "control");
+    await expect(page.getByTestId("focus-transfer")).toContainText(/endpoint metadata over TCP/i);
+    await expect(page.getByTestId("visual-5-2")).not.toContainText(/SEND packet|WRITE packet|READ packet/);
+    await page.getByTestId("prepare-qps").click();
+    await expect(page.getByTestId("visual-5-2")).toContainText("recorded final QP RTS");
+    await expect(page.getByTestId("metadata-exchange-history")).toContainText(/TCP control history/i);
+    await expect(page.getByTestId("focus-transfer")).toHaveAttribute("data-kind", "none");
+
+    await advance(page, 1);
+
+    await expect(page.getByTestId("send-receive-wr-card")).toHaveCount(0);
     await page.getByTestId("describe-receive-memory").click();
+    await expect(page.getByTestId("receive-wr-lifecycle")).toHaveAttribute("data-stage", "constructed");
+    await expect(page.getByTestId("receive-application-construction")).toContainText(/outside the Receive Queue/i);
+    await expect(page.getByTestId("visual-5-3")).toContainText("no posted receive WR");
     await page.getByTestId("post-receive-request").click();
+    await expect(page.getByTestId("receive-wr-lifecycle")).toHaveAttribute("data-stage", "posted");
     await expect(page.getByTestId("send-receive-wr-card")).toContainText("wr:b:hostb:exp-b-receiver:4");
     await expect(page.getByTestId("send-receive-wr-card")).toContainText("length: 4096");
     await page.getByTestId("tell-a-ready").click();
@@ -37,11 +60,17 @@ test.describe("Operations V2 evidence semantics", () => {
     await page.getByTestId("write-bytes-a-buffer").click();
     await expect(page.getByTestId("send-payload-exact-bytes")).toContainText("50 bytes");
     await expect(page.getByTestId("send-payload-exact-bytes")).toContainText("\\n");
+    await expect(page.getByTestId("visual-5-5")).not.toContainText("The application has submitted the instruction");
     await page.getByTestId("construct-send-instruction").click();
+    await expect(page.getByTestId("send-wr-lifecycle")).toHaveAttribute("data-stage", "constructed");
+    await expect(page.getByTestId("send-application-construction")).toContainText(/outside the Send Queue/i);
+    await expect(page.getByTestId("visual-5-5")).toContainText("no posted SEND WR");
     await expect(page.getByTestId("actual-send-wr")).toContainText("wr:b:hosta:exp-b-sender:5");
     await expect(page.getByTestId("actual-send-wr")).toContainText("length: 50");
     await page.getByTestId("submit-to-send-queue").click();
-    await expect(page.getByTestId("visual-5-5")).toContainText(/no successful completion yet/i);
+    await expect(page.getByTestId("send-wr-lifecycle")).toHaveAttribute("data-stage", "posted");
+    await expect(page.getByTestId("visual-5-5")).toContainText("The application has submitted the instruction");
+    await expect(page.getByTestId("visual-5-5")).toContainText(/does not independently sample queue occupancy/i);
 
     await advance(page, 1);
     await page.getByTestId("inspect-captured-send").click();
@@ -68,7 +97,10 @@ test.describe("Operations V2 evidence semantics", () => {
     await page.getByTestId("observe-a-completion").click();
     await page.getByTestId("observe-b-completion").click();
     await expect(page.getByTestId("send-a-completion")).toContainText("cqe:b:hosta:exp-b-sender:6");
+    await expect(page.getByTestId("send-a-completion")).toContainText("Recorded RXE completion byte_len");
     await expect(page.getByTestId("send-b-completion")).toContainText("cqe:b:hostb:exp-b-receiver:5");
+    await expect(page.getByTestId("send-b-completion")).toContainText("Received message length");
+    await expect(page.getByTestId("send-b-completion")).toContainText("Completion Queue");
     await expect(page.getByTestId("visual-5-7")).toContainText(/independent/i);
 
     await advance(page, 1);
@@ -96,6 +128,11 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(page.getByTestId("actual-write-wr")).toContainText("length: 53");
     await expect(page.getByTestId("actual-write-wr")).toContainText("remote addr:");
     await expect(page.getByTestId("actual-write-wr")).toContainText("RKEY:");
+    await expect(page.getByTestId("write-wr-lifecycle")).toHaveAttribute("data-stage", "constructed");
+    await expect(page.getByTestId("visual-6-3")).not.toContainText("The application has submitted the instruction");
+    await page.getByTestId("submit-write").click();
+    await expect(page.getByTestId("write-wr-lifecycle")).toHaveAttribute("data-stage", "posted");
+    await expect(page.getByTestId("visual-6-3")).toContainText("The application has submitted the instruction");
 
     await advance(page, 1);
     await page.getByTestId("inspect-write-request").click();
@@ -110,6 +147,10 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(request).toContainText("130");
     await page.getByTestId("check-target-access").click();
     await expect(page.getByTestId("write-access-interval")).toContainText("capacity 4096");
+    await expect(page.getByTestId("write-access-interval")).toHaveAttribute("data-qpn-match", "true");
+    await expect(page.getByTestId("write-access-interval")).toHaveAttribute("data-key-match", "true");
+    await expect(page.getByTestId("write-access-interval")).toHaveAttribute("data-range-fits", "true");
+    await expect(page.getByTestId("write-access-interval-checks")).toContainText(/remote-write permission/i);
     await page.getByTestId("follow-target-placement").click();
     await expect(page.getByTestId("write-placement-caveat")).toContainText(/no target CQE is fabricated/i);
 
@@ -128,25 +169,62 @@ test.describe("Operations V2 evidence semantics", () => {
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("[data-testid^=guided-lesson-]")).toHaveAttribute("data-hydrated", "true", { timeout: 15000 });
     await expect(page.getByTestId("write-target-cqe-prediction")).toHaveAttribute("data-prediction", "Yes");
-    await page.getByTestId("target-cqe-prediction-skip").click();
-    await expect(page.getByTestId("write-target-cqe-prediction")).toHaveAttribute("data-prediction", "none");
+    await expect(page.getByTestId("write-target-cqe-prediction")).toHaveAttribute("data-result-revealed", "true");
+    await expect(page.getByTestId("target-cqe-prediction-skip")).toBeDisabled();
+    await page.getByTestId("target-cqe-predict-no").click();
+    await expect(page.getByTestId("write-target-cqe-prediction")).toHaveAttribute("data-prediction", "Yes");
+    await expect(page.getByTestId("write-target-cqe-prediction")).toHaveAttribute("data-review-selection", "No");
     await page.getByTestId("follow-write-done-signal").click();
     await page.getByTestId("poll-target-cq").click();
-    await expect(page.getByTestId("write-prediction-feedback")).toContainText(/skipping does not record mastery/i);
+    await expect(page.getByTestId("write-prediction-feedback")).toContainText(/pre-observation prediction did not match/i);
+    await expect(page.getByTestId("write-post-observation-review")).toContainText(/review\/retry, not evidence of a prediction/i);
 
     await advance(page, 1);
     await page.getByTestId("inspect-write-before-after").click();
     await expect(page.getByTestId("write-memory-exact-comparison")).toHaveAttribute("data-equal", "true");
     await expect(page.getByTestId("write-memory-exact-comparison")).toContainText("53-byte range");
-    await expect(page.getByTestId("write-memory-exact-comparison")).toContainText(/beyond 53 are not observed/i);
+    await expect(page.getByTestId("write-memory-exact-comparison")).toContainText(/beyond the recorded sample are not observed/i);
     await expect(page.getByTestId("write-target-local-order")).toContainText("write_done signal");
     await expect(page.getByTestId("write-target-local-order")).toContainText("poll returned zero");
   });
 
+
+  test("restart ownership clears operation prediction, quiz and mechanism interaction state without unrelated storage", async ({ page }) => {
+    await openOperations(page, "write");
+    await page.getByTestId("compare-ordinary-write").click();
+    expect(await page.evaluate(() => window.localStorage.getItem("fabriclab.rdma.operations-v2.interaction.6.1"))).toContain("operations-v2-interaction-r1");
+    await page.evaluate(() => {
+      window.localStorage.setItem("fabriclab.rdma.operations-v2.6.6.prediction", JSON.stringify({ prediction: "No", skipped: false, resultRevealed: true, revision: "operations-v2-prediction-r1" }));
+      window.localStorage.setItem("fabriclab.rdma.operations-v2.quiz.write-evidence-review", JSON.stringify({ selected: 1, revealed: true, skipped: false, revision: "operations-v2-quiz-r1" }));
+      window.localStorage.setItem("fabriclab.rdma.operations-v2.interaction.6.3", JSON.stringify({ interacted: true, revision: "operations-v2-interaction-r1" }));
+      window.localStorage.setItem("fabriclab.unrelated-user-preference", "preserve");
+    });
+    await page.getByRole("button", { name: /restart this lesson|restart/i }).first().click();
+    const ownership = await page.evaluate(() => ({
+      prediction: window.localStorage.getItem("fabriclab.rdma.operations-v2.6.6.prediction"),
+      quiz: window.localStorage.getItem("fabriclab.rdma.operations-v2.quiz.write-evidence-review"),
+      interaction: window.localStorage.getItem("fabriclab.rdma.operations-v2.interaction.6.1"),
+      interaction63: window.localStorage.getItem("fabriclab.rdma.operations-v2.interaction.6.3"),
+      unrelated: window.localStorage.getItem("fabriclab.unrelated-user-preference"),
+    }));
+    expect(ownership).toEqual({ prediction: null, quiz: null, interaction: null, interaction63: null, unrelated: "preserve" });
+    await expect(page.getByTestId("guided-lesson-write")).toHaveAttribute("data-hydrated", "true");
+  });
+
   test("READ request/response directions, lengths, completion ownership and comparison table are exact", async ({ page }) => {
     await openOperations(page, "read");
-    await advance(page, 3);
+    await advance(page, 2);
 
+    await page.getByTestId("describe-read-local-destination").click();
+    await page.getByTestId("name-remote-source").click();
+    await page.getByTestId("construct-read").click();
+    await expect(page.getByTestId("read-wr-lifecycle")).toHaveAttribute("data-stage", "constructed");
+    await expect(page.getByTestId("visual-7-3")).not.toContainText("The application has submitted the instruction");
+    await page.getByTestId("submit-read").click();
+    await expect(page.getByTestId("read-wr-lifecycle")).toHaveAttribute("data-stage", "posted");
+    await expect(page.getByTestId("visual-7-3")).toContainText("The application has submitted the instruction");
+
+    await advance(page, 1);
     await page.getByTestId("inspect-read-request").click();
     const request = page.locator('[data-testid="read-request-inspector"][data-packet-id="d:packet:3"]');
     await expect(request).toContainText("RDMA READ Request");
@@ -157,6 +235,11 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(page.getByTestId("read-request-range")).toContainText("payload bytes 0");
     await expect(page.getByTestId("focus-transfer")).toHaveAttribute("data-direction", "a-to-b");
     await expect(page.getByTestId("focus-transfer")).toHaveAttribute("data-kind", "request");
+    await page.getByTestId("check-read-source-access").click();
+    await expect(page.getByTestId("read-access-validation")).toHaveAttribute("data-qpn-match", "true");
+    await expect(page.getByTestId("read-access-validation")).toHaveAttribute("data-key-match", "true");
+    await expect(page.getByTestId("read-access-validation")).toHaveAttribute("data-range-fits", "true");
+    await expect(page.getByTestId("read-access-validation-checks")).toContainText(/remote-read permission/i);
 
     await advance(page, 1);
     await page.getByTestId("inspect-read-response").click();
@@ -207,6 +290,7 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(breakdown).toHaveAttribute("data-app-payload", "50");
     await expect(breakdown).toHaveAttribute("data-padding", "2");
     await expect(breakdown).toHaveAttribute("data-frame-length", "110");
+    await expect(breakdown).toHaveAttribute("data-transfer-length", "50");
     await page.getByTestId("length-packet-write").click();
     await expect(breakdown).toHaveAttribute("data-packet-id", "c:packet:7");
     await expect(breakdown).toHaveAttribute("data-app-payload", "53");
@@ -220,13 +304,21 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(breakdown).toHaveAttribute("data-app-payload", "0");
     await expect(breakdown).toHaveAttribute("data-padding", "0");
     await expect(breakdown).toHaveAttribute("data-frame-length", "74");
+    await expect(breakdown).toHaveAttribute("data-transfer-length", "46");
+    await expect(page.getByTestId("read-request-length-distinction")).toContainText("operation transfer length 46");
     await page.getByTestId("length-packet-read-response").click();
     await expect(breakdown).toHaveAttribute("data-packet-id", "d:packet:4");
     await expect(breakdown).toHaveAttribute("data-app-payload", "46");
     await expect(breakdown).toHaveAttribute("data-padding", "2");
     await expect(breakdown).toHaveAttribute("data-frame-length", "110");
 
-    await advance(page, 3);
+    await advance(page, 1);
+    await page.getByTestId("multipacket-select-middle").click();
+    await expect(page.getByTestId("shared-byte-range-representation")).toHaveAttribute("data-selected-start", "1024");
+    await expect(page.getByTestId("shared-byte-range-representation")).toHaveAttribute("data-selected-end", "2047");
+    await expect(page.getByTestId("visual-8-5")).toContainText(/three packets do not imply three receive WRs/i);
+
+    await advance(page, 2);
     await page.getByTestId("correlate-remote-key").click();
     await expect(page.getByTestId("selected-code-wire-chain")).toHaveAttribute("data-direct-field", "true");
     await expect(page.getByTestId("selected-code-wire-chain")).toContainText("set_wr_rdma");
@@ -235,6 +327,11 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(page.getByTestId("selected-code-wire-chain")).toHaveAttribute("data-direct-field", "false");
     await expect(page.getByTestId("correlation-field-explanation")).toContainText(/used by the initiator provider/i);
     await expect(page.getByTestId("correlation-write-wr")).toContainText("wr:c:hosta:exp-c-writer:5");
+    await expect(page.getByTestId("complete-write-evidence-chain")).toContainText("Transport response");
+    await expect(page.getByTestId("complete-write-evidence-chain")).toContainText("write_done");
+    await page.getByTestId("correlate-destination-qpn").click();
+    await expect(page.getByTestId("correlation-source-lines")).toContainText("attr.dest_qp_num");
+    await expect(page.getByTestId("correlation-field-explanation")).toContainText(/merely log prepared values/i);
     await page.getByTestId("inspect-write-payload-match").click();
     await expect(page.getByTestId("write-payload-target-match")).toHaveAttribute("data-equal", "true");
 
@@ -267,6 +364,7 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(page.getByTestId("case-b-select-write-request")).toContainText("c:packet:7");
     await page.getByTestId("case-b-select-ack").click();
     await expect(page.getByTestId("case-b-selected-packet-note")).toContainText(/reverse ACK/i);
+    await expect(page.getByTestId("case-b-selected-packet-inspector")).toHaveAttribute("data-packet-id", "c:packet:8");
     await page.getByTestId("case-b-ack-meaning-option-0").click();
     await expect(page.getByTestId("case-b-ack-meaning-check")).toBeDisabled();
     await page.getByTestId("case-b-ack-meaning-skip").click();
@@ -299,6 +397,13 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(page.getByTestId("ai-fabric-bridge")).toBeVisible();
     await expect(page.getByTestId("ai-control-payload-paths")).toContainText(/CPU\/control path/i);
     await expect(page.getByTestId("ai-control-payload-paths")).toContainText(/Memory payload path/i);
+    await expect(page.getByTestId("conceptual-fabric-path")).toContainText("Leaf A");
+    await expect(page.getByTestId("conceptual-fabric-path")).toContainText("Spine");
+    await page.getByTestId("inspect-fabric-congestion").click();
+    await expect(page.getByTestId("fabric-congestion-mechanism")).toContainText(/ECN marking is an IP congestion indication/i);
+    await expect(page.getByTestId("fabric-congestion-mechanism")).toContainText(/PFC is a distinct hop-by-hop priority pause/i);
+    await page.getByTestId("inspect-gpu-memory-path").click();
+    await expect(page.getByTestId("ai-memory-mode-note")).toContainText(/does not mean all GPU memory/i);
     await expect(page.getByTestId("ai-troubleshooting-chapter-links").getByRole("link", { name: /Chapter 16/i })).toHaveAttribute("href", "/learn/ch16-gpu-compute-network-packet-anatomy");
     await expect(page.getByTestId("ai-troubleshooting-chapter-links").getByRole("link", { name: /Chapter 5/i })).toHaveAttribute("href", "/learn/ch5-pfc-ecn-congestion");
     await expect(page.getByTestId("ai-bridge-scope-label")).toContainText(/no measured NCCL\/GPU experiment/i);

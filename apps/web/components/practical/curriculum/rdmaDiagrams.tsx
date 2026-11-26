@@ -454,7 +454,7 @@ function FocusEndpoint({ endpoint }: { endpoint: FocusEndpointModel }) {
           <CompactFocusWorkList work={work} endpoint={endpoint} />
         </div>
         <div className="mt-1.5 rounded-lg border border-orange-300/25 bg-orange-300/7 px-1.5 py-1 text-center text-[10px] leading-4 text-orange-100" data-testid={`focus-provider-${endpoint.host}`}>
-          RDMA provider{endpoint.providerNote ? <span className="block text-[9px] text-orange-100/70">{endpoint.providerNote}</span> : null}
+          RXE software RDMA provider<span className="block text-[9px] text-orange-100/70">CPU executes transport processing{endpoint.providerNote ? <> · {endpoint.providerNote}</> : null}</span>
         </div>
         {endpoint.completion ? <div className="mt-1.5 rounded-lg border border-lime-300/30 bg-lime-300/8 p-1.5 text-[10px] leading-4 text-lime-100" data-testid={`focus-completion-${endpoint.host}`}>{endpoint.completion}</div> : null}
       </section>
@@ -489,7 +489,7 @@ function FocusEndpoint({ endpoint }: { endpoint: FocusEndpointModel }) {
         </section>
       </div>
       <div className="mt-2 rounded-lg border border-orange-300/25 bg-orange-300/7 p-2 text-center text-xs leading-5 text-orange-100" data-testid={`focus-provider-${endpoint.host}`}>
-        RDMA provider{endpoint.providerNote ? <span className="block text-[10px] text-orange-100/70">{endpoint.providerNote}</span> : null}
+        RXE software RDMA provider<span className="block text-[10px] text-orange-100/70">CPU executes transport processing{endpoint.providerNote ? <> · {endpoint.providerNote}</> : null}</span>
       </div>
       {endpoint.completion ? <div className="mt-2 rounded-lg border border-lime-300/30 bg-lime-300/8 p-2 text-xs leading-5 text-lime-100" data-testid={`focus-completion-${endpoint.host}`}>{endpoint.completion}</div> : null}
     </section>
@@ -552,7 +552,7 @@ export function ExperimentFocusDiagram({
         <div className="text-sky-100/85"><span className="font-semibold uppercase tracking-wide">Payload path:</span> memory ↔ provider ↔ network · bytes bypass queues</div>
         <div className="mt-0.5 text-cyan-100/85"><span className="font-semibold uppercase tracking-wide">Instruction path:</span> app → queue → provider · instructions only</div>
       </div>
-      {caption ? <figcaption className="mt-2 text-center text-[11px] leading-4 text-slate-500 max-sm:hidden">{caption}</figcaption> : null}
+      {caption ? <figcaption className="mt-2 text-center text-[11px] leading-4 text-slate-500">{caption}</figcaption> : null}
     </figure>
   );
 }

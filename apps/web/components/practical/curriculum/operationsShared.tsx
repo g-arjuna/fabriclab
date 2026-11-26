@@ -61,8 +61,8 @@ export function ReferenceList({ references, compact = false }: { references: Ope
       <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Cited references</div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {references.map((reference) => (
-          <a key={reference.id} href={reference.url || undefined} target="_blank" rel="noreferrer" title={reference.title} className="rounded-full border border-cyan-300/20 bg-cyan-300/7 px-2 py-1 text-[11px] font-semibold text-cyan-100 underline-offset-4 hover:underline" data-testid={`reference-${reference.id}`}>
-            {reference.id}
+          <a key={reference.id} href={reference.url || undefined} target="_blank" rel="noreferrer" title={reference.title} className="inline-flex max-w-full items-baseline gap-1.5 rounded-full border border-cyan-300/20 bg-cyan-300/7 px-2 py-1 text-[11px] font-semibold text-cyan-100 underline-offset-4 hover:underline" data-testid={`reference-${reference.id}`}>
+            <span className="font-mono">{reference.id}</span><span className="font-normal text-cyan-100/75">{reference.title}</span>
           </a>
         ))}
       </div>
@@ -103,7 +103,7 @@ function actionFor(section: OperationSourceSection) {
   const explicit: Record<string, string> = {
     "5.1": "Prepare the endpoints",
     "5.2": "Choose the destination buffer",
-    "5.3": "Prepare the message on A",
+    "5.3": "What if no receive was posted?",
     "5.4": "Construct the recorded SEND",
     "5.5": "Follow the data packet",
     "5.6": "Inspect transport acknowledgement",

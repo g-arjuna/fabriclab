@@ -67,6 +67,65 @@ for (const experiment of evidence.experiments.filter((item) => item.id !== "reso
   }
 }
 
+for (const experiment of evidence.experiments.filter((item) => item.id !== "resources")) {
+  const initiator = experiment.endpoints.initiator;
+  const responder = experiment.endpoints.responder;
+  for (const packet of experiment.packets) {
+    const forward = packet.role === "request";
+    const expectedDestination = forward ? responder : initiator;
+    const expectedSource = forward ? initiator : responder;
+    if (packet.destinationHost !== expectedDestination.host || packet.sourceHost !== expectedSource.host) {
+      failures.push(`${experiment.id}/${packet.id} host direction ${packet.sourceHost}→${packet.destinationHost} does not match ${expectedSource.host}→${expectedDestination.host}`);
+    }
+    if (packet.destinationQpn.decimal !== expectedDestination.qpn.decimal) {
+      failures.push(`${experiment.id}/${packet.id} destination QPN ${packet.destinationQpn.decimal} does not match actual destination host endpoint ${expectedDestination.qpn.decimal}`);
+    }
+    if (packet.reth) {
+      const correlatedRegions = packet.correlations.memoryRegionIds.map((id) => experiment.memoryRegions.find((region) => region.id === id)).filter(Boolean);
+      const region = correlatedRegions.find((candidate) =>
+        candidate.host === packet.destinationHost &&
+        candidate.address.decimal === packet.reth.virtualAddress.decimal &&
+        candidate.rkey.decimal === packet.reth.rkey.decimal,
+      );
+      if (!region) {
+        failures.push(`${experiment.id}/${packet.id} RETH does not match a correlated registered region on the actual destination host`);
+      } else {
+        const start = BigInt(packet.reth.virtualAddress.decimal);
+        const length = BigInt(packet.reth.dmaLength.decimal);
+        const base = BigInt(region.address.decimal);
+        const capacity = BigInt(region.length);
+        if (start < base || start + length > base + capacity) failures.push(`${experiment.id}/${packet.id} RETH range exceeds correlated registered capacity`);
+      }
+    }
+    const request = experiment.workRequests.find((item) => item.id === packet.correlations.workRequestIds[0]);
+    if (!request) failures.push(`${experiment.id}/${packet.id} is not correlated with an existing Work Request`);
+  }
+
+  const payloadExpectations = experiment.id === "send-recv"
+    ? [["request", "b:memory:hostb:received"]]
+    : experiment.id === "write"
+      ? [["request", "c:memory:hostb:after"]]
+      : [["response", "d:memory:hosta:read-result"]];
+  for (const [role, snapshotId] of payloadExpectations) {
+    const packet = experiment.packets.find((item) => item.role === role);
+    const snapshot = experiment.memoryRegions.flatMap((region) => region.snapshots).find((item) => item.id === snapshotId);
+    if (!packet?.payloadHex || !snapshot?.hex) failures.push(`${experiment.id} payload verification pair ${role}/${snapshotId} is missing`);
+    else if (packet.payloadHex !== snapshot.hex) failures.push(`${experiment.id}/${packet.id} application payload bytes do not exactly match recorded memory result ${snapshotId}`);
+  }
+}
+
+for (const [experimentId, signalType, pollType] of [["write", "write_done_signal", "target_cq_poll"], ["read", "read_done_signal", "source_cq_poll"]]) {
+  const experiment = evidence.experiments.find((item) => item.id === experimentId);
+  const signalIndex = experiment.events.findIndex((event) => event.type === signalType);
+  const pollIndex = experiment.events.findIndex((event) => event.type === pollType);
+  if (signalIndex === -1 || pollIndex === -1) failures.push(`${experimentId} synchronization or zero-poll event is missing`);
+  else {
+    if (pollIndex <= signalIndex) failures.push(`${experimentId} zero-entry poll does not follow its synchronization event`);
+    const poll = experiment.events[pollIndex];
+    if (poll.fields.npolled !== 0) failures.push(`${experimentId} zero-entry poll event ${poll.id} does not record npolled=0`);
+  }
+}
+
 for (const [experimentId, packetRole] of [["send-recv", "request"], ["write", "request"], ["read", "response"]]) {
   const experiment = evidence.experiments.find((item) => item.id === experimentId);
   const packet = experiment?.packets.find((item) => item.role === packetRole);
