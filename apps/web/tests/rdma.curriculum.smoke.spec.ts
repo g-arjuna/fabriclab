@@ -228,8 +228,11 @@ test.describe("RDMA first-principles curriculum", () => {
     await page.goto("/practical/rdma?lesson=memory", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("guided-lesson-memory")).toContainText(/A buffer is not yet an RDMA Memory Region/i);
     await expect(page.getByTestId("guided-lesson-memory")).toContainText(/illustrative virtual address/i);
-    await advanceStates(page, 6);
+    await advanceStates(page, 4);
+    await expect(page.getByTestId("guided-lesson-memory")).toContainText(/A local key identifies registered access/i);
     await expect(page.getByTestId("guided-lesson-memory")).toContainText(/LKEY/i);
+    await clickLessonAction(page);
+    await expect(page.getByTestId("guided-lesson-memory")).toContainText(/A remote key is for an authorized remote operation/i);
     await expect(page.getByTestId("guided-lesson-memory")).toContainText(/RKEY/i);
 
     await page.goto("/practical/rdma?lesson=queues", { waitUntil: "domcontentloaded" });

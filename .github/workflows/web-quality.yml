@@ -68,6 +68,9 @@ jobs:
         run: npx playwright test tests/rdma.curriculum.smoke.spec.ts --workers=1
       - env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+        run: npm run test:browser:foundations -- --workers=1
+      - env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
         run: npx playwright test tests/rdma.practical.smoke.spec.ts --workers=1
       - env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000

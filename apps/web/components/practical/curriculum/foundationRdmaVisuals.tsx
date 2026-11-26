@@ -30,8 +30,33 @@ function StepLanes({ steps, active }: { steps: string[]; active: number }) {
 }
 
 export function DmaCopyVisual() {
-  const [copied,setCopied]=useState(false);
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="foundation-dma-copy"><ActionRow><FoundationAction testId="configure-dma-copy" active={copied} onClick={()=>setCopied(true)}>Configure the device copy</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_10rem_minmax(0,1fr)] xl:items-center"><MemoryObject bytes={hello16} title="RAM source"/><div><LinkLine label="CPU writes source/destination metadata" kind="instruction" active={copied}/><LinkLine label="device payload access over interconnect" kind="payload" direction="both" active={copied} testId="dma-device-memory-access"/></div><MemoryObject bytes={copied?hello16:zeros16} title="RAM destination / device receive buffer"/><FoundationBox title="DMA-capable device engine" tone="device" active={copied}>copies/moves bytes using device-visible addresses</FoundationBox></div><SmallNote>CPU creates or configures the copy metadata; after that the device can access RAM without the CPU copying each byte. This is an illustrative device mechanism, not proof every NIC uses identical descriptors.</SmallNote></div>;
+  const [state,setState]=useState<"idle"|"configured"|"completed"|"reported">("idle");
+  const configured=state!=="idle";
+  const copied=state==="completed"||state==="reported";
+  const reported=state==="reported";
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="foundation-dma-copy">
+    <ActionRow>
+      <FoundationAction testId="configure-dma-copy" active={configured} onClick={()=>setState("configured")}>Configure device copy</FoundationAction>
+      <FoundationAction testId="start-dma-copy" active={copied} disabled={!configured} onClick={()=>setState("completed")}>Let device copy</FoundationAction>
+      <FoundationAction testId="report-dma-completion" active={reported} disabled={!copied} onClick={()=>setState("reported")}>Report done to CPU</FoundationAction>
+    </ActionRow>
+    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_11rem_minmax(0,1fr)] xl:items-center">
+      <MemoryObject bytes={hello16} title="RAM source"/>
+      <div>
+        <LinkLine label="CPU writes source/destination metadata" kind="instruction" active={configured}/>
+        <LinkLine label="device payload access over interconnect" kind="payload" direction="both" active={copied} testId="dma-device-memory-access"/>
+        {reported?<LinkLine label="completion/report path to CPU or software" kind="metadata" active testId="dma-completion-report-path"/>:null}
+      </div>
+      <MemoryObject bytes={copied?hello16:zeros16} title="RAM destination / device receive buffer"/>
+      <FoundationBox title="DMA-capable device engine" tone="device" active={copied}>{!configured?"waiting for source/destination description":copied?"copy completed; CPU did not copy each payload byte":"configured with device-visible source and destination"}</FoundationBox>
+    </div>
+    <div className="grid gap-3 xl:grid-cols-3">
+      <FoundationBox title="1 · configured" tone="metadata" active={configured}>CPU/software supplies source, destination and length metadata.</FoundationBox>
+      <FoundationBox title="2 · copied" tone="success" active={copied}>Device accesses memory and produces the destination bytes.</FoundationBox>
+      <FoundationBox title="3 · reported" tone="success" active={reported}>A completion/report mechanism tells software the work finished.</FoundationBox>
+    </div>
+    <SmallNote>Compare with CPU copy: the CPU creates or configures the copy metadata, but the device performs the data movement rather than the CPU executing a load/store sequence for every byte. This is an illustrative device mechanism, not proof every NIC uses identical descriptors.</SmallNote>
+  </div>;
 }
 
 export function DmaAddressContextsVisual() {
@@ -85,20 +110,76 @@ export function KeyExerciseVisual({ remote=false }: { remote?: boolean }) {
 }
 
 export function MetadataExchangeVisual() {
+  const [mode,setMode]=useState<"send"|"write">("send");
   const [sent,setSent]=useState(false);
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="rdma-metadata-exchange"><ActionRow><FoundationAction testId="share-remote-metadata" active={sent} onClick={()=>setSent(true)}>Share B's remote-memory metadata over TCP</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_11rem_minmax(0,1fr)] xl:items-center"><FoundationBox title="Server B target" tone="memory"><div className="font-mono text-xs">registered addr {exact(writeExperiment.endpoints.responder.memoryRegion.address)}<br />len {writeExperiment.endpoints.responder.memoryRegion.length}<br />RKEY {exact(writeExperiment.endpoints.responder.memoryRegion.rkey)}</div></FoundationBox><div><LinkLine label="existing TCP control channel · metadata only" kind="metadata" direction="right" active={sent} testId="tcp-control-metadata-link"/></div><FoundationBox title="Server A initiator" tone="metadata" active={sent}><div className="font-mono text-xs">received remote addr/RKEY/len<br />local LKEY {exact(mr.lkey)} remains local</div></FoundationBox></div><SourceExcerpt path="python/exp_c_write.py" start={57} end={69} label="actual WRITE metadata exchange excerpt"/><SourceExcerpt path="python/exp_c_write.py" start={124} end={134} label="actual WRITE construction excerpt"/><SmallNote>Metadata exchange is application/control-plane communication, not the RDMA payload transfer. Recorded keys are evidence values, not reusable live credentials.</SmallNote></div>;
+  const hostA=rdmaEvidence.hosts.hosta;
+  const hostB=rdmaEvidence.hosts.hostb;
+  const writeMr=writeExperiment.endpoints.responder.memoryRegion;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="rdma-metadata-exchange">
+    <ActionRow>
+      <FoundationAction testId="select-send-setup" active={mode==="send"} onClick={()=>{setMode("send");setSent(false)}}>SEND setup</FoundationAction>
+      <FoundationAction testId="select-write-setup-preview" active={mode==="write"} onClick={()=>{setMode("write");setSent(false)}}>WRITE setup preview</FoundationAction>
+      <FoundationAction testId="share-remote-metadata" active={sent} onClick={()=>setSent(true)}>Exchange control metadata</FoundationAction>
+    </ActionRow>
+    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_13rem_minmax(0,1fr)] xl:items-center">
+      <FoundationBox title="Host A initiator" tone="metadata" active={sent}>
+        <div className="font-mono text-xs">data {hostA.dataIp}<br />control {hostA.controlIp}</div>
+        {sent?<div className="mt-2 font-mono text-xs" data-testid="received-control-tuple">{mode==="send"?"received peer QPN/PSN/GID only":"received remote addr/RKEY/length plus endpoint metadata"}<br />local LKEY remains local</div>:null}
+      </FoundationBox>
+      <div><LinkLine label="dashed ordinary TCP control channel · metadata/coordination only" kind="metadata" direction="both" active={sent} testId="tcp-control-metadata-link"/></div>
+      <FoundationBox title="Host B peer/target" tone="memory" active={sent}>
+        <div className="font-mono text-xs">data {hostB.dataIp}<br />control {hostB.controlIp}</div>
+        {sent?<div className="mt-2 font-mono text-xs">{mode==="send"?"shares QPN/PSN/GID; no receive-buffer RKEY needed":`shares addr ${exact(writeMr.address)} · RKEY ${exact(writeMr.rkey)} · len ${writeMr.length}`}</div>:null}
+      </FoundationBox>
+    </div>
+    <div className="grid gap-3 xl:grid-cols-2">
+      <SourceExcerpt path="python/exp_b_send_recv.py" start={60} end={72} label="actual SEND setup metadata source · separate experiment"/>
+      <SourceExcerpt path="python/exp_c_write.py" start={57} end={69} label="actual WRITE conditional metadata source · separate experiment"/>
+    </div>
+    <SmallNote>Registration does not transmit this metadata. The TCP control connection carries metadata only: coordination and endpoint/setup values, not the RDMA payload, and it was not present in the isolated RDMA data captures. Values from different reference experiments are not combined as if they were one execution.</SmallNote>
+  </div>;
 }
 
 export function AccessDecisionExerciseVisual() {
-  const [key,setKey]=useState<"correct"|"incorrect">("correct");
-  const [range,setRange]=useState<"fits"|"crosses">("fits");
-  const [permission,setPermission]=useState<"present"|"absent">("present");
-  const pass=key==="correct"&&range==="fits"&&permission==="present";
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="access-decision-exercise"><div className="grid gap-2 md:grid-cols-3"><div className="space-x-2"><FoundationAction testId="decision-correct-key" active={key==="correct"} onClick={()=>setKey("correct")}>correct key</FoundationAction><FoundationAction testId="decision-incorrect-key" active={key==="incorrect"} onClick={()=>setKey("incorrect")}>incorrect key</FoundationAction></div><div className="space-x-2"><FoundationAction testId="decision-fits" active={range==="fits"} onClick={()=>setRange("fits")}>range fits</FoundationAction><FoundationAction testId="decision-crosses" active={range==="crosses"} onClick={()=>setRange("crosses")}>crosses boundary</FoundationAction></div><div className="space-x-2"><FoundationAction testId="decision-permission-present" active={permission==="present"} onClick={()=>setPermission("present")}>permission present</FoundationAction><FoundationAction testId="decision-permission-absent" active={permission==="absent"} onClick={()=>setPermission("absent")}>permission absent</FoundationAction></div></div><FoundationBox title="conceptual access decision" tone={pass?"success":"warning"} testId="access-decision-result">{pass?"all conceptual checks pass; access may proceed":"access does not pass the selected conceptual checks"}</FoundationBox><SmallNote>Retry by changing the selectors. This is a conceptual decision table, not simulated provider completion status.</SmallNote></div>;
+  const cases=[
+    {id:"read-valid",label:"Read 8 bytes at 0x1004",key:"correct",range:"fits",permission:"remote read present",result:true,offset:4,length:8},
+    {id:"write-no-permission",label:"Write 8 bytes at 0x1004",key:"correct",range:"fits",permission:"remote write absent",result:false,offset:4,length:8},
+    {id:"read-crossing",label:"Read 8 bytes at 0x100c",key:"correct",range:"crosses boundary",permission:"remote read present",result:false,offset:12,length:8},
+    {id:"read-wrong-key",label:"Read 8 bytes at 0x1004",key:"incorrect",range:"fits",permission:"remote read present",result:false,offset:4,length:8},
+  ] as const;
+  const [index,setIndex]=useState(0);
+  const item=cases[index];
+  const selected=Array.from({length:item.length},(_,i)=>item.offset+i);
+  const cells=hello16.concat(Array.from({length:8},()=>"--"));
+  function outcome(label:string,ok:boolean){
+    return <div className={cx("rounded-lg border px-2 py-1.5 text-xs",ok?"border-emerald-300/30 bg-emerald-300/8 text-emerald-50":"border-red-300/35 bg-red-300/10 text-red-50")}>{label}: {ok?"present/valid":"fails under stated model"}</div>;
+  }
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="access-decision-exercise">
+    <ActionRow>
+      {cases.map((entry,entryIndex)=><FoundationAction key={entry.id} testId={`access-case-${entry.id}`} active={index===entryIndex} onClick={()=>setIndex(entryIndex)}>{entry.label} · {entry.key} key</FoundationAction>)}
+      <FoundationAction testId="skip-access-case" onClick={()=>setIndex((index+1)%cases.length)}>Skip case</FoundationAction>
+    </ActionRow>
+    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]">
+      <FoundationBox title="same registered range as 4.3 · offsets 0–15 registered, 16–23 outside" tone="memory" testId="access-exercise-range-grid">
+        <ByteCells compact bytes={cells} offsets={Array.from({length:24},(_,i)=>i)} highlight={selected} outOfRange={[16,17,18,19,20,21,22,23]}/>
+        <div className="mt-2 font-mono text-xs">base 0x1000 · requested {item.label.toLowerCase()} · length {item.length}</div>
+      </FoundationBox>
+      <FoundationBox title="individual conceptual checks" tone={item.result?"success":"warning"} testId="access-decision-result">
+        <div className="space-y-2">
+          {outcome(`appropriate registration/key (${item.key})`,item.key==="correct")}
+          {outcome(`requested range (${item.range})`,item.range==="fits")}
+          {outcome(`required access permission (${item.permission})`,item.permission.includes("present"))}
+          {outcome("suitable endpoint context",true)}
+        </div>
+        <div className="mt-3 text-sm font-semibold">{item.result?"Permitted under the stated model":"Rejected under the stated model"}</div>
+      </FoundationBox>
+    </div>
+    <SmallNote>Select or retry any case. This is a conceptual access-requirement exercise using the authored assumptions; it is not a simulated completion status or observed failure capture.</SmallNote>
+  </div>;
 }
 
 export function ActualRegistrationInspectionVisual() {
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="actual-registration-inspection"><div className="rounded-xl border border-emerald-300/25 bg-emerald-300/8 p-3 text-xs text-emerald-50">Transition: the illustrations above use 16 bytes for visibility. The recorded resource experiment used a 4,096-byte host memory region.</div><div className="grid gap-3 xl:grid-cols-2"><FoundationBox title="hosta recorded MR" tone="memory"><div className="font-mono text-xs">addr {exact(mr.address)}<br />length {mr.length}<br />LKEY {exact(mr.lkey)} · RKEY {exact(mr.rkey)}<br />QPN {exact(resources.endpoints.initiator.qpn)}</div></FoundationBox><FoundationBox title="hostb recorded MR" tone="memory"><div className="font-mono text-xs">addr {exact(responderMr.address)}<br />length {responderMr.length}<br />LKEY {exact(responderMr.lkey)} · RKEY {exact(responderMr.rkey)}<br />QPN {exact(resources.endpoints.responder.qpn)}</div></FoundationBox></div><SourceExcerpt path="python/exp_a_resources.py" start={74} end={82} label="actual resource experiment"/><SmallNote>These are recorded registration metadata values. An MR does not contain copied bytes; recorded keys are not reusable live keys.</SmallNote></div>;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="actual-registration-inspection"><div className="rounded-xl border border-emerald-300/25 bg-emerald-300/8 p-3 text-xs text-emerald-50">Transition: the illustrations above use 16 bytes for visibility. The recorded resource experiment used a 4,096-byte host memory region.</div><div className="grid gap-3 xl:grid-cols-2"><FoundationBox title="hosta recorded MR" tone="memory"><div className="font-mono text-xs">addr {exact(mr.address)}<br />length {mr.length}<br />LKEY {exact(mr.lkey)} · RKEY {exact(mr.rkey)}<br />QPN {exact(resources.endpoints.initiator.qpn)}</div></FoundationBox><FoundationBox title="hostb recorded MR" tone="memory"><div className="font-mono text-xs">addr {exact(responderMr.address)}<br />length {responderMr.length}<br />LKEY {exact(responderMr.lkey)} · RKEY {exact(responderMr.rkey)}<br />QPN {exact(resources.endpoints.responder.qpn)}</div></FoundationBox></div><div className="grid gap-3 xl:grid-cols-3"><SourceExcerpt path="python/exp_a_resources.py" start={74} end={82} label="actual resource experiment"/><SourceExcerpt path="python/rdma_common.py" start={40} end={42} label="actual access flags"/><SourceExcerpt path="python/rdma_common.py" start={131} end={134} label="actual registration helper"/></div><SmallNote>These are recorded registration metadata values. An MR does not contain copied bytes; recorded keys are not reusable live keys.</SmallNote></div>;
 }
 
 export function QueueResourcesVisual() {
@@ -126,11 +207,304 @@ export function ResourceBoundaryVisual() {
   return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="resource-experiment-boundary"><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><FoundationBox title="recorded resources" tone="metadata">QPNs 17/18 · PSN 0x100 · MRs</FoundationBox><FoundationBox title="no posted data operation" tone="neutral" active>resource-only experiment</FoundationBox><FoundationBox title="no RDMA payload packet" tone="network">capture boundary is explicit</FoundationBox><a href="/practical/send-receive" className="rounded-xl border border-cyan-300/40 bg-cyan-300/12 px-4 py-3 text-center text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/20" data-testid="start-real-send-receive-practical">Start the real SEND/RECEIVE practical</a></div><SmallNote>Lesson 5 uses these concepts with actual posted SEND/RECEIVE work and verified packet/memory evidence.</SmallNote></div>;
 }
 
+
+export function OperationPreviewVisual() {
+  type Operation = "send" | "write" | "read";
+  const [operation, setOperation] = useState<Operation>("send");
+  const descriptions: Record<Operation, { title: string; first: string; second: string; result: string }> = {
+    send: {
+      title: "SEND · upcoming mechanism",
+      first: "A supplies data",
+      second: "B has already selected and supplied an appropriate receive buffer",
+      result: "A data → network → B receiver-selected buffer. A does not name B's memory.",
+    },
+    write: {
+      title: "WRITE · upcoming mechanism",
+      first: "A supplies data",
+      second: "the operation names an authorized destination buffer on B",
+      result: "A data → network → B named authorized buffer. Keys and detailed fields are introduced later.",
+    },
+    read: {
+      title: "READ · upcoming mechanism",
+      first: "A sends a request toward authorized memory on B",
+      second: "data returns from B into A's local destination buffer",
+      result: "A request → B; then data B → A. The initiating operation starts on A.",
+    },
+  };
+  const item = descriptions[operation];
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="rdma-operation-preview">
+      <ActionRow>
+        <FoundationAction testId="preview-operation-send" active={operation === "send"} onClick={() => setOperation("send")}>SEND preview</FoundationAction>
+        <FoundationAction testId="preview-operation-write" active={operation === "write"} onClick={() => setOperation("write")}>WRITE preview</FoundationAction>
+        <FoundationAction testId="preview-operation-read" active={operation === "read"} onClick={() => setOperation("read")}>READ preview</FoundationAction>
+      </ActionRow>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_11rem_minmax(0,1fr)] xl:items-center">
+        <FoundationBox title="Server A · fixed illustrative memory location" tone="memory" active={operation !== "read"}>
+          <ByteCells compact bytes={operation === "read" ? zeros16 : hello16} />
+          <div className="mt-1 text-[11px]">{operation === "read" ? "local destination initially empty" : "local source data"}</div>
+        </FoundationBox>
+        <div className="space-y-1">
+          <LinkLine label={operation === "read" ? "request A → B" : "data A → B"} kind="network" direction="right" active />
+          {operation === "read" ? <LinkLine label="returned data B → A" kind="payload" direction="left" active /> : null}
+        </div>
+        <FoundationBox title="Server B · fixed illustrative memory location" tone="memory" active={operation !== "send"}>
+          <ByteCells compact bytes={operation === "read" ? hello16 : zeros16} />
+          <div className="mt-1 text-[11px]">{operation === "send" ? "receiver-selected buffer" : operation === "write" ? "named authorized buffer" : "authorized source memory"}</div>
+        </FoundationBox>
+      </div>
+      <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-3" data-testid="operation-preview-result">
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-100">{item.title}</div>
+        <div className="mt-2 text-sm text-slate-200">{item.first}; {item.second}.</div>
+        <div className="mt-1 font-mono text-xs text-cyan-100">{item.result}</div>
+      </div>
+      <SmallNote>Conceptual preview of upcoming mechanisms only. It intentionally does not introduce keys, RDMA headers, queue machinery, or claim that an experiment is currently executing.</SmallNote>
+    </div>
+  );
+}
+
+export function RemoteKeyOwnershipVisual() {
+  type Stage = "initial" | "shared" | "constructed" | "valid" | "wrong-key" | "out-of-range" | "no-permission";
+  const [stage, setStage] = useState<Stage>("initial");
+  const shared = stage !== "initial";
+  const constructed = ["constructed", "valid", "wrong-key", "out-of-range", "no-permission"].includes(stage);
+  const preview = ["valid", "wrong-key", "out-of-range", "no-permission"].includes(stage);
+  const checks = stage === "valid"
+    ? { key: true, range: true, permission: true, endpoint: true }
+    : {
+        key: stage !== "wrong-key",
+        range: stage !== "out-of-range",
+        permission: stage !== "no-permission",
+        endpoint: true,
+      };
+  const passed = checks.key && checks.range && checks.permission && checks.endpoint;
+  function Check({ label, ok }: { label: string; ok: boolean }) {
+    return <div className={cx("rounded-lg border px-2 py-1.5 text-xs", ok ? "border-emerald-300/30 bg-emerald-300/8 text-emerald-50" : "border-red-300/35 bg-red-300/10 text-red-50")} data-testid={`remote-check-${label.toLowerCase().replaceAll(" ", "-")}`}>{label}: {ok ? "passes conceptual check" : "fails conceptual check"}</div>;
+  }
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="remote-key-ownership-visual">
+      <ActionRow>
+        <FoundationAction testId="share-remote-memory-information" active={shared} onClick={() => setStage("shared")}>Share remote memory information</FoundationAction>
+        <FoundationAction testId="construct-remote-operation" active={constructed} disabled={!shared} onClick={() => setStage("constructed")}>Construct the operation</FoundationAction>
+        <FoundationAction testId="preview-valid-remote-request" active={stage === "valid"} disabled={!constructed} onClick={() => setStage("valid")}>Inspect valid request</FoundationAction>
+        <FoundationAction testId="preview-wrong-remote-key" active={stage === "wrong-key"} disabled={!constructed} onClick={() => setStage("wrong-key")}>Inspect incorrect key</FoundationAction>
+        <FoundationAction testId="preview-out-of-range" active={stage === "out-of-range"} disabled={!constructed} onClick={() => setStage("out-of-range")}>Inspect out-of-range length</FoundationAction>
+        <FoundationAction testId="preview-missing-permission" active={stage === "no-permission"} disabled={!constructed} onClick={() => setStage("no-permission")}>Inspect missing permission</FoundationAction>
+      </ActionRow>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_12rem_minmax(0,1fr)] xl:items-center">
+        <FoundationBox title="Server A · independent host · local source" tone="memory" testId="server-a-local-source">
+          <ByteCells compact bytes={hello16} />
+          <div className="mt-2 font-mono text-xs text-sky-100">address 0x1000 · LKEY 0x11 · capacity 16</div>
+          <div className="text-[11px] text-slate-400">A's LKEY belongs to A's own registration.</div>
+        </FoundationBox>
+        <div className="space-y-1">
+          <LinkLine label={shared ? "dashed TCP control B → A · metadata only" : "registration does not transmit metadata"} kind="metadata" direction="left" active={shared} testId="remote-metadata-control-path" />
+          {shared ? <div className="rounded-lg border border-fuchsia-300/25 bg-fuchsia-300/8 p-2 text-center font-mono text-[11px] text-fuchsia-100" data-testid="shared-remote-tuple">remote address 0x2000<br />remote key 0x42<br />available length 16</div> : null}
+        </div>
+        <FoundationBox title="Server B · independent host · registered destination" tone="memory" testId="server-b-remote-destination">
+          <ByteCells compact bytes={zeros16} />
+          <div className="mt-2 font-mono text-xs text-fuchsia-100">address 0x2000 · RKEY 0x42 · capacity 16</div>
+          <div className="text-[11px] text-slate-400">remote-write access enabled · target LKEY is not shared here</div>
+        </FoundationBox>
+      </div>
+      {constructed ? (
+        <div className="grid gap-3 xl:grid-cols-2" data-testid="constructed-remote-operation">
+          <FoundationBox title="local memory description · cyan/A-owned" tone="metadata" active>
+            <div className="font-mono text-xs">source address 0x1000<br />LKEY 0x11<br />length 5</div>
+          </FoundationBox>
+          <FoundationBox title="remote memory description · magenta/B-owned" tone="metadata" active>
+            <div className="font-mono text-xs">destination address 0x2000<br />RKEY {stage === "wrong-key" ? "0x99" : "0x42"}<br />transfer length {stage === "out-of-range" ? "20" : "5"}</div>
+          </FoundationBox>
+        </div>
+      ) : null}
+      {preview ? (
+        <div className="space-y-3 rounded-xl border border-white/10 bg-slate-950/45 p-3" data-testid="target-side-validation-preview">
+          <LinkLine label="abstract conceptual remote-access request A provider → B provider · no WRITE execution" kind="network" direction="right" active testId="abstract-remote-request" />
+          <FoundationBox title="Server B provider · conceptual validation only" tone={passed ? "success" : "warning"} active>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Check label="registered region and remote key" ok={checks.key} />
+              <Check label="address range and length" ok={checks.range} />
+              <Check label="remote-write permission" ok={checks.permission} />
+              <Check label="endpoint and protection context" ok={checks.endpoint} />
+            </div>
+            <div className="mt-2 text-xs" data-testid="remote-validation-result">{passed ? "All selected conceptual checks pass; access could be permitted in this model." : "The selected request fails the highlighted conceptual association or access check."}</div>
+          </FoundationBox>
+        </div>
+      ) : null}
+      <SmallNote>All addresses and keys in this demonstration are illustrative. No fictional completion status is produced, and actual WRITE execution remains in Lesson 6. Server A never dereferences Server B's virtual address with its CPU.</SmallNote>
+    </div>
+  );
+}
+
+export function ResourcesQuestionVisual() {
+  const [described, setDescribed] = useState(false);
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="resource-questions-visual">
+      <ActionRow>
+        <FoundationAction testId="describe-a-task" active={described} onClick={() => setDescribed(true)}>Describe a task</FoundationAction>
+      </ActionRow>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <FoundationBox title="Server A application · registered memory already exists" tone="memory" testId="registered-hello-before-operation">
+          <ByteCells compact bytes={hello16} />
+          <div className="mt-2 font-mono text-xs">base 0x1000 · length 16 · registered access established</div>
+        </FoundationBox>
+        <div className="grid gap-2" data-testid="unresolved-resource-questions">
+          {["What task?", "Where should the instruction be submitted?", "How will the application learn the result?"].map((question) => (
+            <FoundationBox key={question} title={question} tone="neutral" dashed>{described && question === "What task?" ? "Desired task: send the first five HELLO bytes. Submission and result reporting are still unresolved." : "not answered yet"}</FoundationBox>
+          ))}
+        </div>
+      </div>
+      {described ? <SmallNote testId="described-task-transition">The next step is to construct a visible task description. Submission and completion-reporting machinery have not been introduced yet.</SmallNote> : <SmallNote>Registered memory alone does not describe the desired operation, where work is submitted, or how completion is observed.</SmallNote>}
+    </div>
+  );
+}
+
+export function ConstructedWorkRequestVisual() {
+  const [source, setSource] = useState(false);
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="illustrative-work-request">
+      <ActionRow>
+        <FoundationAction testId="inspect-actual-send-wr-source" active={source} onClick={() => setSource((value) => !value)}>Inspect actual SEND source</FoundationAction>
+      </ActionRow>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_10rem_minmax(0,1.1fr)] xl:items-center">
+        <FoundationBox title="constructed instruction · unposted Work Request" tone="metadata" active testId="unposted-work-request">
+          <div className="font-mono text-xs">operation SEND<br />WR ID 7<br />SGE addr 0x1000 · length 5 · lkey 0x11<br />request successful send completion · signalled</div>
+          <div className="mt-2 text-[11px]">constructed in application software; not submitted and not a packet</div>
+        </FoundationBox>
+        <LinkLine label="SGE references memory; payload is not copied into the instruction" kind="reference" direction="right" active testId="wr-memory-reference" />
+        <MemoryObject title="separate source memory cells" />
+      </div>
+      {source ? <SourceExcerpt path="python/exp_b_send_recv.py" start={131} end={138} label="optional actual SEND construction excerpt · separate run" /> : null}
+      <SmallNote>No queue is shown as containing this request yet. WR ID is application-chosen local identification; it is not a packet sequence number.</SmallNote>
+    </div>
+  );
+}
+
+export function QueueFormationVisual() {
+  const [stage, setStage] = useState(0);
+  const qp = stage >= 2;
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="queue-formation-visual">
+      <ActionRow>
+        <FoundationAction testId="reveal-send-queue" active={stage >= 0} onClick={() => setStage(0)}>Start with one Send Queue</FoundationAction>
+        <FoundationAction testId="reveal-receive-queue" active={stage >= 1} onClick={() => setStage(1)}>Reveal Receive Queue</FoundationAction>
+        <FoundationAction testId="form-queue-pair" active={qp} disabled={stage < 1} onClick={() => setStage(2)}>Form a Queue Pair</FoundationAction>
+      </ActionRow>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+        <FoundationBox title="constructed WR remains outside pending queues" tone="metadata" testId="wr-outside-queue">
+          <div className="font-mono text-xs">SEND · WR ID 7 · SGE 0x1000/5/0x11</div>
+          <div className="text-[11px]">not yet submitted</div>
+        </FoundationBox>
+        <div className={cx("rounded-2xl border p-3", qp ? "border-violet-300/35 bg-violet-300/7" : "border-white/10 bg-white/3")} data-testid="queue-pair-boundary">
+          {qp ? <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-violet-100">Queue Pair logical boundary · transport endpoint state · peer placeholder</div> : null}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FoundationBox title="Send Queue" tone="device" active testId="empty-send-queue">
+              empty · future submission point for SEND/WRITE/READ work
+            </FoundationBox>
+            {stage >= 1 ? (
+              <FoundationBox title="Receive Queue" tone="device" active testId="receive-queue-revealed">
+                empty · an illustrative receive memory description exists but is not posted
+              </FoundationBox>
+            ) : (
+              <FoundationBox title="Receive Queue" tone="neutral" dashed>not introduced yet</FoundationBox>
+            )}
+          </div>
+        </div>
+      </div>
+      <MemoryObject title="registered HELLO buffer remains separate" />
+      <SmallNote>No transfer executes and no peer endpoint-numbering mechanics are introduced here. Queue entries are implementation/provider state, not packet queues on a switch and not necessarily physical hardware-visible memory in this diagram.</SmallNote>
+    </div>
+  );
+}
+
+export function QpnEndpointVisual() {
+  const [direction, setDirection] = useState<"a-to-b" | "b-to-a">("a-to-b");
+  const [inspect, setInspect] = useState(false);
+  const a = resources.endpoints.initiator;
+  const b = resources.endpoints.responder;
+  const destination = direction === "a-to-b" ? 18 : 17;
+  const destinationIp = direction === "a-to-b" ? "10.10.10.2" : "10.10.10.1";
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="qpn-endpoint-visual">
+      <ActionRow>
+        <FoundationAction testId="direction-a-to-b" active={direction === "a-to-b"} onClick={() => setDirection("a-to-b")}>A → B</FoundationAction>
+        <FoundationAction testId="direction-b-to-a" active={direction === "b-to-a"} onClick={() => setDirection("b-to-a")}>B → A</FoundationAction>
+        <FoundationAction testId="inspect-recorded-endpoint-setup" active={inspect} onClick={() => setInspect((value) => !value)}>Inspect recorded endpoint setup</FoundationAction>
+      </ActionRow>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_12rem_minmax(0,1fr)] xl:items-center">
+        <FoundationBox title="Server A · QP endpoint" tone="device" active={direction === "b-to-a"}>
+          <div className="font-mono text-sm">resource-run local QPN {exact(a.qpn, "decimal")}</div>
+          <div className="text-[11px]">network identity 10.10.10.1 · initial PSN 0x100</div>
+        </FoundationBox>
+        <div className="space-y-1">
+          <LinkLine label="dashed TCP control path exchanges endpoint metadata" kind="metadata" direction="both" active testId="qpn-control-exchange" />
+          <LinkLine label={direction === "a-to-b" ? "future data direction A → B" : "future data direction B → A"} kind="network" direction={direction === "a-to-b" ? "right" : "left"} active testId="qpn-data-direction" />
+        </div>
+        <FoundationBox title="Server B · QP endpoint" tone="device" active={direction === "a-to-b"}>
+          <div className="font-mono text-sm">resource-run local QPN {exact(b.qpn, "decimal")}</div>
+          <div className="text-[11px]">network identity 10.10.10.2 · initial PSN 0x100</div>
+        </FoundationBox>
+      </div>
+      <div className="grid gap-3 xl:grid-cols-2">
+        <FoundationBox title="clearly illustrative BTH field · not a captured packet" tone="metadata" active testId="illustrative-bth-destination-qpn">
+          <div className="font-mono text-xs">destination QPN = {destination}<br />destination IP = {destinationIp}</div>
+        </FoundationBox>
+        <FoundationBox title="distinct identifiers" tone="neutral">
+          <div className="text-xs">Destination IP selects the network destination. Destination QPN identifies the target RDMA endpoint in the relevant device/transport context. WR ID identifies local work; PSN is initial transport packet sequence information.</div>
+        </FoundationBox>
+      </div>
+      {inspect ? (
+        <div className="space-y-3" data-testid="recorded-endpoint-setup">
+          <div className="grid gap-3 xl:grid-cols-2">
+            <FoundationBox title="recorded hosta ready endpoint" tone="metadata"><div className="font-mono text-xs">local QPN {exact(a.qpn, "decimal")} · destination QPN {exact(a.destinationQpn, "decimal")}<br />sq_psn {exact(a.sqPsn)} · rq_psn {exact(a.rqPsn)} · state {a.qpState}</div></FoundationBox>
+            <FoundationBox title="recorded hostb ready endpoint" tone="metadata"><div className="font-mono text-xs">local QPN {exact(b.qpn, "decimal")} · destination QPN {exact(b.destinationQpn, "decimal")}<br />sq_psn {exact(b.sqPsn)} · rq_psn {exact(b.rqPsn)} · state {b.qpState}</div></FoundationBox>
+          </div>
+          <SourceExcerpt path="python/exp_a_resources.py" start={100} end={110} label="actual endpoint metadata exchange excerpt" />
+          <SourceExcerpt path="python/rdma_common.py" start={155} end={190} label="actual bring_qp_to_rts excerpt" />
+        </div>
+      ) : null}
+      <SmallNote>The resource-only experiment recorded endpoint preparation, not an RDMA data-operation packet. This BTH field is a labelled illustration.</SmallNote>
+    </div>
+  );
+}
+
+export function CompletionAndResourceEvidenceVisual() {
+  const [stage, setStage] = useState(0);
+  const resourceEvents = resources.events.filter((event) => event.host === "hosta").slice(0, 6);
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="completion-and-resource-evidence">
+      <ActionRow>
+        <FoundationAction testId="provider-produces-completion" active={stage >= 1} onClick={() => setStage(1)}>Provider produces completion</FoundationAction>
+        <FoundationAction testId="application-polls-cq" active={stage >= 2} disabled={stage < 1} onClick={() => setStage(2)}>Application polls CQ</FoundationAction>
+        <FoundationAction testId="reset-conceptual-completion" onClick={() => setStage(0)}>Reset conceptual lifecycle</FoundationAction>
+      </ActionRow>
+      <div className="grid gap-2 lg:grid-cols-4" data-testid="conceptual-completion-lifecycle">
+        <FoundationBox title="provider" tone="device" active={stage >= 1}>produces completion for signalled successful send-side work</FoundationBox>
+        <FoundationBox title="Completion Queue" tone="metadata" active={stage === 1} testId="conceptual-cq">{stage === 1 ? "one conceptual entry pending" : stage >= 2 ? "polled entry no longer pending in CQ" : "empty conceptual CQ"}</FoundationBox>
+        <FoundationBox title="application polls" tone="cpu" active={stage >= 2}>polling retrieves entries</FoundationBox>
+        <FoundationBox title="retrieved Work Completion" tone="success" active={stage >= 2} testId="retrieved-work-completion">{stage >= 2 ? "outside CQ · status and WR identity available" : "not retrieved"}</FoundationBox>
+      </div>
+      <SmallNote>Conceptual lifecycle only: a local Work Completion is not a network acknowledgement, and this illustration does not claim every send WR produces a success completion.</SmallNote>
+      <div className="rounded-xl border border-emerald-300/25 bg-emerald-300/7 p-3" data-testid="resource-only-evidence-ledger">
+        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-100">actual resource-only experiment ledger · hosta local sequence</div>
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {resourceEvents.map((event) => <div key={event.id} className="rounded-lg border border-white/10 bg-slate-950/45 px-2 py-2 font-mono text-[11px] text-slate-300"><span className="text-emerald-200">{event.sequence}. {event.type}</span><br />{event.type === "resources" ? `MR len ${event.fields.mr_len} · QPN ${event.fields.qp_num}` : event.type === "metadata_exchange" ? `own QPN ${event.fields.own_qpn} · peer QPN ${event.fields.peer_qpn}` : event.type === "qp_ready" ? `dest QPN ${event.fields.dest_qpn} · state ${event.fields.state}` : event.type === "open_device" ? `device ${event.fields.dev}` : event.type === "qp_state" ? String(event.fields.state) : "port/GID observed"}</div>)}
+          <FoundationBox title="no data WR posted in this run" tone="warning" active>validated evidence contains zero resource-run Work Requests</FoundationBox>
+          <FoundationBox title="no RDMA data-operation packets recorded" tone="warning" active>resource-run capture boundary contains zero RDMA data-operation packets</FoundationBox>
+        </div>
+      </div>
+      <SourceExcerpt path="python/exp_a_resources.py" start={77} end={110} label="actual resource setup source excerpt" />
+      <a href="/practical/send-receive" className="inline-block rounded-full border border-cyan-300/40 bg-cyan-300/12 px-4 py-2 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/20" data-testid="start-real-send-receive-practical">Start the real SEND/RECEIVE practical</a>
+      <SmallNote>No completions are invented for the resource-only run. The conceptual completion lifecycle above is visually separate from this genuine setup evidence.</SmallNote>
+    </div>
+  );
+}
+
 export function RdmaFoundationVisual({ sectionId }: { sectionId: string }) {
   if(sectionId==="3.1")return <DmaCopyVisual/>;
   if(sectionId==="3.2")return <DmaAddressContextsVisual/>;
   if(sectionId==="3.3")return <TransferModelComparisonVisual/>;
-  if(sectionId==="3.4")return <RdmaInitiationVisual conceptOnly/>;
+  if(sectionId==="3.4")return <OperationPreviewVisual/>;
   if(sectionId==="3.5")return <SoftRoceStackVisual/>;
   if(sectionId==="3.6")return <RdmaInitiationVisual/>;
   if(sectionId==="4.1")return <RegistrationVisual/>;
@@ -138,13 +512,13 @@ export function RdmaFoundationVisual({ sectionId }: { sectionId: string }) {
   if(sectionId==="4.3")return <RangeSelectionVisual/>;
   if(sectionId==="4.4")return <AccessPathsVisual/>;
   if(sectionId==="4.5")return <KeyExerciseVisual/>;
-  if(sectionId==="4.6")return <KeyExerciseVisual remote/>;
+  if(sectionId==="4.6")return <RemoteKeyOwnershipVisual/>;
   if(sectionId==="4.7")return <MetadataExchangeVisual/>;
   if(sectionId==="4.8")return <AccessDecisionExerciseVisual/>;
   if(sectionId==="4.9")return <ActualRegistrationInspectionVisual/>;
-  if(sectionId==="4.10")return <QueueResourcesVisual/>;
-  if(sectionId==="4.11")return <WorkRequestVisual/>;
-  if(sectionId==="4.12")return <QueuePairVisual/>;
-  if(sectionId==="4.13")return <CompletionLifecycleVisual/>;
-  return <ResourceBoundaryVisual/>;
+  if(sectionId==="4.10")return <ResourcesQuestionVisual/>;
+  if(sectionId==="4.11")return <ConstructedWorkRequestVisual/>;
+  if(sectionId==="4.12")return <QueueFormationVisual/>;
+  if(sectionId==="4.13")return <QpnEndpointVisual/>;
+  return <CompletionAndResourceEvidenceVisual/>;
 }

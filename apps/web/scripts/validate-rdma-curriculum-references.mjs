@@ -17,6 +17,16 @@ const requiredLines = [
   ["python/exp_c_write.py", 165, /bytes\(buf\.raw\[:len\(PAYLOAD\)\]\)/],
   ["python/exp_d_read.py", 120, /qp\.post_send\(swr\)/],
   ["python/exp_d_read.py", 126, /poll_one_cqe\(cq, tag="read"/],
+  ["python/exp_a_resources.py", 78, /pd_mod\.PD\(ctx\)/],
+  ["python/exp_a_resources.py", 80, /new_memory_region\(pd, buf, BUF_LEN\)/],
+  ["python/exp_a_resources.py", 100, /ctrl_send\(sock, \{"role"/],
+  ["python/exp_a_resources.py", 107, /bring_qp_to_rts\(qp/],
+  ["python/exp_b_send_recv.py", 133, /SGE\(addr=.*length=len\(PAYLOAD\)/],
+  ["python/exp_b_send_recv.py", 135, /SendWR\(wr_id=WR_ID_SEND/],
+  ["python/rdma_common.py", 40, /IBV_ACCESS_LOCAL_WRITE/],
+  ["python/rdma_common.py", 41, /IBV_ACCESS_REMOTE_WRITE/],
+  ["python/rdma_common.py", 42, /IBV_ACCESS_REMOTE_READ/],
+  ["python/rdma_common.py", 133, /mr_mod\.MR\(pd, length=length, access=ACCESS/],
 ];
 
 const failures = [];
