@@ -36,7 +36,13 @@ const LESSONS: LessonMeta[] = [
 
 const CURRENT_KEY = "fabriclab.rdma.curriculum.current";
 const COMPLETED_KEY = "fabriclab.rdma.curriculum.completed";
+const COMPLETED_V2_KEY = "fabriclab.rdma.curriculum.completed.v2";
 const FINISHED_KEY = "fabriclab.rdma.curriculum.finished";
+const REVISED_FOUNDATION_LESSON_IDS = new Set(LESSONS.slice(0, 4).map((lesson) => lesson.id));
+
+function validCompletedLessons(value: unknown) {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string" && LESSONS.some((item) => item.id === id)) : [];
+}
 
 function validLessonIndex(value: string | undefined) {
   const index = LESSONS.findIndex((lesson) => lesson.id === value);
@@ -75,12 +81,20 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
       } else if (initialIndex !== lessonIndex) {
         setLessonIndex(initialIndex);
       }
-      const storedCompleted = window.localStorage.getItem(COMPLETED_KEY);
-      if (storedCompleted) {
-        const parsed = JSON.parse(storedCompleted);
-        if (Array.isArray(parsed)) setCompleted(parsed.filter((id) => LESSONS.some((item) => item.id === id)));
+      const versionedCompleted = window.localStorage.getItem(COMPLETED_V2_KEY);
+      let migratedCompleted: string[] = [];
+      if (versionedCompleted) {
+        migratedCompleted = validCompletedLessons(JSON.parse(versionedCompleted));
+      } else {
+        // The pre-revision completion flag used the same lesson identifiers for
+        // substantially different Foundations lessons. Preserve only the
+        // unchanged practical Lessons 5–8; revised Lessons 1–4 must be reviewed
+        // from their beginning rather than inheriting old completion state.
+        const legacyCompleted = window.localStorage.getItem(COMPLETED_KEY);
+        if (legacyCompleted) migratedCompleted = validCompletedLessons(JSON.parse(legacyCompleted)).filter((id) => !REVISED_FOUNDATION_LESSON_IDS.has(id));
       }
-      const storedFinished = window.localStorage.getItem(FINISHED_KEY) === "true";
+      setCompleted(migratedCompleted);
+      const storedFinished = window.localStorage.getItem(FINISHED_KEY) === "true" && LESSONS.every((item) => migratedCompleted.includes(item.id));
       setFinished(storedFinished);
       setShowCompletion(storedFinished && !initialLesson);
     } catch {
@@ -94,7 +108,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
     if (!hydrated) return;
     try {
       window.localStorage.setItem(CURRENT_KEY, lesson.id);
-      window.localStorage.setItem(COMPLETED_KEY, JSON.stringify(completed));
+      window.localStorage.setItem(COMPLETED_V2_KEY, JSON.stringify(completed));
       window.localStorage.setItem(FINISHED_KEY, finished ? "true" : "false");
       const url = new URL(window.location.href);
       if (url.searchParams.has("lesson")) {
@@ -152,6 +166,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
     try {
       LESSONS.forEach((item) => clearLessonProgress(item.id));
       window.localStorage.removeItem(COMPLETED_KEY);
+      window.localStorage.removeItem(COMPLETED_V2_KEY);
       window.localStorage.removeItem(FINISHED_KEY);
       const url = new URL(window.location.href);
       url.searchParams.delete("lesson");

@@ -66,13 +66,92 @@ export function DmaAddressContextsVisual() {
 
 export function TransferModelComparisonVisual() {
   const [model,setModel]=useState<"tcp"|"rdma">("tcp");
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="tcp-rdma-model-comparison"><ActionRow><FoundationAction testId="show-tcp-model" active={model==="tcp"} onClick={()=>setModel("tcp")}>TCP model</FoundationAction><FoundationAction testId="show-rdma-model" active={model==="rdma"} onClick={()=>setModel("rdma")}>Prepared RDMA model</FoundationAction></ActionRow><div className="grid gap-2 lg:grid-cols-5">{(model==="tcp"?["app memory","CPU copy","kernel socket storage","protocol processing","NIC transfer"]:["prepared app memory","registered metadata","QP work request","transport engine","network/target memory"]).map((x)=><div key={x} className="rounded-xl border border-cyan-300/20 bg-cyan-300/6 px-2 py-2 text-center text-xs text-cyan-50">{x}</div>)}</div><SmallNote>{model==="tcp"?"TCP applications use sockets and byte streams; kernel-managed buffering and protocol processing are central.":"RDMA work requests describe prepared memory resources and remote addresses. Resource creation and metadata exchange happen before data operations."} This compares teaching models, not universal implementation internals or performance.</SmallNote></div>;
+  type LaneRow = readonly [readonly [string,string,string], readonly [string,string,string], readonly [string,string,string]];
+  const tcpRows: LaneRow[] = [
+    [["A application buffer","0x1000 · HELLO source","memory"],["same network objective","payload has not left A yet","neutral"],["B application buffer","0x2000 · intended destination position","memory"]],
+    [["CPU/kernel-managed send storage","application socket call; CPU copy and TCP protocol processing","cpu"],["instruction/control remains in host A","socket/protocol control is not the payload wire format","metadata"],["B application buffer","still unchanged at 0x2000","memory"]],
+    [["conventional NIC DMA","NIC accesses kernel-managed packet memory; conventional NICs can use DMA","device"],["network","Ethernet transport between the two hosts","network"],["receiving conventional NIC DMA","NIC places packet bytes into kernel receive storage","device"]],
+    [["A kernel/network stack","completion/return and retransmission state are control responsibilities","cpu"],["network path complete","payload has arrived through NIC/kernel receive storage","network"],["kernel receive storage → CPU copy → B application buffer","TCP ordering processed; CPU copies/returns ordered bytes into 0x2000","cpu"]],
+  ];
+  const rdmaRows: LaneRow[] = [
+    [["A application instruction","submit work describing prepared resources","cpu"],["control preparation already complete","endpoint and registered-memory metadata were prepared before data transfer","metadata"],["B application buffer","0x2000 · authorized destination position","memory"]],
+    [["prepared RDMA resources","registered source memory at A 0x1000 and endpoint metadata","metadata"],["control/instruction path","work submission controls the device; it is not the payload path","metadata"],["prepared remote resources","registered destination memory at B 0x2000 is authorized","metadata"]],
+    [["RNIC accesses source memory","device-visible memory access rather than a CPU byte copy","device"],["network","RDMA transport packets between representative RNICs","network"],["remote RNIC transport/memory access","representative RNIC places payload into the authorized destination memory","device"]],
+    [["completion/control at A","provider completion or application verification path","success"],["control path","completion/control is distinct from payload movement","metadata"],["B application buffer","0x2000 now contains the transferred bytes in this representative outcome","memory"]],
+  ];
+  const rows=model==="tcp"?tcpRows:rdmaRows;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="tcp-rdma-model-comparison">
+    <ActionRow>
+      <FoundationAction testId="show-tcp-model" active={model==="tcp"} onClick={()=>setModel("tcp")}>Representative TCP path</FoundationAction>
+      <FoundationAction testId="show-rdma-model" active={model==="rdma"} onClick={()=>setModel("rdma")}>Representative hardware RDMA path</FoundationAction>
+    </ActionRow>
+    <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-3 text-xs text-cyan-50" data-testid="same-memory-objective">Same objective in both views: source memory position <span className="font-mono">A 0x1000</span> → destination memory position <span className="font-mono">B 0x2000</span>. Positions do not change when the model changes.</div>
+    <div className="overflow-x-auto pb-1" data-testid={model==="tcp"?"representative-tcp-memory-path":"representative-rdma-memory-path"}>
+      <div className="min-w-[56rem] space-y-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)_4rem_minmax(0,1fr)] items-center font-mono text-[10px] uppercase tracking-[0.15em] text-slate-500"><span>Host A</span><span /><span className="text-center">network / path kind</span><span /><span className="text-right">Host B</span></div>
+        {rows.map((row,rowIndex)=><div key={rowIndex} className="grid grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)_4rem_minmax(0,1fr)] items-stretch gap-2">
+          <FoundationBox title={row[0][0]} tone={row[0][2] as never} active={rowIndex===rows.length-1}><div className="text-xs leading-5">{row[0][1]}</div></FoundationBox>
+          <div className="flex items-center justify-center font-mono text-xl text-cyan-200" aria-hidden="true">{rowIndex===0?"·":"→"}</div>
+          <FoundationBox title={row[1][0]} tone={row[1][2] as never}><div className="text-xs leading-5">{row[1][1]}</div></FoundationBox>
+          <div className="flex items-center justify-center font-mono text-xl text-cyan-200" aria-hidden="true">{rowIndex===0?"·":"→"}</div>
+          <FoundationBox title={row[2][0]} tone={row[2][2] as never} active={rowIndex===rows.length-1}><div className="text-xs leading-5">{row[2][1]}</div></FoundationBox>
+        </div>)}
+      </div>
+    </div>
+    <div className="grid gap-2 xl:grid-cols-4" data-testid="tcp-rdma-path-separation">
+      <LinkLine label={model==="tcp"?"instruction: application socket send/receive calls":"instruction: application submits a prepared work request"} kind="instruction" active testId="comparison-instruction-path"/>
+      <LinkLine label={model==="tcp"?"control: connection/protocol state and socket metadata":"control: resource and endpoint metadata prepared before data transfer"} kind="metadata" active testId="comparison-control-path"/>
+      <LinkLine label={model==="tcp"?"payload: memory/storage ↔ conventional NIC ↔ network":"payload: registered memory ↔ RNIC ↔ network ↔ registered memory"} kind="payload" active testId="comparison-payload-path"/>
+      <LinkLine label={model==="tcp"?"completion: syscall return and application receive observation":"completion: provider completion or application verification path"} kind="reference" active testId="comparison-completion-path"/>
+    </div>
+    <SmallNote>Representative buffered TCP and hardware RDMA; optimizations and operations vary. Kernel processing roles are shown separately from physical payload links. Conventional NICs can use DMA; the distinction is where transport and memory-placement responsibilities are implemented. No fixed copy count, universal implementation internals, performance bar, or performance claim is made.</SmallNote>
+  </div>;
 }
 
 export function SoftRoceStackVisual() {
-  const [path,setPath]=useState<"rxe"|"hardware">("rxe");
-  const active = path==="rxe"?["Python application","Pyverbs / libibverbs","Linux RDMA core + RXE software transport","Linux UDP/IP + Ethernet driver","data0 interface","network"]:["Python application","Pyverbs / libibverbs + hardware provider","prepared RNIC resources","hardware RNIC transport","physical Ethernet interface","network"];
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="soft-roce-instruction-path"><ActionRow><FoundationAction testId="show-rxe-path" active={path==="rxe"} onClick={()=>setPath("rxe")}>RXE software path</FoundationAction><FoundationAction testId="show-hardware-path" active={path==="hardware"} onClick={()=>setPath("hardware")}>Representative hardware RNIC path</FoundationAction></ActionRow><div className="grid gap-2 lg:grid-cols-6">{active.map((x,index)=><div key={x} className={cx("rounded-xl border px-2 py-2 text-center text-xs",index<3&&path==="rxe"?"border-amber-300/35 bg-amber-300/10 text-amber-50":"border-cyan-300/20 bg-cyan-300/6 text-cyan-50")}>{x}</div>)}</div><div className="grid gap-3 xl:grid-cols-2"><FoundationBox title="logical RXE RDMA device" tone="metadata" active={path==="rxe"}>rxe0 · created/configured logical device</FoundationBox><FoundationBox title="physical or virtual Ethernet interface" tone="device" active>data0 · ordinary network interface</FoundationBox></div><SmallNote>Python → Pyverbs → verbs provider/kernel path → RXE executes the software transport through Linux networking. Hardware RNICs implement transport in NIC hardware. RXE does not demonstrate hardware bypass or hardware-offload performance.</SmallNote></div>;
+  const hostA=rdmaEvidence.hosts.hosta;
+  const hostB=rdmaEvidence.hosts.hostb;
+  const rxeStack=[
+    ["Python application","CPU executes laboratory program"],
+    ["Pyverbs","Python bindings used by the program"],
+    ["libibverbs + device provider","verbs API/provider boundary for the RXE device"],
+    ["Linux RDMA core + RXE software transport","CPU executes RXE transport processing in software"],
+    ["Linux UDP/IP + Ethernet driver","CPU/kernel networking path"],
+    ["data0 underlying Ethernet interface","isolated laboratory data interface"],
+    ["network to peer host","Host A 10.10.10.1 ↔ Host B 10.10.10.2"],
+  ] as const;
+  const hardwareStack=[
+    ["Python application","CPU executes application"],
+    ["Pyverbs","same Python API surface in this comparison"],
+    ["libibverbs + hardware provider","provider exposes device capabilities and control interface"],
+    ["prepared RNIC resources","registered memory, endpoints and userspace-accessible queues where supported"],
+    ["representative hardware RNIC","NIC hardware executes transport and memory access"],
+    ["physical Ethernet interface","network attachment"],
+    ["network to peer RNIC","representative hardware path, not the RXE measurement"],
+  ] as const;
+  function Stack({title,tone,rows,footer,testId}:{title:string;tone:"cpu"|"device";rows:readonly (readonly [string,string])[];footer:string;testId:string}){
+    return <FoundationBox title={title} tone={tone} testId={testId} className="h-full">
+      <div className="space-y-1.5">
+        {rows.map(([name,description],index)=><div key={name}>
+          <div className={cx("rounded-lg border px-2 py-1.5",index<=4&&tone==="cpu"?"border-amber-300/35 bg-amber-300/10":name==="representative hardware RNIC"?"border-orange-300/35 bg-orange-300/10":"border-white/10 bg-slate-950/35")}>
+            <div className="font-mono text-xs text-slate-100">{name}</div>
+            <div className="text-[11px] leading-4 text-slate-400">{description}</div>
+          </div>
+          {index<rows.length-1?<div className="py-0.5 text-center font-mono text-cyan-200" aria-hidden="true">↓</div>:null}
+        </div>)}
+      </div>
+      <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/40 p-2 text-[11px] text-slate-300">{footer}</div>
+    </FoundationBox>;
+  }
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="soft-roce-instruction-path">
+    <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-3 font-mono text-xs text-cyan-50" data-testid="soft-roce-lab-identities">actual RXE laboratory: hosta ({hostA.label}) data {hostA.dataIp} · hostb ({hostB.label}) data {hostB.dataIp} · isolated data0 Ethernet interfaces</div>
+    <div className="grid gap-3 xl:grid-cols-2">
+      <Stack title="actual RXE software transport" tone="cpu" rows={rxeStack} footer="logical RXE RDMA device rxe0 is associated with data0; CPUs execute the software transport. This experiment does not measure hardware offload or CPU bypass." testId="rxe-software-transport-column"/>
+      <Stack title="representative hardware RNIC transport" tone="device" rows={hardwareStack} footer="control/setup still involves software; the representative RNIC performs transport execution and device memory access in hardware. This column is explanatory, not evidence from the Soft-RoCE run." testId="hardware-rnic-transport-column"/>
+    </div>
+    <div className="grid gap-2 xl:grid-cols-2" data-testid="soft-roce-control-setup-paths"><LinkLine label="RXE control/setup: userspace verbs → kernel RDMA/RXE control path; WR submission is not claimed to be one synchronous syscall" kind="metadata" active/><LinkLine label="hardware control/setup: kernel/driver resource setup remains present even when data-path queues are userspace accessible" kind="metadata" active/></div><div className="grid gap-3 xl:grid-cols-2"><FoundationBox title="logical RXE RDMA device" tone="metadata" active>rxe0 · created/configured logical device, not an extra physical NIC</FoundationBox><FoundationBox title="physical or virtual Ethernet interface" tone="device" active>data0 · ordinary underlying network interface</FoundationBox></div>
+    <SmallNote>Python → Pyverbs → libibverbs/provider. RXE then uses Linux software transport and the Ethernet stack; it does not demonstrate hardware bypass. A hardware RNIC instead implements transport and memory access in device hardware. Kernel/setup involvement is not the same thing as claiming every work request is a synchronous syscall.</SmallNote>
+  </div>;
 }
 
 export function RdmaInitiationVisual({ conceptOnly=false }: { conceptOnly?: boolean }) {
@@ -87,13 +166,20 @@ export function RegistrationVisual() {
 }
 
 export function RegistrationOwnershipVisual() {
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registration-ownership"><div className="grid gap-3 xl:grid-cols-5"><FoundationBox title="application process" tone="cpu">asks Pyverbs</FoundationBox><FoundationBox title="Pyverbs / libibverbs" tone="metadata">invokes provider operation</FoundationBox><FoundationBox title="device context" tone="device">rxe0 context</FoundationBox><FoundationBox title="protection domain" tone="kernel">PD associates MR and future QP</FoundationBox><FoundationBox title="completion queue" tone="neutral">separate object outside PD</FoundationBox></div><SourceExcerpt path="python/exp_a_resources.py" start={74} end={82} label="actual resource creation excerpt"/><SourceExcerpt path="python/rdma_common.py" start={131} end={134} label="actual registration helper"/><SmallNote>The application asks, but provider/kernel implementation establishes registered access. The resulting MR is associated with a protection domain.</SmallNote></div>;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registration-ownership"><div className="grid gap-3 xl:grid-cols-4"><FoundationBox title="application process" tone="cpu">asks Pyverbs</FoundationBox><FoundationBox title="Pyverbs / libibverbs" tone="metadata">invokes provider operation</FoundationBox><FoundationBox title="device context" tone="device">rxe0 context</FoundationBox><FoundationBox title="protection domain" tone="kernel">PD associates the returned MR</FoundationBox></div><div className="grid gap-2 lg:grid-cols-3"><LinkLine label="application asks" kind="instruction" active/><LinkLine label="provider establishes registered access" kind="metadata" active/><LinkLine label="MR returned to application" kind="reference" direction="left" active/></div><SourceExcerpt path="python/exp_a_resources.py" start={74} end={82} label="actual resource creation excerpt"/><SourceExcerpt path="python/rdma_common.py" start={131} end={134} label="actual registration helper"/><SmallNote>The application asks, but provider/kernel implementation establishes registered access. At this beginner stage the diagram intentionally introduces only the context, protection domain and memory registration; communication queues are introduced later.</SmallNote></div>;
 }
 
 export function RangeSelectionVisual() {
   const [choice,setChoice]=useState<"valid"|"invalid"|null>(null);
   const valid=choice==="valid";
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registered-range-selection"><ActionRow><FoundationAction testId="select-eight-at-offset-four" active={choice==="valid"} onClick={()=>setChoice("valid")}>Inspect 8 bytes at offset 4</FoundationAction><FoundationAction testId="select-eight-at-offset-twelve" active={choice==="invalid"} onClick={()=>setChoice("invalid")}>Inspect 8 bytes at offset 12</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_15rem]"><FoundationBox title="24 illustrative memory cells · registered range 0–15" tone="memory" testId="twenty-four-cell-range"><ByteCells compact bytes={hello16.concat(Array.from({length:8},()=>"--"))} highlight={valid?[4,5,6,7,8,9,10,11]:choice==="invalid"?[12,13,14,15,16,17,18,19]:[]} outOfRange={[16,17,18,19,20,21,22,23]}/></FoundationBox><FoundationBox title="selected memory description" tone={choice?(valid?"success":"warning"):"metadata"} testId="range-check-result">{choice?<div className="font-mono text-xs">base 0x1000 + offset {valid?4:12}<br />length 8<br />end offset {valid?12:20}<br />{valid?"inside registered 0–15":"crosses boundary at 15"}</div>:"select a range"}</FoundationBox></div><SmallNote>Base address, offset and length are distinct. The invalid illustration crosses the registered boundary; unregistered cells 16–23 are visible but outside the MR.</SmallNote></div>;
+  const offset=valid?4:12;
+  const first=0x1000+offset;
+  const endExclusive=first+8;
+  const last=endExclusive-1;
+  const cells=hello16.concat(Array.from({length:8},()=>"--"));
+  const offsets=Array.from({length:24},(_,index)=>index);
+  const addresses=offsets.map((index)=>`0x${(0x1000+index).toString(16)}`);
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registered-range-selection"><ActionRow><FoundationAction testId="select-eight-at-offset-four" active={choice==="valid"} onClick={()=>setChoice("valid")}>Inspect 8 bytes at offset 4</FoundationAction><FoundationAction testId="select-eight-at-offset-twelve" active={choice==="invalid"} onClick={()=>setChoice("invalid")}>Inspect 8 bytes at offset 12</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]"><FoundationBox title="24 illustrative memory cells · registered region base 0x1000 · offsets 0–15 registered" tone="memory" testId="twenty-four-cell-range"><ByteCells compact bytes={cells} offsets={offsets} addresses={addresses} highlight={choice?Array.from({length:8},(_,index)=>offset+index):[]} outOfRange={[16,17,18,19,20,21,22,23]}/><div className="mt-2 font-mono text-[11px]">registered bytes: 0x1000–0x100f inclusive · end-exclusive 0x1010</div></FoundationBox><FoundationBox title="selected memory description" tone={choice?(valid?"success":"warning"):"metadata"} testId="range-check-result">{choice?<div className="font-mono text-xs">base address 0x1000<br />selected offset {offset}<br />requested length 8<br />first byte 0x{first.toString(16)}<br />last requested byte 0x{last.toString(16)}<br />end-exclusive 0x{endExclusive.toString(16)}<br />{valid?"in range: inside registered 0–15; end-exclusive is not beyond 0x1010":"boundary-crossing: crosses boundary; request continues beyond 0x100f"}</div>:"select a range"}</FoundationBox></div><SmallNote>Base address, offset and length are distinct. Offset + length ≤ 16 is the bounded nonnegative in-range test used here; the invalid illustration visibly crosses the registered boundary.</SmallNote></div>;
 }
 
 export function AccessPathsVisual() {
@@ -105,8 +191,10 @@ export function AccessPathsVisual() {
 export function KeyExerciseVisual({ remote=false }: { remote?: boolean }) {
   const correct=remote?"0x99":"0x11";
   const [key,setKey]=useState<string|null>(null);
+  const [operation,setOperation]=useState<"write"|"read">("write");
   const ok=key===correct;
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid={remote?"remote-key-exercise":"local-key-exercise"}><div className="grid gap-2 sm:grid-cols-2"><FoundationBox title="MR A" tone="metadata">addr 0x1000 · len 16 · {remote?"RKEY 0x99":"LKEY 0x11"}</FoundationBox><FoundationBox title="MR B" tone="metadata">addr 0x2000 · len 16 · {remote?"RKEY 0xaa":"LKEY 0x22"}</FoundationBox></div><ActionRow>{(remote?["0x99","0xaa"]:["0x11","0x22"]).map((value)=><FoundationAction key={value} testId={`choose-key-${value}`} active={key===value} onClick={()=>setKey(value)}>Use key {value}</FoundationAction>)}</ActionRow><FoundationBox title={remote?"remote-memory operation description":"local memory description"} tone={key?(ok?"success":"warning"):"neutral"} testId="key-check-result"><div className="font-mono text-xs">{remote?"remote_addr 0x1000 · rkey":"addr 0x1000 · len 8 · lkey"} {key??"not selected"}</div><div className="mt-1 text-xs">{key?ok?"conceptual association matches MR A":"key does not match the intended registration":"select a key"}</div></FoundationBox><SmallNote>No fabricated hardware error code or packet: this is only the conceptual association/permission check.</SmallNote></div>;
+  const operationCheck=ok?(operation==="write"?"local-write permission present for provider write in this stated model":"local read access is available for provider read in this stated model"):"operation access is not evaluated because the key association is invalid";
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid={remote?"remote-key-exercise":"local-key-exercise"}><div className="grid gap-2 sm:grid-cols-2"><FoundationBox title="MR A" tone="metadata">addr 0x1000 · len 16 · {remote?"RKEY 0x99":"LKEY 0x11"}<br />local-write permission present in this stated model</FoundationBox><FoundationBox title="MR B" tone="metadata">addr 0x2000 · len 16 · {remote?"RKEY 0xaa":"LKEY 0x22"}</FoundationBox></div><ActionRow>{(remote?["0x99","0xaa"]:["0x11","0x22"]).map((value)=><FoundationAction key={value} testId={`choose-key-${value}`} active={key===value} onClick={()=>setKey(value)}>Use key {value}</FoundationAction>)}<FoundationAction testId="local-write-operation" active={operation==="write"} onClick={()=>setOperation("write")}>Provider local write</FoundationAction><FoundationAction testId="local-read-operation" active={operation==="read"} onClick={()=>setOperation("read")}>Provider local read</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-2"><FoundationBox title={remote?"remote-memory operation description":"constructed local SGE"} tone={key?(ok?"success":"warning"):"neutral"} testId="key-check-result"><div className="font-mono text-xs">{remote?"remote_addr 0x1000 · rkey":"addr 0x1000 · len 5 · lkey"} {key??"not selected"}<br />operation {operation}</div><div className="mt-1 text-xs">{key?ok?"key association matches MR A":"key does not match the intended registration":"select a key"}</div></FoundationBox><FoundationBox title="separate access-requirement check" tone={key&&ok?"success":"warning"} testId="local-access-operation-check"><div className="text-xs">{key?operationCheck:"select a key before checking operation access"}</div><div className="mt-2 text-[11px] text-slate-400">A valid LKEY association is not the same question as whether the requested provider operation is permitted.</div></FoundationBox></div><div className="rounded-xl border border-sky-300/20 bg-sky-300/7 p-2" data-testid="local-key-range-highlight"><ByteCells compact bytes={hello16} highlight={ok?[0,1,2,3,4]:[]} /><div className="mt-1 font-mono text-[11px]">MR A range 0x1000–0x100f · SGE bytes 0x1000–0x1004 highlighted when associated</div></div><SmallNote>No fabricated hardware error code or packet: this is only a simplified conceptual association/permission model. Ordinary CPU writes to a writable process mapping do not require an RDMA local-write flag; that flag applies to provider access to registered memory.</SmallNote></div>;
 }
 
 export function MetadataExchangeVisual() {
@@ -204,7 +292,7 @@ export function CompletionLifecycleVisual() {
 }
 
 export function ResourceBoundaryVisual() {
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="resource-experiment-boundary"><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><FoundationBox title="recorded resources" tone="metadata">QPNs 17/18 · PSN 0x100 · MRs</FoundationBox><FoundationBox title="no posted data operation" tone="neutral" active>resource-only experiment</FoundationBox><FoundationBox title="no RDMA payload packet" tone="network">capture boundary is explicit</FoundationBox><a href="/practical/send-receive" className="rounded-xl border border-cyan-300/40 bg-cyan-300/12 px-4 py-3 text-center text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/20" data-testid="start-real-send-receive-practical">Start the real SEND/RECEIVE practical</a></div><SmallNote>Lesson 5 uses these concepts with actual posted SEND/RECEIVE work and verified packet/memory evidence.</SmallNote></div>;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="resource-experiment-boundary"><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"><FoundationBox title="recorded resources" tone="metadata">QPNs 17/18 · PSN 0x100 · MRs</FoundationBox><FoundationBox title="no posted data operation" tone="neutral" active>resource-only experiment</FoundationBox><FoundationBox title="no RDMA payload packet" tone="network">capture boundary is explicit</FoundationBox><a href="/practical/rdma?lesson=send-receive" className="rounded-xl border border-cyan-300/40 bg-cyan-300/12 px-4 py-3 text-center text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/20" data-testid="start-real-send-receive-practical">Start the real SEND/RECEIVE practical</a></div><SmallNote>Lesson 5 uses these concepts with actual posted SEND/RECEIVE work and verified packet/memory evidence.</SmallNote></div>;
 }
 
 
@@ -288,7 +376,7 @@ export function RemoteKeyOwnershipVisual() {
         <FoundationAction testId="construct-remote-operation" active={constructed} disabled={!shared} onClick={() => setStage("constructed")}>Construct the operation</FoundationAction>
         <FoundationAction testId="preview-valid-remote-request" active={stage === "valid"} disabled={!constructed} onClick={() => setStage("valid")}>Inspect valid request</FoundationAction>
         <FoundationAction testId="preview-wrong-remote-key" active={stage === "wrong-key"} disabled={!constructed} onClick={() => setStage("wrong-key")}>Inspect incorrect key</FoundationAction>
-        <FoundationAction testId="preview-out-of-range" active={stage === "out-of-range"} disabled={!constructed} onClick={() => setStage("out-of-range")}>Inspect out-of-range length</FoundationAction>
+        <FoundationAction testId="preview-out-of-range" active={stage === "out-of-range"} disabled={!constructed} onClick={() => setStage("out-of-range")}>Inspect out-of-range remote range</FoundationAction>
         <FoundationAction testId="preview-missing-permission" active={stage === "no-permission"} disabled={!constructed} onClick={() => setStage("no-permission")}>Inspect missing permission</FoundationAction>
       </ActionRow>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_12rem_minmax(0,1fr)] xl:items-center">
@@ -304,7 +392,7 @@ export function RemoteKeyOwnershipVisual() {
         <FoundationBox title="Server B · independent host · registered destination" tone="memory" testId="server-b-remote-destination">
           <ByteCells compact bytes={zeros16} />
           <div className="mt-2 font-mono text-xs text-fuchsia-100">address 0x2000 · RKEY 0x42 · capacity 16</div>
-          <div className="text-[11px] text-slate-400">remote-write access enabled · target LKEY is not shared here</div>
+          <div className="text-[11px] text-slate-400">{stage === "no-permission" ? "remote-write access absent in this scenario" : "remote-write access enabled"} · target LKEY is not shared here</div>
         </FoundationBox>
       </div>
       {constructed ? (
@@ -313,7 +401,7 @@ export function RemoteKeyOwnershipVisual() {
             <div className="font-mono text-xs">source address 0x1000<br />LKEY 0x11<br />length 5</div>
           </FoundationBox>
           <FoundationBox title="remote memory description · magenta/B-owned" tone="metadata" active>
-            <div className="font-mono text-xs">destination address 0x2000<br />RKEY {stage === "wrong-key" ? "0x99" : "0x42"}<br />transfer length {stage === "out-of-range" ? "20" : "5"}</div>
+            <div className="font-mono text-xs">destination address {stage === "out-of-range" ? "0x200e" : "0x2000"}<br />RKEY {stage === "wrong-key" ? "0x99" : "0x42"}<br />transfer length 5</div>
           </FoundationBox>
         </div>
       ) : null}
@@ -327,7 +415,7 @@ export function RemoteKeyOwnershipVisual() {
               <Check label="remote-write permission" ok={checks.permission} />
               <Check label="endpoint and protection context" ok={checks.endpoint} />
             </div>
-            <div className="mt-2 text-xs" data-testid="remote-validation-result">{passed ? "All selected conceptual checks pass; access could be permitted in this model." : "The selected request fails the highlighted conceptual association or access check."}</div>
+            <div className="mt-2 text-xs" data-testid="remote-validation-result">{passed ? "All selected conceptual checks pass; access could be permitted in this model." : "The selected request fails the highlighted conceptual association or access check."}</div>{stage === "out-of-range" ? <div className="mt-3" data-testid="remote-crossing-range"><ByteCells compact bytes={zeros16.concat(Array.from({length:4},()=>"--"))} highlight={[14,15,16,17,18]} outOfRange={[16,17,18,19]}/><div className="mt-1 font-mono text-[11px]">destination 0x200e + length 5 requests 0x200e–0x2012; registered region ends at 0x200f inclusive</div></div> : null}
           </FoundationBox>
         </div>
       ) : null}
@@ -494,7 +582,7 @@ export function CompletionAndResourceEvidenceVisual() {
         </div>
       </div>
       <SourceExcerpt path="python/exp_a_resources.py" start={77} end={110} label="actual resource setup source excerpt" />
-      <a href="/practical/send-receive" className="inline-block rounded-full border border-cyan-300/40 bg-cyan-300/12 px-4 py-2 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/20" data-testid="start-real-send-receive-practical">Start the real SEND/RECEIVE practical</a>
+      <a href="/practical/rdma?lesson=send-receive" className="inline-block rounded-full border border-cyan-300/40 bg-cyan-300/12 px-4 py-2 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/20" data-testid="start-real-send-receive-practical">Start the real SEND/RECEIVE practical</a>
       <SmallNote>No completions are invented for the resource-only run. The conceptual completion lifecycle above is visually separate from this genuine setup evidence.</SmallNote>
     </div>
   );

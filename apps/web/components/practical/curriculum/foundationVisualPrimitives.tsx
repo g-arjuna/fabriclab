@@ -182,12 +182,14 @@ export function RangeBar({
   ranges,
   total,
   selected,
+  highlighted = [],
   onSelect,
   testId,
 }: {
   ranges: Array<{ id: string; label: string; start: number; endExclusive: number; detail?: string }>;
   total: number;
   selected?: string | null;
+  highlighted?: string[];
   onSelect?: (id: string) => void;
   testId?: string;
 }) {
@@ -196,6 +198,7 @@ export function RangeBar({
       {ranges.map((range) => {
         const width = `${Math.max(7, ((range.endExclusive - range.start) / total) * 100)}%`;
         const active = selected === range.id;
+        const intersects = !active && highlighted.includes(range.id);
         const content = (
           <>
             <span className="block truncate font-mono text-[10px]">{range.label}</span>
@@ -209,12 +212,12 @@ export function RangeBar({
             onClick={() => onSelect(range.id)}
             style={{ width }}
             data-range-id={range.id}
-            className={cx("min-w-0 border-r border-slate-950/70 px-1 py-1 text-left last:border-r-0", active ? "bg-cyan-300/35 text-cyan-50" : "bg-sky-300/10 text-sky-100 hover:bg-sky-300/20")}
+            className={cx("min-w-0 border-r border-slate-950/70 px-1 py-1 text-left last:border-r-0", active ? "bg-cyan-300/35 text-cyan-50" : intersects ? "bg-emerald-300/25 text-emerald-50 hover:bg-emerald-300/35" : "bg-sky-300/10 text-sky-100 hover:bg-sky-300/20")}
           >
             {content}
           </button>
         ) : (
-          <div key={range.id} style={{ width }} data-range-id={range.id} className={cx("min-w-0 border-r border-slate-950/70 px-1 py-1 last:border-r-0", active ? "bg-cyan-300/35 text-cyan-50" : "bg-sky-300/10 text-sky-100")}>{content}</div>
+          <div key={range.id} style={{ width }} data-range-id={range.id} className={cx("min-w-0 border-r border-slate-950/70 px-1 py-1 last:border-r-0", active ? "bg-cyan-300/35 text-cyan-50" : intersects ? "bg-emerald-300/25 text-emerald-50" : "bg-sky-300/10 text-sky-100")}>{content}</div>
         );
       })}
     </div>

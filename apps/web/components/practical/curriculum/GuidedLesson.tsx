@@ -21,24 +21,29 @@ export type GuidedStep = {
 };
 
 type PersistedGuidedState = {
-  version: 2;
+  version: 2 | 3;
+  revision?: string;
   current: string;
   visited: string[];
 };
+
+const REVISED_FOUNDATION_LESSONS = new Set(["moving-data", "why-rdma", "memory", "queues"]);
+const FOUNDATIONS_V2_REVISION = "foundations-v2-final";
 
 function idToIndex(steps: GuidedStep[], id: string | undefined) {
   const index = steps.findIndex((step) => step.id === id);
   return index >= 0 ? index : 0;
 }
 
-function parsePersistedState(value: string | null, steps: GuidedStep[]): { stepIndex: number; visitedSteps: number[] } | null {
+function parsePersistedState(value: string | null, steps: GuidedStep[], requiredVersion: 2 | 3, requiredRevision?: string): { stepIndex: number; visitedSteps: number[] } | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value) as Partial<PersistedGuidedState>;
-    if (parsed.version !== 2 || typeof parsed.current !== "string" || !Array.isArray(parsed.visited)) return null;
+    if (parsed.version !== requiredVersion || typeof parsed.current !== "string" || !Array.isArray(parsed.visited)) return null;
+    if (requiredRevision && parsed.revision !== requiredRevision) return null;
     const validIds = new Set(steps.map((step) => step.id));
-    // Authored Foundations V2 is substantially reorganized. Only exact stable
-    // identifiers migrate; unrelated legacy foundation progress starts the revised lesson at its beginning.
+    // Authored Foundations V2 is substantially reorganized. Revised foundation
+    // progress additionally requires the explicit revision marker checked by the caller.
     if (!validIds.has(parsed.current)) return null;
     const visitedSteps = Array.from(new Set(parsed.visited.filter((id): id is string => typeof id === "string" && validIds.has(id)).map((id) => idToIndex(steps, id))));
     return { stepIndex: idToIndex(steps, parsed.current), visitedSteps };
@@ -79,6 +84,9 @@ export function GuidedLesson({
   const [stepIndex, setStepIndex] = useState(0);
   const [visitedSteps, setVisitedSteps] = useState<number[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const revisedFoundation = REVISED_FOUNDATION_LESSONS.has(lessonId);
+  const persistedVersion = revisedFoundation ? 3 as const : 2 as const;
+  const persistedRevision = revisedFoundation ? FOUNDATIONS_V2_REVISION : undefined;
   const articleRef = useRef<HTMLElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const step = steps[stepIndex];
@@ -95,11 +103,11 @@ export function GuidedLesson({
 
   useEffect(() => {
     try {
-      const versioned = parsePersistedState(window.localStorage.getItem(stateKey), steps);
+      const versioned = parsePersistedState(window.localStorage.getItem(stateKey), steps, persistedVersion, persistedRevision);
       if (versioned) {
         setStepIndex(versioned.stepIndex);
         setVisitedSteps(versioned.visitedSteps);
-      } else {
+      } else if (!revisedFoundation) {
         const legacyStep = parseLegacyIndex(window.localStorage.getItem(storageKey), steps.length);
         const legacyVisited = parseLegacyVisited(window.localStorage.getItem(visitedKey), steps.length);
         setStepIndex(legacyStep);
@@ -115,7 +123,8 @@ export function GuidedLesson({
     if (!hydrated) return;
     try {
       const state: PersistedGuidedState = {
-        version: 2,
+        version: persistedVersion,
+        revision: persistedRevision,
         current: steps[stepIndex]?.id || steps[0].id,
         visited: visitedSteps.map((index) => steps[index]?.id).filter((id): id is string => Boolean(id)),
       };
@@ -123,7 +132,7 @@ export function GuidedLesson({
     } catch {
       // Ignore storage failures.
     }
-  }, [hydrated, stateKey, stepIndex, steps, visitedSteps]);
+  }, [hydrated, persistedRevision, persistedVersion, stateKey, stepIndex, steps, visitedSteps]);
 
   useEffect(() => {
     if (!hydrated) return;
