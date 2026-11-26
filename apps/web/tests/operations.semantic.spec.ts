@@ -209,6 +209,37 @@ test.describe("Operations V2 evidence semantics", () => {
     }));
     expect(ownership).toEqual({ prediction: null, quiz: null, interaction: null, interaction63: null, unrelated: "preserve" });
     await expect(page.getByTestId("guided-lesson-write")).toHaveAttribute("data-hydrated", "true");
+
+    await advance(page, 7);
+    await page.getByTestId("write-evidence-review-option-0").click();
+    await page.getByTestId("write-evidence-review-check").click();
+    await expect(page.getByTestId("write-evidence-review-feedback")).toHaveAttribute("data-correct", "false");
+    await page.getByTestId("write-evidence-review-retry").click();
+    await expect(page.getByTestId("write-evidence-review-feedback")).toHaveCount(0);
+    await page.getByTestId("write-evidence-review-option-1").click();
+    await page.getByTestId("write-evidence-review-check").click();
+    await expect(page.getByTestId("write-evidence-review-feedback")).toHaveAttribute("data-correct", "true");
+
+    await page.evaluate(() => {
+      const allLessons = ["moving-data", "why-rdma", "memory", "queues", "send-receive", "write", "read", "packets"];
+      window.localStorage.setItem("fabriclab.rdma.curriculum.completed.v3", JSON.stringify(allLessons));
+      window.localStorage.setItem("fabriclab.rdma.curriculum.finished", "true");
+      window.localStorage.setItem("fabriclab.rdma.operations-v2.6.6.prediction", JSON.stringify({ prediction: "No", skipped: false, resultRevealed: true, revision: "operations-v2-prediction-r1" }));
+      window.localStorage.setItem("fabriclab.unrelated-user-preference", "preserve");
+    });
+    await page.goto("/practical/rdma", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("rdma-curriculum-complete")).toBeVisible();
+    await page.getByRole("button", { name: /Start the practical again/i }).click();
+    const restarted = await page.evaluate(() => ({
+      prediction: window.localStorage.getItem("fabriclab.rdma.operations-v2.6.6.prediction"),
+      quiz: window.localStorage.getItem("fabriclab.rdma.operations-v2.quiz.write-evidence-review"),
+      interaction: window.localStorage.getItem("fabriclab.rdma.operations-v2.interaction.6.8"),
+      lesson: window.localStorage.getItem("fabriclab.rdma.lesson.write.state.v2"),
+      completed: window.localStorage.getItem("fabriclab.rdma.curriculum.completed.v3"),
+      unrelated: window.localStorage.getItem("fabriclab.unrelated-user-preference"),
+    }));
+    expect(restarted).toEqual({ prediction: null, quiz: null, interaction: null, lesson: null, completed: "[]", unrelated: "preserve" });
+    await expect(page.getByTestId("guided-lesson-moving-data")).toBeVisible();
   });
 
   test("READ request/response directions, lengths, completion ownership and comparison table are exact", async ({ page }) => {
