@@ -84,7 +84,7 @@ function ProcessMap({ name, active, frame, shared = false, demandTouched = false
     <FoundationBox title={`process ${name} · independent virtual address space`} tone="metadata" active={active} testId={`process-${name.toLowerCase()}-address-space`}>
       <div className="space-y-1.5">
         {rows.map(([label, range, target, isShared]) => (
-          <div key={label} className={cx("grid gap-1 rounded-lg border px-2 py-1.5 text-[11px] sm:grid-cols-[5.5rem_7rem_minmax(0,1fr)]", target.toString().startsWith("dotted") ? "border-dashed border-white/15 text-slate-400" : "border-white/10 bg-slate-950/35")}> 
+          <div key={label} className={cx("grid gap-1 rounded-lg border px-2 py-1.5 text-[11px] sm:grid-cols-[5.5rem_7rem_minmax(0,1fr)]", target.toString().startsWith("dotted") ? "border-dashed border-white/15 text-slate-400" : "border-white/10 bg-slate-950/35")}>
             <span>{label}{isShared ? " · shared" : ""}</span><span className="font-mono">{range}</span><span className="font-mono text-emerald-100">→ {target}</span>
           </div>
         ))}
