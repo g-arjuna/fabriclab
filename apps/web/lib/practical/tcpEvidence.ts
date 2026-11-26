@@ -5,6 +5,14 @@ export type TcpPacket = {
   sourcePort: number; destinationPort: number; flags: string; relativeSequence: number; relativeAcknowledgement: number;
   tcpPayloadLength: number; payloadHex: string; payloadHexTruncated: boolean; payloadSha256: string | null; advertisedMss: number | null;
 };
+export type TcpDetailedPacket = {
+  frameNumber: number; timeEpoch: string; frameLength: number; capturedLength: number;
+  ethernet: { source: string; destination: string; type: string };
+  ip: { version: string; headerLength: number; dsfield: string; identification: string; flags: string; ttl: number; protocol: number; totalLength: number; source: string; destination: string };
+  tcp: { sourcePort: number; destinationPort: number; stream: number; headerLength: number; payloadLength: number; flags: string; syn: boolean; ack: boolean; psh: boolean; fin: boolean; relativeSequence: number; relativeAcknowledgement: number; windowSize: number; checksum: string; checksumStatus: string; advertisedMss: number | null };
+  payloadHex: string; payloadSha256: string | null;
+};
+export type TcpApplicationRange = { frameNumber: number; start: number; endExclusive: number };
 export type TcpCaseEvidence = {
   id: string; port: number;
   capture: { file: string; downloadPath: string; sha256: string; host: string; interface: string; command: string };
@@ -16,6 +24,9 @@ export type TcpCaseEvidence = {
   ssSnapshots: Record<string, string>;
   validation: { ok: boolean; errors: string[]; recv_return_counts: number[]; forward_payload_rows: number };
   events: { sender: Array<Record<string, unknown>>; receiver: Array<Record<string, unknown>> };
+  operatorEvents: Array<Record<string, unknown>>;
+  packets: TcpDetailedPacket[];
+  browserValidation: { validated: boolean; errors: string[]; bytes: number; sha256: string; segments: number; baseSequence: number; applicationRanges: TcpApplicationRange[] };
 };
 export type TcpEvidenceBundle = {
   schemaVersion: string; kind: string; sequenceNumberPolicy: string; capturePointPolicy: string;

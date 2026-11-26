@@ -175,35 +175,35 @@ test.describe("RDMA first-principles curriculum", () => {
     await expect(page.getByTestId("foundation-host-architecture")).toContainText(/CPU/i);
     await expect(page.getByTestId("foundation-host-architecture")).toContainText(/RAM/i);
     await expect(page.getByTestId("foundation-host-architecture")).toContainText(/kernel/i);
-    await expect(page.getByText(/19 authored subsections/i)).toBeVisible();
     await expect(page.getByTestId("guided-lesson-moving-data")).not.toContainText(/\{\{/);
 
     await advanceStates(page, 7);
-    await expect(page.getByTestId("foundation-socket-endpoints")).toContainText(/process-local descriptor/i);
+    await expect(page.getByTestId("foundation-socket-objects")).toContainText(/process-local handle/i);
     await clickLessonAction(page);
-    await expect(page.getByTestId("foundation-socket-endpoints")).toContainText(/connection four-tuple/i);
+    await expect(page.getByTestId("foundation-socket-endpoints")).toContainText(/process-local fd/i);
     await expect(page.getByTestId("guided-lesson-moving-data")).toContainText(/Python includes a standard-library module called/i);
-    await expect(page.getByTestId("tcp-handshake-evidence")).toContainText(/SYN/i);
-    await expect(page.getByTestId("tcp-handshake-evidence")).toContainText(/5001/i);
+    await clickLessonAction(page);
+    await expect(page.getByTestId("tcp-handshake-provenance")).toContainText(/SYN/i);
+    await expect(page.getByTestId("tcp-handshake-provenance")).toContainText(/5001/i);
 
-    await advanceStates(page, 2);
-    await expect(page.getByTestId("foundation-byte-stream")).toContainText(/continuous byte stream positions/i);
+    await clickLessonAction(page);
+    await expect(page.getByTestId("foundation-byte-stream")).toContainText(/continuous stream positions/i);
     await page.getByTestId("byte-stream-pattern-toggle").click();
     await expect(page.getByTestId("foundation-byte-stream")).toContainText(/read HE/i);
     await advanceStates(page, 2);
-    await expect(page.getByTestId("tcp-segmentation-evidence")).toContainText(/frame 4: relative bytes 1–1448/i);
-    await expect(page.getByTestId("tcp-segmentation-evidence")).toContainText(/frame 5: relative bytes 1449–2896/i);
-    await expect(page.getByTestId("tcp-segmentation-evidence")).toContainText(/frame 6: relative bytes 2897–4096/i);
+    await expect(page.getByTestId("tcp-segmentation-provenance")).toContainText(/frame 4: relative bytes 1–1448/i);
+    await expect(page.getByTestId("tcp-segmentation-provenance")).toContainText(/frame 5: relative bytes 1449–2896/i);
+    await expect(page.getByTestId("tcp-segmentation-provenance")).toContainText(/frame 6: relative bytes 2897–4096/i);
 
     await advanceStates(page, 3);
-    await expect(page.getByTestId("tcp-read-evidence")).toContainText(/read 1: requested 2, returned 2/i);
-    await expect(page.getByTestId("tcp-read-evidence")).toContainText(/read 3: requested 1, returned 1/i);
-    await expect(page.getByTestId("tcp-read-evidence")).toContainText(/Recv-Q 5/i);
+    await expect(page.getByTestId("tcp-read-provenance")).toContainText(/read 1: requested 2, returned 2/i);
+    await expect(page.getByTestId("tcp-read-provenance")).toContainText(/read 3: requested 1, returned 1/i);
+    await expect(page.getByTestId("tcp-read-provenance")).toContainText(/Recv-Q 5/i);
     await clickLessonAction(page);
-    await expect(page.getByTestId("tcp-read-order-evidence")).toContainText(/Receiver reads first/i);
-    await expect(page.getByTestId("tcp-read-order-evidence")).toContainText(/Sender sends first/i);
+    await expect(page.getByTestId("tcp-read-order-provenance")).toContainText(/Receiver reads first/i);
+    await expect(page.getByTestId("tcp-read-order-provenance")).toContainText(/Sender sends first/i);
     await clickLessonAction(page);
-    await expect(page.getByTestId("tcp-loopback-evidence")).toContainText(/software loopback/i);
+    await expect(page.getByTestId("tcp-loopback-provenance")).toContainText(/software loopback/i);
     expectNoBrowserErrors(tracker);
   });
 
@@ -212,13 +212,13 @@ test.describe("RDMA first-principles curriculum", () => {
     await page.goto("/practical/rdma?lesson=why-rdma", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/A local memory transfer without CPU copying every byte/i);
     await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/DMA allows a suitably configured device/i);
-    await expect(page.getByTestId("cpu-copy-diagram")).toBeVisible();
+    await expect(page.getByTestId("foundation-dma-copy")).toBeVisible();
     await advanceStates(page, 2);
     await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/The question RDMA addresses is not whether a NIC can perform DMA at all/i);
     await advanceStates(page, 2);
     await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/Linux has a software implementation called RXE/i);
-    await expect(page.getByTestId("soft-roce-stack-visual")).toContainText(/logical RXE device rxe0/i);
-    await expect(page.getByTestId("soft-roce-stack-visual")).toContainText(/No CPU-offload or throughput claim/i);
+    await expect(page.getByTestId("soft-roce-instruction-path")).toContainText(/logical RXE RDMA device/i);
+    await expect(page.getByTestId("soft-roce-instruction-path")).toContainText(/does not demonstrate hardware bypass/i);
     await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/It is not an extra physical NIC/i);
     expectNoBrowserErrors(tracker);
   });

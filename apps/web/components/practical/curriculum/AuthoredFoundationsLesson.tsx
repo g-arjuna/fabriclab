@@ -2,7 +2,6 @@
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { AuthoredCopy, FoundationEvidenceNote, FoundationInteraction, FoundationVisual, sectionsForLesson, useFoundationBindings, type FoundationSourceSection } from "./foundationsShared";
-import { EvidenceNote } from "./visuals";
 
 function actionFor(section: FoundationSourceSection) {
   if (section.id === "1.7") return "Open the socket interface";
@@ -23,11 +22,10 @@ export function AuthoredFoundationsLesson({ lesson, onComplete }: { lesson: Foun
     title: section.title,
     actionLabel: actionFor(section),
     body: <><AuthoredCopy text={section.learnerCopy} bindings={bindings} testId={`learner-copy-${section.componentId}`} /><FoundationEvidenceNote section={section} /></>,
-    visual: <FoundationVisual sectionId={section.id} />,
+    visual: <FoundationVisual key={section.componentId} sectionId={section.id} />,
     mobileVisualFirst: true,
     inspect: section.inspectCopy ? <AuthoredCopy text={section.inspectCopy} bindings={bindings} testId={`inspect-copy-${section.componentId}`} /> : undefined,
-    interaction: <FoundationInteraction section={section} bindings={bindings} />,
-    evidence: section.visualSpec ? <EvidenceNote kind="Visual contract">This visual follows the supplied implementation specification for source section {section.id}; learner-facing wording above is authored content.</EvidenceNote> : undefined,
+    interaction: <FoundationInteraction key={`interaction-${section.componentId}`} section={section} bindings={bindings} />,
   }));
   return <GuidedLesson lessonId={lesson} steps={steps} onComplete={onComplete} finalActionLabel="Complete lesson" />;
 }

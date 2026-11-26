@@ -60,6 +60,31 @@
         "tcpdumpSummary": "8d441c4202e39b382d6add7b9f715d348bf46179f6707978ed7379b868aad9ac",
         "tsharkFields": "548d54330c86c82f8dd3dc25da289c9a179ae124ba817bbaa8aa776e2322f667"
       },
+      "browserValidation": {
+        "applicationRanges": [
+          {
+            "endExclusive": 1448,
+            "frameNumber": 4,
+            "start": 0
+          },
+          {
+            "endExclusive": 2896,
+            "frameNumber": 5,
+            "start": 1448
+          },
+          {
+            "endExclusive": 4096,
+            "frameNumber": 6,
+            "start": 2896
+          }
+        ],
+        "baseSequence": 1,
+        "bytes": 4096,
+        "errors": [],
+        "segments": 3,
+        "sha256": "b608bb56a8501391894c5f6baec33d10025bb6986c39efd8e8aee9423fac5d5b",
+        "validated": true
+      },
       "capture": {
         "command": "tcpdump -i data0 -s 0 -U -nn -w large.pcap 'tcp port 5003'",
         "downloadPath": "/practical/rdma/large.pcap",
@@ -411,10 +436,631 @@
         }
       ],
       "id": "large",
+      "operatorEvents": [
+        {
+          "event": "capture_started",
+          "host": "hostb",
+          "interface": "data0",
+          "monotonic_ns": 88861687999365,
+          "remote": "/tmp/tcp-foundation-captures/large.pcap"
+        },
+        {
+          "event": "receiver_listen",
+          "monotonic_ns": 88862190275412
+        },
+        {
+          "event": "capture_stopped",
+          "monotonic_ns": 88865083281571
+        }
+      ],
+      "packets": [
+        {
+          "capturedLength": 74,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 74,
+          "frameNumber": 1,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xfb50",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 60,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": false,
+            "advertisedMss": 1460,
+            "checksum": "0xa378",
+            "checksumStatus": "2",
+            "destinationPort": 5003,
+            "fin": false,
+            "flags": "0x0002",
+            "headerLength": 40,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 0,
+            "relativeSequence": 0,
+            "sourcePort": 52126,
+            "stream": 0,
+            "syn": true,
+            "windowSize": 64240
+          },
+          "timeEpoch": "1795680737.115779000"
+        },
+        {
+          "capturedLength": 74,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 74,
+          "frameNumber": 2,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x0000",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 60,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": 1460,
+            "checksum": "0xfca1",
+            "checksumStatus": "2",
+            "destinationPort": 52126,
+            "fin": false,
+            "flags": "0x0012",
+            "headerLength": 40,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 0,
+            "sourcePort": 5003,
+            "stream": 0,
+            "syn": true,
+            "windowSize": 65160
+          },
+          "timeEpoch": "1795680737.115830000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 3,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xfb51",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x2800",
+            "checksumStatus": "2",
+            "destinationPort": 5003,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 1,
+            "sourcePort": 52126,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680737.116190000"
+        },
+        {
+          "capturedLength": 1514,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 1514,
+          "frameNumber": 4,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xfb52",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 1500,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152",
+          "payloadSha256": "dafe81b3be7b4c14ace882ea23d7f9113c56cfab2c192a3b7d2a98512ee7e6f1",
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xa509",
+            "checksumStatus": "2",
+            "destinationPort": 5003,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 1448,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 1,
+            "sourcePort": 52126,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680737.156815000"
+        },
+        {
+          "capturedLength": 1514,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 1514,
+          "frameNumber": 5,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xfb53",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 1500,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a",
+          "payloadSha256": "507c659fee821b241a0a2bb3f654f30a708fa892b74068925f74101ef0a1c46b",
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x7f41",
+            "checksumStatus": "2",
+            "destinationPort": 5003,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 1448,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 1449,
+            "sourcePort": 52126,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680737.156816000"
+        },
+        {
+          "capturedLength": 1266,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 1266,
+          "frameNumber": 6,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xfb54",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 1252,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e",
+          "payloadSha256": "7263a29a9adefdab6ecbaabd8d058820f79128e40e231a66f0b1d61f35f39a45",
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xea74",
+            "checksumStatus": "2",
+            "destinationPort": 5003,
+            "fin": false,
+            "flags": "0x0018",
+            "headerLength": 32,
+            "payloadLength": 1200,
+            "psh": true,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 2897,
+            "sourcePort": 52126,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680737.156816000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 7,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xfb55",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x17ff",
+            "checksumStatus": "2",
+            "destinationPort": 5003,
+            "fin": true,
+            "flags": "0x0011",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 4097,
+            "sourcePort": 52126,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680737.156816000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 8,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xfb56",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x17fa",
+            "checksumStatus": "2",
+            "destinationPort": 5003,
+            "fin": true,
+            "flags": "0x0011",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 4097,
+            "sourcePort": 52126,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680737.156816000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 9,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x8ff2",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x2224",
+            "checksumStatus": "2",
+            "destinationPort": 52126,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1449,
+            "relativeSequence": 1,
+            "sourcePort": 5003,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 513
+          },
+          "timeEpoch": "1795680737.156873000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 10,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x8ff3",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x1c82",
+            "checksumStatus": "2",
+            "destinationPort": 52126,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 2897,
+            "relativeSequence": 1,
+            "sourcePort": 5003,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 507
+          },
+          "timeEpoch": "1795680737.156906000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 11,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x8ff4",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x17d8",
+            "checksumStatus": "2",
+            "destinationPort": 52126,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 4097,
+            "relativeSequence": 1,
+            "sourcePort": 5003,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 501
+          },
+          "timeEpoch": "1795680737.156911000"
+        },
+        {
+          "capturedLength": 78,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 78,
+          "frameNumber": 12,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x8ff5",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 64,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x8b47",
+            "checksumStatus": "2",
+            "destinationPort": 52126,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 44,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 4098,
+            "relativeSequence": 1,
+            "sourcePort": 5003,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 501
+          },
+          "timeEpoch": "1795680737.156921000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 13,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x8ff6",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x17c3",
+            "checksumStatus": "2",
+            "destinationPort": 52126,
+            "fin": true,
+            "flags": "0x0011",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 4098,
+            "relativeSequence": 1,
+            "sourcePort": 5003,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 513
+          },
+          "timeEpoch": "1795680737.158309000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 14,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xfb57",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x17a9",
+            "checksumStatus": "2",
+            "destinationPort": 5003,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 2,
+            "relativeSequence": 4098,
+            "sourcePort": 52126,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680737.158713000"
+        }
+      ],
       "payloadSegments": [
         {
           "frameNumber": 4,
-          "payloadHex": null,
+          "payloadHex": "4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152",
           "payloadPreviewHex": "4142434445464748494a4b4c4d4e4f505152535455565758\u202655565758595a4142434445464748494a4b4c4d4e4f505152",
           "payloadSha256": "dafe81b3be7b4c14ace882ea23d7f9113c56cfab2c192a3b7d2a98512ee7e6f1",
           "relativeSequenceEndExclusive": 1449,
@@ -423,7 +1069,7 @@
         },
         {
           "frameNumber": 5,
-          "payloadHex": null,
+          "payloadHex": "535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a",
           "payloadPreviewHex": "535455565758595a4142434445464748494a4b4c4d4e4f50\u20264d4e4f505152535455565758595a4142434445464748494a",
           "payloadSha256": "507c659fee821b241a0a2bb3f654f30a708fa892b74068925f74101ef0a1c46b",
           "relativeSequenceEndExclusive": 2897,
@@ -432,7 +1078,7 @@
         },
         {
           "frameNumber": 6,
-          "payloadHex": null,
+          "payloadHex": "4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e4f505152535455565758595a4142434445464748494a4b4c4d4e",
           "payloadPreviewHex": "4b4c4d4e4f505152535455565758595a4142434445464748\u20265152535455565758595a4142434445464748494a4b4c4d4e",
           "payloadSha256": "7263a29a9adefdab6ecbaabd8d058820f79128e40e231a66f0b1d61f35f39a45",
           "relativeSequenceEndExclusive": 4097,
@@ -541,6 +1187,21 @@
         "senderJsonl": "a2db9473867041d92998c2bc89fc1e81b0b6b6c1b25715b48f32283c01a8dafc",
         "tcpdumpSummary": "4beaaa33e074e4b43479815f2b605d23f2870f6067af682cd581ff6de6c5fd0d",
         "tsharkFields": "c8050cc443f4e1e92c56de575c19f8096f63ba46b1f147ecc7d052601684cc23"
+      },
+      "browserValidation": {
+        "applicationRanges": [
+          {
+            "endExclusive": 5,
+            "frameNumber": 4,
+            "start": 0
+          }
+        ],
+        "baseSequence": 1,
+        "bytes": 5,
+        "errors": [],
+        "segments": 1,
+        "sha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5",
+        "validated": true
       },
       "capture": {
         "command": "tcpdump -i lo -s 0 -U -nn -w loopback.pcap 'tcp port 5004'",
@@ -827,6 +1488,369 @@
         }
       ],
       "id": "loopback",
+      "operatorEvents": [
+        {
+          "event": "capture_started",
+          "host": "hosta",
+          "interface": "lo",
+          "monotonic_ns": 88869446183659,
+          "remote": "/tmp/tcp-foundation-captures/loopback.pcap"
+        },
+        {
+          "event": "receiver_listen",
+          "monotonic_ns": 88870048906921
+        },
+        {
+          "event": "capture_stopped",
+          "monotonic_ns": 88872800983695
+        }
+      ],
+      "packets": [
+        {
+          "capturedLength": 74,
+          "ethernet": {
+            "destination": "00:00:00:00:00:00",
+            "source": "00:00:00:00:00:00",
+            "type": "0x0800"
+          },
+          "frameLength": 74,
+          "frameNumber": 1,
+          "ip": {
+            "destination": "127.0.0.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x4b3f",
+            "protocol": 6,
+            "source": "127.0.0.1",
+            "totalLength": 60,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": false,
+            "advertisedMss": 65495,
+            "checksum": "0xfe30",
+            "checksumStatus": "2",
+            "destinationPort": 5004,
+            "fin": false,
+            "flags": "0x0002",
+            "headerLength": 40,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 0,
+            "relativeSequence": 0,
+            "sourcePort": 48494,
+            "stream": 0,
+            "syn": true,
+            "windowSize": 65495
+          },
+          "timeEpoch": "1795680745.010225000"
+        },
+        {
+          "capturedLength": 74,
+          "ethernet": {
+            "destination": "00:00:00:00:00:00",
+            "source": "00:00:00:00:00:00",
+            "type": "0x0800"
+          },
+          "frameLength": 74,
+          "frameNumber": 2,
+          "ip": {
+            "destination": "127.0.0.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x0000",
+            "protocol": 6,
+            "source": "127.0.0.1",
+            "totalLength": 60,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": 65495,
+            "checksum": "0xfe30",
+            "checksumStatus": "2",
+            "destinationPort": 48494,
+            "fin": false,
+            "flags": "0x0012",
+            "headerLength": 40,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 0,
+            "sourcePort": 5004,
+            "stream": 0,
+            "syn": true,
+            "windowSize": 65483
+          },
+          "timeEpoch": "1795680745.010242000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "00:00:00:00:00:00",
+            "source": "00:00:00:00:00:00",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 3,
+          "ip": {
+            "destination": "127.0.0.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x4b40",
+            "protocol": 6,
+            "source": "127.0.0.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xfe28",
+            "checksumStatus": "2",
+            "destinationPort": 5004,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 1,
+            "sourcePort": 48494,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 512
+          },
+          "timeEpoch": "1795680745.010257000"
+        },
+        {
+          "capturedLength": 71,
+          "ethernet": {
+            "destination": "00:00:00:00:00:00",
+            "source": "00:00:00:00:00:00",
+            "type": "0x0800"
+          },
+          "frameLength": 71,
+          "frameNumber": 4,
+          "ip": {
+            "destination": "127.0.0.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x4b41",
+            "protocol": 6,
+            "source": "127.0.0.1",
+            "totalLength": 57,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "48454c4c4f",
+          "payloadSha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5",
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xfe2d",
+            "checksumStatus": "2",
+            "destinationPort": 5004,
+            "fin": false,
+            "flags": "0x0018",
+            "headerLength": 32,
+            "payloadLength": 5,
+            "psh": true,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 1,
+            "sourcePort": 48494,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 512
+          },
+          "timeEpoch": "1795680745.010550000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "00:00:00:00:00:00",
+            "source": "00:00:00:00:00:00",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 5,
+          "ip": {
+            "destination": "127.0.0.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x0f81",
+            "protocol": 6,
+            "source": "127.0.0.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xfe28",
+            "checksumStatus": "2",
+            "destinationPort": 48494,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 6,
+            "relativeSequence": 1,
+            "sourcePort": 5004,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 512
+          },
+          "timeEpoch": "1795680745.010562000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "00:00:00:00:00:00",
+            "source": "00:00:00:00:00:00",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 6,
+          "ip": {
+            "destination": "127.0.0.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x4b42",
+            "protocol": 6,
+            "source": "127.0.0.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xfe28",
+            "checksumStatus": "2",
+            "destinationPort": 5004,
+            "fin": true,
+            "flags": "0x0011",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 6,
+            "sourcePort": 48494,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 512
+          },
+          "timeEpoch": "1795680745.010618000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "00:00:00:00:00:00",
+            "source": "00:00:00:00:00:00",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 7,
+          "ip": {
+            "destination": "127.0.0.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x0f82",
+            "protocol": 6,
+            "source": "127.0.0.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xfe28",
+            "checksumStatus": "2",
+            "destinationPort": 48494,
+            "fin": true,
+            "flags": "0x0011",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 7,
+            "relativeSequence": 1,
+            "sourcePort": 5004,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 512
+          },
+          "timeEpoch": "1795680745.010973000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "00:00:00:00:00:00",
+            "source": "00:00:00:00:00:00",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 8,
+          "ip": {
+            "destination": "127.0.0.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x4b43",
+            "protocol": 6,
+            "source": "127.0.0.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xfe28",
+            "checksumStatus": "2",
+            "destinationPort": 5004,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 2,
+            "relativeSequence": 7,
+            "sourcePort": 48494,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 512
+          },
+          "timeEpoch": "1795680745.011024000"
+        }
+      ],
       "payloadSegments": [
         {
           "frameNumber": 4,
@@ -918,6 +1942,21 @@
         "senderJsonl": "4a10bd7b73e9e08ad390301c4ea1d8db321979c96230837745297d17f418119d",
         "tcpdumpSummary": "051feefcfdd900d6f1dd3ea75b1ba0f0eaee48181f93bb2db24ab280f94b6c2e",
         "tsharkFields": "e9ba1519ab755cb08314ded595e48147ede086665589cf7ac4a2f65dc5d25626"
+      },
+      "browserValidation": {
+        "applicationRanges": [
+          {
+            "endExclusive": 5,
+            "frameNumber": 4,
+            "start": 0
+          }
+        ],
+        "baseSequence": 1,
+        "bytes": 5,
+        "errors": [],
+        "segments": 1,
+        "sha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5",
+        "validated": true
       },
       "capture": {
         "command": "tcpdump -i data0 -s 0 -U -nn -w small-early.pcap 'tcp port 5002'",
@@ -1216,6 +2255,378 @@
         }
       ],
       "id": "small-early",
+      "operatorEvents": [
+        {
+          "event": "capture_started",
+          "host": "hostb",
+          "interface": "data0",
+          "monotonic_ns": 88854724734555,
+          "remote": "/tmp/tcp-foundation-captures/small-early.pcap"
+        },
+        {
+          "event": "receiver_listen",
+          "monotonic_ns": 88855336629968
+        },
+        {
+          "event": "observed_receiver_waiting_before_send",
+          "monotonic_ns": 88856489270804
+        },
+        {
+          "event": "gate_release",
+          "gate": "sender_before_send",
+          "monotonic_ns": 88856489282236
+        },
+        {
+          "event": "capture_stopped",
+          "monotonic_ns": 88858085146749
+        }
+      ],
+      "packets": [
+        {
+          "capturedLength": 74,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 74,
+          "frameNumber": 1,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x1e3f",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 60,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": false,
+            "advertisedMss": 1460,
+            "checksum": "0x9d04",
+            "checksumStatus": "2",
+            "destinationPort": 5002,
+            "fin": false,
+            "flags": "0x0002",
+            "headerLength": 40,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 0,
+            "relativeSequence": 0,
+            "sourcePort": 54206,
+            "stream": 0,
+            "syn": true,
+            "windowSize": 64240
+          },
+          "timeEpoch": "1795680729.926813000"
+        },
+        {
+          "capturedLength": 74,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 74,
+          "frameNumber": 2,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x0000",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 60,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": 1460,
+            "checksum": "0xbc19",
+            "checksumStatus": "2",
+            "destinationPort": 54206,
+            "fin": false,
+            "flags": "0x0012",
+            "headerLength": 40,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 0,
+            "sourcePort": 5002,
+            "stream": 0,
+            "syn": true,
+            "windowSize": 65160
+          },
+          "timeEpoch": "1795680729.926861000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 3,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x1e40",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xe777",
+            "checksumStatus": "2",
+            "destinationPort": 5002,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 1,
+            "sourcePort": 54206,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680729.927202000"
+        },
+        {
+          "capturedLength": 71,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 71,
+          "frameNumber": 4,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x1e41",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 57,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "48454c4c4f",
+          "payloadSha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5",
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0x024d",
+            "checksumStatus": "2",
+            "destinationPort": 5002,
+            "fin": false,
+            "flags": "0x0018",
+            "headerLength": 32,
+            "payloadLength": 5,
+            "psh": true,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 1,
+            "sourcePort": 54206,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680730.323643000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 5,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xcf69",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xe451",
+            "checksumStatus": "2",
+            "destinationPort": 54206,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 6,
+            "relativeSequence": 1,
+            "sourcePort": 5002,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 510
+          },
+          "timeEpoch": "1795680730.323691000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 6,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x1e42",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xe5e4",
+            "checksumStatus": "2",
+            "destinationPort": 5002,
+            "fin": true,
+            "flags": "0x0011",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 6,
+            "sourcePort": 54206,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680730.323713000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 7,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xcf6a",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xe44e",
+            "checksumStatus": "2",
+            "destinationPort": 54206,
+            "fin": true,
+            "flags": "0x0011",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 7,
+            "relativeSequence": 1,
+            "sourcePort": 5002,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 510
+          },
+          "timeEpoch": "1795680730.324125000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 8,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x1e43",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xe456",
+            "checksumStatus": "2",
+            "destinationPort": 5002,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 2,
+            "relativeSequence": 7,
+            "sourcePort": 54206,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680730.324345000"
+        }
+      ],
       "payloadSegments": [
         {
           "frameNumber": 4,
@@ -1308,6 +2719,21 @@
         "senderJsonl": "cfbd656144844fff0a6e66ed41e8e1ef1df6f10c7dc198d3481b4e4dedf7333f",
         "tcpdumpSummary": "b7ed9af6989e678f6c1f1b0c238316e56ee4f29cbd36b0cf807bc634231a58aa",
         "tsharkFields": "f58db49efcf9b395d14c381a39865f3b3aa4c16d77cd39245aafbb7ca08da6b8"
+      },
+      "browserValidation": {
+        "applicationRanges": [
+          {
+            "endExclusive": 5,
+            "frameNumber": 4,
+            "start": 0
+          }
+        ],
+        "baseSequence": 1,
+        "bytes": 5,
+        "errors": [],
+        "segments": 1,
+        "sha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5",
+        "validated": true
       },
       "capture": {
         "command": "tcpdump -i data0 -s 0 -U -nn -w small-late.pcap 'tcp port 5001'",
@@ -1618,6 +3044,383 @@
         }
       ],
       "id": "small-late",
+      "operatorEvents": [
+        {
+          "event": "capture_started",
+          "host": "hostb",
+          "interface": "data0",
+          "monotonic_ns": 88846619205780,
+          "remote": "/tmp/tcp-foundation-captures/small-late.pcap"
+        },
+        {
+          "event": "receiver_listen",
+          "monotonic_ns": 88847121533024
+        },
+        {
+          "event": "observed_after_send_before_read",
+          "monotonic_ns": 88848389298077
+        },
+        {
+          "event": "gate_release",
+          "gate": "receiver_before_first_read",
+          "monotonic_ns": 88848389310432
+        },
+        {
+          "event": "gate_release",
+          "gate": "sender_after_send_before_shutdown",
+          "monotonic_ns": 88848795836581
+        },
+        {
+          "event": "capture_stopped",
+          "monotonic_ns": 88850893515908
+        }
+      ],
+      "packets": [
+        {
+          "capturedLength": 74,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 74,
+          "frameNumber": 1,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xb06f",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 60,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": false,
+            "advertisedMss": 1460,
+            "checksum": "0x1d51",
+            "checksumStatus": "2",
+            "destinationPort": 5001,
+            "fin": false,
+            "flags": "0x0002",
+            "headerLength": 40,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 0,
+            "relativeSequence": 0,
+            "sourcePort": 53082,
+            "stream": 0,
+            "syn": true,
+            "windowSize": 64240
+          },
+          "timeEpoch": "1795680721.864462000"
+        },
+        {
+          "capturedLength": 74,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 74,
+          "frameNumber": 2,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x0000",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 60,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": 1460,
+            "checksum": "0xb223",
+            "checksumStatus": "2",
+            "destinationPort": 53082,
+            "fin": false,
+            "flags": "0x0012",
+            "headerLength": 40,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 0,
+            "sourcePort": 5001,
+            "stream": 0,
+            "syn": true,
+            "windowSize": 65160
+          },
+          "timeEpoch": "1795680721.864523000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 3,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xb070",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xdd82",
+            "checksumStatus": "2",
+            "destinationPort": 5001,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 1,
+            "sourcePort": 53082,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680721.864832000"
+        },
+        {
+          "capturedLength": 71,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 71,
+          "frameNumber": 4,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xb071",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 57,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "48454c4c4f",
+          "payloadSha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5",
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xf9e3",
+            "checksumStatus": "2",
+            "destinationPort": 5001,
+            "fin": false,
+            "flags": "0x0018",
+            "headerLength": 32,
+            "payloadLength": 5,
+            "psh": true,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 1,
+            "sourcePort": 53082,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680721.910505000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 5,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x5c1a",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xdd47",
+            "checksumStatus": "2",
+            "destinationPort": 53082,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 6,
+            "relativeSequence": 1,
+            "sourcePort": 5001,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 510
+          },
+          "timeEpoch": "1795680721.910538000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 6,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xb072",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xda47",
+            "checksumStatus": "2",
+            "destinationPort": 5001,
+            "fin": true,
+            "flags": "0x0011",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 1,
+            "relativeSequence": 6,
+            "sourcePort": 53082,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680722.645704000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0a",
+            "source": "52:54:00:00:13:0b",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 7,
+          "ip": {
+            "destination": "10.10.10.1",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0x5c1b",
+            "protocol": 6,
+            "source": "10.10.10.2",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xd75a",
+            "checksumStatus": "2",
+            "destinationPort": 53082,
+            "fin": true,
+            "flags": "0x0011",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 7,
+            "relativeSequence": 1,
+            "sourcePort": 5001,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 510
+          },
+          "timeEpoch": "1795680722.650564000"
+        },
+        {
+          "capturedLength": 66,
+          "ethernet": {
+            "destination": "52:54:00:00:13:0b",
+            "source": "52:54:00:00:13:0a",
+            "type": "0x0800"
+          },
+          "frameLength": 66,
+          "frameNumber": 8,
+          "ip": {
+            "destination": "10.10.10.2",
+            "dsfield": "0x00",
+            "flags": "0x02",
+            "headerLength": 20,
+            "identification": "0xb073",
+            "protocol": 6,
+            "source": "10.10.10.1",
+            "totalLength": 52,
+            "ttl": 64,
+            "version": "4"
+          },
+          "payloadHex": "",
+          "payloadSha256": null,
+          "tcp": {
+            "ack": true,
+            "advertisedMss": null,
+            "checksum": "0xd754",
+            "checksumStatus": "2",
+            "destinationPort": 5001,
+            "fin": false,
+            "flags": "0x0010",
+            "headerLength": 32,
+            "payloadLength": 0,
+            "psh": false,
+            "relativeAcknowledgement": 2,
+            "relativeSequence": 7,
+            "sourcePort": 53082,
+            "stream": 0,
+            "syn": false,
+            "windowSize": 502
+          },
+          "timeEpoch": "1795680722.655967000"
+        }
+      ],
       "payloadSegments": [
         {
           "frameNumber": 4,

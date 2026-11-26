@@ -31,35 +31,17 @@ function idToIndex(steps: GuidedStep[], id: string | undefined) {
   return index >= 0 ? index : 0;
 }
 
-const legacyV2Ids: Record<string, string[]> = {
-  "moving-data": ["objective", "memory", "socket-api", "server-a-path", "network", "server-b-path", "proof"],
-  "why-rdma": ["scale-problem", "cpu-work", "cpu-copy", "device-dma", "rdma-path", "comparison", "soft-roce"],
-  memory: ["byte-cells", "volatile", "registered-memory", "keys", "boundaries", "exercise"],
-  queues: ["endpoint-resources", "illustrative-instruction", "send-queue", "receive-queue", "qp-endpoint", "peer-coordination", "completion"],
-};
-
-function migrateLegacyV2Id(id: string, steps: GuidedStep[]) {
-  for (const ids of Object.values(legacyV2Ids)) {
-    const index = ids.indexOf(id);
-    if (index >= 0) {
-      const fraction = ids.length <= 1 ? 0 : index / (ids.length - 1);
-      return Math.round(fraction * (steps.length - 1));
-    }
-  }
-  return null;
-}
-
 function parsePersistedState(value: string | null, steps: GuidedStep[]): { stepIndex: number; visitedSteps: number[] } | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value) as Partial<PersistedGuidedState>;
     if (parsed.version !== 2 || typeof parsed.current !== "string" || !Array.isArray(parsed.visited)) return null;
     const validIds = new Set(steps.map((step) => step.id));
-    const migrateIndex = (id: string) => validIds.has(id) ? idToIndex(steps, id) : migrateLegacyV2Id(id, steps);
-    const visitedSteps = Array.from(new Set(parsed.visited.filter((id): id is string => typeof id === "string").map(migrateIndex).filter((index): index is number => index !== null)));
-    const currentIndex = migrateIndex(parsed.current);
-    if (currentIndex === null) return null;
-    return { stepIndex: currentIndex, visitedSteps };
+    // Authored Foundations V2 is substantially reorganized. Only exact stable
+    // identifiers migrate; unrelated legacy foundation progress starts the revised lesson at its beginning.
+    if (!validIds.has(parsed.current)) return null;
+    const visitedSteps = Array.from(new Set(parsed.visited.filter((id): id is string => typeof id === "string" && validIds.has(id)).map((id) => idToIndex(steps, id))));
+    return { stepIndex: idToIndex(steps, parsed.current), visitedSteps };
   } catch {
     return null;
   }
@@ -204,7 +186,6 @@ export function GuidedLesson({
         <div>
           <div className="text-xs uppercase tracking-[0.18em] text-cyan-300">Step {stepIndex + 1} of {steps.length}</div>
           <div className="mt-2 flex items-center gap-1.5" aria-label="Guided step progress">
-            {steps.length > 10 ? <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-slate-500">{steps.length} authored subsections · use the lesson outline</span> : null}
             {steps.length <= 10 && steps.map((item, index) => {
               const active = index === stepIndex;
               const visited = visitedSteps.includes(index);

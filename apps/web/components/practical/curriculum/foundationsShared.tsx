@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import rawSections from "@/lib/practical/foundationsContent.generated.json";
 import { rdmaEvidence } from "@/lib/practical/rdmaEvidence";
@@ -10,6 +12,9 @@ import { cx, EvidenceNote } from "./visuals";
 import { MemoryAccessExercise, MemoryRegistrationDiagram } from "./LegacyLesson3Visuals";
 import { queuesVisual } from "./LegacyLesson4Visuals";
 import { DmaDiagram, HardwareRdmaConceptDiagram, TransferModelComparison } from "./rdmaDiagrams";
+import { HostFoundationVisual } from "./foundationHostVisuals";
+import { TcpFoundationVisual } from "./foundationTcpVisuals";
+import { RdmaFoundationVisual as TeachingRdmaFoundationVisual } from "./foundationRdmaVisuals";
 
 export type FoundationSourceSection = {
   id: string;
@@ -33,32 +38,28 @@ export function replaceFoundationBindings(text: string, bindings: Record<string,
   return text.replace(/\{\{([^}]+)\}\}/g, (original, key: string) => bindings[key.trim()] ?? original);
 }
 
-function inlineCode(text: string, keyPrefix: string): ReactNode[] {
-  return text.split(/(`[^`]+`)/g).filter(Boolean).map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return <code key={`${keyPrefix}-${index}`} className="rounded bg-white/8 px-1 py-0.5 font-mono text-[0.92em] text-cyan-100">{part.slice(1, -1)}</code>;
-    }
-    return <span key={`${keyPrefix}-${index}`}>{part.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map((segment, segmentIndex) => segment.startsWith("**") && segment.endsWith("**") ? <strong key={segmentIndex} className="font-semibold text-slate-100">{segment.slice(2, -2)}</strong> : segment)}</span>;
-  });
-}
-
 function markdownish(text: string, bindings: Record<string, string>, keyPrefix: string) {
   const resolved = replaceFoundationBindings(text, bindings).trim();
   if (!resolved) return null;
-  return resolved.split(/\n\s*\n/).map((block, blockIndex) => {
-    const lines = block.split("\n").filter(Boolean);
-    if (/^```/.test(block)) {
-      const code = block.replace(/^```[^\n]*\n?/, "").replace(/\n?```$/, "");
-      return <pre key={`${keyPrefix}-${blockIndex}`} className="overflow-x-auto rounded-xl bg-slate-950/80 p-3 font-mono text-xs leading-6 text-slate-200"><code>{code}</code></pre>;
-    }
-    if (lines.every((line) => /^- /.test(line.trim()))) {
-      return <ul key={`${keyPrefix}-${blockIndex}`} className="list-disc space-y-2 pl-5">{lines.map((line, index) => <li key={index}>{inlineCode(line.trim().slice(2), `${keyPrefix}-${blockIndex}-${index}`)}</li>)}</ul>;
-    }
-    if (lines.every((line) => /^\d+\./.test(line.trim()))) {
-      return <ol key={`${keyPrefix}-${blockIndex}`} className="list-decimal space-y-2 pl-5">{lines.map((line, index) => <li key={index}>{inlineCode(line.trim().replace(/^\d+\.\s*/, ""), `${keyPrefix}-${blockIndex}-${index}`)}</li>)}</ol>;
-    }
-    return <p key={`${keyPrefix}-${blockIndex}`}>{lines.map((line, lineIndex) => <span key={lineIndex}>{inlineCode(line, `${keyPrefix}-${blockIndex}-${lineIndex}`)}{lineIndex < lines.length - 1 ? <br /> : null}</span>)}</p>;
-  });
+  return (
+    <ReactMarkdown
+      key={keyPrefix}
+      remarkPlugins={[remarkGfm]}
+      components={{
+        pre: ({ children }) => <pre className="overflow-x-auto rounded-xl bg-slate-950/80 p-3 font-mono text-xs leading-6 text-slate-200" data-testid="markdown-fenced-code-block">{children}</pre>,
+        code: ({ className, children, ...props }) => {
+          const isBlock = Boolean(className?.includes("language-"));
+          return isBlock
+            ? <code className={className} {...props}>{children}</code>
+            : <code className="rounded bg-white/8 px-1 py-0.5 font-mono text-[0.92em] text-cyan-100" {...props}>{children}</code>;
+        },
+        ul: ({ children }) => <ul className="list-disc space-y-2 pl-5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal space-y-2 pl-5">{children}</ol>,
+        p: ({ children }) => <p>{children}</p>,
+        a: ({ children, href }) => <a href={href} className="text-cyan-200 underline underline-offset-4">{children}</a>,
+      }}
+    >{resolved}</ReactMarkdown>
+  );
 }
 
 export function AuthoredCopy({ text, bindings = {}, className, testId }: { text: string; bindings?: Record<string, string>; className?: string; testId?: string }) {
@@ -351,14 +352,14 @@ function TcpEvidencePanel({ sectionId }: { sectionId: string }) {
   const large = tcpEvidence.cases.large;
   if (!["2.2", "2.3", "2.5", "2.6", "2.9", "2.10", "2.11", "2.12"].includes(sectionId)) return null;
   if (sectionId === "2.2" || sectionId === "2.3") {
-    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-handshake-evidence">
+    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-handshake-provenance">
       <div className="flex flex-wrap items-center justify-between gap-2"><div className="text-xs font-semibold uppercase tracking-[0.15em] text-cyan-200">Recorded TCP handshake · small-late.pcap</div><a className="text-xs text-cyan-200 underline underline-offset-4" href={small.capture.downloadPath}>download capture</a></div>
       <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[34rem] text-left font-mono text-xs"><thead className="text-slate-500"><tr><th className="py-1 pr-3">frame</th><th className="py-1 pr-3">direction</th><th className="py-1 pr-3">flags</th><th className="py-1 pr-3">seq</th><th className="py-1 pr-3">ack</th><th className="py-1">tuple</th></tr></thead><tbody>{small.handshake.map((packet) => <tr key={packet.frameNumber} className="border-t border-white/8 text-slate-300"><td className="py-1.5 pr-3">{packet.frameNumber}</td><td className="py-1.5 pr-3">{packet.sourceIp}:{packet.sourcePort} → {packet.destinationIp}:{packet.destinationPort}</td><td className="py-1.5 pr-3 text-cyan-100">{tcpFlagNames(packet.flags)}</td><td className="py-1.5 pr-3">{packet.relativeSequence}</td><td className="py-1.5 pr-3">{packet.relativeAcknowledgement}</td><td className="py-1.5">{small.endpoints.senderLocal[0]}:{small.endpoints.senderLocal[1]} ↔ {small.endpoints.senderPeer[0]}:{small.endpoints.senderPeer[1]}</td></tr>)}</tbody></table></div>
       <div className="mt-2 text-[11px] leading-5 text-slate-500">Endpoint capture on {small.capture.host} {small.capture.interface}. {tcpEvidence.sequenceNumberPolicy}</div>
     </div>;
   }
   if (sectionId === "2.6") {
-    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-segmentation-evidence">
+    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-segmentation-provenance">
       <div className="flex flex-wrap items-center justify-between gap-2"><div className="text-xs font-semibold uppercase tracking-[0.15em] text-cyan-200">Recorded large-transfer segments · large.pcap</div><a className="text-xs text-cyan-200 underline underline-offset-4" href={large.capture.downloadPath}>download capture</a></div>
       <div className="mt-3 grid gap-2">{large.payloadSegments.map((segment) => <div key={segment.frameNumber} className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-2 font-mono text-xs text-slate-200">frame {segment.frameNumber}: relative bytes {segment.relativeSequenceStart}–{segment.relativeSequenceEndExclusive - 1} · TCP payload {segment.tcpPayloadLength} bytes · SHA-256 {segment.payloadSha256.slice(0, 12)}…</div>)}</div>
       <div className="mt-2 text-[11px] leading-5 text-slate-500">Advertised MSS in the handshake: {large.handshake[0]?.advertisedMss ?? "not decoded"}. Sequence ranges are transport payload positions; read chunks are application observations and need not match segment boundaries.</div>
@@ -367,7 +368,7 @@ function TcpEvidencePanel({ sectionId }: { sectionId: string }) {
   if (sectionId === "2.10") {
     const early = tcpEvidence.cases["small-early"];
     const cases = [early, small];
-    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-read-order-evidence">
+    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-read-order-provenance">
       <div className="text-xs font-semibold uppercase tracking-[0.15em] text-cyan-200">Recorded ordering comparison · receiver-first versus sender-first</div>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">{cases.map((item) => <div key={item.id} className="rounded-xl border border-white/10 bg-white/4 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-sm text-slate-100">{item.id === "small-early" ? "Receiver reads first" : "Sender sends first"}</div><a className="text-xs text-cyan-200 underline underline-offset-4" href={item.capture.downloadPath}>capture</a></div>
@@ -381,7 +382,7 @@ function TcpEvidencePanel({ sectionId }: { sectionId: string }) {
   }
   if (sectionId === "2.11") {
     const loopback = tcpEvidence.cases.loopback;
-    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-loopback-evidence">
+    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-loopback-provenance">
       <div className="text-xs font-semibold uppercase tracking-[0.15em] text-cyan-200">Recorded loopback versus two-host captures</div>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">{[loopback, small].map((item) => <div key={item.id} className="rounded-xl border border-white/10 bg-white/4 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-sm text-slate-100">{item.id === "loopback" ? "Same machine · software loopback" : "Two machines · Ethernet data0"}</div><a className="text-xs text-cyan-200 underline underline-offset-4" href={item.capture.downloadPath}>capture</a></div>
@@ -393,14 +394,14 @@ function TcpEvidencePanel({ sectionId }: { sectionId: string }) {
   }
   if (sectionId === "2.5" || sectionId === "2.9") {
     const snapshot = small.ssSnapshots["after-send-before-read"] || small.ssSnapshots["after-completion"];
-    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-read-evidence">
+    return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-read-provenance">
       <div className="flex flex-wrap items-center justify-between gap-2"><div className="text-xs font-semibold uppercase tracking-[0.15em] text-cyan-200">Recorded application reads and socket state</div><a className="text-xs text-cyan-200 underline underline-offset-4" href={small.capture.downloadPath}>download capture</a></div>
       <div className="mt-3 flex flex-wrap gap-2">{small.receiveEvents.map((event, index) => <span key={index} className="rounded-full border border-violet-300/25 bg-violet-300/10 px-3 py-1 font-mono text-xs text-violet-100">read {index + 1}: requested {event.requested}, returned {event.count}</span>)}</div>
       {snapshot ? <pre className="mt-3 max-h-44 overflow-auto rounded-xl bg-slate-950/80 p-3 font-mono text-[11px] leading-5 text-slate-300">{snapshot}</pre> : null}
       <div className="mt-2 text-[11px] leading-5 text-slate-500">The small-late snapshot records Recv-Q 5 before the receiver's first read. Application log records method entry/return; it is not presented as a syscall trace.</div>
     </div>;
   }
-  return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-evidence-review">
+  return <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3" data-testid="tcp-evidence-provenance">
     <div className="text-xs font-semibold uppercase tracking-[0.15em] text-cyan-200">Validated TCP evidence set</div>
     <div className="mt-2 rounded-lg border border-amber-300/20 bg-amber-300/7 px-2 py-2 text-[11px] leading-5 text-amber-50">Recorded experiment decoded with TShark artifacts. GUI Wireshark screenshots are not embedded in this revision; the downloadable PCAPs and decoded field/log tables are the authoritative browser evidence.</div>
     <div className="mt-3 grid gap-2 text-xs text-slate-300 sm:grid-cols-2">{Object.values(tcpEvidence.cases).map((item) => <a key={item.id} href={item.capture.downloadPath} className="rounded-xl border border-white/10 bg-white/4 px-3 py-2 hover:border-cyan-300/30"><span className="font-semibold text-cyan-100">{item.id}</span><br />port {item.port} · {item.validation.forward_payload_rows} forward payload row{item.validation.forward_payload_rows === 1 ? "" : "s"} · validation {item.validation.ok ? "passed" : "failed"}</a>)}</div>
@@ -412,22 +413,8 @@ function FoundationVisualControls({ activity, setActivity, max }: { activity: nu
 }
 
 export function FoundationVisual({ sectionId }: { sectionId: string }) {
-  const [activity, setActivity] = useState(0);
-  const max = sectionId.startsWith("1.") && sectionId !== "1.7" ? 3 : sectionId.startsWith("3.") || sectionId.startsWith("4.") ? 4 : 5;
-  const memoryStages: Record<string, number> = { "4.1": 1, "4.2": 2, "4.3": 3, "4.4": 4, "4.5": 5, "4.6": 5, "4.7": 5, "4.9": 5 };
-  const queueStages: Record<string, number> = { "4.10": 0, "4.11": 1, "4.12": 3, "4.13": 4, "4.14": 6 };
-  if (sectionId === "4.8") return <div className="space-y-4"><MemoryAccessExercise /><TcpEvidencePanel sectionId={sectionId} /></div>;
-  if (memoryStages[sectionId] !== undefined) return <div className="space-y-4"><MemoryRegistrationDiagram stage={memoryStages[sectionId]} /><TcpEvidencePanel sectionId={sectionId} /></div>;
-  if (queueStages[sectionId] !== undefined) return <div className="space-y-4">{queuesVisual(queueStages[sectionId])}<TcpEvidencePanel sectionId={sectionId} /></div>;
-  if (sectionId === "3.1" || sectionId === "3.2") return <div className="space-y-4"><DmaDiagram phase={activity >= 1 || sectionId === "3.2" ? "device-dma" : "cpu-copy"} /><TcpEvidencePanel sectionId={sectionId} /><FoundationVisualControls activity={activity} setActivity={setActivity} max={max} /></div>;
-  if (sectionId === "3.3") return <div className="space-y-4"><TransferModelComparison /><TcpEvidencePanel sectionId={sectionId} /></div>;
-  if (sectionId === "3.5") return <div className="space-y-4"><SoftRoceStackVisual /><TcpEvidencePanel sectionId={sectionId} /></div>;
-  if (sectionId === "3.6") return <div className="space-y-4"><RdmaWorkInitiationVisual /><TcpEvidencePanel sectionId={sectionId} /></div>;
-  if (sectionId === "3.4") return <div className="space-y-4"><HardwareRdmaConceptDiagram active={activity >= 1} /><TcpEvidencePanel sectionId={sectionId} /><FoundationVisualControls activity={activity} setActivity={setActivity} max={max} /></div>;
-  const visual = sectionId === "2.1" || sectionId === "2.2" ? <EndpointSocketsVisual sectionId={sectionId} activity={activity} /> : sectionId === "2.4" ? <ByteStreamVisual /> : sectionId === "2.6" ? <TcpSegmentationVisual /> : ["2.5", "2.7", "2.8"].includes(sectionId) ? <TcpKernelPathVisual sectionId={sectionId} activity={activity} /> : sectionId.startsWith("1.") ? <HostArchitectureVisual sectionId={sectionId} activity={activity} /> : sectionId.startsWith("2.") ? <TcpPathVisual sectionId={sectionId} activity={activity} /> : <RdmaFoundationVisual sectionId={sectionId} activity={activity} />;
-  const evidencePanel = <TcpEvidencePanel sectionId={sectionId} />;
-  const evidenceFirst = ["2.2", "2.3", "2.5", "2.6", "2.9", "2.10", "2.11", "2.12"].includes(sectionId);
-  return <div className="space-y-4">{evidenceFirst ? evidencePanel : null}{visual}{evidenceFirst ? null : evidencePanel}<div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => setActivity((value) => Math.max(0, value - 1))} disabled={activity === 0} className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 disabled:opacity-40">Back</button><button type="button" onClick={() => setActivity((value) => Math.min(max, value + 1))} disabled={activity >= max} className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 disabled:opacity-40" data-testid="foundation-visual-next">Advance visual</button><span className="text-[11px] text-slate-500">conceptual visual step {activity + 1} of {max + 1}</span></div></div>;
+  const teachingVisual = sectionId.startsWith("1.") ? <HostFoundationVisual sectionId={sectionId} /> : sectionId.startsWith("2.") ? <TcpFoundationVisual sectionId={sectionId} /> : <TeachingRdmaFoundationVisual sectionId={sectionId} />;
+  return <div className="space-y-4" data-testid={`teaching-visual-${sectionId.replace(".", "-")}`}>{teachingVisual}<TcpEvidencePanel sectionId={sectionId} /></div>;
 }
 
 export function FoundationInteraction({ section, bindings }: { section: FoundationSourceSection; bindings: Record<string, string> }) {
