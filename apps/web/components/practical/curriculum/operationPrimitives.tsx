@@ -274,10 +274,10 @@ function workRequestTitle(request: WorkRequest) {
   return `${host} ${kind} work request`;
 }
 
-export function WorkRequestCard({ request, testId }: { request: WorkRequest; testId?: string }) {
+export function WorkRequestCard({ request, testId, representation = "recorded", includeRemote = true }: { request: WorkRequest; testId?: string; representation?: "recorded" | "source-derived"; includeRemote?: boolean }) {
   return (
-    <section className="rounded-xl border border-cyan-300/25 bg-cyan-300/8 p-3" data-testid={testId || "recorded-wr-card"}>
-      <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-cyan-100">{workRequestTitle(request)}</div><ProvenanceTag kind="recorded" /></div>
+    <section className="rounded-xl border border-cyan-300/25 bg-cyan-300/8 p-3" data-testid={testId || "recorded-wr-card"} data-representation={representation} data-remote-fields={includeRemote ? "included" : "not-attached"}>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-cyan-100">{workRequestTitle(request)}</div><ProvenanceTag kind={representation} /></div>
       <dl className="mt-2 grid gap-1 font-mono text-xs text-cyan-50/90 sm:grid-cols-2">
         <div>kind: {request.kind}</div>
         <div>opcode: {request.opcode}</div>
@@ -285,10 +285,10 @@ export function WorkRequestCard({ request, testId }: { request: WorkRequest; tes
         <div>length: {request.byteLength ?? "—"}</div>
         <div>local addr: {exactValue(request.localAddress)}</div>
         <div>LKEY: {exactValue(request.localLkey)}</div>
-        {request.remoteAddress ? <div>remote addr: {exactValue(request.remoteAddress)}</div> : null}
-        {request.remoteRkey ? <div>RKEY: {exactValue(request.remoteRkey)}</div> : null}
+        {includeRemote && request.remoteAddress ? <div>remote addr: {exactValue(request.remoteAddress)}</div> : null}
+        {includeRemote && request.remoteRkey ? <div>RKEY: {exactValue(request.remoteRkey)}</div> : null}
       </dl>
-      <details className="mt-2 text-[11px] text-cyan-100/65"><summary className="cursor-pointer">Evidence identifier</summary><div className="mt-1 break-all font-mono">{request.id}</div></details>
+      {representation === "recorded" ? <details className="mt-2 text-[11px] text-cyan-100/65"><summary className="cursor-pointer">Evidence identifier</summary><div className="mt-1 break-all font-mono">{request.id}</div></details> : <div className="mt-2 text-[11px] leading-4 text-cyan-100/65">Source-derived intermediate representation; the pre-submission object was not separately captured.</div>}
     </section>
   );
 }

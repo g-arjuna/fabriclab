@@ -29,6 +29,8 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(page.getByTestId("focus-transfer")).toContainText(/endpoint metadata over TCP/i);
     await expect(page.getByTestId("visual-5-2")).not.toContainText(/SEND packet|WRITE packet|READ packet/);
     await page.getByTestId("prepare-qps").click();
+    await expect(page.getByTestId("visual-5-2")).toContainText("At resource creation");
+    await expect(page.getByTestId("visual-5-2")).toContainText("After endpoint preparation");
     await expect(page.getByTestId("visual-5-2")).toContainText("recorded final QP RTS");
     await expect(page.getByTestId("metadata-exchange-history")).toContainText(/TCP control history/i);
     await expect(page.getByTestId("focus-transfer")).toHaveAttribute("data-kind", "none");
@@ -119,20 +121,43 @@ test.describe("Operations V2 evidence semantics", () => {
 
     await page.getByTestId("fill-write-source").click();
     await expect(page.getByTestId("write-payload-exact-bytes")).toContainText("53 bytes");
+    await expect(page.getByTestId("write-source-line-fill")).toContainText("mr.write");
     await page.getByTestId("describe-write-local-source").click();
-    await page.getByTestId("add-remote-destination").click();
+    await expect(page.getByTestId("write-source-line-sge")).toContainText("SGE");
+    await expect(page.getByTestId("write-application-construction")).toHaveCount(0);
+    await expect(page.getByTestId("visual-6-3")).toContainText(/have not yet been attached to the Work Request/i);
+    await page.getByTestId("construct-write-instruction").click();
+    await expect(page.getByTestId("write-source-line-wr-construction")).toContainText("SendWR");
+    await expect(page.getByTestId("write-source-line-remote-attachment")).toHaveCount(0);
+    await expect(page.getByTestId("write-construct-explanation")).toContainText(/has not yet been submitted to the Queue Pair/i);
+    await expect(page.getByTestId("actual-write-wr")).toHaveAttribute("data-representation", "source-derived");
+    await expect(page.getByTestId("actual-write-wr")).toHaveAttribute("data-remote-fields", "not-attached");
+    await expect(page.getByTestId("actual-write-wr")).toContainText("length: 53");
+    await expect(page.getByTestId("actual-write-wr")).not.toContainText("remote addr:");
+    await expect(page.getByTestId("actual-write-wr")).not.toContainText("RKEY:");
+    await expect(page.getByTestId("write-memory-descriptions")).not.toContainText("remote destination");
+    await expect(page.getByTestId("write-wr-lifecycle")).toHaveAttribute("data-stage", "constructed");
+    await expect(page.getByTestId("visual-6-3")).toContainText("no posted WRITE WR");
+    await page.getByTestId("attach-write-remote-destination").click();
+    await expect(page.getByTestId("write-source-line-remote-attachment")).toContainText("set_wr_rdma");
+    await expect(page.getByTestId("write-attach-explanation")).toContainText(/previously supplied by B/i);
     await expect(page.getByTestId("write-memory-descriptions")).toContainText("local source");
     await expect(page.getByTestId("write-memory-descriptions")).toContainText("remote destination");
-    await page.getByTestId("construct-write-instruction").click();
-    await expect(page.getByTestId("actual-write-wr")).toContainText("wr:c:hosta:exp-c-writer:5");
-    await expect(page.getByTestId("actual-write-wr")).toContainText("length: 53");
+    await expect(page.getByTestId("actual-write-wr")).toHaveAttribute("data-remote-fields", "included");
     await expect(page.getByTestId("actual-write-wr")).toContainText("remote addr:");
     await expect(page.getByTestId("actual-write-wr")).toContainText("RKEY:");
-    await expect(page.getByTestId("write-wr-lifecycle")).toHaveAttribute("data-stage", "constructed");
+    await expect(page.getByTestId("visual-6-3")).toContainText(/are now part of A's WRITE Work Request/i);
     await expect(page.getByTestId("visual-6-3")).not.toContainText("The application has submitted the instruction");
+    await page.getByTestId("write-final-recorded-inspection").locator("summary").first().click();
+    await expect(page.getByTestId("final-recorded-write-wr")).toHaveAttribute("data-representation", "recorded");
+    await expect(page.getByTestId("final-recorded-write-wr")).toContainText("wr:c:hosta:exp-c-writer:5");
     await page.getByTestId("submit-write").click();
+    await expect(page.getByTestId("write-source-line-post-send")).toContainText("post_send");
+    await expect(page.getByTestId("write-submit-explanation")).toContainText(/does not establish that the operation has completed/i);
     await expect(page.getByTestId("write-wr-lifecycle")).toHaveAttribute("data-stage", "posted");
+    await expect(page.getByTestId("actual-write-wr")).toHaveAttribute("data-representation", "recorded");
     await expect(page.getByTestId("visual-6-3")).toContainText("The application has submitted the instruction");
+    await expect(page.getByTestId("visual-6-3")).toContainText(/submitted WRITE references this registered destination/i);
 
     await advance(page, 1);
     await page.getByTestId("inspect-write-request").click();
@@ -188,6 +213,25 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(page.getByTestId("write-target-local-order")).toContainText("poll returned zero");
   });
 
+
+  test("mechanism interaction tracking ignores container clicks and records meaningful control use", async ({ page }) => {
+    await openOperations(page, "write");
+    const visual = page.getByTestId("visual-6-1");
+    await expect(visual).toHaveAttribute("data-interaction-state", "not-interacted");
+    await visual.getByTestId("experiment-position").click();
+    await expect(visual).toHaveAttribute("data-interaction-state", "not-interacted");
+    expect(await page.evaluate(() => window.localStorage.getItem("fabriclab.rdma.operations-v2.interaction.6.1"))).toBeNull();
+
+    await page.getByTestId("compare-ordinary-write").click();
+    await expect(visual).toHaveAttribute("data-interaction-state", "interacted");
+    expect(await page.evaluate(() => window.localStorage.getItem("fabriclab.rdma.operations-v2.interaction.6.1"))).toContain("operations-v2-interaction-r1");
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("[data-testid^=guided-lesson-]")).toHaveAttribute("data-hydrated", "true", { timeout: 15000 });
+    await expect(page.getByTestId("visual-6-1")).toHaveAttribute("data-interaction-state", "interacted");
+    await page.getByRole("button", { name: /restart this lesson/i }).click();
+    expect(await page.evaluate(() => window.localStorage.getItem("fabriclab.rdma.operations-v2.interaction.6.1"))).toBeNull();
+  });
 
   test("restart ownership clears operation prediction, quiz and mechanism interaction state without unrelated storage", async ({ page }) => {
     await openOperations(page, "write");
@@ -247,13 +291,35 @@ test.describe("Operations V2 evidence semantics", () => {
     await advance(page, 2);
 
     await page.getByTestId("describe-read-local-destination").click();
-    await page.getByTestId("name-remote-source").click();
+    await expect(page.getByTestId("read-source-line-sge")).toContainText("SGE");
+    await expect(page.getByTestId("visual-7-3")).toContainText(/local destination SGE construction/i);
+    await expect(page.getByTestId("visual-7-3")).toContainText(/have not yet been attached to the Work Request/i);
     await page.getByTestId("construct-read").click();
+    await expect(page.getByTestId("read-source-line-wr-construction")).toContainText("SendWR");
+    await expect(page.getByTestId("read-source-line-remote-attachment")).toHaveCount(0);
+    await expect(page.getByTestId("read-construct-explanation")).toContainText(/where the returned bytes should be placed/i);
+    await expect(page.getByTestId("read-construct-explanation")).toContainText(/No application payload is being sent/i);
+    await expect(page.getByTestId("actual-read-wr")).toHaveAttribute("data-representation", "source-derived");
+    await expect(page.getByTestId("actual-read-wr")).toHaveAttribute("data-remote-fields", "not-attached");
+    await expect(page.getByTestId("actual-read-wr")).not.toContainText("remote addr:");
+    await expect(page.getByTestId("actual-read-wr")).not.toContainText("RKEY:");
     await expect(page.getByTestId("read-wr-lifecycle")).toHaveAttribute("data-stage", "constructed");
+    await expect(page.getByTestId("visual-7-3")).toContainText("no posted READ WR");
+    await page.getByTestId("attach-read-remote-source").click();
+    await expect(page.getByTestId("read-source-line-remote-attachment")).toContainText("set_wr_rdma");
+    await expect(page.getByTestId("read-attach-explanation")).toContainText(/authorized source memory at B/i);
+    await expect(page.getByTestId("actual-read-wr")).toHaveAttribute("data-remote-fields", "included");
+    await expect(page.getByTestId("actual-read-wr")).toContainText("remote addr:");
+    await expect(page.getByTestId("actual-read-wr")).toContainText("RKEY:");
+    await expect(page.getByTestId("visual-7-3")).toContainText(/now part of A's READ Work Request/i);
     await expect(page.getByTestId("visual-7-3")).not.toContainText("The application has submitted the instruction");
     await page.getByTestId("submit-read").click();
+    await expect(page.getByTestId("read-source-line-post-send")).toContainText("post_send");
+    await expect(page.getByTestId("read-submit-explanation")).toContainText(/data will travel from B back to A/i);
     await expect(page.getByTestId("read-wr-lifecycle")).toHaveAttribute("data-stage", "posted");
+    await expect(page.getByTestId("actual-read-wr")).toHaveAttribute("data-representation", "recorded");
     await expect(page.getByTestId("visual-7-3")).toContainText("The application has submitted the instruction");
+    await expect(page.getByTestId("visual-7-3")).toContainText(/submitted READ references this registered source/i);
 
     await advance(page, 1);
     await page.getByTestId("inspect-read-request").click();
@@ -322,11 +388,26 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(breakdown).toHaveAttribute("data-padding", "2");
     await expect(breakdown).toHaveAttribute("data-frame-length", "110");
     await expect(breakdown).toHaveAttribute("data-transfer-length", "50");
+    await expect(page.getByTestId("packet-structural-strip")).toHaveAttribute("data-structure", "Ethernet/IPv4/UDP>BTH>payload 50>padding 2>ICRC");
+    await expect(page.getByTestId("packet-structure-evidence-note")).toContainText("Protocol structure; individual fields are not decoded");
+    await expect(page.getByTestId("length-packet-send-ack")).toHaveText("SEND ACK");
+    await expect(page.getByTestId("length-packet-write-ack")).toHaveText("WRITE ACK");
+    await page.getByTestId("length-packet-send-ack").click();
+    await expect(breakdown).toHaveAttribute("data-packet-id", "b:packet:4");
+    await expect(page.getByTestId("packet-structural-strip")).toHaveAttribute("data-structure", "Ethernet/IPv4/UDP>BTH>AETH>ICRC");
+    await expect(page.getByTestId("packet-length-breakdown")).toContainText("selected packet opcode Acknowledge");
+    await page.getByTestId("length-packet-write-ack").click();
+    await expect(breakdown).toHaveAttribute("data-packet-id", "c:packet:8");
+    await expect(page.getByTestId("packet-structural-strip")).toHaveAttribute("data-structure", "Ethernet/IPv4/UDP>BTH>AETH>ICRC");
+    await expect(page.getByTestId("packet-length-breakdown")).toContainText("selected packet opcode Acknowledge");
+    await expect(page.getByTestId("packet-length-breakdown")).not.toContainText(/syndrome|MSN/i);
+    await page.getByTestId("length-packet-send").click();
     await page.getByTestId("length-packet-write").click();
     await expect(breakdown).toHaveAttribute("data-packet-id", "c:packet:7");
     await expect(breakdown).toHaveAttribute("data-app-payload", "53");
     await expect(breakdown).toHaveAttribute("data-padding", "3");
     await expect(breakdown).toHaveAttribute("data-frame-length", "130");
+    await expect(page.getByTestId("packet-structural-strip")).toHaveAttribute("data-structure", "Ethernet/IPv4/UDP>BTH>RETH>payload 53>padding 3>ICRC");
     await page.getByTestId("toggle-payload-padding-view").click();
     await expect(page.getByTestId("visual-8-4")).toContainText("application payload plus transport padding");
     await expect(page.getByTestId("visual-8-4")).toContainText("56 bytes");
@@ -337,11 +418,13 @@ test.describe("Operations V2 evidence semantics", () => {
     await expect(breakdown).toHaveAttribute("data-frame-length", "74");
     await expect(breakdown).toHaveAttribute("data-transfer-length", "46");
     await expect(page.getByTestId("read-request-length-distinction")).toContainText("operation transfer length 46");
+    await expect(page.getByTestId("packet-structural-strip")).toHaveAttribute("data-structure", "Ethernet/IPv4/UDP>BTH>RETH>ICRC");
     await page.getByTestId("length-packet-read-response").click();
     await expect(breakdown).toHaveAttribute("data-packet-id", "d:packet:4");
     await expect(breakdown).toHaveAttribute("data-app-payload", "46");
     await expect(breakdown).toHaveAttribute("data-padding", "2");
     await expect(breakdown).toHaveAttribute("data-frame-length", "110");
+    await expect(page.getByTestId("packet-structural-strip")).toHaveAttribute("data-structure", "Ethernet/IPv4/UDP>BTH>AETH>payload 46>padding 2>ICRC");
 
     await advance(page, 1);
     await page.getByTestId("multipacket-select-middle").click();

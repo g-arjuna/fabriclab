@@ -29,6 +29,32 @@ The reviewer should verify that conceptual illustrations, recorded evidence and 
 - Do not collect names, contact details, employer information or other unnecessary personal information.
 - Do not show the answer panels before asking the corresponding question.
 
+
+## Lesson-by-lesson comprehension objectives
+
+Ask the learner to explain each mechanism in their own words. Do not require memorization of recorded memory addresses, keys, QPNs, WR IDs or packet sequence numbers; those values are examples for correlation, not the educational objective.
+
+| Lesson | Learner should be able to explain |
+|---|---|
+| 1 | How application memory, CPU execution, kernel services and TCP communication relate |
+| 2 | Why conventional NIC DMA differs from the RDMA programming model, and what RXE actually implements |
+| 3 | Why memory registration exists and how address ranges, permissions, LKEY and RKEY relate |
+| 4 | How a Work Request becomes submitted work and how the application retrieves a completion |
+| 5 | Why the receiver supplies destination memory before ordinary SEND |
+| 6 | How ordinary WRITE changes remote memory without producing a normal target receive completion |
+| 7 | Why READ is submitted through the Send Queue even though the application payload returns in the reverse direction |
+| 8 | How to reconstruct an application operation from packet fields, local work, completion and memory evidence |
+
+During the review, record:
+
+- Where an unfamiliar term first becomes confusing.
+- Which visual relationship is unclear.
+- Whether the learner can predict the next operation.
+- Whether the learner understands why each resource exists.
+- Whether the learner can distinguish recorded evidence from conceptual explanation.
+- Whether the lesson contains unnecessary repetition.
+- Whether mobile layout interferes with comprehension.
+
 ## Learner explanation prompts
 
 Ask the learner to explain, without reading the displayed answer:

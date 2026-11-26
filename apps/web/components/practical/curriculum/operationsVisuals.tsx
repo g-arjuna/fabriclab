@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 
 import {
   bytesFromHex,
@@ -231,7 +231,7 @@ function StagedEndpointFacts({ endpointValue, title, stage }: { endpointValue: R
   return (
     <div className="grid gap-2 text-xs sm:grid-cols-3" data-testid={`staged-endpoint-facts-${endpointValue.host}`}>
       <div className={card}>
-        <div className="font-semibold text-slate-300">{title} locally created resources</div>
+        <div className="font-semibold text-slate-300">At resource creation · {title}</div>
         {stage >= 1 ? <div className="mt-1 font-mono text-cyan-100">QP {exact(endpointValue.qpn)} in RESET<br />MR {exact(endpointValue.memoryRegion.address)} · len {endpointValue.memoryRegion.length}<br />PD/CQ available</div> : <div className="mt-1 text-slate-500">not yet introduced in this reconstruction</div>}
       </div>
       <div className={card}>
@@ -239,7 +239,7 @@ function StagedEndpointFacts({ endpointValue, title, stage }: { endpointValue: R
         {stage >= 2 ? <div className="mt-1 font-mono text-violet-100">peer QPN {exact(endpointValue.destinationQpn)}<br />own/peer PSNs {exact(endpointValue.sqPsn, "decimal")} / {exact(endpointValue.rqPsn, "decimal")}<br />GID exchange recorded</div> : <div className="mt-1 text-slate-500">metadata not exchanged yet</div>}
       </div>
       <div className={card}>
-        <div className="font-semibold text-slate-300">Recorded final QP configuration</div>
+        <div className="font-semibold text-slate-300">After endpoint preparation</div>
         {stage >= 3 ? <div className="mt-1 font-mono text-emerald-100">state RTS · event {endpointValue.qpReadyEventId}<br />dest QPN {exact(endpointValue.destinationQpn)}</div> : <div className="mt-1 text-slate-500">QP not yet configured as ready</div>}
       </div>
     </div>
@@ -331,10 +331,21 @@ function EventFact({ id, label }: { id: string; label: string }) {
   return <div className="rounded-lg border border-white/10 bg-slate-950/45 px-2.5 py-2 font-mono text-xs text-slate-300"><span className="text-slate-500">{label}: </span>{id}</div>;
 }
 
+function isMeaningfulInteractionTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false;
+  const control = target.closest("button, summary, select, input, textarea, a[href], [role='button']");
+  if (!control) return false;
+  if (control instanceof HTMLButtonElement && control.disabled) return false;
+  return true;
+}
+
 function OperationShell({ title, children, controls, provenance, testId }: { title: string; children: ReactNode; controls?: ReactNode; provenance?: "recorded" | "source-derived" | "conceptual"; testId: string }) {
   const { interacted, markInteracted } = useSectionInteraction(testId);
+  function trackMeaningfulClick(event: MouseEvent<HTMLElement>) {
+    if (isMeaningfulInteractionTarget(event.target)) markInteracted();
+  }
   return (
-    <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/30 p-3 sm:p-4" data-testid={testId} data-interaction-state={interacted ? "interacted" : "not-interacted"} onClickCapture={markInteracted}>
+    <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/30 p-3 sm:p-4" data-testid={testId} data-interaction-state={interacted ? "interacted" : "not-interacted"} onClickCapture={trackMeaningfulClick}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
         {provenance ? <ProvenanceTag kind={provenance} /> : <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">Mixed · elements labelled</span>}
@@ -657,36 +668,42 @@ function Lesson63() {
   const writeWr = workRequest(writeExperiment, "rdma-write");
   const writePacket = packet(writeExperiment, "request");
   const targetRegion = memoryRegion(writeExperiment, "hostb");
+  const remoteMetadataNote = stage >= 5
+    ? `The submitted WRITE references this registered destination using remote address ${exact(targetRegion.address)} and RKEY ${exact(targetRegion.rkey)}.`
+    : stage >= 4
+      ? `Remote address ${exact(targetRegion.address)} and RKEY ${exact(targetRegion.rkey)} are now part of A's WRITE Work Request.`
+      : `Advertised remote address ${exact(targetRegion.address)} and RKEY ${exact(targetRegion.rkey)} are known to A but have not yet been attached to the Work Request.`;
   return (
     <OperationShell title="WRITE instruction assembled from local and remote descriptions" testId="visual-6-3" controls={<>
       <ActionButton testId="fill-write-source" active={stage >= 1} onClick={() => setStage(1)}>Fill A's source buffer</ActionButton>
-      <ActionButton testId="describe-write-local-source" active={stage >= 2} disabled={stage < 1} onClick={() => setStage(2)}>Describe local source</ActionButton>
-      <ActionButton testId="add-remote-destination" active={stage >= 3} disabled={stage < 2} onClick={() => setStage(3)}>Add remote destination</ActionButton>
-      <ActionButton testId="construct-write-instruction" active={stage >= 4} disabled={stage < 3} onClick={() => setStage(4)}>Construct WRITE instruction</ActionButton>
-      <ActionButton testId="submit-write" active={stage >= 5} disabled={stage < 4} onClick={() => setStage(5)}>Submit WRITE</ActionButton>
+      <ActionButton testId="describe-write-local-source" active={stage >= 2} disabled={stage < 1} onClick={() => setStage(2)}>Describe local source memory</ActionButton>
+      <ActionButton testId="construct-write-instruction" active={stage >= 3} disabled={stage < 2} onClick={() => setStage(3)}>Construct the WRITE Work Request</ActionButton>
+      <ActionButton testId="attach-write-remote-destination" active={stage >= 4} disabled={stage < 3} onClick={() => setStage(4)}>Attach the remote destination</ActionButton>
+      <ActionButton testId="submit-write" active={stage >= 5} disabled={stage < 4} onClick={() => setStage(5)}>Submit the completed Work Request</ActionButton>
     </>}>
       <Bench
         a={focusEndpoint("hosta", "Server A", "source memory · reconstructed", stage >= 1 ? textPayload(writePacket.payloadHex) : "payload not written", {
           work: [work("Send Queue", stage >= 5 ? `WR ${exactValue(writeWr.wrId)} · WRITE` : "no posted WRITE WR", stage >= 5 ? "pending" : "empty", stage >= 5 ? `${writeWr.byteLength} bytes · local SGE` : undefined)],
         })}
-        b={focusEndpoint("hostb", "Server B", "target registered memory · metadata already known", `${exact(targetRegion.address)} · capacity ${targetRegion.length}`, { memoryNote: `advertised RKEY ${exact(targetRegion.rkey)} · not yet part of the constructed WRITE operation`, work: [work("Receive Queue", "no receive WR", "empty")] })}
+        b={focusEndpoint("hostb", "Server B", "target registered memory · metadata already known", `${exact(targetRegion.address)} · capacity ${targetRegion.length}`, { memoryNote: remoteMetadataNote, work: [work("Receive Queue", "no receive WR", "empty")] })}
         transfer={{ visible: false, direction: "none", kind: "none" }}
         caption={stage >= 5 ? "The application has submitted the instruction. The pending-work representation illustrates the logical lifecycle; the reference run does not independently sample queue occupancy at this instant. Completion evidence will be examined separately." : "The application is still preparing or constructing the instruction; it is outside the Send Queue until post_send()."}
       />
       {stage >= 1 ? <ByteCells hex={writePacket.payloadHex} label="exact unpadded WRITE payload" testId="write-payload-exact-bytes" /> : null}
       {stage >= 2 ? <div className="grid gap-2 sm:grid-cols-2" data-testid="write-memory-descriptions">
         <div className="rounded-xl border border-cyan-300/25 bg-cyan-300/8 p-3 text-sm text-cyan-50">local source · addr {exact(writeWr.localAddress)} · LKEY {exact(writeWr.localLkey)} · len {writeWr.byteLength}</div>
-        {stage >= 3 ? <div className="rounded-xl border border-orange-300/25 bg-orange-300/8 p-3 text-sm text-orange-50">remote destination · addr {exact(writeWr.remoteAddress)} · RKEY {exact(writeWr.remoteRkey)}</div> : null}
+        {stage >= 4 ? <div className="rounded-xl border border-orange-300/25 bg-orange-300/8 p-3 text-sm text-orange-50">remote destination · addr {exact(writeWr.remoteAddress)} · RKEY {exact(writeWr.remoteRkey)}</div> : null}
       </div> : null}
-      <WorkLifecycleDiagram testId="write-wr-lifecycle" operation="WRITE" postMethod="post_send()" stage={stage >= 5 ? "posted" : stage >= 4 ? "constructed" : "none"} />
-      {stage >= 4 ? <div data-testid="write-application-construction"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stage >= 5 ? "submitted WRITE instruction · recorded representation" : "application-side constructed instruction · outside the Send Queue"}</div><WorkRequestCard request={writeWr} testId="actual-write-wr" /></div> : null}
-      <div className="grid gap-3 xl:grid-cols-2">
-        {stage === 1 ? <SourceLines path="python/exp_c_write.py" start={124} end={124} title="Local payload write into the registered buffer" /> : null}
-        {stage === 2 ? <SourceLines path="python/exp_c_write.py" start={125} end={126} title="Local source SGE construction" /> : null}
-        {stage === 3 ? <SourceLines path="python/exp_c_write.py" start={133} end={133} title="Remote destination attachment" /> : null}
-        {stage === 4 ? <SourceLines path="python/exp_c_write.py" start={127} end={130} title="SendWR construction" /> : null}
-        {stage >= 5 ? <SourceLines path="python/exp_c_write.py" start={134} end={138} title="post_send submission and recorded posting event" /> : null}
+      <WorkLifecycleDiagram testId="write-wr-lifecycle" operation="WRITE" postMethod="post_send()" stage={stage >= 5 ? "posted" : stage >= 3 ? "constructed" : "none"} />
+      <div className="grid gap-3 xl:grid-cols-2" data-testid="write-construction-sequence">
+        {stage >= 3 ? <div data-testid="write-application-construction"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stage >= 5 ? "submitted WRITE instruction · final recorded representation" : stage >= 4 ? "completed application-side instruction · outside the Send Queue · source-derived stage representation" : "application-side constructed instruction · outside the Send Queue · remote fields not attached"}</div><WorkRequestCard request={writeWr} testId="actual-write-wr" representation={stage >= 5 ? "recorded" : "source-derived"} includeRemote={stage >= 4} /></div> : null}
+        {stage === 1 ? <SourceLines testId="write-source-line-fill" path="python/exp_c_write.py" start={124} end={124} title="Local payload write into the registered buffer" /> : null}
+        {stage === 2 ? <SourceLines testId="write-source-line-sge" path="python/exp_c_write.py" start={125} end={126} title="Local source SGE construction" /> : null}
+        {stage === 3 ? <div className="space-y-3"><div className="rounded-xl border border-cyan-300/25 bg-cyan-300/8 p-3 text-sm leading-6 text-cyan-50" data-testid="write-construct-explanation"><span className="font-semibold">Construct WRITE Work Request. </span>A creates a Work Request object containing the WRITE operation, its local identifier and the local memory description. The object exists in the application, but it has not yet been submitted to the Queue Pair.</div><SourceLines testId="write-source-line-wr-construction" path="python/exp_c_write.py" start={127} end={130} title="SendWR construction" /></div> : null}
+        {stage === 4 ? <div className="space-y-3"><div className="rounded-xl border border-orange-300/25 bg-orange-300/8 p-3 text-sm leading-6 text-orange-50" data-testid="write-attach-explanation"><span className="font-semibold">Attach remote destination. </span>A now adds the remote address and RKEY previously supplied by B. The Work Request has both its local source description and its remote destination description.</div><SourceLines testId="write-source-line-remote-attachment" path="python/exp_c_write.py" start={133} end={133} title="Remote destination attachment" /></div> : null}
+        {stage >= 5 ? <div className="space-y-3"><div className="rounded-xl border border-emerald-300/25 bg-emerald-300/8 p-3 text-sm leading-6 text-emerald-50" data-testid="write-submit-explanation"><span className="font-semibold">Submit WRITE. </span>Calling <span className="font-mono">post_send()</span> submits the completed instruction to the provider through the Send Queue. A successful return from this call does not establish that the operation has completed. Metadata received by the application, metadata attached to the Work Request and remote fields later encoded by the provider in the captured RETH are distinct stages.</div><SourceLines testId="write-source-line-post-send" path="python/exp_c_write.py" start={134} end={138} title="post_send submission and recorded posting event" /></div> : null}
       </div>
+      {stage >= 3 ? <details className="rounded-xl border border-white/10 bg-white/4 p-3" data-testid="write-final-recorded-inspection"><summary className="cursor-pointer text-sm text-cyan-100">Inspect final recorded WRITE instruction</summary><div className="mt-2 text-xs leading-5 text-slate-400">Final recorded instruction after construction, remote attachment and submission. Earlier intermediate object states above are source-derived representations rather than separately captured Python objects.</div><div className="mt-3"><WorkRequestCard request={writeWr} testId="final-recorded-write-wr" /></div></details> : null}
       <details className="rounded-xl border border-white/10 bg-white/4 p-3"><summary className="cursor-pointer text-sm text-cyan-100">Inspect complete WRITE construction context</summary><div className="mt-3"><SourceLines path="python/exp_c_write.py" start={124} end={138} title="Complete WRITE construction and submission" /></div></details>
     </OperationShell>
   );
@@ -934,27 +951,33 @@ function Lesson72() {
 function Lesson73() {
   const [stage, setStage] = useState(0);
   const readWr = workRequest(readExperiment, "rdma-read");
+  const remoteSourceNote = stage >= 4
+    ? `The submitted READ references this registered source using remote address ${exact(readWr.remoteAddress)} and RKEY ${exact(readWr.remoteRkey)}.`
+    : stage >= 3
+      ? `Remote source address ${exact(readWr.remoteAddress)} and RKEY ${exact(readWr.remoteRkey)} are now part of A's READ Work Request.`
+      : `Advertised remote source address ${exact(readWr.remoteAddress)} and RKEY ${exact(readWr.remoteRkey)} are known to A but have not yet been attached to the Work Request.`;
   return (
     <OperationShell title="READ submitted through the initiator's Send Queue" testId="visual-7-3" controls={<>
-      <ActionButton testId="describe-read-local-destination" active={stage >= 1} onClick={() => setStage(1)}>Describe local destination</ActionButton>
-      <ActionButton testId="name-remote-source" active={stage >= 2} disabled={stage < 1} onClick={() => setStage(2)}>Name remote source</ActionButton>
-      <ActionButton testId="construct-read" active={stage >= 3} disabled={stage < 2} onClick={() => setStage(3)}>Construct READ</ActionButton>
+      <ActionButton testId="describe-read-local-destination" active={stage >= 1} onClick={() => setStage(1)}>Describe A's local destination</ActionButton>
+      <ActionButton testId="construct-read" active={stage >= 2} disabled={stage < 1} onClick={() => setStage(2)}>Construct READ Work Request</ActionButton>
+      <ActionButton testId="attach-read-remote-source" active={stage >= 3} disabled={stage < 2} onClick={() => setStage(3)}>Attach B's remote source description</ActionButton>
       <ActionButton testId="submit-read" active={stage >= 4} disabled={stage < 3} onClick={() => setStage(4)}>Submit to A's Send Queue</ActionButton>
     </>}>
       <Bench
         a={focusEndpoint("hosta", "Server A", "local destination reference", stage >= 1 ? `${exact(readWr.localAddress)} · LKEY ${exact(readWr.localLkey)}` : "not described", { work: [work("Send Queue", stage >= 4 ? `WR ${exactValue(readWr.wrId)} · READ` : "no posted READ WR", stage >= 4 ? "pending" : "empty", stage >= 4 ? `${readWr.byteLength} bytes · local destination SGE` : undefined)] })}
-        b={focusEndpoint("hostb", "Server B", "remote source reference", stage >= 2 ? `${exact(readWr.remoteAddress)} · RKEY ${exact(readWr.remoteRkey)}` : "not named", { providerNote: "no B application WR is needed for the response" })}
+        b={focusEndpoint("hostb", "Server B", "remote source reference", stage >= 3 ? `${exact(readWr.remoteAddress)} · RKEY ${exact(readWr.remoteRkey)}` : "advertised but not attached", { memoryNote: remoteSourceNote, providerNote: "no B application WR is needed for the response" })}
         transfer={{ visible: false, direction: "none", kind: "none" }}
         caption={stage >= 4 ? "The application has submitted the instruction. The pending-work representation illustrates the logical lifecycle; the reference run does not independently sample queue occupancy at this instant. Completion evidence will be examined separately. For READ the local SGE is a destination reference, not outgoing payload." : "The application is still preparing or constructing the READ instruction; it is outside the Send Queue until post_send()."}
       />
-      <WorkLifecycleDiagram testId="read-wr-lifecycle" operation="READ" postMethod="post_send()" stage={stage >= 4 ? "posted" : stage >= 3 ? "constructed" : "none"} />
-      {stage >= 3 ? <div data-testid="read-application-construction"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stage >= 4 ? "submitted READ instruction · recorded representation" : "application-side constructed instruction · outside the Send Queue"}</div><WorkRequestCard request={readWr} testId="actual-read-wr" /></div> : null}
-      <div className="grid gap-3 xl:grid-cols-2">
-        {stage === 1 ? <SourceLines path="python/exp_d_read.py" start={113} end={114} title="Local destination SGE construction" /> : null}
-        {stage === 2 ? <SourceLines path="python/exp_d_read.py" start={119} end={119} title="Remote source attachment" /> : null}
-        {stage === 3 ? <SourceLines path="python/exp_d_read.py" start={115} end={118} title="SendWR construction" /> : null}
-        {stage >= 4 ? <SourceLines path="python/exp_d_read.py" start={120} end={124} title="post_send submission and recorded posting event" /> : null}
+      <WorkLifecycleDiagram testId="read-wr-lifecycle" operation="READ" postMethod="post_send()" stage={stage >= 4 ? "posted" : stage >= 2 ? "constructed" : "none"} />
+      <div className="grid gap-3 xl:grid-cols-2" data-testid="read-construction-sequence">
+        {stage >= 2 ? <div data-testid="read-application-construction"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stage >= 4 ? "submitted READ instruction · final recorded representation" : stage >= 3 ? "completed application-side instruction · outside the Send Queue · source-derived stage representation" : "application-side constructed instruction · outside the Send Queue · remote fields not attached"}</div><WorkRequestCard request={readWr} testId="actual-read-wr" representation={stage >= 4 ? "recorded" : "source-derived"} includeRemote={stage >= 3} /></div> : null}
+        {stage === 1 ? <SourceLines testId="read-source-line-sge" path="python/exp_d_read.py" start={113} end={114} title="Local destination SGE construction" /> : null}
+        {stage === 2 ? <div className="space-y-3"><div className="rounded-xl border border-cyan-300/25 bg-cyan-300/8 p-3 text-sm leading-6 text-cyan-50" data-testid="read-construct-explanation"><span className="font-semibold">Construct READ Work Request. </span>A constructs an instruction requesting an RDMA READ. Its local SGE describes where the returned bytes should be placed. No application payload is being sent from that local destination buffer.</div><SourceLines testId="read-source-line-wr-construction" path="python/exp_d_read.py" start={115} end={118} title="SendWR construction" /></div> : null}
+        {stage === 3 ? <div className="space-y-3"><div className="rounded-xl border border-orange-300/25 bg-orange-300/8 p-3 text-sm leading-6 text-orange-50" data-testid="read-attach-explanation"><span className="font-semibold">Attach remote source. </span>A supplies the remote address and RKEY identifying the authorized source memory at B. These values were obtained during the earlier control-channel exchange.</div><SourceLines testId="read-source-line-remote-attachment" path="python/exp_d_read.py" start={119} end={119} title="Remote source attachment" /></div> : null}
+        {stage >= 4 ? <div className="space-y-3"><div className="rounded-xl border border-emerald-300/25 bg-emerald-300/8 p-3 text-sm leading-6 text-emerald-50" data-testid="read-submit-explanation"><span className="font-semibold">Submit READ. </span>A submits the READ instruction through its Send Queue. The operation is initiated by A, even though the requested application data will travel from B back to A. Metadata received by the application, metadata attached to the Work Request and remote fields later encoded by the provider in the captured RETH are distinct stages.</div><SourceLines testId="read-source-line-post-send" path="python/exp_d_read.py" start={120} end={124} title="post_send submission and recorded posting event" /></div> : null}
       </div>
+      {stage >= 2 ? <details className="rounded-xl border border-white/10 bg-white/4 p-3" data-testid="read-final-recorded-inspection"><summary className="cursor-pointer text-sm text-cyan-100">Inspect final recorded READ instruction</summary><div className="mt-2 text-xs leading-5 text-slate-400">Final recorded instruction after construction, remote attachment and submission. Earlier intermediate object states above are source-derived representations rather than separately captured Python objects.</div><div className="mt-3"><WorkRequestCard request={readWr} testId="final-recorded-read-wr" /></div></details> : null}
       <details className="rounded-xl border border-white/10 bg-white/4 p-3"><summary className="cursor-pointer text-sm text-cyan-100">Inspect complete READ construction context</summary><div className="mt-3"><SourceLines path="python/exp_d_read.py" start={110} end={124} title="Complete READ construction and submission" /></div></details>
     </OperationShell>
   );
@@ -1187,12 +1210,12 @@ function Lesson83() {
 
 function Lesson84() {
   const choices = [
-    ["send", packet(sendExperiment, "request"), sendExperiment],
-    ["send-ack", packet(sendExperiment, "acknowledgement"), sendExperiment],
-    ["write", packet(writeExperiment, "request"), writeExperiment],
-    ["write-ack", packet(writeExperiment, "acknowledgement"), writeExperiment],
-    ["read-request", packet(readExperiment, "request"), readExperiment],
-    ["read-response", packet(readExperiment, "response"), readExperiment],
+    ["send", packet(sendExperiment, "request"), sendExperiment, "SEND Only"],
+    ["send-ack", packet(sendExperiment, "acknowledgement"), sendExperiment, "SEND ACK"],
+    ["write", packet(writeExperiment, "request"), writeExperiment, "WRITE Only"],
+    ["write-ack", packet(writeExperiment, "acknowledgement"), writeExperiment, "WRITE ACK"],
+    ["read-request", packet(readExperiment, "request"), readExperiment, "READ request"],
+    ["read-response", packet(readExperiment, "response"), readExperiment, "READ response Only"],
   ] as const;
   const [selected, setSelected] = useState<(typeof choices)[number][0]>("send");
   const [showPadding, setShowPadding] = useState(false);
@@ -1203,6 +1226,13 @@ function Lesson84() {
   const transferLength = operationTransferLength(experimentValue, current);
   const capacityEvidence = capacityEvidenceForPacket(experimentValue, current);
   const transferRelevant = transferLength !== null;
+  const hasAeth = current.role === "acknowledgement" || current.role === "response";
+  const rdmaStructure: string[] = ["BTH"];
+  if (current.reth) rdmaStructure.push("RETH");
+  if (hasAeth) rdmaStructure.push("AETH");
+  if (lengths.applicationPayloadBytes) rdmaStructure.push(`payload ${lengths.applicationPayloadBytes}`);
+  if (lengths.transportPaddingBytes) rdmaStructure.push(`padding ${lengths.transportPaddingBytes}`);
+  rdmaStructure.push("ICRC");
   const rows = [
     ["related registered capacity", capacityEvidence ? capacityEvidence.region.length : "not correlated", capacityEvidence ? capacityEvidence.basis : "no validated memory association"],
     ["operation transfer length", transferRelevant ? `${transferLength} bytes` : "not applicable", transferRelevant ? "requested operation bytes; distinct from bytes carried by this packet" : "no operation-level transfer length established"],
@@ -1214,18 +1244,19 @@ function Lesson84() {
   ] as const;
   return (
     <OperationShell title="Capacity, transfer length, padding and frame length" testId="visual-8-4" controls={<>
-      {choices.map(([id, item]) => <ActionButton key={id} testId={`length-packet-${id}`} active={selected === id} onClick={() => setSelected(id)}>{item.opcodeName}</ActionButton>)}
+      {choices.map(([id, , , label]) => <ActionButton key={id} testId={`length-packet-${id}`} active={selected === id} onClick={() => setSelected(id)}>{label}</ActionButton>)}
       {current.payloadHex ? <ActionButton testId="toggle-payload-padding-view" active={showPadding} onClick={() => setShowPadding((value) => !value)}>{showPadding ? "Show payload only" : "Show payload plus transport padding"}</ActionButton> : null}
     </>}>
       <div className="rounded-xl border border-orange-300/20 bg-orange-300/6 p-3" data-testid="packet-length-breakdown" data-packet-id={current.id} data-transfer-length={transferRelevant ? transferLength : "not-applicable"} data-app-payload={lengths.applicationPayloadBytes} data-padding={lengths.transportPaddingBytes} data-frame-length={lengths.totalFrameBytes}>
-        <div className="mb-3 font-semibold text-orange-100">{current.id} · {current.opcodeName}</div>
-        <div className="flex min-w-0 flex-wrap overflow-hidden rounded-lg border border-white/10 font-mono text-[11px]">
-          <span className="bg-slate-700/80 px-2 py-2 text-slate-100">Ethernet/IP/UDP/BTH headers</span>
-          {current.reth ? <span className="bg-orange-500/30 px-2 py-2 text-orange-50">RETH</span> : null}
-          {lengths.applicationPayloadBytes ? <span className="bg-sky-500/30 px-2 py-2 text-sky-50" style={{ flexGrow: lengths.applicationPayloadBytes }}>application {lengths.applicationPayloadBytes}</span> : null}
-          {lengths.transportPaddingBytes ? <span className="bg-violet-500/30 px-2 py-2 text-violet-50">pad {lengths.transportPaddingBytes}</span> : null}
-          <span className="bg-slate-800 px-2 py-2 text-slate-300">ICRC/captured frame context</span>
+        <div className="mb-3 font-semibold text-orange-100">{choice[3]} · selected packet opcode {current.opcodeName} · {current.id}</div>
+        <div className="flex min-w-0 flex-wrap overflow-hidden rounded-lg border border-white/10 font-mono text-[11px]" data-testid="packet-structural-strip" data-structure={`Ethernet/IPv4/UDP>${rdmaStructure.join(">")}`}>
+          <span className="bg-slate-700/80 px-2 py-2 text-slate-100">Ethernet / IPv4 / UDP</span>
+          {rdmaStructure.map((segment) => {
+            const style = segment === "BTH" ? "bg-cyan-700/35 text-cyan-50" : segment === "RETH" ? "bg-orange-500/30 text-orange-50" : segment === "AETH" ? "bg-emerald-500/25 text-emerald-50" : segment.startsWith("payload") ? "bg-sky-500/30 text-sky-50" : segment.startsWith("padding") ? "bg-violet-500/30 text-violet-50" : "bg-slate-800 text-slate-300";
+            return <span key={segment} className={`px-2 py-2 ${style}`} style={segment.startsWith("payload") ? { flexGrow: lengths.applicationPayloadBytes } : undefined}>{segment}</span>;
+          })}
         </div>
+        <div className="mt-1 text-[11px] text-slate-500" data-testid="packet-structure-evidence-note">AETH and ICRC: Protocol structure; individual fields are not decoded in the current reference export.</div>
         <div className="mt-1 text-[11px] text-slate-500" data-testid="packet-strip-scale-note">Structural illustration, not a byte-width measurement or raw-span assertion. Frame length in the capture is distinct from additional physical Ethernet transmission overhead.</div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{rows.map(([label, value, note]) => <div key={label} className="rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2"><div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</div><div className="mt-1 font-mono text-sm text-slate-100">{value}</div><div className="text-[11px] text-slate-500">{note}</div></div>)}</div>
         {selected === "read-request" ? <div className="mt-3 rounded-lg border border-sky-300/25 bg-sky-300/8 p-2 text-xs text-sky-50" data-testid="read-request-length-distinction">READ request: operation transfer length {transferLength}; application payload in this request packet {lengths.applicationPayloadBytes}. The requested data length is not request-packet payload.</div> : null}
