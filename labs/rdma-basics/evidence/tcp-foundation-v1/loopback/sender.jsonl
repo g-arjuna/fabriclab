@@ -1,0 +1,9 @@
+{"case": "small", "chunk": 2, "event": "start", "monotonic_ns": 691901918525, "pid": 4927, "role": "sender"}
+{"address": "0x7fd3583aad90", "capacity": 16, "event": "source_buffer", "hex": "48454c4c4f", "monotonic_ns": 691902066323, "payload_length": 5, "pid": 4927, "sha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5"}
+{"event": "connect_enter", "monotonic_ns": 691902151878, "pid": 4927, "target": ["127.0.0.1", 5004]}
+{"event": "connect_return", "fd": 3, "local": ["127.0.0.1", 48494], "monotonic_ns": 691902348511, "peer": ["127.0.0.1", 5004], "pid": 4927}
+{"event": "sendall_enter", "length": 5, "monotonic_ns": 691902472763, "pid": 4927}
+{"event": "sendall_return", "length": 5, "monotonic_ns": 691902601031, "pid": 4927, "source_unchanged": true}
+{"event": "shutdown_write", "monotonic_ns": 691902651511, "pid": 4927}
+{"count": 0, "event": "peer_eof", "hex": "", "monotonic_ns": 691903151024, "pid": 4927}
+{"event": "closed", "monotonic_ns": 691903241029, "pid": 4927}

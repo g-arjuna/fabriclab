@@ -1,0 +1,16 @@
+[
+  {
+    "command": "ss -tnpi '( sport = :5003 or dport = :5003 )' 2>&1 || true",
+    "exit_code": 0,
+    "observation_label": "before-connect",
+    "output": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n",
+    "recorded_monotonic_ns": 88862753702037
+  },
+  {
+    "command": "ss -tnpi '( sport = :5003 or dport = :5003 )' 2>&1 || true",
+    "exit_code": 0,
+    "observation_label": "after-completion",
+    "output": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\n",
+    "recorded_monotonic_ns": 88863974479467
+  }
+]

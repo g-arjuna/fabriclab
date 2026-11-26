@@ -1,0 +1,26 @@
+[
+  {
+    "event": "capture_started",
+    "host": "hostb",
+    "interface": "data0",
+    "monotonic_ns": 88854724734555,
+    "remote": "/tmp/tcp-foundation-captures/small-early.pcap"
+  },
+  {
+    "event": "receiver_listen",
+    "monotonic_ns": 88855336629968
+  },
+  {
+    "event": "observed_receiver_waiting_before_send",
+    "monotonic_ns": 88856489270804
+  },
+  {
+    "event": "gate_release",
+    "gate": "sender_before_send",
+    "monotonic_ns": 88856489282236
+  },
+  {
+    "event": "capture_stopped",
+    "monotonic_ns": 88858085146749
+  }
+]

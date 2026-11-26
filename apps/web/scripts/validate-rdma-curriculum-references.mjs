@@ -55,6 +55,76 @@ for (const [experimentId, packetRole] of [["send-recv", "request"], ["write", "r
   }
 }
 
+
+const foundations = JSON.parse(fs.readFileSync(new URL("../lib/practical/foundationsContent.generated.json", import.meta.url), "utf8"));
+const tcpEvidence = JSON.parse(fs.readFileSync(new URL("../public/practical/rdma/tcp-foundations-evidence.json", import.meta.url), "utf8"));
+const foundationSourceDir = new URL("../../../content/foundations-v2/", import.meta.url);
+const foundationFiles = new Map(fs.readdirSync(foundationSourceDir).filter((name) => name.endsWith(".md")).map((name) => [name, fs.readFileSync(new URL(name, foundationSourceDir), "utf8")]));
+
+function sourceBlock(source, sectionId, blockName) {
+  const sectionMarker = new RegExp(`^## ${sectionId.replaceAll(".", "\\.")} .*$`, "m").exec(source);
+  if (!sectionMarker) return "";
+  const sectionBodyStart = sectionMarker.index + sectionMarker[0].length;
+  const sectionRest = source.slice(sectionBodyStart);
+  const nextSection = sectionRest.search(/^## \d+\.\d+ /m);
+  const sectionBody = nextSection === -1 ? sectionRest : sectionRest.slice(0, nextSection);
+  const blockMarker = new RegExp(`^### ${blockName}\\n\\n`, "m").exec(sectionBody);
+  if (!blockMarker) return "";
+  const blockRest = sectionBody.slice(blockMarker.index + blockMarker[0].length);
+  const nextBlock = blockRest.search(/^### /m);
+  return (nextBlock === -1 ? blockRest : blockRest.slice(0, nextBlock)).trim();
+}
+
+function resolveTemplateValue(template) {
+  const [, caseName, metric] = template.split(".");
+  if (caseName === "small") {
+    if (metric === "client_port") return tcpEvidence.summary.smallClientPort;
+    if (metric === "handshake_frames") return tcpEvidence.summary.smallHandshakeFrames.length;
+    if (metric === "read_events") return tcpEvidence.summary.smallReadCounts.length;
+    return undefined;
+  }
+  const item = tcpEvidence.cases[caseName];
+  if (!item) return undefined;
+  if (metric === "client_port") return item.endpoints.senderLocal?.[1];
+  if (metric === "handshake_frames") return item.handshake.length;
+  if (metric === "read_events") return item.receiveEvents.length;
+  if (metric === "payload_segments") return item.payloadSegments.length;
+  return undefined;
+}
+
+
+for (const section of foundations) {
+  const source = foundationFiles.get(section.sourceFile);
+  if (!source) {
+    failures.push(`${section.id} source file ${section.sourceFile} is missing`);
+    continue;
+  }
+  for (const [key, blockName] of [["learnerCopy", "Learner copy"], ["visualSpec", "Visual and interaction"], ["revealCopy", "Reveal/feedback"], ["inspectCopy", "Inspect"]]) {
+    const authored = sourceBlock(source, section.id, blockName);
+    if (authored !== section[key]) failures.push(`${section.id} ${blockName} does not exactly match ${section.sourceFile}`);
+  }
+  const combined = [section.learnerCopy, section.visualSpec, section.revealCopy, section.inspectCopy].join("\n");
+  for (const template of combined.matchAll(/\{(tcp\.[^}]+|rdma\.[^}]+)\}/g)) {
+    const key = template[1];
+    if (key.startsWith("tcp.") && resolveTemplateValue(key) === undefined) failures.push(`${section.id} references unavailable TCP evidence binding ${key}`);
+    if (key.startsWith("rdma.")) {
+      const resources = evidence.experiments.find((entry) => entry.id === "resources");
+      const hostMemory = {
+        hosta: resources?.endpoints?.initiator?.memoryRegion,
+        hostb: resources?.endpoints?.responder?.memoryRegion,
+      };
+      const [, , host, metric] = key.split(".");
+      if (!hostMemory[host]?.[metric]) failures.push(`${section.id} references unavailable RDMA evidence binding ${key}`);
+    }
+  }
+}
+
+if (!foundations.length) failures.push("generated authored foundations content is empty");
+if (foundations.filter((section) => section.lesson === "moving-data").length !== 19) failures.push("moving-data does not contain 19 authored sections");
+if (foundations.filter((section) => section.lesson === "why-rdma").length !== 6) failures.push("why-rdma does not contain 6 authored sections");
+if (foundations.filter((section) => section.lesson === "memory").length !== 9) failures.push("memory does not contain 9 authored sections");
+if (foundations.filter((section) => section.lesson === "queues").length !== 5) failures.push("queues does not contain 5 authored sections");
+
 if (failures.length) {
   console.error(failures.join("\n"));
   process.exit(1);

@@ -38,6 +38,13 @@ async function clickLessonAction(page: Page) {
   await page.getByTestId("lesson-action").click();
 }
 
+async function openLessonOutline(page: Page) {
+  const outline = page.getByTestId("lesson-outline");
+  if (!(await outline.getAttribute("open"))) {
+    await outline.locator("summary").click();
+  }
+}
+
 async function showTechnicalDetails(page: Page) {
   await expect(page.locator("[data-testid^=guided-lesson-]")).toHaveAttribute("data-hydrated", "true", { timeout: 15000 });
   await page.getByRole("button", { name: /^Inspect endpoint resources$/i }).click();
@@ -73,7 +80,8 @@ test.describe("RDMA first-principles curriculum", () => {
     await expect(page).toHaveURL(/\/practical\/rdma/);
     await expect(page.getByText("Lesson 1 of 8", { exact: true })).toBeVisible();
     await expect(page.getByTestId("guided-lesson-moving-data")).toBeVisible();
-    await expect(page.getByTestId("opening-memory-diagram")).toContainText("HELLO");
+    await expect(page.getByTestId("foundation-host-architecture")).toBeVisible();
+    await expect(page.getByTestId("guided-lesson-moving-data")).toContainText(/Before we connect two computers/i);
     await expect(page.getByTestId("rdma-curriculum")).not.toContainText(/QPN|RKEY|LKEY|Protection Domain|Completion Queue Entry/);
     await expect(page.getByRole("button", { name: /^Play$/i })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^Pause$/i })).toHaveCount(0);
@@ -82,18 +90,18 @@ test.describe("RDMA first-principles curriculum", () => {
 
   test("a learner can progress manually through every state of all eight lessons and completion persists", async ({ page }) => {
     const tracker = trackErrors(page);
-    test.setTimeout(150_000);
+    test.setTimeout(240_000);
     await page.goto("/practical/rdma", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("rdma-curriculum")).toHaveAttribute("data-hydrated", "true", { timeout: 15000 });
 
-    const before = await page.getByText(/Step 1 of 7/i).textContent();
+    const before = await page.getByText(/Step 1 of 19/i).textContent();
     await page.waitForTimeout(1100);
-    expect(await page.getByText(/Step 1 of 7/i).textContent()).toBe(before);
+    expect(await page.getByText(/Step 1 of 19/i).textContent()).toBe(before);
 
-    await completeLesson(page, "moving-data", 7);
-    await completeLesson(page, "why-rdma", 7);
-    await completeLesson(page, "memory", 6);
-    await completeLesson(page, "queues", 7);
+    await completeLesson(page, "moving-data", 19);
+    await completeLesson(page, "why-rdma", 6);
+    await completeLesson(page, "memory", 9);
+    await completeLesson(page, "queues", 5);
     await completeLesson(page, "send-receive", 11);
     await completeLesson(page, "write", 13);
     await completeLesson(page, "read", 12);
@@ -111,7 +119,7 @@ test.describe("RDMA first-principles curriculum", () => {
     await expect(page.getByTestId("rdma-curriculum-complete")).toBeVisible();
     await page.getByRole("button", { name: /Review Lesson 1 from the beginning/i }).click();
     await expect(page.getByTestId("guided-lesson-moving-data")).toBeVisible();
-    await expect(page.getByText(/Step 1 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 1 of 19/i)).toBeVisible();
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("guided-lesson-moving-data")).toBeVisible();
     await expect(page.getByTestId("rdma-curriculum-complete")).toHaveCount(0);
@@ -124,29 +132,29 @@ test.describe("RDMA first-principles curriculum", () => {
     await expect(page.getByTestId("guided-lesson-moving-data")).toBeVisible();
     await clickLessonAction(page);
     await clickLessonAction(page);
-    await expect(page.getByText(/Step 3 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 3 of 19/i)).toBeVisible();
 
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator("[data-testid^=guided-lesson-]")).toHaveAttribute("data-hydrated", "true", { timeout: 15000 });
-    await expect(page.getByText(/Step 3 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 3 of 19/i)).toBeVisible();
     await page.getByRole("button", { name: /Back to previous step/i }).click();
-    await expect(page.getByText(/Step 2 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 2 of 19/i)).toBeVisible();
 
     await page.getByRole("button", { name: /Restart this lesson/i }).click();
-    await expect(page.getByText(/Step 1 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 1 of 19/i)).toBeVisible();
     await page.getByTestId("lesson-action").focus();
     await expect(page.getByTestId("lesson-action")).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page.getByText(/Step 2 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 2 of 19/i)).toBeVisible();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByText(/Step 3 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 3 of 19/i)).toBeVisible();
     await page.keyboard.press("ArrowLeft");
-    await expect(page.getByText(/Step 2 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 2 of 19/i)).toBeVisible();
 
     await page.goto("/practical/rdma?lesson=packets", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("guided-lesson-packets")).toBeVisible();
     await expect(page.locator("[data-testid^=guided-lesson-]")).toHaveAttribute("data-hydrated", "true", { timeout: 15000 });
-    await page.getByTestId("lesson-outline").locator("summary").click();
+    await openLessonOutline(page);
     await page.getByRole("button", { name: /You can now connect the programming model to the fabric/i }).click();
     await expect(page.getByText(/Step 7 of 7/i)).toBeVisible();
     await expect(page.getByTestId("lesson-action")).toBeDisabled();
@@ -160,99 +168,76 @@ test.describe("RDMA first-principles curriculum", () => {
     expectNoBrowserErrors(tracker);
   });
 
-  test("DMA is demonstrated locally before RDMA and the comparison uses real data-path diagrams", async ({ page }) => {
+  test("host architecture and TCP foundations use authored copy and validated captures", async ({ page }) => {
+    const tracker = trackErrors(page);
+    await page.goto("/practical/rdma", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("guided-lesson-moving-data")).toContainText(/Before we connect two computers/i);
+    await expect(page.getByTestId("foundation-host-architecture")).toContainText(/CPU/i);
+    await expect(page.getByTestId("foundation-host-architecture")).toContainText(/RAM/i);
+    await expect(page.getByTestId("foundation-host-architecture")).toContainText(/kernel/i);
+    await expect(page.getByText(/19 authored subsections/i)).toBeVisible();
+    await expect(page.getByTestId("guided-lesson-moving-data")).not.toContainText(/\{\{/);
+
+    await advanceStates(page, 7);
+    await expect(page.getByTestId("foundation-socket-endpoints")).toContainText(/process-local descriptor/i);
+    await clickLessonAction(page);
+    await expect(page.getByTestId("foundation-socket-endpoints")).toContainText(/connection four-tuple/i);
+    await expect(page.getByTestId("guided-lesson-moving-data")).toContainText(/Python includes a standard-library module called/i);
+    await expect(page.getByTestId("tcp-handshake-evidence")).toContainText(/SYN/i);
+    await expect(page.getByTestId("tcp-handshake-evidence")).toContainText(/5001/i);
+
+    await advanceStates(page, 2);
+    await expect(page.getByTestId("foundation-byte-stream")).toContainText(/continuous byte stream positions/i);
+    await page.getByTestId("byte-stream-pattern-toggle").click();
+    await expect(page.getByTestId("foundation-byte-stream")).toContainText(/read HE/i);
+    await advanceStates(page, 2);
+    await expect(page.getByTestId("tcp-segmentation-evidence")).toContainText(/frame 4: relative bytes 1–1448/i);
+    await expect(page.getByTestId("tcp-segmentation-evidence")).toContainText(/frame 5: relative bytes 1449–2896/i);
+    await expect(page.getByTestId("tcp-segmentation-evidence")).toContainText(/frame 6: relative bytes 2897–4096/i);
+
+    await advanceStates(page, 3);
+    await expect(page.getByTestId("tcp-read-evidence")).toContainText(/read 1: requested 2, returned 2/i);
+    await expect(page.getByTestId("tcp-read-evidence")).toContainText(/read 3: requested 1, returned 1/i);
+    await expect(page.getByTestId("tcp-read-evidence")).toContainText(/Recv-Q 5/i);
+    await clickLessonAction(page);
+    await expect(page.getByTestId("tcp-read-order-evidence")).toContainText(/Receiver reads first/i);
+    await expect(page.getByTestId("tcp-read-order-evidence")).toContainText(/Sender sends first/i);
+    await clickLessonAction(page);
+    await expect(page.getByTestId("tcp-loopback-evidence")).toContainText(/software loopback/i);
+    expectNoBrowserErrors(tracker);
+  });
+
+  test("DMA and Soft-RoCE foundations use the supplied authored progression", async ({ page }) => {
     const tracker = trackErrors(page);
     await page.goto("/practical/rdma?lesson=why-rdma", { waitUntil: "domcontentloaded" });
-    await advanceStates(page, 2);
+    await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/A local memory transfer without CPU copying every byte/i);
+    await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/DMA allows a suitably configured device/i);
     await expect(page.getByTestId("cpu-copy-diagram")).toBeVisible();
-    await expect(page.getByTestId("cpu-copy-diagram")).toContainText(/CPU executes instructions/i);
-
-    await clickLessonAction(page);
-    await expect(page.getByTestId("device-dma-diagram")).toBeVisible();
-    await expect(page.getByTestId("dma-direct-path")).toContainText(/no CPU byte-copy loop/i);
-    await expect(page.getByTestId("dma-destination-memory")).not.toContainText("HELLO");
-    await page.getByTestId("reveal-dma-transfer").click();
-    await expect(page.getByTestId("dma-destination-memory")).toContainText("HELLO");
-
-    await clickLessonAction(page);
-    await expect(page.getByTestId("hardware-rdma-concept-path")).toBeVisible();
-    await expect(page.getByTestId("hardware-rdma-concept-path")).not.toContainText(/Kernel socket buffer/i);
-
-    await clickLessonAction(page);
-    await expect(page.getByTestId("transfer-model-comparison")).toBeVisible();
-    await expect(page.getByTestId("conventional-data-path")).toBeVisible();
-    await page.getByRole("button", { name: /Hardware RDMA/i }).click();
-    await expect(page.getByTestId("hardware-rdma-concept-path")).toBeVisible();
+    await advanceStates(page, 2);
+    await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/The question RDMA addresses is not whether a NIC can perform DMA at all/i);
+    await advanceStates(page, 2);
+    await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/Linux has a software implementation called RXE/i);
+    await expect(page.getByTestId("soft-roce-stack-visual")).toContainText(/logical RXE device rxe0/i);
+    await expect(page.getByTestId("soft-roce-stack-visual")).toContainText(/No CPU-offload or throughput claim/i);
+    await expect(page.getByTestId("guided-lesson-why-rdma")).toContainText(/It is not an extra physical NIC/i);
     expectNoBrowserErrors(tracker);
   });
 
-  test("memory registration explains mapping, permissions, bounds and keys accurately", async ({ page }) => {
+  test("memory resources keys and queue foundations use authored copy and verified RDMA bindings", async ({ page }) => {
     const tracker = trackErrors(page);
     await page.goto("/practical/rdma?lesson=memory", { waitUntil: "domcontentloaded" });
-    await clickLessonAction(page);
-    await expect(page.getByTestId("process-memory-scope")).toContainText(/allocated, not yet registered/i);
-    await expect(page.getByTestId("memory-registration-diagram")).toContainText(/no registered description/i);
-    await expect(page.getByText(/valid registered mapping and explicit access attributes/i)).toBeVisible();
-    await advanceStates(page, 3);
-    await expect(page.getByTestId("memory-access-exercise")).toBeVisible();
-    await expect(page.getByTestId("memory-access-address-map")).toContainText(/unregistered bytes 16–23/i);
-    await page.getByTestId("memory-access-valid-read").click();
-    await expect(page.getByTestId("memory-access-result")).toContainText(/Permitted/i);
-    await expect(page.getByTestId("memory-access-result")).toContainText(/inside the registered region/i);
-    await page.getByTestId("memory-access-write-without-permission").click();
-    await expect(page.getByTestId("memory-access-result")).toContainText(/address range is valid/i);
-    await expect(page.getByTestId("memory-access-result")).toContainText(/remote write · absent/i);
-    await expect(page.getByTestId("memory-access-result")).toContainText(/does not by itself authorize/i);
-    await page.getByTestId("memory-access-out-of-bounds-read").click();
-    await expect(page.getByTestId("memory-access-result")).toContainText(/crosses the registered boundary/i);
-    await expect(page.getByTestId("memory-access-result")).toContainText(/remote read · present/i);
-    await expect(page.getByText(/local-write registration flag is different/i)).toBeVisible();
-    expectNoBrowserErrors(tracker);
-  });
+    await expect(page.getByTestId("guided-lesson-memory")).toContainText(/A buffer is not yet an RDMA Memory Region/i);
+    await expect(page.getByTestId("guided-lesson-memory")).toContainText(/illustrative virtual address/i);
+    await advanceStates(page, 6);
+    await expect(page.getByTestId("guided-lesson-memory")).toContainText(/LKEY/i);
+    await expect(page.getByTestId("guided-lesson-memory")).toContainText(/RKEY/i);
 
-  test("QP and CQ resource relationships are introduced progressively and outside the conventional socket stack", async ({ page }) => {
-    const tracker = trackErrors(page);
     await page.goto("/practical/rdma?lesson=queues", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("lesson4-progressive-instruction-diagram")).toBeVisible();
-    await expect(page.getByTestId("lesson4-hello-memory")).toContainText("HELLO");
-    await expect(page.getByTestId("lesson4-progressive-instruction-diagram")).not.toContainText(/QPN|Completion Queue/);
-
+    await expect(page.getByTestId("guided-lesson-queues")).toContainText(/Why create communication resources before transferring anything/i);
     await clickLessonAction(page);
-    await expect(page.getByTestId("lesson4-illustrative-work-request")).toContainText(/Operation/i);
-    await expect(page.getByTestId("lesson4-illustrative-work-request")).toContainText(/SEND/i);
-    await expect(page.getByTestId("lesson4-illustrative-work-request")).toContainText(/not submitted/i);
-    await expect(page.getByTestId("lesson4-progressive-instruction-diagram")).not.toContainText(/posted to the Send Queue/i);
-
-    await clickLessonAction(page);
-    await expect(page.getByTestId("lesson4-send-queue-hosta")).toBeVisible();
-    await expect(page.getByTestId("lesson4-send-queue-hosta")).toContainText(/empty in this illustration/i);
-    await expect(page.getByTestId("lesson4-illustrative-work-request")).toContainText(/not submitted/i);
-    await expect(page.getByTestId("lesson-narrative")).toContainText(/Our laboratory prepares both Reliable Connected endpoints before submitting the SEND operation/i);
-    await expect(page.getByTestId("lesson-narrative")).not.toContainText(/every kind of Work Request|universally requires the QP/i);
-
-    await clickLessonAction(page);
-    await expect(page.getByTestId("lesson4-qp-boundary")).toBeVisible();
-    await expect(page.getByTestId("lesson4-receive-queue-hosta")).toBeVisible();
-
-    await clickLessonAction(page);
-    await expect(page.getByTestId("lesson4-peer-endpoint-diagram")).toBeVisible();
-    await expect(page.getByTestId("lesson4-qp-hosta")).toContainText(/Send Queue/i);
-    await expect(page.getByTestId("lesson4-qp-hosta")).toContainText(/Receive Queue/i);
-    await expect(page.getByTestId("lesson4-qp-hostb")).toContainText(/Receive Queue/i);
-    await expect(page.getByTestId("lesson4-cq-hosta")).toHaveCount(0);
-    await expect(page.getByTestId("lesson4-control-channel")).toContainText(/TCP control channel/i);
-    await expect(page.getByTestId("lesson4-control-channel")).toContainText(/192\.168\.100\.1/i);
-    await expect(page.getByTestId("lesson4-control-channel")).toContainText(/not payload/i);
-    await expect(page.getByTestId("lesson4-peer-endpoint-diagram")).toContainText(/remains constructed, not submitted/i);
-    await expect(page.getByTestId("lesson4-peer-endpoint-diagram")).not.toContainText(/Kernel socket buffer/i);
-
-    await clickLessonAction(page);
-    await expect(page.getByTestId("completion-lifecycle-diagram")).toBeVisible();
-    await expect(page.getByTestId("lesson4-cq-introduction-context")).toContainText(/separate from the Queue Pair/i);
-    await expect(page.getByTestId("lesson4-no-transfer-boundary")).toContainText(/does not execute a SEND/i);
-
-    await clickLessonAction(page);
-    await expect(page.getByTestId("polled-completion-outside-cq")).toBeVisible();
+    await expect(page.getByTestId("guided-lesson-queues")).toContainText(/Constructing the request only prepares/i);
+    await advanceStates(page, 3);
+    await expect(page.getByTestId("guided-lesson-queues")).toContainText(/Polling removes the retrieved entries from the CQ/i);
     expectNoBrowserErrors(tracker);
   });
 
@@ -339,7 +324,7 @@ test.describe("RDMA first-principles curriculum", () => {
     await expect(page.locator('[data-testid="cq-resource-hostb"]')).toContainText(/not yet inspected/i);
     await expect(page.locator('[data-testid="cq-resource-hostb"]')).not.toContainText(/known empty/i);
 
-    await page.getByTestId("lesson-outline").locator("summary").click();
+    await openLessonOutline(page);
     await expect(page.getByRole("button", { name: /target Completion Queue is observed empty/i })).toBeDisabled();
 
     await page.getByTestId("write-completion-prediction").getByRole("button", { name: /^Yes$/i }).click();
@@ -501,7 +486,7 @@ test.describe("RDMA first-principles curriculum", () => {
     test.setTimeout(150_000);
     await page.addInitScript(() => window.localStorage.clear());
 
-    for (const width of [320, 360, 390, 430]) {
+    for (const width of [320, 360, 390, 430, 768]) {
       await page.setViewportSize({ width, height: 844 });
       await page.goto("/practical/rdma?lesson=write", { waitUntil: "domcontentloaded" });
       await advanceStates(page, 5);
@@ -573,7 +558,12 @@ test.describe("RDMA first-principles curriculum", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/practical/rdma", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("guided-lesson-moving-data")).toBeVisible();
-    await expect(page.getByTestId("opening-memory-diagram")).toContainText("HELLO");
+    await expect(page.getByTestId("foundation-host-architecture")).toBeVisible();
+    const foundationVisualBox = await page.getByTestId("lesson-visual").boundingBox();
+    const foundationNarrativeBox = await page.getByTestId("lesson-narrative").boundingBox();
+    expect(foundationVisualBox).not.toBeNull();
+    expect(foundationNarrativeBox).not.toBeNull();
+    expect(foundationVisualBox!.y).toBeLessThan(foundationNarrativeBox!.y);
     await expect(page.getByTestId("lesson-action")).toBeVisible();
     const actionBox = await page.getByTestId("lesson-action").boundingBox();
     expect(actionBox, "primary opening action should be present in the first mobile viewport").not.toBeNull();
@@ -585,11 +575,11 @@ test.describe("RDMA first-principles curriculum", () => {
     await page.getByTestId("lesson-action").focus();
     await expect(page.getByTestId("lesson-action")).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page.getByText(/Step 2 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 2 of 19/i)).toBeVisible();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByText(/Step 3 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 3 of 19/i)).toBeVisible();
     await page.keyboard.press("ArrowLeft");
-    await expect(page.getByText(/Step 2 of 7/i)).toBeVisible();
+    await expect(page.getByText(/Step 2 of 19/i)).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);
     const clippedMainOverflow = await page.evaluate(() => {
@@ -597,6 +587,17 @@ test.describe("RDMA first-principles curriculum", () => {
       return main ? main.scrollWidth - main.clientWidth : 0;
     });
     expect(clippedMainOverflow).toBeLessThanOrEqual(1);
+
+    for (const width of [320, 360, 390, 430, 768]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/practical/rdma", { waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId("guided-lesson-moving-data")).toBeVisible();
+      const widthOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(widthOverflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+      const visualBox = await page.getByTestId("lesson-visual").boundingBox();
+      const narrativeBox = await page.getByTestId("lesson-narrative").boundingBox();
+      expect(visualBox!.y, `foundation visual should precede narrative at ${width}px`).toBeLessThan(narrativeBox!.y);
+    }
     expectNoBrowserErrors(tracker);
   });
 });

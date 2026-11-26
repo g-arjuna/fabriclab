@@ -1,0 +1,151 @@
+{
+  "captured_at_unix": 1795680707.226217,
+  "hosta_route_to_b": {
+    "command": "ip route get 10.10.10.2",
+    "exit_code": 0,
+    "output": "10.10.10.2 dev data0 src 10.10.10.1 uid 1000 \n    cache \n"
+  },
+  "hostb_route_to_a": {
+    "command": "ip route get 10.10.10.1",
+    "exit_code": 0,
+    "output": "10.10.10.1 dev data0 src 10.10.10.2 uid 1000 \n    cache \n"
+  },
+  "hosts": {
+    "hosta": {
+      "ethtool7": {
+        "command": "ethtool -k data0 2>&1 || true",
+        "exit_code": 0,
+        "output": "Features for data0:\nrx-checksumming: on [fixed]\ntx-checksumming: off\n\ttx-checksum-ipv4: off [fixed]\n\ttx-checksum-ip-generic: off [fixed]\n\ttx-checksum-ipv6: off [fixed]\n\ttx-checksum-fcoe-crc: off [fixed]\n\ttx-checksum-sctp: off [fixed]\nscatter-gather: off\n\ttx-scatter-gather: off [fixed]\n\ttx-scatter-gather-fraglist: off [fixed]\ntcp-segmentation-offload: off\n\ttx-tcp-segmentation: off [fixed]\n\ttx-tcp-ecn-segmentation: off [fixed]\n\ttx-tcp-mangleid-segmentation: off [fixed]\n\ttx-tcp6-segmentation: off [fixed]\ngeneric-segmentation-offload: off [requested on]\ngeneric-receive-offload: on\nlarge-receive-offload: off [fixed]\nrx-vlan-offload: off [fixed]\ntx-vlan-offload: off [fixed]\nntuple-filters: off [fixed]\nreceive-hashing: off [fixed]\nhighdma: on [fixed]\nrx-vlan-filter: on [fixed]\nvlan-challenged: off [fixed]\ntx-lockless: off [fixed]\nnetns-local: off [fixed]\ntx-gso-robust: off [fixed]\ntx-fcoe-segmentation: off [fixed]\ntx-gre-segmentation: off [fixed]\ntx-gre-csum-segmentation: off [fixed]\ntx-ipxip4-segmentation: off [fixed]\ntx-ipxip6-segmentation: off [fixed]\ntx-udp_tnl-segmentation: off [fixed]\ntx-udp_tnl-csum-segmentation: off [fixed]\ntx-gso-partial: off [fixed]\ntx-tunnel-remcsum-segmentation: off [fixed]\ntx-sctp-segmentation: off [fixed]\ntx-esp-segmentation: off [fixed]\ntx-udp-segmentation: off [fixed]\ntx-gso-list: off [fixed]\nfcoe-mtu: off [fixed]\ntx-nocache-copy: off\nloopback: off [fixed]\nrx-fcs: off [fixed]\nrx-all: off [fixed]\ntx-vlan-stag-hw-insert: off [fixed]\nrx-vlan-stag-hw-parse: off [fixed]\nrx-vlan-stag-filter: off [fixed]\nl2-fwd-offload: off [fixed]\nhw-tc-offload: off [fixed]\nesp-hw-offload: off [fixed]\nesp-tx-csum-hw-offload: off [fixed]\nrx-udp_tunnel-port-offload: off [fixed]\ntls-hw-tx-offload: off [fixed]\ntls-hw-rx-offload: off [fixed]\nrx-gro-hw: off\ntls-hw-record: off [fixed]\nrx-gro-list: off\nmacsec-hw-offload: off [fixed]\nrx-udp-gro-forwarding: off\nhsr-tag-ins-offload: off [fixed]\nhsr-tag-rm-offload: off [fixed]\nhsr-fwd-offload: off [fixed]\nhsr-dup-offload: off [fixed]\n"
+      },
+      "hostname0": {
+        "command": "hostname",
+        "exit_code": 0,
+        "output": "hosta\n"
+      },
+      "ip3": {
+        "command": "ip -o addr show dev data0",
+        "exit_code": 0,
+        "output": "4: data0    inet 10.10.10.1/24 brd 10.10.10.255 scope global data0\\       valid_lft forever preferred_lft forever\n4: data0    inet6 fe80::5054:ff:fe00:130a/64 scope link \\       valid_lft forever preferred_lft forever\n"
+      },
+      "ip4": {
+        "command": "ip link show dev data0",
+        "exit_code": 0,
+        "output": "4: data0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000\n    link/ether 52:54:00:00:13:0a brd ff:ff:ff:ff:ff:ff\n    altname enp0s5\n"
+      },
+      "ip5": {
+        "command": "ip -o addr show dev lo",
+        "exit_code": 0,
+        "output": "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n1: lo    inet6 ::1/128 scope host noprefixroute \\       valid_lft forever preferred_lft forever\n"
+      },
+      "ip6": {
+        "command": "ip link show dev lo",
+        "exit_code": 0,
+        "output": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n"
+      },
+      "python32": {
+        "command": "python3 --version",
+        "exit_code": 0,
+        "output": "Python 3.12.3\n"
+      },
+      "ss8": {
+        "command": "ss -tlnp 2>/dev/null | grep -E ':(5001|5002|5003|5004)\\b' || true",
+        "exit_code": 0,
+        "output": ""
+      },
+      "uname1": {
+        "command": "uname -a",
+        "exit_code": 0,
+        "output": "Linux hosta 6.8.0-151-generic #151-Ubuntu SMP PREEMPT_DYNAMIC Wed Nov 11 01:28:36 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n"
+      }
+    },
+    "hostb": {
+      "ethtool7": {
+        "command": "ethtool -k data0 2>&1 || true",
+        "exit_code": 0,
+        "output": "Features for data0:\nrx-checksumming: on [fixed]\ntx-checksumming: off\n\ttx-checksum-ipv4: off [fixed]\n\ttx-checksum-ip-generic: off [fixed]\n\ttx-checksum-ipv6: off [fixed]\n\ttx-checksum-fcoe-crc: off [fixed]\n\ttx-checksum-sctp: off [fixed]\nscatter-gather: off\n\ttx-scatter-gather: off [fixed]\n\ttx-scatter-gather-fraglist: off [fixed]\ntcp-segmentation-offload: off\n\ttx-tcp-segmentation: off [fixed]\n\ttx-tcp-ecn-segmentation: off [fixed]\n\ttx-tcp-mangleid-segmentation: off [fixed]\n\ttx-tcp6-segmentation: off [fixed]\ngeneric-segmentation-offload: off [requested on]\ngeneric-receive-offload: on\nlarge-receive-offload: off [fixed]\nrx-vlan-offload: off [fixed]\ntx-vlan-offload: off [fixed]\nntuple-filters: off [fixed]\nreceive-hashing: off [fixed]\nhighdma: on [fixed]\nrx-vlan-filter: on [fixed]\nvlan-challenged: off [fixed]\ntx-lockless: off [fixed]\nnetns-local: off [fixed]\ntx-gso-robust: off [fixed]\ntx-fcoe-segmentation: off [fixed]\ntx-gre-segmentation: off [fixed]\ntx-gre-csum-segmentation: off [fixed]\ntx-ipxip4-segmentation: off [fixed]\ntx-ipxip6-segmentation: off [fixed]\ntx-udp_tnl-segmentation: off [fixed]\ntx-udp_tnl-csum-segmentation: off [fixed]\ntx-gso-partial: off [fixed]\ntx-tunnel-remcsum-segmentation: off [fixed]\ntx-sctp-segmentation: off [fixed]\ntx-esp-segmentation: off [fixed]\ntx-udp-segmentation: off [fixed]\ntx-gso-list: off [fixed]\nfcoe-mtu: off [fixed]\ntx-nocache-copy: off\nloopback: off [fixed]\nrx-fcs: off [fixed]\nrx-all: off [fixed]\ntx-vlan-stag-hw-insert: off [fixed]\nrx-vlan-stag-hw-parse: off [fixed]\nrx-vlan-stag-filter: off [fixed]\nl2-fwd-offload: off [fixed]\nhw-tc-offload: off [fixed]\nesp-hw-offload: off [fixed]\nesp-tx-csum-hw-offload: off [fixed]\nrx-udp_tunnel-port-offload: off [fixed]\ntls-hw-tx-offload: off [fixed]\ntls-hw-rx-offload: off [fixed]\nrx-gro-hw: off\ntls-hw-record: off [fixed]\nrx-gro-list: off\nmacsec-hw-offload: off [fixed]\nrx-udp-gro-forwarding: off\nhsr-tag-ins-offload: off [fixed]\nhsr-tag-rm-offload: off [fixed]\nhsr-fwd-offload: off [fixed]\nhsr-dup-offload: off [fixed]\n"
+      },
+      "hostname0": {
+        "command": "hostname",
+        "exit_code": 0,
+        "output": "hostb\n"
+      },
+      "ip3": {
+        "command": "ip -o addr show dev data0",
+        "exit_code": 0,
+        "output": "4: data0    inet 10.10.10.2/24 brd 10.10.10.255 scope global data0\\       valid_lft forever preferred_lft forever\n4: data0    inet6 fe80::5054:ff:fe00:130b/64 scope link \\       valid_lft forever preferred_lft forever\n"
+      },
+      "ip4": {
+        "command": "ip link show dev data0",
+        "exit_code": 0,
+        "output": "4: data0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000\n    link/ether 52:54:00:00:13:0b brd ff:ff:ff:ff:ff:ff\n    altname enp0s5\n"
+      },
+      "ip5": {
+        "command": "ip -o addr show dev lo",
+        "exit_code": 0,
+        "output": "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n1: lo    inet6 ::1/128 scope host noprefixroute \\       valid_lft forever preferred_lft forever\n"
+      },
+      "ip6": {
+        "command": "ip link show dev lo",
+        "exit_code": 0,
+        "output": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n"
+      },
+      "python32": {
+        "command": "python3 --version",
+        "exit_code": 0,
+        "output": "Python 3.12.3\n"
+      },
+      "ss8": {
+        "command": "ss -tlnp 2>/dev/null | grep -E ':(5001|5002|5003|5004)\\b' || true",
+        "exit_code": 0,
+        "output": ""
+      },
+      "uname1": {
+        "command": "uname -a",
+        "exit_code": 0,
+        "output": "Linux hostb 6.8.0-151-generic #151-Ubuntu SMP PREEMPT_DYNAMIC Wed Nov 11 01:28:36 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n"
+      }
+    }
+  },
+  "loopback_route": {
+    "command": "ip route get 127.0.0.1",
+    "exit_code": 0,
+    "output": "local 127.0.0.1 dev lo src 127.0.0.1 uid 1000 \n    cache <local> \n"
+  },
+  "offload_control": {
+    "hosta": {
+      "after": {
+        "command": "ethtool -k data0 2>&1 | grep -E 'generic-receive-offload|generic-segmentation-offload|tcp-segmentation-offload' || true",
+        "exit_code": 0,
+        "output": "tcp-segmentation-offload: off\ngeneric-segmentation-offload: off [requested on]\ngeneric-receive-offload: off\n"
+      },
+      "before": {
+        "command": "ethtool -k data0 2>&1 | grep -E 'generic-receive-offload|generic-segmentation-offload|tcp-segmentation-offload' || true",
+        "exit_code": 0,
+        "output": "tcp-segmentation-offload: off\ngeneric-segmentation-offload: off [requested on]\ngeneric-receive-offload: on\n"
+      },
+      "change": {
+        "command": "sudo ethtool -K data0 gro off 2>&1 || true",
+        "exit_code": 0,
+        "output": ""
+      }
+    },
+    "hostb": {
+      "after": {
+        "command": "ethtool -k data0 2>&1 | grep -E 'generic-receive-offload|generic-segmentation-offload|tcp-segmentation-offload' || true",
+        "exit_code": 0,
+        "output": "tcp-segmentation-offload: off\ngeneric-segmentation-offload: off [requested on]\ngeneric-receive-offload: off\n"
+      },
+      "before": {
+        "command": "ethtool -k data0 2>&1 | grep -E 'generic-receive-offload|generic-segmentation-offload|tcp-segmentation-offload' || true",
+        "exit_code": 0,
+        "output": "tcp-segmentation-offload: off\ngeneric-segmentation-offload: off [requested on]\ngeneric-receive-offload: on\n"
+      },
+      "change": {
+        "command": "sudo ethtool -K data0 gro off 2>&1 || true",
+        "exit_code": 0,
+        "output": ""
+      }
+    }
+  },
+  "purpose": "isolated FabricLab TCP foundations reference run"
+}

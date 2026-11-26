@@ -1,0 +1,17 @@
+[
+  {
+    "event": "capture_started",
+    "host": "hostb",
+    "interface": "data0",
+    "monotonic_ns": 88861687999365,
+    "remote": "/tmp/tcp-foundation-captures/large.pcap"
+  },
+  {
+    "event": "receiver_listen",
+    "monotonic_ns": 88862190275412
+  },
+  {
+    "event": "capture_stopped",
+    "monotonic_ns": 88865083281571
+  }
+]

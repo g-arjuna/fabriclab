@@ -240,7 +240,9 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
             <h2 className="font-semibold text-slate-200">Reproduce the evidence</h2>
             <p className="mt-2">The guided lesson replays validated recorded evidence in your browser; it does not execute live RDMA operations.</p>
             <div className="mt-3 grid gap-2">
-              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/reference-evidence.json">Evidence bundle JSON</a>
+              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/reference-evidence.json">RDMA evidence bundle JSON</a>
+              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/tcp-foundations-evidence.json">TCP foundations evidence JSON</a>
+              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/foundations-section-map.json">Foundations source-section map</a>
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="https://github.com/g-arjuna/fabriclab/tree/a208af6ecf4e838d6d2c475ede366494de81a706/labs/rdma-basics">Lab source and reproduction instructions</a>
             </div>
           </section>
@@ -249,7 +251,9 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
             <summary className="cursor-pointer font-semibold text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Reproduce the evidence</summary>
             <p className="mt-2">The guided lesson replays validated recorded evidence in your browser; it does not execute live RDMA operations.</p>
             <div className="mt-3 grid gap-2">
-              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/reference-evidence.json">Evidence bundle JSON</a>
+              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/reference-evidence.json">RDMA evidence bundle JSON</a>
+              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/tcp-foundations-evidence.json">TCP foundations evidence JSON</a>
+              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/foundations-section-map.json">Foundations source-section map</a>
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="https://github.com/g-arjuna/fabriclab/tree/a208af6ecf4e838d6d2c475ede366494de81a706/labs/rdma-basics">Lab source and reproduction instructions</a>
             </div>
           </details>
