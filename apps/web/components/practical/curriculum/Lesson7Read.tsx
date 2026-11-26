@@ -2,7 +2,7 @@
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { CompletionSummary, PacketSummary, PayloadMemory, WorkRequestSummary } from "./operationVisuals";
-import { CodeOperationChain, RdmaSystemDiagram, type CompletionQueueVisualModel, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
+import { CodeOperationChain, ExperimentFocusDiagram, ExpandableTechnicalDiagram, RdmaSystemDiagram, type CompletionQueueVisualModel, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
 import { EvidenceNote, exactValue, OperationComparisonTable, SourceExcerpt } from "./visuals";
 import { rdmaEvidence } from "@/lib/practical/rdmaEvidence";
 
@@ -38,10 +38,9 @@ function visual(stage: number) {
     detail: `${readWr.byteLength} bytes · remote source into local destination`,
     lifecycle: readLifecycle,
   };
-  const readerCq: CompletionQueueVisualModel = stage >= 8
-    ? { state: "occupied", entries: [{ id: readCqe.id, label: `CQE · RDMA read · WR ${exactValue(readCqe.wrId)}`, detail: "polled by Server A", evidence: "recorded" }] }
-    : { state: "unknown" };
-  const sourceCq: CompletionQueueVisualModel = stage >= 8 ? { state: "empty" } : { state: "unknown" };
+  const readerCq: CompletionQueueVisualModel = stage >= 8 ? { state: "post-poll" } : { state: "unknown" };
+  const readerObserved = stage >= 8 ? [{ id: readCqe.id, label: `Work Completion · RDMA read · WR ${exactValue(readCqe.wrId)}`, detail: "retrieved by Server A poll", evidence: "recorded" as const, lifecycle: "polled" as const }] : undefined;
+  const sourceCq: CompletionQueueVisualModel = stage >= 10 ? { state: "empty" } : { state: "unknown" };
   const requestInFlight = stage === 5;
   const responseInFlight = stage === 6;
   const chain = stage === 4
@@ -50,29 +49,80 @@ function visual(stage: number) {
       ? [{ path: "python/exp_d_read.py", line: 126, effect: "Server A polls and observes the reader-local completion" }]
       : [];
 
+  const focusTransfer = {
+    visible: requestInFlight || responseInFlight || stage === 2 || stage === 9,
+    direction: requestInFlight || stage === 9 ? "a-to-b" as const : responseInFlight || stage === 2 ? "b-to-a" as const : "none" as const,
+    kind: requestInFlight ? "request" as const : responseInFlight ? "response" as const : stage === 2 || stage === 9 ? "control" as const : "none" as const,
+    label: requestInFlight
+      ? <span>{readRequest.opcodeName}<br />request · no payload data</span>
+      : responseInFlight
+        ? <span>{readResponse.opcodeName}<br />payload returns to reader</span>
+        : stage === 2
+          ? <span>TCP metadata: remote address + RKEY</span>
+          : stage === 9
+            ? <span>TCP synchronization: read_done</span>
+            : undefined,
+  };
+  const focusLocalMemory = stage >= 9
+    ? `${localAfter}
+[recorded verification]`
+    : stage >= 7
+      ? `${remoteBefore?.split("#")[0] || "remote data"}
+[causal placement]`
+      : "local destination waiting";
+
   return (
     <div className="space-y-3">
       {chain.length ? <CodeOperationChain items={chain} /> : null}
-      <RdmaSystemDiagram
+      <ExperimentFocusDiagram
+        transfer={focusTransfer}
+        caption="Compact ownership/direction view: A initiates, the request goes A→B, payload data returns B→A, and completion belongs to A."
+        a={{
+          host: "hosta",
+          name: "Server A",
+          memoryLabel: "reader destination memory",
+          memory: focusLocalMemory,
+          memoryNote: stage >= 9 ? "verified after completion" : stage >= 7 ? "placement is causal illustration" : "registered local destination",
+          work: stage >= 3 ? [{ title: "Send Queue", label: `WR ${exactValue(readWr.wrId)} · READ`, tone: readLifecycle === "posted" || readLifecycle === "in-flight" ? "pending" : readLifecycle === "completed" ? "completed" : "empty" }] : [],
+          completion: stage >= 8 ? `application-observed read completion · WR ${exactValue(readCqe.wrId)}` : undefined,
+          providerNote: requestInFlight ? "emits READ request" : responseInFlight ? "receives response payload" : undefined,
+        }}
+        b={{
+          host: "hostb",
+          name: "Server B",
+          memoryLabel: "remote source memory",
+          memory: stage >= 2 ? remoteBefore : "registered source memory",
+          memoryNote: stage >= 2 ? "recorded before-state" : undefined,
+          work: stage >= 3 ? [{ title: "Receive Queue", label: "no data WR posted for this READ", tone: "empty" }] : [],
+          completion: stage >= 10 ? "recorded post-synchronization source CQ poll: zero completions" : undefined,
+          providerNote: requestInFlight ? "reads registered memory" : responseInFlight ? "returns response payload" : undefined,
+        }}
+      />
+      <ExpandableTechnicalDiagram>
+        <RdmaSystemDiagram
         caption="Guided replay of the validated RDMA READ reference execution. The request travels from reader to source; the payload response travels back from source to reader. Queue lifecycle is a logical instructional reconstruction tied to recorded events."
         transfer={{
-          visible: requestInFlight || responseInFlight || stage === 2,
-          direction: requestInFlight ? "a-to-b" : responseInFlight || stage === 2 ? "b-to-a" : "none",
-          kind: requestInFlight ? "request" : responseInFlight ? "response" : stage === 2 ? "control" : "none",
+          visible: requestInFlight || responseInFlight || stage === 2 || stage === 9,
+          direction: requestInFlight || stage === 9 ? "a-to-b" : responseInFlight || stage === 2 ? "b-to-a" : "none",
+          kind: requestInFlight ? "request" : responseInFlight ? "response" : stage === 2 || stage === 9 ? "control" : "none",
           label: requestInFlight
             ? <span>{readRequest.opcodeName}<br />request only · no payload data</span>
             : responseInFlight
               ? <span>{readResponse.opcodeName}<br />payload returns to reader</span>
               : stage === 2
                 ? <span>TCP control channel: remote address + RKEY metadata</span>
-                : undefined,
+                : stage === 9
+                  ? <span>TCP synchronization: read_done<br />control only · no payload bytes</span>
+                  : undefined,
           detail: requestInFlight
             ? "Request direction: reader asks source transport for memory."
             : responseInFlight
               ? "Payload direction: source memory returns to reader memory."
               : stage === 2
-                ? "The reader learns which remote region it may read."
-                : stage >= 8
+                ? "The reader learns which remote region it may read over the separate control connection."
+                : stage === 9
+                  ? "The reader has verified memory and now signals the source; the source-side CQ observation has not yet been revealed."
+                  : stage >= 8
                   ? "The READ request/response exchange has completed; the learner is inspecting application completion and memory evidence."
                   : stage === 7
                     ? "The response has arrived; local memory placement is causally illustrated before completion inspection."
@@ -95,6 +145,7 @@ function visual(stage: number) {
           sendQueue: stage >= 3 ? queueFor(readWork, readLifecycle) : { state: "not-introduced" },
           receiveQueue: stage >= 3 ? { state: "empty" } : { state: "not-introduced" },
           completionQueue: readerCq,
+          observedCompletions: readerObserved,
           emphasize: stage === 1 ? ["memory"] : stage === 3 ? ["application", "memory"] : stage === 4 ? ["application", "qp"] : requestInFlight ? ["provider"] : responseInFlight ? ["provider", "memory"] : stage >= 8 ? ["cq"] : [],
         }}
         b={{
@@ -102,7 +153,7 @@ function visual(stage: number) {
           name: "Server B",
           role: "source / responder",
           qpn: exactValue(experiment.endpoints.responder.qpn),
-          application: stage >= 4 ? "source application owns the data but posts no data Work Request for this READ" : "source application owns the data",
+          application: stage >= 10 ? "source application polls once after synchronization and records zero completions" : stage >= 4 ? "source application owns the data but posts no data Work Request for this READ" : "source application owns the data",
           memory: stage >= 2 ? `${remoteBefore}\n[recorded remote source memory]` : "registered source memory not yet inspected",
           provider: requestInFlight ? "receives the READ request" : responseInFlight ? "returns memory contents in a READ response" : "Soft-RoCE provider implementing RDMA transport",
           softRoce: true,
@@ -111,7 +162,8 @@ function visual(stage: number) {
           completionQueue: sourceCq,
           emphasize: stage === 1 || stage === 2 ? ["memory"] : requestInFlight ? ["provider", "memory"] : responseInFlight ? ["provider", "memory"] : [],
         }}
-      />
+        />
+      </ExpandableTechnicalDiagram>
     </div>
   );
 }
@@ -261,6 +313,19 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
       visual: visual(9),
       evidence: <EvidenceNote kind="Verified through application memory inspection">The reader compared its local buffer with the expected bytes and logged a successful payload verification.</EvidenceNote>,
       inspect: <PayloadMemory label="Recorded reader memory after READ" value={localAfter} />,
+    },
+    {
+      id: "responder-cq-observation",
+      title: "Only after synchronization is the responder CQ observation revealed",
+      actionLabel: "Compare the three operations",
+      body: (
+        <>
+          <p>The protocol property can be predicted: because Server B posted no data Work Request for the READ, servicing it should not create a normal source-side Work Completion.</p>
+          <p>The recorded observation is more specific. Server A verified its memory, sent the <code className="font-mono text-cyan-100">read_done</code> control message, Server B received that signal and only then polled its CQ once, recording zero completions. The empty-CQ evidence is therefore revealed after the causal program sequence that produced it.</p>
+        </>
+      ),
+      visual: visual(10),
+      evidence: <EvidenceNote kind="Recorded application event">The zero-count source CQ poll is a recorded post-synchronization observation. It is not revealed early merely because the protocol outcome is expected.</EvidenceNote>,
     },
     {
       id: "operation-comparison",

@@ -153,3 +153,21 @@ pre,
     transition-duration: 0.01ms !important;
   }
 }
+
+@media (max-width: 639px) {
+  .guided-lesson-article {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+  }
+
+  .guided-mobile-footer {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 639px) {
+  [data-testid="experiment-focus-diagram"],
+  [data-testid="final-packet-investigation"],
+  [data-testid="write-completion-prediction"] {
+    scroll-margin-bottom: calc(8rem + env(safe-area-inset-bottom));
+  }
+}

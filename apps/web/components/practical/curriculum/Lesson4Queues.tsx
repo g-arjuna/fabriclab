@@ -2,7 +2,7 @@
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { EvidenceNote, exactValue, FactGrid, SourceExcerpt } from "./visuals";
-import { CodeOperationChain, RdmaSystemDiagram, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
+import { CompletionLifecycleDiagram, RdmaSystemDiagram, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
 import { rdmaEvidence } from "@/lib/practical/rdmaEvidence";
 
 const resources = rdmaEvidence.experiments.find((experiment) => experiment.id === "resources")!;
@@ -16,13 +16,19 @@ function queuesVisual(stage: number) {
     detail: "conceptual instruction object",
     lifecycle: stage < 2 ? "constructed" : stage < 6 ? "posted" : "completed",
   };
-  const queueNowEmpty: QueueVisualModel = { state: "empty", entries: stage >= 6 ? [wr] : [] };
+  if (stage >= 5) {
+    return (
+      <div className="space-y-3">
+        <CompletionLifecycleDiagram polled={stage >= 6} />
+        <div className="rounded-xl border border-white/10 bg-slate-900/40 p-3 text-sm leading-6 text-slate-300" data-testid="lesson4-no-transfer-boundary">
+          This lifecycle is intentionally conceptual. Lesson 4 prepares resources and explains completion mechanics; it does not execute a SEND. The complete receiver-prepared SEND/RECEIVE experiment is Lesson 5.
+        </div>
+      </div>
+    );
+  }
   const pendingQueue: QueueVisualModel = { state: "occupied", entries: stage >= 2 ? [wr] : [] };
   return (
     <div className="space-y-3">
-      {stage >= 2 ? (
-        <CodeOperationChain items={[{ path: "python/exp_b_send_recv.py", line: 139, effect: "a real SEND Work Request enters the sender Send Queue" }]} />
-      ) : null}
       <RdmaSystemDiagram
         caption={stage >= 6 ? "Logical mechanical diagram. The Work Request is application intent, the packet and ACK are wire objects, and the Completion Queue Entry is a separate local application-observable result." : "Logical resource diagram. Components appear as the lesson establishes why they are needed; queue placement is not a claim about physical storage inside a particular NIC."}
         transfer={{
@@ -30,7 +36,7 @@ function queuesVisual(stage: number) {
           direction: stage === 4 ? "both" : "none",
           kind: stage === 4 ? "control" : "none",
           label: stage === 4 ? <span>TCP control channel: endpoint metadata only</span> : undefined,
-          detail: stage === 6 ? "The conceptual operation packet and reverse ACK have already occurred; they are not still in flight while the completion is inspected." : stage >= 4 ? "QPN, PSN and network identity are programmed through a separate control mechanism." : "Memory preparation alone does not describe work.",
+          detail: stage >= 4 ? "QPN, PSN and network identity are programmed through a separate TCP control connection, distinct from the RDMA data network." : "Memory preparation alone does not describe work.",
         }}
         a={{
           host: "hosta",
@@ -42,9 +48,9 @@ function queuesVisual(stage: number) {
           provider: stage >= 4 ? "Soft-RoCE provider can use the programmed endpoint" : "RDMA provider present",
           softRoce: true,
           constructedWork: stage === 1 ? [wr] : undefined,
-          sendQueue: stage >= 2 ? (stage >= 6 ? queueNowEmpty : pendingQueue) : { state: "not-introduced" },
+          sendQueue: stage >= 2 ? pendingQueue : { state: "not-introduced" },
           receiveQueue: stage >= 2 ? { state: "empty" } : { state: "not-introduced" },
-          completionQueue: stage >= 5 ? (stage >= 6 ? { state: "occupied", entries: [{ id: "conceptual-cqe", label: "CQE · local outcome", detail: "conceptual signalled send completion", evidence: "conceptual" }] } : { state: "empty" }) : { state: "not-introduced" },
+          completionQueue: { state: "not-introduced" },
           emphasize: stage === 0 ? ["memory"] : stage === 1 ? ["application"] : stage <= 3 ? ["qp"] : stage === 4 ? ["provider"] : stage >= 5 ? ["cq"] : [],
         }}
         b={{
@@ -64,6 +70,33 @@ function queuesVisual(stage: number) {
         }}
       />
     </div>
+  );
+}
+
+function WorkRequestAnatomy() {
+  return (
+    <section className="rounded-2xl border border-cyan-300/15 bg-cyan-300/5 p-4" data-testid="work-request-anatomy">
+      <h3 className="font-semibold text-slate-100">One concrete logical instruction</h3>
+      <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+        <div className="rounded-xl border border-white/10 bg-slate-950/55 p-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Work Request = instruction</div>
+          <dl className="mt-2 space-y-1 font-mono text-xs text-slate-200">
+            <div className="flex justify-between gap-3"><dt>operation</dt><dd>SEND</dd></div>
+            <div className="flex justify-between gap-3"><dt>source buffer</dt><dd>registered memory</dd></div>
+            <div className="flex justify-between gap-3"><dt>length</dt><dd>5 bytes</dd></div>
+            <div className="flex justify-between gap-3"><dt>local key</dt><dd>valid for that region</dd></div>
+            <div className="flex justify-between gap-3"><dt>WR ID</dt><dd>application recognition tag</dd></div>
+            <div className="flex justify-between gap-3"><dt>signalled</dt><dd>request local completion</dd></div>
+          </dl>
+        </div>
+        <div className="text-center font-mono text-cyan-200" aria-hidden="true">→</div>
+        <div className="rounded-xl border border-white/10 bg-slate-950/55 p-3 text-sm leading-6 text-slate-300">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Scatter/Gather Entry</div>
+          <p className="mt-2">The local memory description: address says where the local data begins, length says how much data is involved, and LKEY associates that local memory reference with registered access.</p>
+        </div>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">The Queue Pair is the communication endpoint whose queues hold posted work. The Completion Queue is the separate local reporting resource used later to observe completion.</p>
+    </section>
   );
 }
 
@@ -104,9 +137,10 @@ export function Lesson4Queues({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: queuesVisual(1),
+      interaction: <WorkRequestAnatomy />,
       inspect: (
         <SourceExcerpt path="python/exp_b_send_recv.py" start={131} end={139} title="A real SEND Work Request under construction">
-          The scatter-gather entry names the local buffer address, byte length and LKEY. The SendWR carries the operation type and a signalling flag. Later lessons correlate this exact structure with a genuine packet.
+          This excerpt comes from the separate verified SEND experiment, not from the resource-creation run whose QPNs are shown later. The scatter-gather entry names the local buffer address, byte length and LKEY. The SendWR carries the operation type and a signalling flag. Later lessons correlate this exact structure with a genuine packet.
         </SourceExcerpt>
       ),
     },

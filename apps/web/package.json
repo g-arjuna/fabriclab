@@ -20,7 +20,8 @@
     "test:browser:notifications": "playwright test tests/notifications.smoke.spec.ts",
     "test:browser:release": "npm run test:browser:deploy && npm run test:browser:admin && npm run test:browser:progress && npm run test:browser:catalog && npm run test:browser:entitlements && npm run test:browser:labs",
     "test:browser:ch16": "playwright test tests/ch16.rdma-write.smoke.spec.ts",
-    "test:browser:public": "playwright test tests/public.smoke.spec.ts"
+    "test:browser:public": "playwright test tests/public.smoke.spec.ts",
+    "validate:rdma-curriculum": "node scripts/validate-rdma-curriculum-references.mjs"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",

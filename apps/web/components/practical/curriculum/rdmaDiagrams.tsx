@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { rdmaEvidence } from "@/lib/practical/rdmaEvidence";
 import { cx } from "./visuals";
@@ -26,6 +26,7 @@ export type CompletionVisual = {
   label: string;
   detail?: string;
   evidence?: "recorded" | "conceptual";
+  lifecycle?: "pending" | "polled";
 };
 
 export type QueueVisualModel = {
@@ -34,7 +35,7 @@ export type QueueVisualModel = {
 };
 
 export type CompletionQueueVisualModel = {
-  state: "not-introduced" | "unknown" | "empty" | "occupied";
+  state: "not-introduced" | "unknown" | "empty" | "occupied" | "post-poll";
   entries?: CompletionVisual[];
 };
 
@@ -92,8 +93,8 @@ function NodeBox({
 function Arrow({ direction = "down", label, active = false }: { direction?: "down" | "up" | "right" | "left" | "both"; label?: ReactNode; active?: boolean }) {
   const symbol = direction === "down" ? "↓" : direction === "up" ? "↑" : direction === "right" ? "→" : direction === "left" ? "←" : "↔";
   return (
-    <div className={cx("flex items-center justify-center gap-2 py-1 text-center", active ? "text-cyan-200" : "text-slate-600")} aria-hidden="true">
-      <span className="font-mono text-lg leading-none">{symbol}</span>
+    <div className={cx("flex items-center justify-center gap-2 py-1 text-center", active ? "text-cyan-200" : "text-slate-600")}>
+      <span className="font-mono text-lg leading-none" aria-hidden="true">{symbol}</span>
       {label ? <span className="max-w-56 text-[11px] leading-4">{label}</span> : null}
     </div>
   );
@@ -176,11 +177,11 @@ export function ConventionalDataPathDiagram({ stage, compact = false }: { stage:
         <Arrow direction="up" label={showReceive ? "receive loop returns a complete application buffer" : "waiting for application receive"} active={stage === 5 || received} />
 
         <PathNode label="Kernel socket buffer" active={stage === 3} dimmed={!showSocketPath} tone="kernel">
-          {showSocketPath ? "byte-stream data made available to TCP" : "not involved yet"}
+          {showSocketPath ? <><Bytes value="HELLO" /><div className="mt-1 text-[10px] text-slate-500">byte-stream data made available to TCP</div></> : "not involved yet"}
         </PathNode>
         <div />
         <PathNode label="Kernel socket buffer" active={stage === 5} dimmed={!showSocketPath} tone="kernel">
-          {showReceive ? "received byte-stream data waiting for the application" : "no received bytes yet"}
+          {showReceive ? <><Bytes value="HELLO" /><div className="mt-1 text-[10px] text-slate-500">received byte-stream data waiting for the application</div></> : "no received bytes yet"}
         </PathNode>
 
         <Arrow direction="down" label="TCP/IP processing" active={stage === 3} />
@@ -188,14 +189,14 @@ export function ConventionalDataPathDiagram({ stage, compact = false }: { stage:
         <Arrow direction="up" label="TCP/IP processing" active={stage === 5} />
 
         <PathNode label="NIC transmit" active={stage === 4} dimmed={!showStack} tone="device">
-          {showStack ? "frames outgoing traffic" : "not involved yet"}
+          {showNetwork ? <><Bytes value="HELLO" /><div className="mt-1 text-[10px] text-slate-500">payload inside outgoing frames</div></> : showStack ? "frames outgoing traffic" : "not involved yet"}
         </PathNode>
         <div className={cx("self-center rounded-xl border px-2 py-3 text-center", showNetwork ? "border-orange-300/35 bg-orange-300/10" : "border-dashed border-white/10")} data-testid="conventional-network-packet">
           <div className="font-mono text-lg text-orange-100" aria-hidden="true">→</div>
           {showNetwork ? <div className="mt-1 font-mono text-[10px] leading-4 text-orange-100">packet payload<br />HELLO</div> : <div className="text-[10px] text-slate-600">idle</div>}
         </div>
         <PathNode label="NIC receive" active={stage === 5} dimmed={!showStack} tone="device">
-          {showReceive ? "receives frames from the network" : "listening"}
+          {showReceive ? <><Bytes value="HELLO" /><div className="mt-1 text-[10px] text-slate-500">payload received from the network; not yet application-consumed</div></> : "listening"}
         </PathNode>
       </div>
       <figcaption className="mt-3 text-xs leading-5 text-slate-500">
@@ -206,6 +207,7 @@ export function ConventionalDataPathDiagram({ stage, compact = false }: { stage:
 }
 
 export function DmaDiagram({ phase }: { phase: "cpu-copy" | "device-dma" }) {
+  const [transferred, setTransferred] = useState(false);
   if (phase === "cpu-copy") {
     return (
       <figure className="rounded-2xl border border-white/10 bg-slate-950/35 p-4" data-testid="cpu-copy-diagram">
@@ -223,24 +225,32 @@ export function DmaDiagram({ phase }: { phase: "cpu-copy" | "device-dma" }) {
   return (
     <figure className="rounded-2xl border border-white/10 bg-slate-950/35 p-4" data-testid="device-dma-diagram">
       <div className="mx-auto max-w-3xl">
-        <NodeBox title="CPU" tone="warning">configures the transfer: address, length, direction and permissions</NodeBox>
-        <Arrow direction="down" label="setup / control" active />
+        <NodeBox title="CPU" tone="warning">configures the transfer: device memory source, destination address, length and direction</NodeBox>
+        <Arrow direction="down" label="setup / control · CPU arranges the operation" active />
         <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)]">
           <NodeBox title="DMA-capable device" tone="device" active>
-            performs the memory transfer after being configured
+            <div className="mb-2 text-xs text-slate-400">device has five bytes available</div>
+            <Bytes value="HELLO" />
           </NodeBox>
           <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-2 py-3 text-center" data-testid="dma-direct-path">
-            <div className="font-mono text-lg text-cyan-100" aria-hidden="true">↔</div>
-            <div className="mt-1 text-[11px] leading-4 text-cyan-100">device-mediated memory read/write<br />CPU does not execute a byte-by-byte copy loop</div>
+            <div className="font-mono text-lg text-cyan-100" aria-hidden="true">→</div>
+            <div className="mt-1 text-[11px] leading-4 text-cyan-100">device-mediated memory write<br />no CPU byte-copy loop</div>
           </div>
-          <NodeBox title="System memory buffer" tone="memory" active>
-            device reads or writes this memory through DMA
+          <NodeBox title="Destination memory buffer" tone="memory" active={transferred} testId="dma-destination-memory">
+            {transferred ? <Bytes value="HELLO" /> : <Bytes value="·····" empty />}
           </NodeBox>
         </div>
+        <div className="mt-3 text-center">
+          <button type="button" onClick={() => setTransferred((current) => !current)} aria-pressed={transferred} className="rounded-full border border-cyan-300/30 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-300/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" data-testid="reveal-dma-transfer">
+            {transferred ? "Reset the conceptual destination" : "Reveal the device-mediated transfer"}
+          </button>
+        </div>
         <Arrow direction="down" label="completion or status is observed later" />
-        <div className="mx-auto max-w-md rounded-xl border border-white/10 bg-slate-950/50 p-2.5 text-center text-xs text-slate-400">software observes completion or status through the device/programming interface</div>
+        <div className="mx-auto max-w-md rounded-xl border border-white/10 bg-slate-950/50 p-2.5 text-center text-xs text-slate-400" data-testid="dma-outcome-observation">
+          software subsequently observes completion or status; the CPU arranged the operation while the device performed the memory transfer
+        </div>
       </div>
-      <figcaption className="mt-3 text-center text-xs text-slate-500">Conceptual single-server DMA demonstration. Conventional Ethernet NICs already use DMA.</figcaption>
+      <figcaption className="mt-3 text-center text-xs text-slate-500">Conceptual single-server DMA demonstration, not a captured hardware experiment. Conventional Ethernet NICs already use DMA.</figcaption>
     </figure>
   );
 }
@@ -294,14 +304,139 @@ function CompletionLane({ queue }: { queue: CompletionQueueVisualModel }) {
     <div data-queue-state={queue.state}>
       {queue.state === "unknown" ? <div className="rounded-lg border border-dashed border-white/10 px-2 py-2 text-xs text-slate-500">Completion Queue state not yet inspected</div> : null}
       {queue.state === "empty" ? <div className="rounded-lg border border-dashed border-white/10 px-2 py-2 text-xs text-slate-500">known empty in the inspected context</div> : null}
+      {queue.state === "post-poll" ? <div className="rounded-lg border border-dashed border-lime-300/25 px-2 py-2 text-xs leading-5 text-lime-100/75">the retrieved completion is no longer pending here; residual queue contents were not independently established</div> : null}
       {(queue.entries || []).map((entry) => (
         <div key={entry.id} className="mt-1.5 rounded-lg border border-lime-300/30 bg-lime-300/8 px-2 py-1.5 text-xs leading-5 text-lime-100" data-testid="completion-entry-visual">
           <div className="font-mono">{entry.label}</div>
           {entry.detail ? <div className="text-[11px] text-lime-100/70">{entry.detail}</div> : null}
+          {entry.lifecycle ? <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-lime-100/60">{entry.lifecycle === "polled" ? "retrieved by application poll" : "pending in Completion Queue"}</div> : null}
           {entry.evidence ? <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-lime-100/60">{entry.evidence === "recorded" ? "recorded application evidence" : "conceptual completion illustration"}</div> : null}
         </div>
       ))}
     </div>
+  );
+}
+
+
+export type FocusWorkState = {
+  title: string;
+  label: ReactNode;
+  tone?: "pending" | "consumed" | "completed" | "empty" | "unknown";
+};
+
+export type FocusEndpointModel = {
+  host: "hosta" | "hostb";
+  name: "Server A" | "Server B";
+  memoryLabel: string;
+  memory: ReactNode;
+  memoryNote?: ReactNode;
+  work?: FocusWorkState[];
+  completion?: ReactNode;
+  providerNote?: ReactNode;
+};
+
+function focusWorkTone(tone: FocusWorkState["tone"]) {
+  if (tone === "pending") return "border-cyan-300/35 bg-cyan-300/10 text-cyan-100";
+  if (tone === "consumed") return "border-amber-300/35 bg-amber-300/10 text-amber-100";
+  if (tone === "completed") return "border-emerald-300/35 bg-emerald-300/10 text-emerald-100";
+  if (tone === "unknown") return "border-dashed border-white/15 text-slate-500";
+  return "border-white/10 bg-slate-950/45 text-slate-500";
+}
+
+function focusWorkStatus(tone: FocusWorkState["tone"]) {
+  if (tone === "pending") return "pending work";
+  if (tone === "consumed") return "consumed · no longer pending";
+  if (tone === "completed") return "completed work · no longer pending";
+  if (tone === "unknown") return "not inspected";
+  return "no pending work";
+}
+
+function FocusEndpoint({ endpoint }: { endpoint: FocusEndpointModel }) {
+  return (
+    <section className="min-w-0 rounded-xl border border-white/10 bg-slate-900/35 p-2.5" data-testid={`focus-endpoint-${endpoint.host}`}>
+      <h3 className="text-center text-xs font-semibold uppercase tracking-[0.15em] text-slate-300">{endpoint.name}</h3>
+      <div className="mt-2 rounded-lg border border-sky-300/25 bg-sky-300/8 p-2" data-testid={`focus-memory-${endpoint.host}`}>
+        <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-500">{endpoint.memoryLabel}</div>
+        <div className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-5 text-sky-100">{endpoint.memory}</div>
+        {endpoint.memoryNote ? <div className="mt-1 text-[10px] leading-4 text-slate-400">{endpoint.memoryNote}</div> : null}
+      </div>
+      <Arrow direction="down" label="registered memory + posted work" />
+      <div className="space-y-1.5">
+        {(endpoint.work || []).map((work) => (
+          <div key={work.title} className={cx("rounded-lg border px-2 py-1.5 text-xs leading-5", focusWorkTone(work.tone))} data-testid={`focus-${work.title.toLowerCase().replace(/\s+/g, "-")}-${endpoint.host}`}>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.12em] opacity-75">{work.title}</div>
+            <div className="font-mono">{work.label}</div>
+            <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] opacity-75">{focusWorkStatus(work.tone)}</div>
+          </div>
+        ))}
+      </div>
+      <Arrow direction="both" label="provider executes transport" />
+      <div className="rounded-lg border border-orange-300/25 bg-orange-300/7 p-2 text-center text-xs leading-5 text-orange-100" data-testid={`focus-provider-${endpoint.host}`}>
+        RDMA provider{endpoint.providerNote ? <span className="block text-[10px] text-orange-100/70">{endpoint.providerNote}</span> : null}
+      </div>
+      {endpoint.completion ? <div className="mt-2 rounded-lg border border-lime-300/30 bg-lime-300/8 p-2 text-xs leading-5 text-lime-100" data-testid={`focus-completion-${endpoint.host}`}>{endpoint.completion}</div> : null}
+    </section>
+  );
+}
+
+export function ExperimentFocusDiagram({
+  a,
+  b,
+  transfer,
+  caption,
+}: {
+  a: FocusEndpointModel;
+  b: FocusEndpointModel;
+  transfer: TransferVisualModel;
+  caption?: ReactNode;
+}) {
+  const direction = transfer.direction || "none";
+  const arrow = direction === "a-to-b" ? "A ─────→ B" : direction === "b-to-a" ? "A ←───── B" : direction === "both" ? "A ⇄ B" : "A ───── B";
+  const active = Boolean(transfer.visible);
+  return (
+    <figure className="rounded-2xl border border-white/10 bg-slate-950/35 p-3" data-testid="experiment-focus-diagram">
+      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1fr)] lg:items-center">
+        <FocusEndpoint endpoint={a} />
+        <div className={cx("self-center rounded-xl border px-2 py-3 text-center", active ? transfer.kind === "control" ? "border-violet-300/35 bg-violet-300/9" : "border-orange-300/35 bg-orange-300/9" : "border-white/10 bg-slate-950/35")} data-testid="focus-transfer" data-direction={direction} data-kind={transfer.kind || "none"}>
+          <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-500">{transfer.kind === "control" ? "TCP control" : "RoCEv2 data"}</div>
+          <div className="mt-1 font-mono text-cyan-200" aria-hidden="true">{arrow}</div>
+          {active ? <div className="mt-2 text-xs leading-5 text-orange-100">{transfer.label}</div> : <div className="mt-2 text-[10px] text-slate-600">no packet at this point</div>}
+        </div>
+        <FocusEndpoint endpoint={b} />
+      </div>
+      {caption ? <figcaption className="mt-2 text-center text-[11px] leading-4 text-slate-500">{caption}</figcaption> : null}
+    </figure>
+  );
+}
+
+export function ExpandableTechnicalDiagram({ summary = "Inspect full endpoint and resource relationships", children }: { summary?: string; children: ReactNode }) {
+  const storageKey = "fabriclab.rdma.technical-diagrams-open";
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    try {
+      setOpen(window.localStorage.getItem(storageKey) === "true");
+    } catch {
+      // Optional display preference.
+    }
+  }, [storageKey]);
+  function toggle() {
+    setOpen((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(storageKey, String(next));
+      } catch {
+        // Optional display preference.
+      }
+      return next;
+    });
+  }
+  return (
+    <section className="rounded-xl border border-white/10 bg-slate-950/30 p-2" data-testid="technical-resource-details">
+      <button type="button" onClick={toggle} aria-expanded={open} className="w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-cyan-100 transition hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+        {open ? "Hide" : "Show"} {summary}
+      </button>
+      {open ? <div className="mt-2 border-t border-white/8 pt-2">{children}</div> : null}
+    </section>
   );
 }
 
@@ -318,6 +453,7 @@ export type EndpointVisualProps = {
   sendQueue?: QueueVisualModel;
   receiveQueue?: QueueVisualModel;
   completionQueue?: CompletionQueueVisualModel;
+  observedCompletions?: CompletionVisual[];
   constructedWork?: WorkVisual[];
   emphasize?: Array<"application" | "qp" | "cq" | "provider" | "memory">;
   dimmed?: boolean;
@@ -334,13 +470,27 @@ export function EndpointResourceDiagram(props: EndpointVisualProps) {
       </header>
       <div className="mt-3">
         <NodeBox title="Application / userspace verbs interface" active={emphasize("application")}>{props.application}</NodeBox>
+        {props.observedCompletions?.length ? (
+          <div className="mt-2 rounded-lg border border-lime-300/25 bg-lime-300/8 p-2" data-testid={`observed-completion-${props.host}`}>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-lime-100">application-observed completion history · outside the CQ</div>
+            <div className="mt-1 space-y-1">
+              {props.observedCompletions.map((entry) => (
+                <div key={entry.id} className="rounded-lg border border-lime-300/25 bg-slate-950/40 px-2 py-1.5 text-xs leading-5 text-lime-100">
+                  <div className="font-mono">{entry.label}</div>
+                  {entry.detail ? <div className="text-[11px] text-lime-100/70">{entry.detail}</div> : null}
+                  <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-lime-100/60">retrieved by application poll · no longer pending in CQ</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {props.constructedWork?.length ? (
           <div className="mt-2 rounded-lg border border-amber-300/25 bg-amber-300/8 p-2" data-testid={`constructed-work-${props.host}`}>
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100">constructed instruction · not yet posted</div>
             <div className="mt-1 space-y-1">{props.constructedWork.map((entry) => <WorkEntry key={entry.id} entry={entry} />)}</div>
           </div>
         ) : null}
-        <div className="hidden grid-cols-2 gap-2 xl:grid" aria-hidden="true">
+        <div className="hidden grid-cols-2 gap-2 xl:grid">
           <Arrow direction="down" label="posts work" active={emphasize("application") || emphasize("qp")} />
           <Arrow direction="up" label="polls completions" active={emphasize("application") || emphasize("cq")} />
         </div>
@@ -360,7 +510,7 @@ export function EndpointResourceDiagram(props: EndpointVisualProps) {
             {props.completionQueue ? <CompletionLane queue={props.completionQueue} /> : <div className="text-xs text-slate-500">not yet introduced</div>}
           </NodeBox>
         </div>
-        <div className="hidden grid-cols-2 gap-2 xl:grid" aria-hidden="true">
+        <div className="hidden grid-cols-2 gap-2 xl:grid">
           <Arrow direction="down" label="work execution" active={emphasize("provider") || emphasize("qp")} />
           <Arrow direction="up" label="completion produced" active={emphasize("provider") || emphasize("cq")} />
         </div>
@@ -407,21 +557,62 @@ export function RdmaSystemDiagram({
     <figure className="rounded-2xl border border-white/10 bg-slate-950/30 p-3 sm:p-4" data-testid="rdma-system-diagram">
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1fr)] lg:items-stretch">
         <EndpointResourceDiagram {...a} />
-        <div className={cx("flex min-h-24 items-center justify-center rounded-2xl border p-3 text-center", transfer.visible ? "border-orange-300/30 bg-orange-300/8" : "border-white/10 bg-slate-950/30")} data-testid="network-transfer" data-direction={direction} data-kind={transfer.kind || "none"}>
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">RoCEv2 / Ethernet network</div>
-            <div className="mt-3 font-mono text-lg text-cyan-200" aria-hidden="true">{arrow}</div>
-            {transfer.visible ? (
-              <div className="mx-auto mt-3 max-w-44 rounded-xl border border-orange-300/30 bg-orange-300/10 px-3 py-2 text-xs leading-5 text-orange-100" data-testid="visible-transfer-object">
-                {transfer.label}
-              </div>
-            ) : <div className="mt-3 text-xs text-slate-600">no data packet at this point</div>}
+        <div className="flex min-h-24 items-center justify-center rounded-2xl border border-white/10 bg-slate-950/30 p-3 text-center" data-testid="network-transfer" data-direction={direction} data-kind={transfer.kind || "none"}>
+          <div className="w-full">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Separate laboratory channels</div>
+            <div className={cx("mt-3 rounded-xl border px-2 py-2", transfer.kind === "control" ? "border-violet-300/45 bg-violet-300/10" : "border-white/8 bg-slate-950/35 opacity-55")} data-testid="control-channel">
+              <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-violet-100">TCP control connection</div>
+              <div className="mt-1 font-mono text-[10px] text-violet-100/80">{rdmaEvidence.hosts.hosta.controlIp} ⇄ {rdmaEvidence.hosts.hostb.controlIp}</div>
+              {transfer.kind === "control" && transfer.visible ? <div className="mx-auto mt-2 max-w-44 rounded-lg border border-violet-300/35 bg-violet-300/10 px-2 py-1.5 text-xs leading-5 text-violet-50" data-testid="visible-transfer-object">{transfer.label}</div> : <div className="mt-1 text-[10px] text-slate-500">metadata / synchronization only</div>}
+            </div>
+            <div className={cx("mt-2 rounded-xl border px-2 py-2", transfer.visible && transfer.kind !== "control" ? "border-orange-300/45 bg-orange-300/10" : "border-white/8 bg-slate-950/35 opacity-60")} data-testid="rdma-data-channel">
+              <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-orange-100">RoCEv2 data network</div>
+              <div className="mt-1 font-mono text-[10px] text-orange-100/80">{rdmaEvidence.hosts.hosta.dataIp} ⇄ {rdmaEvidence.hosts.hostb.dataIp}</div>
+              <div className="mt-2 font-mono text-lg text-cyan-200" aria-hidden="true">{arrow}</div>
+              {transfer.visible && transfer.kind !== "control" ? (
+                <div className="mx-auto mt-2 max-w-44 rounded-lg border border-orange-300/35 bg-orange-300/10 px-2 py-1.5 text-xs leading-5 text-orange-100" data-testid="visible-transfer-object">
+                  {transfer.label}
+                </div>
+              ) : <div className="mt-1 text-[10px] text-slate-500">RDMA operations / ACKs / responses</div>}
+            </div>
             {transfer.detail ? <div className="mt-2 text-[11px] leading-5 text-slate-500">{transfer.detail}</div> : null}
           </div>
         </div>
         <EndpointResourceDiagram {...b} />
       </div>
       {caption ? <figcaption className="mt-3 text-xs leading-5 text-slate-500">{caption}</figcaption> : null}
+    </figure>
+  );
+}
+
+
+export function CompletionLifecycleDiagram({ polled = false, conceptual = true }: { polled?: boolean; conceptual?: boolean }) {
+  const cqe: CompletionVisual = {
+    id: conceptual ? "conceptual-cqe" : "recorded-cqe",
+    label: "CQE · status · WR ID · byte length",
+    detail: conceptual ? "conceptual completion object" : "recorded completion object",
+    evidence: conceptual ? "conceptual" : "recorded",
+    lifecycle: polled ? "polled" : "pending",
+  };
+  return (
+    <figure className="rounded-2xl border border-white/10 bg-slate-950/35 p-4" data-testid="completion-lifecycle-diagram">
+      <div className="mx-auto max-w-2xl">
+        <NodeBox title="RDMA device / provider" tone="device" active={!polled}>finishes a signalled work operation</NodeBox>
+        <Arrow direction="down" label="produces a Completion Queue Entry" active={!polled} />
+        <NodeBox title="Completion Queue" tone="completion" active={!polled} testId="conceptual-completion-queue">
+          {polled ? "the retrieved entry is no longer pending here" : <CompletionLane queue={{ state: "occupied", entries: [cqe] }} />}
+        </NodeBox>
+        <Arrow direction="down" label="application polls the CQ and retrieves the entry" active={polled} />
+        <NodeBox title="Application / userspace" tone="neutral" active={polled} testId="conceptual-application-completion">
+          {polled ? (
+            <div className="rounded-lg border border-lime-300/30 bg-lime-300/8 px-2 py-1.5 text-xs leading-5 text-lime-100" data-testid="polled-completion-outside-cq">
+              <div className="font-mono">Work Completion · check status and WR ID</div>
+              <div className="mt-1 text-[11px] text-lime-100/70">application-observed result · outside the Completion Queue</div>
+            </div>
+          ) : "has not yet observed the outcome"}
+        </NodeBox>
+      </div>
+      <figcaption className="mt-3 text-center text-xs text-slate-500">{conceptual ? "Conceptual completion lifecycle. It illustrates CQE production and polling without claiming that the resource-creation experiment performed a data transfer." : "Completion lifecycle representation."}</figcaption>
     </figure>
   );
 }
@@ -438,8 +629,8 @@ export function ResourceRelationshipDiagram({ stage }: { stage: number }) {
           <section className={cx("rounded-xl border p-3", prepared ? "border-violet-300/30 bg-violet-300/7" : "border-dashed border-white/10 bg-slate-950/35")} data-testid="protection-domain-boundary">
             <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-violet-100">Protection Domain · logical association boundary</div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <NodeBox title="Memory Region" tone="memory" active={registered} testId="pd-memory-region">
-                {registered ? "registered buffer · address · length · permissions" : stage >= 1 ? "buffer allocated, not yet registered" : "no authorized buffer yet"}
+              <NodeBox title={registered ? "Memory Region" : "Application buffer"} tone="memory" active={registered} testId="pd-memory-region">
+                {registered ? "registered resource · valid mapping · length · permissions · keys" : stage >= 1 ? "allocated process memory · virtual address + length · not yet a Memory Region" : "no authorized buffer yet"}
               </NodeBox>
               <NodeBox title="Queue Pair" tone="queue" active={stage >= 4} testId="pd-queue-pair">
                 {stage >= 4 ? "Send Queue + Receive Queue endpoint" : "introduced in the next lesson"}
@@ -515,7 +706,7 @@ export function HardwareRdmaConceptDiagram({ active = false }: { active?: boolea
             <Arrow direction="down" label="control / work submission" active={!active} />
             <NodeBox title="Hardware RDMA NIC" tone="device" active={active}>executes the transport operation</NodeBox>
             <Arrow direction="both" label="DMA read from registered memory" active={active} />
-            <NodeBox title="Registered source memory" tone="memory" active={active}>application buffer made available under explicit rules</NodeBox>
+            <NodeBox title="Registered source memory" tone="memory" active={active}><Bytes value="HELLO" /></NodeBox>
           </div>
         </section>
         <div className={cx("flex items-center justify-center rounded-xl border p-3 text-center", active ? "border-orange-300/30 bg-orange-300/8" : "border-white/10 bg-slate-950/30")}>
@@ -532,7 +723,7 @@ export function HardwareRdmaConceptDiagram({ active = false }: { active?: boolea
             <Arrow direction="down" label="setup / coordination happened beforehand" />
             <NodeBox title="Hardware RDMA NIC" tone="device" active={active}>receives or answers RDMA transport operations</NodeBox>
             <Arrow direction="both" label="DMA write or read of registered memory" active={active} />
-            <NodeBox title="Registered target/source memory" tone="memory" active={active}>only the prepared region is accessible</NodeBox>
+            <NodeBox title="Registered target/source memory" tone="memory" active={active}>{active ? <Bytes value="HELLO" /> : <Bytes value="·····" empty />}</NodeBox>
           </div>
         </section>
       </div>

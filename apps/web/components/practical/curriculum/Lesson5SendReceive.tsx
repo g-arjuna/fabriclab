@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
+
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { CompletionSummary, PacketSummary, WorkRequestSummary } from "./operationVisuals";
-import { CodeOperationChain, RdmaSystemDiagram, type CompletionQueueVisualModel, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
+import { CodeOperationChain, ExperimentFocusDiagram, ExpandableTechnicalDiagram, RdmaSystemDiagram, type CompletionQueueVisualModel, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
 import { EvidenceNote, exactValue, SourceExcerpt } from "./visuals";
 import { rdmaEvidence } from "@/lib/practical/rdmaEvidence";
 
@@ -55,12 +57,10 @@ function visual(stage: number) {
     detail: "signalled application send request",
     lifecycle: sendLifecycle,
   };
-  const senderCq: CompletionQueueVisualModel = stage >= 8
-    ? { state: "occupied", entries: [{ id: sendCqe.id, label: `CQE · Send · WR ${exactValue(sendCqe.wrId)}`, detail: "polled by Server A", evidence: "recorded" }] }
-    : { state: "unknown" };
-  const receiverCq: CompletionQueueVisualModel = stage >= 8
-    ? { state: "occupied", entries: [{ id: recvCqe.id, label: `CQE · Receive · WR ${exactValue(recvCqe.wrId)}`, detail: "polled by Server B", evidence: "recorded" }] }
-    : { state: "unknown" };
+  const senderCq: CompletionQueueVisualModel = stage >= 8 ? { state: "post-poll" } : { state: "unknown" };
+  const receiverCq: CompletionQueueVisualModel = stage >= 8 ? { state: "post-poll" } : { state: "unknown" };
+  const senderObserved = stage >= 8 ? [{ id: sendCqe.id, label: `Work Completion · Send · WR ${exactValue(sendCqe.wrId)}`, detail: "retrieved by Server A poll", evidence: "recorded" as const, lifecycle: "polled" as const }] : undefined;
+  const receiverObserved = stage >= 8 ? [{ id: recvCqe.id, label: `Work Completion · Receive · WR ${exactValue(recvCqe.wrId)}`, detail: "retrieved by Server B poll", evidence: "recorded" as const, lifecycle: "polled" as const }] : undefined;
   const packetInFlight = stage === 6;
   const ackInFlight = stage === 7;
   const chain = stage === 3
@@ -74,10 +74,51 @@ function visual(stage: number) {
           ]
         : [];
 
+  const focusTransfer = {
+    visible: packetInFlight || ackInFlight || stage === 3,
+    direction: packetInFlight ? "a-to-b" as const : ackInFlight ? "b-to-a" as const : stage === 3 ? "both" as const : "none" as const,
+    kind: packetInFlight ? "request" as const : ackInFlight ? "acknowledgement" as const : stage === 3 ? "control" as const : "none" as const,
+    label: packetInFlight
+      ? <span>{sendPacket.opcodeName}<br />payload toward receiver</span>
+      : ackInFlight
+        ? <span>transport ACK<br />not an application completion</span>
+        : stage === 3
+          ? <span>TCP readiness coordination<br />no RDMA payload</span>
+          : undefined,
+  };
+  const memoryText = stage >= 9 ? `${receivedText}
+[recorded verification]` : stage >= 7 ? `${sendWr.payloadText}
+[causal placement]` : "waiting";
+
   return (
     <div className="space-y-3">
       {chain.length ? <CodeOperationChain items={chain} /> : null}
-      <RdmaSystemDiagram
+      <ExperimentFocusDiagram
+        transfer={focusTransfer}
+        caption="Compact causal view. Open the technical diagram only when the complete resource relationships are needed."
+        a={{
+          host: "hosta",
+          name: "Server A",
+          memoryLabel: "source memory",
+          memory: stage >= 4 ? sendWr.payloadText : "source buffer prepared",
+          memoryNote: stage >= 4 ? "recorded payload content" : undefined,
+          work: stage >= 4 ? [{ title: "Send Queue", label: `WR ${exactValue(sendWr.wrId)} · SEND`, tone: sendLifecycle === "posted" || sendLifecycle === "in-flight" ? "pending" : sendLifecycle === "completed" ? "completed" : "empty" }] : [],
+          completion: stage >= 8 ? `application-observed send completion · WR ${exactValue(sendCqe.wrId)}` : undefined,
+          providerNote: packetInFlight ? "executes SEND" : undefined,
+        }}
+        b={{
+          host: "hostb",
+          name: "Server B",
+          memoryLabel: "destination memory",
+          memory: memoryText,
+          memoryNote: stage >= 9 ? "verified after completion" : stage >= 7 ? "placement is causal illustration" : "receiver chooses this destination",
+          work: stage >= 2 ? [{ title: "Receive Queue", label: `WR ${exactValue(recvWr.wrId)} · RECEIVE`, tone: receiveLifecycle === "posted" || receiveLifecycle === "in-flight" ? "pending" : receiveLifecycle === "consumed" ? "consumed" : receiveLifecycle === "completed" ? "completed" : "empty" }] : [],
+          completion: stage >= 8 ? `application-observed receive completion · WR ${exactValue(recvCqe.wrId)}` : undefined,
+          providerNote: packetInFlight ? "consumes posted receive" : undefined,
+        }}
+      />
+      <ExpandableTechnicalDiagram>
+        <RdmaSystemDiagram
         caption="Guided replay of the validated SEND/RECEIVE reference execution. Queue lifecycle is a logical instructional reconstruction tied to recorded application events; it is not independently measured hardware queue occupancy. Browser actions do not execute live RDMA."
         transfer={{
           visible: packetInFlight || ackInFlight,
@@ -111,6 +152,7 @@ function visual(stage: number) {
           sendQueue: stage >= 4 ? queueFor(sendWork, sendLifecycle) : { state: "not-introduced" },
           receiveQueue: stage >= 4 ? { state: "empty" } : { state: "not-introduced" },
           completionQueue: senderCq,
+          observedCompletions: senderObserved,
           emphasize: stage === 4 ? ["application", "memory"] : stage === 5 ? ["application", "qp"] : packetInFlight ? ["provider"] : stage >= 8 ? ["cq"] : [],
         }}
         b={{
@@ -130,10 +172,36 @@ function visual(stage: number) {
           sendQueue: stage >= 2 ? { state: "empty" } : { state: "not-introduced" },
           receiveQueue: stage >= 2 ? queueFor(receiveWork, receiveLifecycle) : { state: "not-introduced" },
           completionQueue: receiverCq,
+          observedCompletions: receiverObserved,
           emphasize: stage === 2 ? ["application", "memory"] : stage === 3 ? ["qp"] : packetInFlight ? ["provider", "memory"] : stage === 7 ? ["memory", "qp"] : stage >= 8 ? ["cq"] : [],
         }}
-      />
+        />
+      </ExpandableTechnicalDiagram>
     </div>
+  );
+}
+
+function MissingReceiveExercise() {
+  const [selected, setSelected] = useState<string | null>(null);
+  const options = [
+    ["posted-receive", "A posted receive buffer on Server B", "Correct. A Reliable Connected SEND needs appropriate receive work at the target. Without it, transport can encounter Receiver Not Ready behaviour and retry or eventually fail according to its configuration."],
+    ["sender-packet", "A packet already waiting in the network", "Not correct. The packet is a consequence of executing posted work; it is not the prerequisite that tells Server B where incoming payload may land."],
+    ["remote-address", "The sender's knowledge of Server B's virtual address", "Not correct for SEND/RECEIVE. Unlike ordinary WRITE, SEND does not name remote memory directly; the receiver's posted receive work chooses the destination locally."],
+  ] as const;
+  return (
+    <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4" data-testid="missing-receive-exercise">
+      <h3 className="font-semibold text-slate-100">Predict the missing prerequisite</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-300">Suppose Server A wants to SEND data, but Server B has not provided receive work. Which necessary input is absent?</p>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {options.map(([id, label, explanation]) => (
+          <button key={id} type="button" onClick={() => setSelected(id)} aria-pressed={selected === id} className={`rounded-xl border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${selected === id ? id === "posted-receive" ? "border-emerald-300/45 bg-emerald-300/10 text-emerald-100" : "border-amber-300/45 bg-amber-300/10 text-amber-100" : "border-white/10 bg-slate-900/45 text-slate-300 hover:border-white/25"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {selected ? <p className="mt-3 rounded-lg border border-white/10 bg-slate-950/55 p-2.5 text-xs leading-5 text-slate-300" data-testid="missing-receive-feedback">{options.find(([id]) => id === selected)?.[2]}</p> : null}
+      <p className="mt-3 text-xs leading-5 text-slate-500">Conceptual transport explanation. This practical does not fabricate a failed Receiver-Not-Ready reference experiment.</p>
+    </section>
   );
 }
 
@@ -163,6 +231,7 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(1),
+      interaction: <MissingReceiveExercise />,
       inspect: <WorkRequestSummary request={recvWr} title="Recorded receive-side memory description" />,
     },
     {

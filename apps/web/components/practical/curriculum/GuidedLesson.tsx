@@ -18,12 +18,36 @@ export type GuidedStep = {
   advanceBlockedReason?: string;
 };
 
-function parseStep(value: string | null, length: number) {
+type PersistedGuidedState = {
+  version: 2;
+  current: string;
+  visited: string[];
+};
+
+function idToIndex(steps: GuidedStep[], id: string | undefined) {
+  const index = steps.findIndex((step) => step.id === id);
+  return index >= 0 ? index : 0;
+}
+
+function parsePersistedState(value: string | null, steps: GuidedStep[]): { stepIndex: number; visitedSteps: number[] } | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<PersistedGuidedState>;
+    if (parsed.version !== 2 || typeof parsed.current !== "string" || !Array.isArray(parsed.visited)) return null;
+    const validIds = new Set(steps.map((step) => step.id));
+    const visitedSteps = Array.from(new Set(parsed.visited.filter((id): id is string => typeof id === "string" && validIds.has(id)).map((id) => idToIndex(steps, id))));
+    return { stepIndex: idToIndex(steps, parsed.current), visitedSteps };
+  } catch {
+    return null;
+  }
+}
+
+function parseLegacyIndex(value: string | null, length: number) {
   const parsed = value ? Number.parseInt(value, 10) : 0;
   return Number.isFinite(parsed) && parsed >= 0 && parsed < length ? parsed : 0;
 }
 
-function parseVisited(value: string | null, length: number) {
+function parseLegacyVisited(value: string | null, length: number) {
   try {
     const parsed = value ? JSON.parse(value) : [];
     if (!Array.isArray(parsed)) return [];
@@ -44,6 +68,7 @@ export function GuidedLesson({
   onComplete: () => void;
   finalActionLabel: string;
 }) {
+  const stateKey = `fabriclab.rdma.lesson.${lessonId}.state.v2`;
   const storageKey = `fabriclab.rdma.lesson.${lessonId}.step`;
   const visitedKey = `fabriclab.rdma.lesson.${lessonId}.visited`;
   const [stepIndex, setStepIndex] = useState(0);
@@ -63,34 +88,41 @@ export function GuidedLesson({
 
   useEffect(() => {
     try {
-      setStepIndex(parseStep(window.localStorage.getItem(storageKey), steps.length));
-      const storedVisited = parseVisited(window.localStorage.getItem(visitedKey), steps.length);
-      if (storedVisited.length) setVisitedSteps(storedVisited);
+      const versioned = parsePersistedState(window.localStorage.getItem(stateKey), steps);
+      if (versioned) {
+        setStepIndex(versioned.stepIndex);
+        setVisitedSteps(versioned.visitedSteps);
+      } else {
+        const legacyStep = parseLegacyIndex(window.localStorage.getItem(storageKey), steps.length);
+        const legacyVisited = parseLegacyVisited(window.localStorage.getItem(visitedKey), steps.length);
+        setStepIndex(legacyStep);
+        if (legacyVisited.length) setVisitedSteps(legacyVisited);
+      }
     } catch {
       // Persistence is a convenience; the lesson remains usable without it.
     }
     setHydrated(true);
-  }, [storageKey, steps.length, visitedKey]);
+  }, [stateKey, storageKey, steps, visitedKey]);
 
   useEffect(() => {
     if (!hydrated) return;
     try {
-      window.localStorage.setItem(storageKey, String(stepIndex));
+      const state: PersistedGuidedState = {
+        version: 2,
+        current: steps[stepIndex]?.id || steps[0].id,
+        visited: visitedSteps.map((index) => steps[index]?.id).filter((id): id is string => Boolean(id)),
+      };
+      window.localStorage.setItem(stateKey, JSON.stringify(state));
     } catch {
       // Ignore storage failures.
     }
-  }, [hydrated, stepIndex, storageKey]);
+  }, [hydrated, stateKey, stepIndex, steps, visitedSteps]);
 
   useEffect(() => {
     if (!hydrated) return;
     setVisitedSteps((current) => {
       if (current.includes(stepIndex)) return current;
       const next = [...current, stepIndex].sort((left, right) => left - right);
-      try {
-        window.localStorage.setItem(visitedKey, JSON.stringify(next));
-      } catch {
-        // Ignore storage failures.
-      }
       return next;
     });
   }, [hydrated, stepIndex, visitedKey]);
@@ -191,7 +223,7 @@ export function GuidedLesson({
         </details>
       </div>
 
-      <article ref={articleRef} className="scroll-mt-20 rounded-2xl border border-white/10 bg-slate-900/35 p-3 shadow-[0_20px_70px_rgba(2,6,23,0.22)] max-sm:pb-24 sm:p-6 lg:p-7">
+      <article ref={articleRef} className="scroll-mt-20 guided-lesson-article rounded-2xl border border-white/10 bg-slate-900/35 p-3 shadow-[0_20px_70px_rgba(2,6,23,0.22)] max-sm:pb-24 sm:p-6 lg:p-7">
         <div className="border-b border-white/8 pb-3 sm:pb-4">
           <h2 ref={headingRef} tabIndex={-1} className="max-w-4xl text-xl font-semibold tracking-tight text-white outline-none sm:text-3xl">{step.title}</h2>
           {blockedByInteraction ? <p className="mt-2 text-xs text-amber-200">A later state requires the prerequisite interaction before it can be opened.</p> : null}
@@ -234,7 +266,7 @@ export function GuidedLesson({
         ) : null}
         {step.interaction ? <div className="mt-3 sm:mt-5">{step.interaction}</div> : null}
 
-        <footer className="z-30 mt-7 flex flex-col-reverse gap-2 border-t border-white/8 pt-4 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:m-0 max-sm:bg-slate-950/95 max-sm:px-4 max-sm:py-3 max-sm:shadow-[0_-12px_32px_rgba(2,6,23,0.7)] max-sm:backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-5">
+        <footer className="guided-mobile-footer z-30 mt-7 flex flex-col-reverse gap-2 border-t border-white/8 pt-4 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:m-0 max-sm:bg-slate-950/95 max-sm:px-4 max-sm:py-3 max-sm:shadow-[0_-12px_32px_rgba(2,6,23,0.7)] max-sm:backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-5">
           {stepIndex > 0 ? (
             <button
               type="button"

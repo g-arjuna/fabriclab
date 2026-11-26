@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { CompletionSummary, PacketSummary, PayloadMemory, WorkRequestSummary } from "./operationVisuals";
-import { CodeOperationChain, RdmaSystemDiagram, type CompletionQueueVisualModel, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
+import { CodeOperationChain, ExperimentFocusDiagram, ExpandableTechnicalDiagram, RdmaSystemDiagram, type CompletionQueueVisualModel, type QueueVisualModel, type WorkVisual } from "./rdmaDiagrams";
 import { cx, EvidenceNote, exactValue, OperationComparisonTable, SourceExcerpt } from "./visuals";
 import { rdmaEvidence } from "@/lib/practical/rdmaEvidence";
 
@@ -40,9 +40,8 @@ function visual(stage: number) {
     detail: `${writeWr.byteLength} bytes · local source + remote destination`,
     lifecycle: writeLifecycle,
   };
-  const writerCq: CompletionQueueVisualModel = stage >= 7
-    ? { state: "occupied", entries: [{ id: writeCqe.id, label: `CQE · RDMA write · WR ${exactValue(writeCqe.wrId)}`, detail: "polled by Server A", evidence: "recorded" }] }
-    : { state: "unknown" };
+  const writerCq: CompletionQueueVisualModel = stage >= 7 ? { state: "post-poll" } : { state: "unknown" };
+  const writerObserved = stage >= 7 ? [{ id: writeCqe.id, label: `Work Completion · RDMA write · WR ${exactValue(writeCqe.wrId)}`, detail: "retrieved by Server A poll", evidence: "recorded" as const, lifecycle: "polled" as const }] : undefined;
   const targetCq: CompletionQueueVisualModel = stage >= 10 ? { state: "empty" } : { state: "unknown" };
   const packetInFlight = stage === 5;
   const ackInFlight = stage === 6;
@@ -57,10 +56,60 @@ function visual(stage: number) {
           ? [{ path: "python/exp_c_write.py", line: 165, effect: "Server B reads its memory after the empty target-CQ observation" }]
           : [];
 
+  const focusTransfer = {
+    visible: packetInFlight || ackInFlight || controlVisible,
+    direction: packetInFlight || stage === 9 ? "a-to-b" as const : ackInFlight || stage === 2 ? "b-to-a" as const : "none" as const,
+    kind: packetInFlight ? "request" as const : ackInFlight ? "acknowledgement" as const : controlVisible ? "control" as const : "none" as const,
+    label: packetInFlight
+      ? <span>{writePacket.opcodeName}<br />payload + remote memory fields</span>
+      : ackInFlight
+        ? <span>transport ACK<br />not target application notice</span>
+        : stage === 2
+          ? <span>TCP metadata: address + RKEY</span>
+          : stage === 9
+            ? <span>TCP synchronization<br />no payload bytes</span>
+            : undefined,
+  };
+  const focusTargetMemory = stage >= 11
+    ? `${afterText}
+[recorded verification]`
+    : stage >= 6
+      ? `${writeWr.payloadText}
+[causal placement]`
+      : stage >= 1
+        ? `${beforeText}
+[recorded before-state]`
+        : "destination not introduced";
+
   return (
     <div className="space-y-3">
       {chain.length ? <CodeOperationChain items={chain} /> : null}
-      <RdmaSystemDiagram
+      <ExperimentFocusDiagram
+        transfer={focusTransfer}
+        caption="Compact causal view. Control messages and RDMA data packets use separate laboratory channels; open the technical diagram for complete resources."
+        a={{
+          host: "hosta",
+          name: "Server A",
+          memoryLabel: "local source memory",
+          memory: stage >= 3 ? writeWr.payloadText : "source buffer",
+          memoryNote: stage >= 3 ? "recorded payload content" : undefined,
+          work: stage >= 3 ? [{ title: "Send Queue", label: `WR ${exactValue(writeWr.wrId)} · WRITE`, tone: writeLifecycle === "posted" || writeLifecycle === "in-flight" ? "pending" : writeLifecycle === "completed" ? "completed" : "empty" }] : [],
+          completion: stage >= 7 ? `application-observed write completion · WR ${exactValue(writeCqe.wrId)}` : undefined,
+          providerNote: packetInFlight ? "emits WRITE" : undefined,
+        }}
+        b={{
+          host: "hostb",
+          name: "Server B",
+          memoryLabel: "registered destination memory",
+          memory: focusTargetMemory,
+          memoryNote: stage >= 11 ? "verified after synchronization and CQ poll" : stage >= 6 ? "placement is causal illustration" : stage >= 1 ? "remote-write permission required" : undefined,
+          work: stage >= 3 ? [{ title: "Receive Queue", label: "no receive WR for ordinary WRITE", tone: "empty" }] : [],
+          completion: stage >= 10 ? "recorded target CQ poll: zero completions" : stage >= 8 ? "target CQ not yet inspected" : undefined,
+          providerNote: packetInFlight ? "writes named registered memory" : undefined,
+        }}
+      />
+      <ExpandableTechnicalDiagram>
+        <RdmaSystemDiagram
         caption="Guided replay of the validated ordinary RDMA WRITE reference execution. Queue lifecycle is a logical instructional reconstruction tied to application events; intermediate memory placement is causal illustration, while before/after bytes are recorded memory evidence."
         transfer={{
           visible: packetInFlight || ackInFlight || controlVisible,
@@ -106,6 +155,7 @@ function visual(stage: number) {
           sendQueue: stage >= 3 ? queueFor(writeWork, writeLifecycle) : { state: "not-introduced" },
           receiveQueue: stage >= 3 ? { state: "empty" } : { state: "not-introduced" },
           completionQueue: writerCq,
+          observedCompletions: writerObserved,
           emphasize: stage === 3 ? ["application", "memory"] : stage === 4 ? ["application", "qp"] : packetInFlight ? ["provider"] : stage >= 7 ? ["cq"] : [],
         }}
         b={{
@@ -128,7 +178,8 @@ function visual(stage: number) {
           completionQueue: targetCq,
           emphasize: stage === 1 ? ["memory"] : stage === 2 ? ["memory", "application"] : packetInFlight ? ["provider", "memory"] : stage === 6 ? ["memory"] : stage === 10 ? ["cq"] : stage >= 11 ? ["memory", "application"] : stage >= 9 ? ["cq", "application"] : [],
         }}
-      />
+        />
+      </ExpandableTechnicalDiagram>
     </div>
   );
 }
@@ -162,8 +213,8 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
       <p className="mt-2 text-sm leading-6 text-slate-300">Will Server B receive a normal receive completion when Server A performs this ordinary RDMA WRITE?</p>
       <div className="mt-4 flex flex-wrap gap-3">
         {([
-          ["yes", "Yes — a normal receive completion appears"],
-          ["no", "No — ordinary WRITE produces none"],
+          ["yes", "Yes"],
+          ["no", "No"],
         ] as const).map(([value, label]) => (
           <button
             key={value}
@@ -191,8 +242,12 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
     <section className="rounded-xl border border-white/10 bg-slate-950/55 p-4" data-testid="write-prediction-review">
       <h3 className="font-semibold text-slate-100">Compare your prediction with the evidence</h3>
       <p className="mt-2 text-sm leading-7 text-slate-300">
-        You predicted {prediction === "yes" ? "that a normal receive completion would appear" : "that ordinary WRITE would produce no normal receive completion"}. The recorded target CQ poll returned zero completions, so {prediction === "no" ? "your prediction matches the evidence." : "the evidence contradicts that prediction."} The mechanism explains why: ordinary WRITE did not consume a target Receive Work Request, so there was no receive work for which to generate a normal target receive completion.
+        You predicted {prediction === "yes" ? "yes" : "no"}. The recorded target CQ poll returned zero completions, so {prediction === "no" ? "your prediction matches the evidence." : "the evidence contradicts that prediction."} The mechanism explains why: ordinary WRITE did not consume a target Receive Work Request, so there was no receive work for which to generate a normal target receive completion.
       </p>
+      <details className="mt-3 rounded-lg border border-white/10 bg-slate-900/50 p-3" data-testid="write-notification-consequence">
+        <summary className="cursor-pointer text-sm font-medium text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">If Server B polls its CQ expecting a normal receive completion, what happens?</summary>
+        <p className="mt-2 text-sm leading-6 text-slate-300">It does not observe one as a consequence of this ordinary WRITE. Memory may already have changed, but memory placement is not application notification. Server B needs an appropriate application-level coordination or notification mechanism — in this reference run, explicit TCP synchronization — before consuming the data meaningfully.</p>
+      </details>
     </section>
   ) : null;
 
@@ -205,6 +260,10 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         <>
           <p>In SEND/RECEIVE, Server B had to post a receive request before Server A’s message could be placed. That gives the receiver control over the destination, but it also means the target must participate in every incoming message transfer.</p>
           <p>Ordinary RDMA WRITE is the one-sided answer: the initiator names registered remote memory directly, using authorization established beforehand.</p>
+          <div className="grid gap-2 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-sm sm:grid-cols-2" data-testid="send-write-model-comparison">
+            <div><strong className="text-slate-100">SEND:</strong> the receiver chooses the destination using a posted receive request; no remote address/RKEY is needed in the request packet.</div>
+            <div><strong className="text-slate-100">WRITE:</strong> the initiator identifies authorized remote memory directly with remote address and RKEY; no target receive request is consumed.</div>
+          </div>
         </>
       ),
       visual: visual(0),

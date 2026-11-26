@@ -82,7 +82,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
       }
       const storedFinished = window.localStorage.getItem(FINISHED_KEY) === "true";
       setFinished(storedFinished);
-      setShowCompletion(storedFinished);
+      setShowCompletion(storedFinished && !initialLesson);
     } catch {
       // Progress persistence is non-invasive and optional.
     }
@@ -96,8 +96,11 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
       window.localStorage.setItem(CURRENT_KEY, lesson.id);
       window.localStorage.setItem(COMPLETED_KEY, JSON.stringify(completed));
       window.localStorage.setItem(FINISHED_KEY, finished ? "true" : "false");
-      const url = `/practical/rdma?lesson=${encodeURIComponent(lesson.id)}`;
-      window.history.replaceState(null, "", url);
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("lesson")) {
+        url.searchParams.set("lesson", lesson.id);
+        window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+      }
     } catch {
       // Ignore storage/history failures.
     }
@@ -117,7 +120,18 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
     }
   }
 
+  function markLessonExplicit(id: string) {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("lesson", id);
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      // Direct-reference persistence is optional.
+    }
+  }
+
   function selectLesson(index: number) {
+    markLessonExplicit(LESSONS[index].id);
     setShowCompletion(false);
     setLessonIndex(index);
   }
@@ -128,6 +142,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
     } catch {
       // Restart remains possible without storage access.
     }
+    markLessonExplicit(LESSONS[index].id);
     setShowCompletion(false);
     setLessonIndex(index);
     setResetVersion((current) => current + 1);
@@ -138,6 +153,9 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
       LESSONS.forEach((item) => clearLessonProgress(item.id));
       window.localStorage.removeItem(COMPLETED_KEY);
       window.localStorage.removeItem(FINISHED_KEY);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("lesson");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     } catch {
       // Restart remains possible without storage access.
     }

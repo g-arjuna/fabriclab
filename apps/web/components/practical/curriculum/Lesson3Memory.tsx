@@ -68,6 +68,48 @@ function MemoryRegistrationDiagram({ stage }: { stage: number }) {
   );
 }
 
+function MemoryAccessExercise() {
+  const cases = [
+    {
+      id: "valid-read",
+      label: "Read 8 bytes inside the region",
+      result: "Permitted",
+      tone: "border-emerald-300/35 bg-emerald-300/10 text-emerald-100",
+      explanation: "The request names the registered region, stays inside its address range and requires remote-read permission, which exists in this illustration.",
+    },
+    {
+      id: "write-without-permission",
+      label: "Write 8 bytes into the region",
+      result: "Rejected",
+      tone: "border-amber-300/35 bg-amber-300/10 text-amber-100",
+      explanation: "The range is inside the region, but the illustrated permissions allow remote read and not remote write. A valid address range is not sufficient without the required access permission.",
+    },
+    {
+      id: "out-of-bounds-read",
+      label: "Read bytes beyond the 16-byte region",
+      result: "Rejected",
+      tone: "border-amber-300/35 bg-amber-300/10 text-amber-100",
+      explanation: "The operation names the region and remote read is allowed, but the requested range crosses the registered boundary. Permission does not extend to unrelated memory.",
+    },
+  ] as const;
+  return (
+    <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4" data-testid="memory-access-exercise">
+      <h3 className="font-semibold text-slate-100">Conceptual memory-access check</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-300">Illustrative registered buffer: address <span className="font-mono text-cyan-100">0x1000</span>, length 16 bytes. Permissions: remote read allowed; remote write not allowed. Inspect each proposed operation.</p>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {cases.map((item) => (
+          <details key={item.id} className="rounded-xl border border-white/10 bg-slate-900/45 p-3" data-testid={`memory-access-${item.id}`}>
+            <summary className="cursor-pointer text-sm font-medium text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">{item.label}</summary>
+            <div className={cx("mt-3 rounded-lg border p-2 text-xs font-semibold", item.tone)}>{item.result}</div>
+            <p className="mt-2 text-xs leading-5 text-slate-300">{item.explanation}</p>
+          </details>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">Conceptual access model, not a fabricated packet or completion-status experiment.</p>
+    </section>
+  );
+}
+
 export function Lesson3Memory({ onComplete }: { onComplete: () => void }) {
   const steps: GuidedStep[] = [
     {
@@ -89,8 +131,8 @@ export function Lesson3Memory({ onComplete }: { onComplete: () => void }) {
       actionLabel: "Prepare the device context and protection boundary",
       body: (
         <>
-          <p>The application first allocates an ordinary buffer. At this point the memory belongs to the application process, but the RDMA device has no registered description of it and no permission to use it for RDMA operations.</p>
-          <p>An application buffer is a contiguous region described by a starting memory address and a length. Those two values matter because the device needs to know exactly where the permitted region begins and ends.</p>
+          <p>The application first allocates an ordinary buffer. The application references it through a virtual address and length. At this point the memory belongs to the application process, but allocation alone does not create a Memory Region, a device-visible translation relationship or permission for the RDMA device/provider to use it.</p>
+          <p>Registration is needed because the device/provider must have a valid registered mapping and explicit access attributes for the intended region. Depending on the provider and registration model, residency, pinning and translation may involve additional mechanisms such as on-demand paging; this lesson does not need the full virtual-memory implementation detail.</p>
         </>
       ),
       visual: <MemoryRegistrationDiagram stage={1} />,
@@ -123,8 +165,8 @@ export function Lesson3Memory({ onComplete }: { onComplete: () => void }) {
       actionLabel: "Inspect access permissions",
       body: (
         <>
-          <p>Registration tells the RDMA device and operating system about one memory region: its starting address, length and allowed access. The device can now use that region in the ways the registration permits. Other memory in the process remains outside the registration.</p>
-          <p>The technical object is a <strong className="text-slate-100">Memory Region</strong>, often abbreviated MR. In this laboratory the registered length is {endpoint.memoryRegion.length} bytes and the recorded starting address is run-specific evidence, not a value that another execution should reproduce exactly.</p>
+          <p>Registration tells the RDMA device/provider and operating system about one intended buffer: its virtual starting address, length, protection attributes and applicable address-translation relationship. The resulting <strong className="text-slate-100">Memory Region</strong> is the registered resource describing that buffer; it is not the buffer allocation itself.</p>
+          <p>The device/provider can now use the region in the ways the registration permits. Other memory in the process remains outside the registration. In this laboratory the registered length is {endpoint.memoryRegion.length} bytes and the recorded starting address is run-specific evidence, not a value that another execution should reproduce exactly.</p>
         </>
       ),
       visual: <MemoryRegistrationDiagram stage={3} />,
@@ -141,11 +183,12 @@ export function Lesson3Memory({ onComplete }: { onComplete: () => void }) {
       actionLabel: "Inspect memory keys",
       body: (
         <>
-          <p>Registering memory does not mean “anyone may do anything.” The access flags say what operations are allowed. Local write permission concerns use by the local system. Remote write and remote read permissions concern operations initiated by a peer.</p>
-          <p>This distinction matters because a receive-style operation, an ordinary WRITE and a READ use memory differently. A target that permits remote write is not automatically permitting remote read unless that permission was also granted.</p>
+          <p>Registering memory does not mean “anyone may do anything.” The access flags say what operations are allowed. Remote write and remote read permissions concern operations initiated by a peer. A local-write registration flag is different from the application’s ordinary CPU permission to write its own process memory.</p>
+          <p>Use the short access check below to see that three requirements are independent: the operation must identify the appropriate registered memory, the requested range must be valid and the required access permission must exist. This distinction matters because receive-style operations, ordinary WRITE and READ use memory differently.</p>
         </>
       ),
       visual: <MemoryRegistrationDiagram stage={4} />,
+      interaction: <MemoryAccessExercise />,
       inspect: (
         <SourceExcerpt path="python/rdma_common.py" start={35} end={42} title="The laboratory access flags" emphasisLines={[40, 41, 42]} emphasisLabel="The highlighted flags are the exact permissions later associated with the registered memory region.">
           The reference lab enables local write, remote write and remote read so that all three later operations can be studied. A production application should grant only the access its design requires.

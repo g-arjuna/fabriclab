@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
-import { CompletionSummary, WorkRequestSummary } from "./operationVisuals";
+import { CompletionSummary, PacketSummary, PayloadMemory, WorkRequestSummary } from "./operationVisuals";
 import { cx, EvidenceNote, exactValue, FactGrid, SourceExcerpt } from "./visuals";
 import { exact, rdmaEvidence, type Experiment, type PacketRecord } from "@/lib/practical/rdmaEvidence";
 
@@ -58,6 +58,104 @@ function FieldButton({ selected, onClick, label, value, disabled = false }: { se
       <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</span>
       <span className="mt-1 block break-all font-mono text-sm text-slate-100">{value}</span>
     </button>
+  );
+}
+
+function WriteCodePacketCorrelation() {
+  const write = rdmaEvidence.experiments.find((item) => item.id === "write")!;
+  const wr = write.workRequests.find((item) => item.kind === "rdma-write")!;
+  const packet = write.packets.find((item) => item.role === "request")!;
+  const [selected, setSelected] = useState("remote-address");
+  const rows = [
+    {
+      id: "operation",
+      application: "Requested operation",
+      workRequest: wr.opcode,
+      wire: packet.opcodeName,
+      relationship: "Direct semantic encoding: the application-selected RDMA_WRITE operation appears as the transport opcode in the genuine WRITE request.",
+    },
+    {
+      id: "remote-address",
+      application: "Remote address assigned with set_wr_rdma",
+      workRequest: exact(wr.remoteAddress!),
+      wire: `RETH remote address ${exact(packet.reth!.virtualAddress)}`,
+      relationship: "Direct correlation: the remote virtual address supplied by the application is the memory target carried in RETH.",
+    },
+    {
+      id: "remote-rkey",
+      application: "Remote RKEY assigned with set_wr_rdma",
+      workRequest: exact(wr.remoteRkey!),
+      wire: `RETH RKEY ${exact(packet.reth!.rkey)}`,
+      relationship: "Direct correlation: the scoped remote-access key for the registered target region is carried in RETH.",
+    },
+    {
+      id: "length",
+      application: "Transfer length",
+      workRequest: `${wr.byteLength} bytes`,
+      wire: `RETH DMA length ${exact(packet.reth!.dmaLength, "decimal")}`,
+      relationship: "Direct semantic correlation for this reference packet. DMA length is not the same as captured frame length because headers and padding also exist.",
+    },
+    {
+      id: "wr-id",
+      application: "WR ID",
+      workRequest: exact(wr.wrId),
+      wire: "No corresponding BTH field",
+      relationship: "No direct wire representation: WR ID is local application bookkeeping used to recognize completed work. It is not the Packet Sequence Number.",
+    },
+    {
+      id: "local-memory",
+      application: "Local memory address + LKEY",
+      workRequest: `${exact(wr.localAddress!)} · LKEY ${exact(wr.localLkey!)}`,
+      wire: "Not transmitted as remote memory fields",
+      relationship: "Used locally to read the initiator's source buffer. Do not confuse the local address or LKEY with the remote address and RKEY carried in RETH.",
+    },
+    {
+      id: "qpn-psn",
+      application: "Endpoint context",
+      workRequest: "posted through the writer QP",
+      wire: `destination QPN ${exact(packet.destinationQpn)} · PSN ${exact(packet.psn)}`,
+      relationship: "The destination QPN identifies the packet's target endpoint. PSN is transport sequencing, not application WR ID.",
+    },
+  ] as const;
+  const active = rows.find((row) => row.id === selected) || rows[0];
+  return (
+    <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4" data-testid="write-code-packet-correlation">
+      <h3 className="font-semibold text-slate-100">Correlate the real WRITE code with the real packet</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-300">Start with the actual Python instructions, follow the application Work Request, then inspect which relationships exist in the captured RoCEv2 request. Some application fields have direct wire representations; others deliberately do not.</p>
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <SourceExcerpt path="python/exp_c_write.py" start={124} end={140} title="Actual verified WRITE construction and submission" emphasisLines={[125, 127, 133, 134]} emphasisLabel="The highlighted lines construct the SGE and SendWR, assign remote memory metadata, and post the work.">
+          The SGE describes local source memory. <code className="font-mono text-cyan-100">set_wr_rdma</code> supplies remote memory metadata. <code className="font-mono text-cyan-100">qp.post_send(swr)</code> submits the instruction; it does not itself constitute the packet.
+        </SourceExcerpt>
+        <div className="rounded-xl border border-orange-300/20 bg-orange-300/6 p-3" data-testid="correlated-write-wire-fields">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-orange-100">Captured WRITE request · frame {packet.frameNumber}</div>
+          <dl className="mt-2 grid gap-2 font-mono text-xs text-orange-50">
+            <div className="flex justify-between gap-3"><dt>BTH opcode</dt><dd>{packet.opcodeName}</dd></div>
+            <div className="flex justify-between gap-3"><dt>destination QPN</dt><dd>{exact(packet.destinationQpn)}</dd></div>
+            <div className="flex justify-between gap-3"><dt>PSN</dt><dd>{exact(packet.psn)}</dd></div>
+            <div className="flex justify-between gap-3"><dt>RETH address</dt><dd>{exact(packet.reth!.virtualAddress)}</dd></div>
+            <div className="flex justify-between gap-3"><dt>RETH RKEY</dt><dd>{exact(packet.reth!.rkey)}</dd></div>
+            <div className="flex justify-between gap-3"><dt>RETH DMA length</dt><dd>{exact(packet.reth!.dmaLength, "decimal")}</dd></div>
+          </dl>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 lg:grid-cols-2">
+        <div className="space-y-2">
+          {rows.map((row) => (
+            <button key={row.id} type="button" onClick={() => setSelected(row.id)} aria-pressed={selected === row.id} className={cx("w-full rounded-xl border px-3 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300", selected === row.id ? "border-cyan-300/50 bg-cyan-300/12" : "border-white/10 bg-slate-900/45 hover:border-white/25")} data-testid={`correlation-field-${row.id}`}>
+              <span className="block text-xs font-semibold text-slate-100">{row.application}</span>
+              <span className="mt-1 block font-mono text-xs text-slate-400">WR: {row.workRequest}</span>
+              <span className="mt-1 block font-mono text-xs text-orange-100/80">wire: {row.wire}</span>
+            </button>
+          ))}
+        </div>
+        <aside className="rounded-xl border border-cyan-300/20 bg-cyan-300/6 p-4" data-testid="correlation-explanation">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-100">Selected relationship</div>
+          <h4 className="mt-2 font-semibold text-slate-100">{active.application}</h4>
+          <p className="mt-2 text-sm leading-7 text-slate-300">{active.relationship}</p>
+          <p className="mt-3 text-xs leading-5 text-slate-500">All runtime values come from the validated WRITE evidence bundle. None are independently hardcoded teaching values.</p>
+        </aside>
+      </div>
+    </section>
   );
 }
 
@@ -225,9 +323,9 @@ function PacketInvestigator({ stage }: { stage: number }) {
               ) : (
                 <p className="mt-3 rounded-xl border border-white/10 bg-slate-950/45 p-3 text-sm leading-6 text-slate-300">This {packet.opcodeName} packet has no RETH. Only the WRITE and READ request packets in these captures carry remote address, RKEY and DMA length fields.</p>
               )}
-              {packet.payloadText ? (
+              {packet.payloadHex ? (
                 <div className="mt-3">
-                  <FieldButton selected={selection === "payload"} onClick={() => setSelection("payload")} label="Payload" value={packet.payloadText} />
+                  <FieldButton selected={selection === "payload"} onClick={() => setSelection("payload")} label="Payload" value={packet.payloadText || `${packet.dataLength} binary bytes`} />
                 </div>
               ) : null}
             </section>
@@ -274,128 +372,293 @@ function hostLabel(host: string | null | undefined) {
   return host === "hosta" ? "Server A" : host === "hostb" ? "Server B" : "unknown host";
 }
 
+type OperationalQuestion = {
+  id: string;
+  prompt: string;
+  options: Array<[string, string]>;
+  correct: string;
+  explanation: string;
+};
+
+type OperationalCase = {
+  id: string;
+  label: string;
+  title: string;
+  experiment: Experiment;
+  packet: PacketRecord;
+  questions: OperationalQuestion[];
+  evidence: React.ReactNode;
+};
+
+function operationalCases(): OperationalCase[] {
+  const sendExperiment = rdmaEvidence.experiments.find((item) => item.id === "send-recv")!;
+  const writeExperiment = rdmaEvidence.experiments.find((item) => item.id === "write")!;
+  const readExperiment = rdmaEvidence.experiments.find((item) => item.id === "read")!;
+  const sendRequest = sendExperiment.packets.find((item) => item.role === "request")!;
+  const sendReceiveWr = sendExperiment.workRequests.find((item) => item.kind === "receive")!;
+  const sendCompletion = sendExperiment.completions.find((item) => item.host === "hostb")!;
+  const writeRequest = writeExperiment.packets.find((item) => item.role === "request")!;
+  const writeCompletion = writeExperiment.completions[0];
+  const writeMemory = writeExperiment.memoryRegions.find((item) => item.host === "hostb")!;
+  const writeAfter = writeMemory.snapshots.find((item) => item.id.includes("after"))?.text;
+  const readRequest = readExperiment.packets.find((item) => item.role === "request")!;
+  const readResponse = readExperiment.packets.find((item) => item.role === "response")!;
+  const readWr = readExperiment.workRequests.find((item) => item.kind === "rdma-read")!;
+  const readCompletion = readExperiment.completions[0];
+  return [
+    {
+      id: "send-landing",
+      label: "Investigation A",
+      title: "Where did this SEND land?",
+      experiment: sendExperiment,
+      packet: sendRequest,
+      questions: [
+        {
+          id: "destination-in-packet",
+          prompt: "Can the destination virtual address be determined from this SEND packet alone?",
+          options: [["yes", "Yes — the packet names it"], ["no", "No — the packet does not name it"]],
+          correct: "no",
+          explanation: "This SEND packet has no RETH remote-memory fields. In SEND/RECEIVE the sender does not choose the destination virtual address; the receiving endpoint uses its posted receive work locally.",
+        },
+        {
+          id: "landing-resource",
+          prompt: "What application resource determines where the bytes are placed?",
+          options: [["receive-wr", "The target's posted Receive Work Request"], ["writer-cq", "The sender Completion Queue"], ["udp", "The UDP destination port"]],
+          correct: "receive-wr",
+          explanation: "The posted Receive Work Request supplies the local memory description consumed by the incoming SEND. UDP 4791 only identifies RoCEv2 encapsulation, and the sender CQ reports sender-local completion.",
+        },
+        {
+          id: "success-evidence",
+          prompt: "What evidence establishes that the receiving application obtained the expected data?",
+          options: [["capture-only", "The captured SEND packet alone"], ["ack-only", "The reverse transport ACK alone"], ["completion-memory", "Correlated receive completion plus application memory verification"]],
+          correct: "completion-memory",
+          explanation: "The packet proves payload was on the wire; the ACK is transport evidence. Application success requires the receiver-local completion and the recorded memory comparison.",
+        },
+      ],
+      evidence: (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <WorkRequestSummary request={sendReceiveWr} title="Revealed correlated Receive Work Request" />
+          <CompletionSummary completion={sendCompletion} title="Revealed receiver-local completion" />
+        </div>
+      ),
+    },
+    {
+      id: "write-notification",
+      label: "Investigation B",
+      title: "Did the target application receive a notification?",
+      experiment: writeExperiment,
+      packet: writeRequest,
+      questions: [
+        {
+          id: "write-established",
+          prompt: "What can be established directly from the captured WRITE request?",
+          options: [["wire-memory", "Target memory named by RETH and payload carried on the wire"], ["target-consumed", "The target application consumed the data"], ["target-completion", "A target receive completion already exists"]],
+          correct: "wire-memory",
+          explanation: "The RETH fields and payload are genuine wire evidence. They do not encode application consumption or prove that a target receive CQE exists.",
+        },
+        {
+          id: "ack-meaning",
+          prompt: "Does the reverse ACK prove that the target application consumed the data?",
+          options: [["yes", "Yes"], ["no", "No"]],
+          correct: "no",
+          explanation: "The ACK is reliable-transport evidence flowing toward the initiator endpoint. It is not a target application memory inspection and not a Completion Queue Entry.",
+        },
+        {
+          id: "target-cqe",
+          prompt: "Does ordinary WRITE produce a normal target receive completion?",
+          options: [["yes", "Yes"], ["no", "No"]],
+          correct: "no",
+          explanation: "Ordinary WRITE consumes no target Receive Work Request. The reference target's post-synchronization CQ poll recorded zero completions.",
+        },
+        {
+          id: "required-evidence",
+          prompt: "What evidence is required before saying the target verified its buffer?",
+          options: [["memory-verification", "Application memory verification after meaningful synchronization/observation"], ["wireshark-only", "The WRITE packet alone"], ["link-state", "The Ethernet link being up"]],
+          correct: "memory-verification",
+          explanation: "Wire evidence and link state do not establish application interpretation. The reference evidence uses explicit synchronization, target CQ observation and then memory verification.",
+        },
+      ],
+      evidence: (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <CompletionSummary completion={writeCompletion} title="Revealed initiator-local WRITE completion" />
+          <PayloadMemory label="Revealed verified target memory after synchronization" value={writeAfter} />
+        </div>
+      ),
+    },
+    {
+      id: "read-ownership",
+      label: "Investigation C",
+      title: "Who requested the data in this response?",
+      experiment: readExperiment,
+      packet: readResponse,
+      questions: [
+        {
+          id: "transmitter",
+          prompt: "Which host transmitted this response?",
+          options: [["hosta", "Server A"], ["hostb", "Server B"]],
+          correct: "hostb",
+          explanation: "The response source IP belongs to Server B. Payload data returns from the memory source toward the reader.",
+        },
+        {
+          id: "initiator",
+          prompt: "Which application originally initiated the READ?",
+          options: [["hosta", "Server A"], ["hostb", "Server B"]],
+          correct: "hosta",
+          explanation: "The correlated READ Work Request was posted by Server A. The response is a consequence of that request, not a new operation initiated by Server B.",
+        },
+        {
+          id: "direction-reason",
+          prompt: "Why are request direction and payload direction different?",
+          options: [["read-pull", "The reader asks the source to return memory, so the request goes A→B and payload returns B→A"], ["send-queue", "Send Queue means payload always travels outward"], ["capture-error", "The capture reversed the addresses"]],
+          correct: "read-pull",
+          explanation: "READ is initiated by the requester, but its payload is sourced from remote memory. “Send Queue” names where work is posted, not the direction payload data must travel.",
+        },
+        {
+          id: "response-target",
+          prompt: "Which endpoint does this response target?",
+          options: [["reader", "The reader endpoint on Server A"], ["source", "The source endpoint on Server B"]],
+          correct: "reader",
+          explanation: `The response destination QPN ${exact(readResponse.destinationQpn)} correlates with Server A's endpoint for this reference run. Reverse-direction packets must be interpreted by their own destination fields.`,
+        },
+        {
+          id: "completion-owner",
+          prompt: "Which application should observe the READ completion?",
+          options: [["hosta", "Server A — the initiating reader"], ["hostb", "Server B — the memory source"]],
+          correct: "hosta",
+          explanation: "Completion ownership follows the application that posted the signalled READ work. The source application posted no data Work Request and later recorded zero completions after synchronization.",
+        },
+      ],
+      evidence: (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <PacketSummary packet={readRequest}>Revealed earlier READ request. Compare its direction and RETH fields with the response you started from.</PacketSummary>
+          <div className="space-y-3">
+            <WorkRequestSummary request={readWr} title="Revealed originating READ Work Request" />
+            <CompletionSummary completion={readCompletion} title="Revealed reader-local completion" />
+          </div>
+        </div>
+      ),
+    },
+  ];
+}
+
 function FinalInvestigation() {
-  const cases = useMemo(() => investigationCases(), []);
+  const cases = useMemo(() => operationalCases(), []);
   const [caseId, setCaseId] = useState(cases[0].id);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const selectedCase = cases.find((item) => item.id === caseId) || cases[0];
-  const { experiment, packet } = selectedCase;
-  const correlatedWr = experiment.workRequests.find((item) => packet.correlations.workRequestIds.includes(item.id));
-  const destinationEndpoint = endpointForQpn(experiment, packet);
-  const correct = {
-    role: packet.role,
-    transmitter: packet.sourceHost || "unknown",
-    target: packet.destinationHost || "unknown",
-    initiator: correlatedWr?.host || "unknown",
-    payload: packet.payloadText ? "yes" : "no",
-    reth: packet.reth ? "yes" : "no",
-    evidence: "application-correlation",
-  } as const;
+  const [revealed, setRevealed] = useState(false);
+  const [skipped, setSkipped] = useState(false);
+  const activeCase = cases.find((item) => item.id === caseId) || cases[0];
+  const { packet } = activeCase;
+  const answeredCount = activeCase.questions.filter((question) => answers[question.id]).length;
 
-  const groups = [
-    { id: "role", label: "Is this a request, response or acknowledgement?", options: [["request", "Operation request"], ["response", "Data-carrying response"], ["acknowledgement", "Transport acknowledgement"]] },
-    { id: "transmitter", label: "Which host transmitted this packet?", options: [["hosta", "Server A"], ["hostb", "Server B"]] },
-    { id: "target", label: "Which endpoint host does this packet target?", options: [["hosta", "Server A endpoint"], ["hostb", "Server B endpoint"]] },
-    { id: "initiator", label: "Which application initiated the associated operation?", options: [["hosta", "Server A application"], ["hostb", "Server B application"]] },
-    { id: "payload", label: "Is application payload present in this packet?", options: [["yes", "Yes"], ["no", "No"]] },
-    { id: "reth", label: "Does this packet contain remote memory fields in RETH?", options: [["yes", "Yes"], ["no", "No"]] },
-    { id: "evidence", label: "What is needed to establish completion or verified memory?", options: [["application-correlation", "Correlated application completion/memory evidence"], ["packet-alone", "This packet alone proves both"], ["peer-assumption", "Assume the peer application noticed"]] },
-  ] as const;
-
-  function explanation(groupId: string, selected: string) {
-    const expected = correct[groupId as keyof typeof correct];
-    const right = selected === expected;
-    const prefix = right ? "Correct. " : "Not correct. ";
-    if (groupId === "role") {
-      return `${prefix}The decoded opcode is ${packet.opcodeName}. Interpret its consequence: operation requests initiate transport work, a READ response returns requested data, and an Acknowledge packet is reliable-transport evidence rather than a new application-issued operation.`;
-    }
-    if (groupId === "transmitter") {
-      return `${prefix}The source IP is ${packet.sourceIp}, which the validated topology maps to ${hostLabel(packet.sourceHost)}. Wire direction is determined by the actual source and destination, not by which application originally posted the Work Request.`;
-    }
-    if (groupId === "target") {
-      return `${prefix}The packet travels to ${packet.destinationIp} and destination QPN ${exact(packet.destinationQpn)}. That QPN correlates with the ${destinationEndpoint?.label || "recorded endpoint"} on ${hostLabel(packet.destinationHost)}. Reverse-direction responses and ACKs therefore target a different endpoint from the forward request.`;
-    }
-    if (groupId === "initiator") {
-      return `${prefix}The correlated Work Request is ${correlatedWr ? correlatedWr.id : "not available"} on ${hostLabel(correlatedWr?.host)}. A response or ACK travels backward as a consequence of that original work; it is not a new operation initiated by the responding application.`;
-    }
-    if (groupId === "payload") {
-      return `${prefix}${packet.payloadText ? `This packet carries captured payload bytes beginning with “${packet.payloadText.slice(0, 42)}”.` : "This packet carries no application payload bytes."} A READ request asks for memory but does not carry the memory contents; the response carries them instead.`;
-    }
-    if (groupId === "reth") {
-      return `${prefix}${packet.reth ? `This packet contains RETH: remote address ${exact(packet.reth.virtualAddress)}, RKEY ${exact(packet.reth.rkey)}, DMA length ${exact(packet.reth.dmaLength, "decimal")}.` : "This packet has no RETH."} In these captures, only WRITE and READ request packets carry those remote-memory fields; SEND, ACK and READ-response packets do not.`;
-    }
-    return `${prefix}The capture proves wire direction, headers and carried bytes. Completion ownership, completion timing and application memory verification require correlated application event and memory evidence.`;
+  function chooseCase(id: string) {
+    setCaseId(id);
+    setAnswers({});
+    setRevealed(false);
+    setSkipped(false);
   }
-
-  const answered = groups.every((group) => answers[group.id]);
-  const correctCount = groups.filter((group) => answers[group.id] === correct[group.id as keyof typeof correct]).length;
 
   return (
     <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4" data-testid="final-packet-investigation">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-slate-100">Packet interpretation exercise</h3>
-          <p className="mt-1 text-sm text-slate-400">Cases are neutrally labelled. Interpret the decoded fields and direction instead of relying on the case selector.</p>
+          <h3 className="font-semibold text-slate-100">Operational packet investigations</h3>
+          <p className="mt-1 text-sm text-slate-400">Start from observable wire evidence and reconstruct the application behaviour. Exercises are learning aids, not a mastery score.</p>
         </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Choose packet case">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Choose investigation">
           {cases.map((item) => (
-            <button key={item.id} type="button" onClick={() => { setCaseId(item.id); setAnswers({}); }} aria-pressed={item.id === caseId} className={cx("rounded-full border px-3 py-1.5 text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300", item.id === caseId ? "border-cyan-300/60 bg-cyan-300/12 text-cyan-100" : "border-white/10 text-slate-400 hover:text-slate-200")}>
+            <button key={item.id} type="button" onClick={() => chooseCase(item.id)} aria-pressed={item.id === caseId} className={cx("rounded-full border px-3 py-1.5 text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300", item.id === caseId ? "border-cyan-300/60 bg-cyan-300/12 text-cyan-100" : "border-white/10 text-slate-400 hover:text-slate-200")}>
               {item.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-xl border border-orange-300/20 bg-orange-300/6" data-testid="decoded-investigation-packet">
-        <header className="border-b border-orange-300/15 px-3 py-2 text-sm font-semibold text-orange-100">Wireshark-style decoded packet · frame {packet.frameNumber}</header>
+      <h4 className="mt-4 text-lg font-semibold text-slate-100">{activeCase.title}</h4>
+      <div className="mt-3 overflow-hidden rounded-xl border border-orange-300/20 bg-orange-300/6" data-testid="decoded-investigation-packet">
+        <header className="border-b border-orange-300/15 px-3 py-2 text-sm font-semibold text-orange-100">Initial artifact · frame {packet.frameNumber} · {packet.captureFile}</header>
         <dl className="grid gap-2 p-3 font-mono text-xs text-orange-50 sm:grid-cols-2">
-          <div><dt className="text-orange-200/70">capture</dt><dd>{packet.captureFile}</dd></div>
-          <div><dt className="text-orange-200/70">Ethernet/IP direction</dt><dd>{packet.sourceIp} → {packet.destinationIp}</dd></div>
+          <div><dt className="text-orange-200/70">IP direction</dt><dd>{packet.sourceIp} → {packet.destinationIp}</dd></div>
           <div><dt className="text-orange-200/70">UDP destination port</dt><dd>{packet.udp.destinationPort}</dd></div>
           <div><dt className="text-orange-200/70">BTH opcode</dt><dd>{packet.opcodeName}</dd></div>
           <div><dt className="text-orange-200/70">Destination QPN</dt><dd>{exact(packet.destinationQpn)}</dd></div>
           <div><dt className="text-orange-200/70">PSN</dt><dd>{exact(packet.psn)}</dd></div>
-          <div className="sm:col-span-2"><dt className="text-orange-200/70">Operation-specific fields</dt><dd>{packet.reth ? `RETH remote address ${exact(packet.reth.virtualAddress)} · RKEY ${exact(packet.reth.rkey)} · DMA length ${exact(packet.reth.dmaLength, "decimal")}` : "no RETH"}{packet.payloadText ? ` · payload “${packet.payloadText}”` : " · no application payload"}</dd></div>
+          <div><dt className="text-orange-200/70">Payload bytes</dt><dd>{packet.payloadHex ? `${packet.dataLength} captured bytes` : "none"}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-orange-200/70">Operation-specific fields</dt><dd>{packet.reth ? `RETH remote address ${exact(packet.reth.virtualAddress)} · RKEY ${exact(packet.reth.rkey)} · DMA length ${exact(packet.reth.dmaLength, "decimal")}` : "no RETH"}</dd></div>
         </dl>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {groups.map((group) => {
-          const selected = answers[group.id];
+        {activeCase.questions.map((question) => {
+          const selected = answers[question.id];
+          const isCorrect = selected === question.correct;
           return (
-            <fieldset key={group.id} className="rounded-xl border border-white/10 bg-slate-900/40 p-3" data-testid={`investigation-${group.id}`}>
-              <legend className="px-1 text-sm font-medium text-slate-200">{group.label}</legend>
+            <fieldset key={question.id} className="rounded-xl border border-white/10 bg-slate-900/40 p-3" data-testid={`investigation-${question.id}`}>
+              <legend className="px-1 text-sm font-medium text-slate-200">{question.prompt}</legend>
               <div className="mt-2 grid gap-2">
-                {group.options.map(([value, label]) => {
-                  const selectedAnswer = selected === value;
-                  const isCorrect = correct[group.id as keyof typeof correct] === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setAnswers((current) => ({ ...current, [group.id]: value }))}
-                      aria-pressed={selectedAnswer}
-                      className={cx(
-                        "rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
-                        selectedAnswer ? isCorrect ? "border-emerald-300/45 bg-emerald-300/10 text-emerald-100" : "border-amber-300/45 bg-amber-300/10 text-amber-100" : "border-white/10 text-slate-300 hover:border-white/25",
-                      )}
-                    >
-                      {label}{selectedAnswer ? <span className="ml-2 text-xs">{isCorrect ? "correct" : "incorrect"}</span> : null}
-                    </button>
-                  );
-                })}
+                {question.options.map(([value, label]) => (
+                  <button key={value} type="button" onClick={() => setAnswers((current) => ({ ...current, [question.id]: value }))} aria-pressed={selected === value} className={cx("rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300", selected === value ? isCorrect ? "border-emerald-300/45 bg-emerald-300/10 text-emerald-100" : "border-amber-300/45 bg-amber-300/10 text-amber-100" : "border-white/10 text-slate-300 hover:border-white/25")}>
+                    {label}{selected === value ? <span className="ml-2 text-xs">{isCorrect ? "correct" : "incorrect"}</span> : null}
+                  </button>
+                ))}
               </div>
-              {selected ? <p className="mt-3 rounded-lg border border-white/10 bg-slate-950/55 p-2.5 text-xs leading-5 text-slate-300" data-testid={`feedback-${group.id}`}>{explanation(group.id, selected)}</p> : null}
+              {selected ? <p className="mt-3 rounded-lg border border-white/10 bg-slate-950/55 p-2.5 text-xs leading-5 text-slate-300" data-testid={`feedback-${question.id}`}>{isCorrect ? "Correct. " : "Not correct. "}{question.explanation}</p> : null}
             </fieldset>
           );
         })}
       </div>
-      {answered ? (
-        <p className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-300/8 p-3 text-sm leading-6 text-cyan-100" data-testid="final-investigation-result">
-          You answered {correctCount} of {groups.length} correctly. The important skill is not naming the displayed opcode; it is interpreting direction, endpoint targeting, payload presence, RETH presence and the boundary between wire evidence and application evidence.
-        </p>
-      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => { setRevealed(true); setSkipped(false); }} className="rounded-full border border-cyan-300/30 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-300/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" data-testid="reveal-investigation-evidence">Reveal correlated evidence</button>
+        <button type="button" onClick={() => { setSkipped(true); setRevealed(true); }} className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" data-testid="skip-investigation">Skip and inspect explanation</button>
+        <span className="text-xs text-slate-500" data-testid="investigation-status">{skipped ? "skipped · evidence reviewed" : revealed ? "evidence reviewed" : answeredCount ? `${answeredCount} question${answeredCount === 1 ? "" : "s"} attempted` : "not attempted"}</span>
+      </div>
+      {revealed ? <div className="mt-4" data-testid="revealed-investigation-evidence">{activeCase.evidence}</div> : null}
     </section>
+  );
+}
+
+function AiNetworkingBridge() {
+  return (
+    <section className="mt-5 rounded-2xl border border-cyan-300/18 bg-cyan-300/6 p-4" data-testid="ai-networking-bridge">
+      <h4 className="font-semibold text-cyan-100">One concrete AI-cluster transfer example</h4>
+      <p className="mt-2 text-sm leading-7 text-slate-300">Imagine that the buffer is no longer a small Python message. It contains a portion of the data that an AI application needs to exchange with another server. The same causal questions apply: which memory is registered, which endpoint resources exist, what work was posted, which packets appear, and which completion or synchronization evidence establishes the outcome?</p>
+      <div className="mt-3 grid gap-1 rounded-xl border border-white/10 bg-slate-950/55 p-3 text-center font-mono text-xs leading-6 text-slate-200 sm:grid-cols-7 sm:items-center">
+        <span>AI application /<br />communication library</span><span aria-hidden="true">→</span><span>RDMA-capable<br />transport</span><span aria-hidden="true">→</span><span>registered memory<br />+ QP/CQ resources</span><span aria-hidden="true">→</span><span>RDMA NIC → RoCEv2 fabric → remote NIC/memory</span>
+      </div>
+      <p className="mt-3 text-sm leading-7 text-slate-300">Hardware-supported GPUDirect RDMA can extend this memory-transfer model to suitable GPU memory. That is a conceptual hardware/GPU path: it is not what our host-memory Soft-RoCE experiments demonstrate, and this practical does not claim that every NCCL transport uses one fixed operation sequence or always uses ordinary RDMA WRITE.</p>
+      <details className="mt-3 rounded-xl border border-white/10 bg-slate-900/45 p-3">
+        <summary className="cursor-pointer text-sm font-medium text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">If an RDMA-dependent application is waiting for completion, why is an Ethernet link in the UP state insufficient?</summary>
+        <p className="mt-2 text-sm leading-7 text-slate-300">Link UP only means the physical/link layer is operational. Communication can still fail because endpoints are not ready, memory is not registered with the required permission, work was not submitted correctly, transport progress is impaired by loss or congestion, a completion contains an error status, or application synchronization never occurs. The deeper fabric mechanisms are covered in the linked FabricLab chapters.</p>
+      </details>
+    </section>
+  );
+}
+
+function LearningSummary() {
+  const rows = [
+    ["DMA", "why a device can transfer memory without the CPU performing each data copy"],
+    ["RDMA", "what changes compared with representative socket networking"],
+    ["MR", "why memory must be registered and what access is permitted"],
+    ["PD", "why related RDMA resources must be associated correctly"],
+    ["WR", "how an application describes work"],
+    ["QP", "how application work reaches a communication endpoint"],
+    ["CQ", "how the application observes completed work"],
+    ["SEND", "why the receiver prepares destination memory"],
+    ["WRITE", "why remote memory can change without a normal target receive CQE"],
+    ["READ", "why request direction and payload direction differ"],
+    ["RoCEv2", "how application operations appear as network packets"],
+    ["Evidence", "what a packet capture proves and what requires application observation"],
+  ] as const;
+  return (
+    <details className="mt-5 rounded-2xl border border-white/10 bg-slate-900/40 p-4" data-testid="learning-summary">
+      <summary className="cursor-pointer font-semibold text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Optional learning summary — explain the mechanism, not the definition</summary>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {rows.map(([concept, outcome]) => (
+          <div key={concept} className="rounded-lg border border-white/8 bg-slate-950/45 p-2.5 text-sm leading-6 text-slate-300"><strong className="text-cyan-100">{concept}:</strong> {outcome}</div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -414,6 +677,8 @@ function CurriculumLinks() {
       <p className="mt-3 text-sm leading-7 text-slate-300">
         The model you have just learned is the application-facing end of a much larger system. Hardware RDMA NICs such as ConnectX implement these semantics in hardware. NCCL uses RDMA-capable transports for collective AI communication, and GPUDirect RDMA extends the data path toward accelerator memory. In a leaf-spine RoCEv2 fabric, loss, congestion or misconfigured PFC/ECN can stall the very queue-pair operations whose packet anatomy you can now recognize.
       </p>
+      <AiNetworkingBridge />
+      <LearningSummary />
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {links.map(([href, label]) => (
           <Link key={href} href={href} className="rounded-xl border border-white/10 bg-slate-900/45 px-3 py-2.5 text-sm text-cyan-200 transition hover:border-cyan-300/30 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
@@ -447,7 +712,7 @@ export function Lesson8Packets({ onComplete }: { onComplete: () => void }) {
           <p>Use the same verified SEND, WRITE and READ captures from the previous lessons. The packet values are exported evidence and remain correlated with the application objects you have already seen.</p>
         </>
       ),
-      visual: <PacketInvestigator stage={0} />,
+      visual: <WriteCodePacketCorrelation />,
       evidence: <EvidenceNote kind="Captured evidence">Every packet shown here is a decoded record from the committed validated captures. The browser does not generate or fabricate packets.</EvidenceNote>,
     },
     {
