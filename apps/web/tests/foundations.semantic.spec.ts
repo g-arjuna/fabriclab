@@ -359,7 +359,7 @@ test.describe("bounded closeout regressions", () => {
     await expect(page.getByTestId("remote-key-ownership-visual")).not.toContainText("failure packet");
   });
 
-  test("legacy foundations completion does not migrate while Lessons 5-8 progress is preserved", async ({ page }) => {
+  test("unversioned legacy completion does not migrate into Operations V2", async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem("fabriclab.rdma.curriculum.completed", JSON.stringify(["moving-data", "why-rdma", "memory", "queues", "send-receive", "write"]));
       window.localStorage.setItem("fabriclab.rdma.curriculum.finished", "true");
@@ -372,7 +372,22 @@ test.describe("bounded closeout regressions", () => {
     await expect(page.getByText(/Step 1 of 19/i)).toBeVisible();
     await expect(page.getByTestId("rdma-curriculum-complete")).toHaveCount(0);
     await expect(page.getByText(/Previously completed/i)).toHaveCount(0);
-    await expect.poll(async () => page.evaluate(() => window.localStorage.getItem("fabriclab.rdma.curriculum.completed.v2"))).toBe(JSON.stringify(["send-receive", "write"]));
+    await expect.poll(async () => page.evaluate(() => window.localStorage.getItem("fabriclab.rdma.curriculum.completed.v3"))).toBe(JSON.stringify([]));
+    const finished = await page.evaluate(() => window.localStorage.getItem("fabriclab.rdma.curriculum.finished"));
+    expect(finished).toBe("false");
+  });
+
+  test("Foundations V2 completion is preserved while short pre-Operations completion requires review", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("fabriclab.rdma.curriculum.completed.v2", JSON.stringify(["moving-data", "why-rdma", "memory", "queues", "send-receive", "write", "read", "packets"]));
+      window.localStorage.setItem("fabriclab.rdma.curriculum.finished", "true");
+    });
+    await page.goto("/practical/rdma?lesson=send-receive", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("guided-lesson-send-receive")).toBeVisible();
+    await expect(page.getByText(/Step 1 of 9/i)).toBeVisible();
+    await expect(page.getByTestId("rdma-curriculum-complete")).toHaveCount(0);
+    await expect(page.getByText(/Previously completed · review\/reference access/i)).toHaveCount(0);
+    await expect.poll(async () => page.evaluate(() => window.localStorage.getItem("fabriclab.rdma.curriculum.completed.v3"))).toBe(JSON.stringify(["moving-data", "why-rdma", "memory", "queues"]));
     const finished = await page.evaluate(() => window.localStorage.getItem("fabriclab.rdma.curriculum.finished"));
     expect(finished).toBe("false");
   });

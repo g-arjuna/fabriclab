@@ -28,7 +28,9 @@ type PersistedGuidedState = {
 };
 
 const REVISED_FOUNDATION_LESSONS = new Set(["moving-data", "why-rdma", "memory", "queues"]);
+const REVISED_OPERATION_LESSONS = new Set(["send-receive", "write", "read", "packets"]);
 const FOUNDATIONS_V2_REVISION = "foundations-v2-final";
+const OPERATIONS_V2_REVISION = "operations-v2";
 
 function idToIndex(steps: GuidedStep[], id: string | undefined) {
   const index = steps.findIndex((step) => step.id === id);
@@ -85,8 +87,9 @@ export function GuidedLesson({
   const [visitedSteps, setVisitedSteps] = useState<number[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const revisedFoundation = REVISED_FOUNDATION_LESSONS.has(lessonId);
-  const persistedVersion = revisedFoundation ? 3 as const : 2 as const;
-  const persistedRevision = revisedFoundation ? FOUNDATIONS_V2_REVISION : undefined;
+  const revisedOperation = REVISED_OPERATION_LESSONS.has(lessonId);
+  const persistedVersion = revisedFoundation || revisedOperation ? 3 as const : 2 as const;
+  const persistedRevision = revisedFoundation ? FOUNDATIONS_V2_REVISION : revisedOperation ? OPERATIONS_V2_REVISION : undefined;
   const articleRef = useRef<HTMLElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const step = steps[stepIndex];
@@ -107,7 +110,7 @@ export function GuidedLesson({
       if (versioned) {
         setStepIndex(versioned.stepIndex);
         setVisitedSteps(versioned.visitedSteps);
-      } else if (!revisedFoundation) {
+      } else if (!revisedFoundation && !revisedOperation) {
         const legacyStep = parseLegacyIndex(window.localStorage.getItem(storageKey), steps.length);
         const legacyVisited = parseLegacyVisited(window.localStorage.getItem(visitedKey), steps.length);
         setStepIndex(legacyStep);

@@ -1,0 +1,189 @@
+{
+  "purpose": "Regression audit expectations verified against the reference-evidence export at baseline. These values are not a runtime source or a new evidence artifact; derive all UI values from repository evidence.",
+  "baseline": "46cd691bd72563f94d9565e21ef208b71d7b31f2",
+  "referenceEvidencePath": "apps/web/public/practical/rdma/reference-evidence.json",
+  "rdmaDigest": "c4feb017e809cb1e7ac4ceb8fc007adec72cd31a2a57018ccc227f715aa7bd9e",
+  "rdmaJsonSha256": "f143ebcadf676e4505ca8d897dca95f4d11191d677f1f4c0f16c9b703eca1f25",
+  "tcpJsonSha256": "c6cb497efbb1e91ac295c4215494273d797838a57ef6d046102769fb6a77c3e6",
+  "experiments": [
+    {
+      "id": "send-recv",
+      "source": "python/exp_b_send_recv.py",
+      "aQpn": 18,
+      "bQpn": 19,
+      "aMr": "b:memory:hosta",
+      "bMr": "b:memory:hostb",
+      "wrIds": [
+        "wr:b:hosta:exp-b-sender:5",
+        "wr:b:hostb:exp-b-receiver:4"
+      ],
+      "expectedWorkLengths": [
+        50,
+        4096
+      ],
+      "completionIds": [
+        "cqe:b:hosta:exp-b-sender:6",
+        "cqe:b:hostb:exp-b-receiver:5"
+      ],
+      "packets": [
+        {
+          "id": "b:packet:3",
+          "role": "request",
+          "opcode": 4,
+          "destinationQpn": 19,
+          "psn": 512,
+          "payloadBytes": 50,
+          "pad": 2,
+          "dataLength": 52,
+          "frameLength": 110,
+          "reth": false
+        },
+        {
+          "id": "b:packet:4",
+          "role": "acknowledgement",
+          "opcode": 17,
+          "destinationQpn": 18,
+          "psn": 512,
+          "payloadBytes": 0,
+          "pad": 0,
+          "dataLength": 0,
+          "frameLength": 62,
+          "reth": false
+        }
+      ],
+      "snapshotIds": [
+        "b:memory:hostb:received"
+      ],
+      "requiredEventIds": [
+        "b:hosta:exp-b-sender:4",
+        "b:hostb:exp-b-receiver:4",
+        "b:hostb:exp-b-receiver:5",
+        "b:hostb:exp-b-receiver:6",
+        "b:hostb:exp-b-receiver:7"
+      ],
+      "expectedVerifiedBytes": 50,
+      "senderTextLogStripped": true,
+      "expectedPayloadLastByteHex": "0a"
+    },
+    {
+      "id": "write",
+      "source": "python/exp_c_write.py",
+      "aQpn": 19,
+      "bQpn": 20,
+      "aMr": "c:memory:hosta",
+      "bMr": "c:memory:hostb",
+      "wrIds": [
+        "wr:c:hosta:exp-c-writer:5"
+      ],
+      "expectedWorkLengths": [
+        53
+      ],
+      "completionIds": [
+        "cqe:c:hosta:exp-c-writer:6"
+      ],
+      "packets": [
+        {
+          "id": "c:packet:7",
+          "role": "request",
+          "opcode": 10,
+          "destinationQpn": 20,
+          "psn": 768,
+          "payloadBytes": 53,
+          "pad": 3,
+          "dataLength": 56,
+          "frameLength": 130,
+          "reth": true,
+          "rethDmaLength": 53
+        },
+        {
+          "id": "c:packet:8",
+          "role": "acknowledgement",
+          "opcode": 17,
+          "destinationQpn": 19,
+          "psn": 768,
+          "payloadBytes": 0,
+          "pad": 0,
+          "dataLength": 0,
+          "frameLength": 62,
+          "reth": false
+        }
+      ],
+      "snapshotIds": [
+        "c:memory:hostb:before",
+        "c:memory:hostb:after"
+      ],
+      "requiredEventIds": [
+        "c:hostb:exp-c-target:3",
+        "c:hosta:exp-c-writer:6",
+        "c:hostb:exp-c-target:5",
+        "c:hostb:exp-c-target:6",
+        "c:hostb:exp-c-target:7"
+      ],
+      "expectedBeforeSnapshotBytes": 64,
+      "expectedVerifiedBytes": 53,
+      "targetPollCount": 0,
+      "senderTextLogStripped": true,
+      "expectedPayloadLastByteHex": "0a"
+    },
+    {
+      "id": "read",
+      "source": "python/exp_d_read.py",
+      "aQpn": 20,
+      "bQpn": 21,
+      "aMr": "d:memory:hosta",
+      "bMr": "d:memory:hostb",
+      "wrIds": [
+        "wr:d:hosta:exp-d-reader:5"
+      ],
+      "expectedWorkLengths": [
+        46
+      ],
+      "completionIds": [
+        "cqe:d:hosta:exp-d-reader:6"
+      ],
+      "packets": [
+        {
+          "id": "d:packet:3",
+          "role": "request",
+          "opcode": 12,
+          "destinationQpn": 21,
+          "psn": 1024,
+          "payloadBytes": 0,
+          "pad": 0,
+          "dataLength": 0,
+          "frameLength": 74,
+          "reth": true,
+          "rethDmaLength": 46
+        },
+        {
+          "id": "d:packet:4",
+          "role": "response",
+          "opcode": 16,
+          "destinationQpn": 20,
+          "psn": 1024,
+          "payloadBytes": 46,
+          "pad": 2,
+          "dataLength": 48,
+          "frameLength": 110,
+          "reth": false
+        }
+      ],
+      "snapshotIds": [
+        "d:memory:hostb:before",
+        "d:memory:hosta:read-result"
+      ],
+      "requiredEventIds": [
+        "d:hostb:exp-d-source:3",
+        "d:hosta:exp-d-reader:6",
+        "d:hosta:exp-d-reader:7",
+        "d:hostb:exp-d-source:5",
+        "d:hostb:exp-d-source:6"
+      ],
+      "expectedSourceSnapshotBytes": 64,
+      "expectedAdvertisedLength": 46,
+      "expectedVerifiedBytes": 46,
+      "sourcePollCount": 0,
+      "expectedPayloadLastByteHex": "0a"
+    }
+  ]
+}

@@ -37,8 +37,10 @@ const LESSONS: LessonMeta[] = [
 const CURRENT_KEY = "fabriclab.rdma.curriculum.current";
 const COMPLETED_KEY = "fabriclab.rdma.curriculum.completed";
 const COMPLETED_V2_KEY = "fabriclab.rdma.curriculum.completed.v2";
+const COMPLETED_V3_KEY = "fabriclab.rdma.curriculum.completed.v3";
 const FINISHED_KEY = "fabriclab.rdma.curriculum.finished";
 const REVISED_FOUNDATION_LESSON_IDS = new Set(LESSONS.slice(0, 4).map((lesson) => lesson.id));
+const REVISED_OPERATION_LESSON_IDS = new Set(LESSONS.slice(4).map((lesson) => lesson.id));
 
 function validCompletedLessons(value: unknown) {
   return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string" && LESSONS.some((item) => item.id === id)) : [];
@@ -81,17 +83,22 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
       } else if (initialIndex !== lessonIndex) {
         setLessonIndex(initialIndex);
       }
-      const versionedCompleted = window.localStorage.getItem(COMPLETED_V2_KEY);
+      const operationsCompleted = window.localStorage.getItem(COMPLETED_V3_KEY);
       let migratedCompleted: string[] = [];
-      if (versionedCompleted) {
-        migratedCompleted = validCompletedLessons(JSON.parse(versionedCompleted));
+      if (operationsCompleted) {
+        migratedCompleted = validCompletedLessons(JSON.parse(operationsCompleted));
       } else {
-        // The pre-revision completion flag used the same lesson identifiers for
-        // substantially different Foundations lessons. Preserve only the
-        // unchanged practical Lessons 5–8; revised Lessons 1–4 must be reviewed
-        // from their beginning rather than inheriting old completion state.
-        const legacyCompleted = window.localStorage.getItem(COMPLETED_KEY);
-        if (legacyCompleted) migratedCompleted = validCompletedLessons(JSON.parse(legacyCompleted)).filter((id) => !REVISED_FOUNDATION_LESSON_IDS.has(id));
+        // Preserve accepted Foundations V2 completion, but do not allow the
+        // shorter pre-Operations lessons 5–8 to satisfy the expanded revision.
+        const versionedCompleted = window.localStorage.getItem(COMPLETED_V2_KEY);
+        if (versionedCompleted) {
+          migratedCompleted = validCompletedLessons(JSON.parse(versionedCompleted)).filter((id) => !REVISED_OPERATION_LESSON_IDS.has(id));
+        } else {
+          const legacyCompleted = window.localStorage.getItem(COMPLETED_KEY);
+          if (legacyCompleted) {
+            migratedCompleted = validCompletedLessons(JSON.parse(legacyCompleted)).filter((id) => !REVISED_FOUNDATION_LESSON_IDS.has(id) && !REVISED_OPERATION_LESSON_IDS.has(id));
+          }
+        }
       }
       setCompleted(migratedCompleted);
       const storedFinished = window.localStorage.getItem(FINISHED_KEY) === "true" && LESSONS.every((item) => migratedCompleted.includes(item.id));
@@ -108,7 +115,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
     if (!hydrated) return;
     try {
       window.localStorage.setItem(CURRENT_KEY, lesson.id);
-      window.localStorage.setItem(COMPLETED_V2_KEY, JSON.stringify(completed));
+      window.localStorage.setItem(COMPLETED_V3_KEY, JSON.stringify(completed));
       window.localStorage.setItem(FINISHED_KEY, finished ? "true" : "false");
       const url = new URL(window.location.href);
       if (url.searchParams.has("lesson")) {
@@ -124,13 +131,21 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
 
   function completeLesson() {
     const nextCompleted = completed.includes(lesson.id) ? completed : [...completed, lesson.id];
-    setCompleted(nextCompleted);
     const practicalComplete = LESSONS.every((item) => nextCompleted.includes(item.id));
+    const nextLessonIndex = practicalComplete || lessonIndex >= LESSONS.length - 1 ? lessonIndex : lessonIndex + 1;
+    try {
+      window.localStorage.setItem(COMPLETED_V3_KEY, JSON.stringify(nextCompleted));
+      window.localStorage.setItem(FINISHED_KEY, practicalComplete ? "true" : "false");
+      window.localStorage.setItem(CURRENT_KEY, LESSONS[nextLessonIndex].id);
+    } catch {
+      // Progress persistence is optional.
+    }
+    setCompleted(nextCompleted);
     if (practicalComplete) {
       setFinished(true);
       setShowCompletion(true);
     } else if (lessonIndex < LESSONS.length - 1) {
-      setLessonIndex(lessonIndex + 1);
+      setLessonIndex(nextLessonIndex);
     }
   }
 
@@ -146,6 +161,11 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
 
   function selectLesson(index: number) {
     markLessonExplicit(LESSONS[index].id);
+    try {
+      window.localStorage.setItem(CURRENT_KEY, LESSONS[index].id);
+    } catch {
+      // Progress persistence is optional.
+    }
     setShowCompletion(false);
     setLessonIndex(index);
   }
@@ -167,6 +187,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
       LESSONS.forEach((item) => clearLessonProgress(item.id));
       window.localStorage.removeItem(COMPLETED_KEY);
       window.localStorage.removeItem(COMPLETED_V2_KEY);
+      window.localStorage.removeItem(COMPLETED_V3_KEY);
       window.localStorage.removeItem(FINISHED_KEY);
       const url = new URL(window.location.href);
       url.searchParams.delete("lesson");
@@ -258,6 +279,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/reference-evidence.json">RDMA evidence bundle JSON</a>
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/tcp-foundations-evidence.json">TCP foundations evidence JSON</a>
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/foundations-section-map.json">Foundations source-section map</a>
+              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/operations-section-map.json">Operations source-section map</a>
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="https://github.com/g-arjuna/fabriclab/tree/a208af6ecf4e838d6d2c475ede366494de81a706/labs/rdma-basics">Lab source and reproduction instructions</a>
             </div>
           </section>
@@ -269,6 +291,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/reference-evidence.json">RDMA evidence bundle JSON</a>
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/tcp-foundations-evidence.json">TCP foundations evidence JSON</a>
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/foundations-section-map.json">Foundations source-section map</a>
+              <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="/practical/rdma/operations-section-map.json">Operations source-section map</a>
               <a className="text-cyan-200 underline decoration-cyan-200/30 underline-offset-4 hover:text-cyan-100" href="https://github.com/g-arjuna/fabriclab/tree/a208af6ecf4e838d6d2c475ede366494de81a706/labs/rdma-basics">Lab source and reproduction instructions</a>
             </div>
           </details>
