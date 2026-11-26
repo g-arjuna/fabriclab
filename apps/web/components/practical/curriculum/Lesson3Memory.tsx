@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { cx, EvidenceNote, exactValue, FactGrid, SourceExcerpt } from "./visuals";
 import { ResourceRelationshipDiagram } from "./rdmaDiagrams";
@@ -73,39 +75,113 @@ function MemoryAccessExercise() {
     {
       id: "valid-read",
       label: "Read 8 bytes inside the region",
+      start: 0,
+      length: 8,
+      permission: "remote read",
+      permissionPresent: true,
       result: "Permitted",
-      tone: "border-emerald-300/35 bg-emerald-300/10 text-emerald-100",
-      explanation: "The request names the registered region, stays inside its address range and requires remote-read permission, which exists in this illustration.",
+      explanation: "The requested bytes stay inside the registered 16-byte range, and the required remote-read permission is present in this illustration.",
     },
     {
       id: "write-without-permission",
       label: "Write 8 bytes into the region",
+      start: 4,
+      length: 8,
+      permission: "remote write",
+      permissionPresent: false,
       result: "Rejected",
-      tone: "border-amber-300/35 bg-amber-300/10 text-amber-100",
-      explanation: "The range is inside the region, but the illustrated permissions allow remote read and not remote write. A valid address range is not sufficient without the required access permission.",
+      explanation: "The address range is valid, but remote-write permission is absent. A valid range does not by itself authorize the requested operation.",
     },
     {
       id: "out-of-bounds-read",
-      label: "Read bytes beyond the 16-byte region",
+      label: "Read 8 bytes starting at byte 12",
+      start: 12,
+      length: 8,
+      permission: "remote read",
+      permissionPresent: true,
       result: "Rejected",
-      tone: "border-amber-300/35 bg-amber-300/10 text-amber-100",
-      explanation: "The operation names the region and remote read is allowed, but the requested range crosses the registered boundary. Permission does not extend to unrelated memory.",
+      explanation: "Remote-read permission is present, but bytes 16–19 are outside the registered boundary. Permission does not extend into unregistered memory.",
     },
   ] as const;
+  const [selectedId, setSelectedId] = useState<(typeof cases)[number]["id"]>("valid-read");
+  const selected = cases.find((item) => item.id === selectedId)!;
+  const requestedEnd = selected.start + selected.length - 1;
+  const rangeValid = selected.start >= 0 && requestedEnd < 16;
+  const permitted = rangeValid && selected.permissionPresent;
   return (
     <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4" data-testid="memory-access-exercise">
       <h3 className="font-semibold text-slate-100">Conceptual memory-access check</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-300">Illustrative registered buffer: address <span className="font-mono text-cyan-100">0x1000</span>, length 16 bytes. Permissions: remote read allowed; remote write not allowed. Inspect each proposed operation.</p>
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
+      <p className="mt-2 text-sm leading-6 text-slate-300">Illustrative registered region: address <span className="font-mono text-cyan-100">0x1000</span>, length 16 bytes. Permissions: remote read allowed; remote write not allowed. For these examples, assume the endpoint context is ready and the peer presents the valid remote key.</p>
+
+      <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/40 p-3" data-testid="memory-access-address-map">
+        <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.13em]">
+          <span className="text-emerald-100/85">registered bytes 0–15</span>
+          <span className="text-slate-500">unregistered bytes 16–23</span>
+        </div>
+        <div className="mt-2 grid grid-cols-8 gap-1 sm:grid-cols-12">
+          {Array.from({ length: 24 }, (_, index) => {
+            const registered = index < 16;
+            const requested = index >= selected.start && index <= requestedEnd;
+            const state = requested && registered ? "requested inside" : requested ? "requested outside" : registered ? "registered" : "unregistered";
+            return (
+              <div
+                key={index}
+                className={cx(
+                  "rounded-md border px-1 py-1.5 text-center font-mono text-[10px] leading-4",
+                  registered ? "border-emerald-300/25 bg-emerald-300/7 text-emerald-100/75" : "border-white/10 bg-slate-950/60 text-slate-600",
+                  requested && (registered ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-50" : "border-amber-300/60 bg-amber-300/15 text-amber-100"),
+                )}
+                aria-label={`byte ${index}: ${state}`}
+              >
+                <div className="text-[8px] uppercase tracking-wide opacity-70">{index}</div>
+                <div>{registered ? "byte" : "out"}</div>
+                {requested ? <div className="mt-0.5 rounded bg-white/10 px-0.5 text-[8px] uppercase">{registered ? "in" : "out"}</div> : null}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-2 grid gap-1 text-[11px] leading-4 text-slate-400 sm:grid-cols-2">
+          <span><span className="text-cyan-100">cyan outline:</span> requested bytes inside the boundary</span>
+          <span><span className="text-amber-100">amber outline:</span> requested bytes outside the boundary</span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3" role="group" aria-label="Choose a proposed memory operation">
         {cases.map((item) => (
-          <details key={item.id} className="rounded-xl border border-white/10 bg-slate-900/45 p-3" data-testid={`memory-access-${item.id}`}>
-            <summary className="cursor-pointer text-sm font-medium text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">{item.label}</summary>
-            <div className={cx("mt-3 rounded-lg border p-2 text-xs font-semibold", item.tone)}>{item.result}</div>
-            <p className="mt-2 text-xs leading-5 text-slate-300">{item.explanation}</p>
-          </details>
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setSelectedId(item.id)}
+            aria-pressed={selectedId === item.id}
+            className={cx(
+              "rounded-xl border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+              selectedId === item.id ? "border-cyan-300/55 bg-cyan-300/12 text-cyan-100" : "border-white/10 bg-slate-900/45 text-slate-300 hover:border-white/25",
+            )}
+            data-testid={`memory-access-${item.id}`}
+          >
+            {item.label}
+          </button>
         ))}
       </div>
-      <p className="mt-3 text-xs leading-5 text-slate-500">Conceptual access model, not a fabricated packet or completion-status experiment.</p>
+
+      <div className={cx("mt-4 rounded-xl border p-3", permitted ? "border-emerald-300/30 bg-emerald-300/8" : "border-amber-300/30 bg-amber-300/8")} data-testid="memory-access-result">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm font-semibold text-slate-100">{selected.result}</div>
+          <div className="font-mono text-xs text-slate-300">requested bytes {selected.start}–{requestedEnd}</div>
+        </div>
+        <dl className="mt-3 grid gap-2 text-xs leading-5 sm:grid-cols-2">
+          <div className="rounded-lg border border-white/10 bg-slate-950/45 p-2">
+            <dt className="font-semibold text-slate-200">Address range</dt>
+            <dd className={rangeValid ? "text-emerald-100" : "text-amber-100"}>{rangeValid ? "inside the registered region" : "crosses the registered boundary"}</dd>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-slate-950/45 p-2">
+            <dt className="font-semibold text-slate-200">Required permission</dt>
+            <dd className={selected.permissionPresent ? "text-emerald-100" : "text-amber-100"}>{selected.permission} · {selected.permissionPresent ? "present" : "absent"}</dd>
+          </div>
+        </dl>
+        <p className="mt-3 text-sm leading-6 text-slate-300">{selected.explanation}</p>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">Conceptual access model, not a fabricated packet or completion-status experiment. The separately recorded registration evidence remains the authoritative laboratory resource evidence.</p>
     </section>
   );
 }
@@ -187,8 +263,8 @@ export function Lesson3Memory({ onComplete }: { onComplete: () => void }) {
           <p>Use the short access check below to see that three requirements are independent: the operation must identify the appropriate registered memory, the requested range must be valid and the required access permission must exist. This distinction matters because receive-style operations, ordinary WRITE and READ use memory differently.</p>
         </>
       ),
-      visual: <MemoryRegistrationDiagram stage={4} />,
-      interaction: <MemoryAccessExercise />,
+      visual: <MemoryAccessExercise />,
+      visualFirst: true,
       inspect: (
         <SourceExcerpt path="python/rdma_common.py" start={35} end={42} title="The laboratory access flags" emphasisLines={[40, 41, 42]} emphasisLabel="The highlighted flags are the exact permissions later associated with the registered memory region.">
           The reference lab enables local write, remote write and remote read so that all three later operations can be studied. A production application should grant only the access its design requires.
@@ -207,7 +283,7 @@ export function Lesson3Memory({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: <MemoryRegistrationDiagram stage={5} />,
-      evidence: <EvidenceNote kind="Validated relationship">The recorded resource experiment created endpoints with QPNs, memory regions and keys, then deliberately posted no data work request. The absence of a data capture is therefore expected evidence, not missing evidence.</EvidenceNote>,
+      evidence: <EvidenceNote kind="Evidence correlation">The recorded resource experiment created endpoints with QPNs, memory regions and keys, then deliberately posted no data work request. The absence of a data capture is therefore expected evidence, not missing evidence.</EvidenceNote>,
       inspect: (
         <div className="space-y-4">
           <FactGrid facts={[

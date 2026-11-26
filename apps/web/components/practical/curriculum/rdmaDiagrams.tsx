@@ -321,6 +321,7 @@ function CompletionLane({ queue }: { queue: CompletionQueueVisualModel }) {
 export type FocusWorkState = {
   title: string;
   label: ReactNode;
+  detail?: ReactNode;
   tone?: "pending" | "consumed" | "completed" | "empty" | "unknown";
 };
 
@@ -346,32 +347,148 @@ function focusWorkTone(tone: FocusWorkState["tone"]) {
 function focusWorkStatus(tone: FocusWorkState["tone"]) {
   if (tone === "pending") return "pending work";
   if (tone === "consumed") return "consumed · no longer pending";
-  if (tone === "completed") return "completed work · no longer pending";
+  if (tone === "completed") return "completed · no longer pending";
   if (tone === "unknown") return "not inspected";
   return "no pending work";
 }
 
-function FocusEndpoint({ endpoint }: { endpoint: FocusEndpointModel }) {
+function FocusMemoryContent({ memory, abbreviate = false }: { memory: ReactNode; abbreviate?: boolean }) {
+  if (!abbreviate || typeof memory !== "string" || memory.length <= 30) return <>{memory}</>;
+  const firstLine = memory.split("\n")[0];
+  const preview = firstLine.length > 18 ? `${firstLine.slice(0, 18)}…` : firstLine;
   return (
-    <section className="min-w-0 rounded-xl border border-white/10 bg-slate-900/35 p-2.5" data-testid={`focus-endpoint-${endpoint.host}`}>
+    <div>
+      <div>{preview}</div>
+      <details className="mt-1">
+        <summary className="cursor-pointer text-[10px] font-medium text-cyan-100/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">show full memory</summary>
+        <div className="mt-1 whitespace-pre-wrap break-words">{memory}</div>
+      </details>
+    </div>
+  );
+}
+
+function FocusWorkCard({ work, endpoint, showTitle = false }: { work: FocusWorkState; endpoint: FocusEndpointModel; showTitle?: boolean }) {
+  return (
+    <div className={cx("rounded-lg border px-2 py-1.5 text-xs leading-5", focusWorkTone(work.tone))} data-testid={`focus-${work.title.toLowerCase().replace(/\s+/g, "-")}-${endpoint.host}`}>
+      {showTitle ? <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-slate-500">{work.title}</div> : null}
+      <div className="break-words font-mono">{work.label}</div>
+      {work.detail ? <div className="mt-0.5 text-[9px] leading-3.5 text-slate-400">{work.detail}</div> : null}
+      {work.tone === "pending" ? null : <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] opacity-75">{focusWorkStatus(work.tone)}</div>}
+    </div>
+  );
+}
+
+function FocusQueueBlock({ title, entries, endpoint }: { title: string; entries: FocusWorkState[]; endpoint: FocusEndpointModel }) {
+  const pending = entries.filter((entry) => entry.tone === "pending");
+  const history = entries.filter((entry) => entry.tone === "consumed" || entry.tone === "completed");
+  const queueState = entries.filter((entry) => entry.tone === "empty" || entry.tone === "unknown");
+  return (
+    <div className="space-y-1.5">
+      <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/6 p-1.5">
+        <div className="flex items-center justify-between gap-1">
+          <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-cyan-100/80">{title}</div>
+          <div className="text-[8px] uppercase tracking-[0.1em] text-slate-500">{pending.length ? "pending" : "no pending work"}</div>
+        </div>
+        <div className="mt-1 space-y-1">
+          {pending.map((work) => <FocusWorkCard key={work.title} work={work} endpoint={endpoint} />)}
+          {!pending.length && queueState.map((work) => <FocusWorkCard key={work.title} work={work} endpoint={endpoint} />)}
+          {!pending.length && !queueState.length ? <div className="rounded border border-dashed border-white/10 px-1.5 py-1 text-[10px] text-slate-500">no pending work in this queue</div> : null}
+        </div>
+      </div>
+      {history.length ? (
+        <div className="rounded-lg border border-white/8 bg-slate-950/40 p-1.5" data-testid={`focus-${title.toLowerCase().replace(/\s+/g, "-")}-history-${endpoint.host}`}>
+          <div className="text-[8px] uppercase tracking-[0.1em] text-slate-500">{title} history · outside the pending queue</div>
+          <div className="mt-1 space-y-1">{history.map((work) => <FocusWorkCard key={work.title} work={work} endpoint={endpoint} />)}</div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function useCompactFocusLayout() {
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 639px)");
+    const update = () => setCompact(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return compact;
+}
+
+function CompactFocusWorkList({ work, endpoint }: { work: FocusWorkState[]; endpoint: FocusEndpointModel }) {
+  const pending = work.filter((entry) => entry.tone === "pending");
+  const history = work.filter((entry) => entry.tone === "consumed" || entry.tone === "completed");
+  const queueState = work.filter((entry) => entry.tone === "empty" || entry.tone === "unknown");
+  if (!work.length) return <div className="rounded border border-dashed border-white/10 px-1.5 py-1 text-[9px] text-slate-500">no work yet</div>;
+  return (
+    <>
+      {(pending.length ? pending : queueState).map((entry) => <FocusWorkCard key={entry.title} work={entry} endpoint={endpoint} showTitle />)}
+      {!pending.length && !queueState.length && !history.length ? <div className="rounded border border-dashed border-white/10 px-1.5 py-1 text-[9px] text-slate-500">no pending work</div> : null}
+      {history.length ? (
+        <div className="rounded-lg border border-white/8 bg-slate-950/40 p-1.5">
+          <div className="text-[8px] uppercase tracking-[0.1em] text-slate-500">work history · outside pending queues</div>
+          <div className="mt-1 space-y-1">{history.map((entry) => <FocusWorkCard key={entry.title} work={entry} endpoint={endpoint} showTitle />)}</div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function FocusEndpoint({ endpoint }: { endpoint: FocusEndpointModel }) {
+  const compact = useCompactFocusLayout();
+  const work = endpoint.work || [];
+  const titles = Array.from(new Set(work.map((entry) => entry.title)));
+
+  if (compact) {
+    return (
+      <section className="min-w-0 rounded-xl border border-white/10 bg-slate-900/35 p-2" data-testid={`focus-endpoint-${endpoint.host}`}>
+        <h3 className="text-center text-[11px] font-semibold uppercase tracking-[0.13em] text-slate-300">{endpoint.name}</h3>
+        <div className="mt-1.5 rounded-lg border border-sky-300/25 bg-sky-300/8 p-1.5" data-testid={`focus-memory-${endpoint.host}`}>
+          <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-slate-500">{endpoint.memoryLabel}</div>
+          <div className="mt-1 whitespace-pre-wrap break-words font-mono text-[10px] leading-4 text-sky-100"><FocusMemoryContent memory={endpoint.memory} abbreviate /></div>
+          {endpoint.memoryNote ? <div className="mt-1 text-[9px] leading-3.5 text-slate-400">{endpoint.memoryNote}</div> : null}
+        </div>
+        <div className="mt-1.5 space-y-1">
+          <CompactFocusWorkList work={work} endpoint={endpoint} />
+        </div>
+        <div className="mt-1.5 rounded-lg border border-orange-300/25 bg-orange-300/7 px-1.5 py-1 text-center text-[10px] leading-4 text-orange-100" data-testid={`focus-provider-${endpoint.host}`}>
+          RDMA provider{endpoint.providerNote ? <span className="block text-[9px] text-orange-100/70">{endpoint.providerNote}</span> : null}
+        </div>
+        {endpoint.completion ? <div className="mt-1.5 rounded-lg border border-lime-300/30 bg-lime-300/8 p-1.5 text-[10px] leading-4 text-lime-100" data-testid={`focus-completion-${endpoint.host}`}>{endpoint.completion}</div> : null}
+      </section>
+    );
+  }
+
+  return (
+    <section className="min-w-0 rounded-xl border border-white/10 bg-slate-900/35 p-2" data-testid={`focus-endpoint-${endpoint.host}`}>
       <h3 className="text-center text-xs font-semibold uppercase tracking-[0.15em] text-slate-300">{endpoint.name}</h3>
-      <div className="mt-2 rounded-lg border border-sky-300/25 bg-sky-300/8 p-2" data-testid={`focus-memory-${endpoint.host}`}>
-        <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-500">{endpoint.memoryLabel}</div>
-        <div className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-5 text-sky-100">{endpoint.memory}</div>
-        {endpoint.memoryNote ? <div className="mt-1 text-[10px] leading-4 text-slate-400">{endpoint.memoryNote}</div> : null}
-      </div>
-      <Arrow direction="down" label="registered memory + posted work" />
-      <div className="space-y-1.5">
-        {(endpoint.work || []).map((work) => (
-          <div key={work.title} className={cx("rounded-lg border px-2 py-1.5 text-xs leading-5", focusWorkTone(work.tone))} data-testid={`focus-${work.title.toLowerCase().replace(/\s+/g, "-")}-${endpoint.host}`}>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.12em] opacity-75">{work.title}</div>
-            <div className="font-mono">{work.label}</div>
-            <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em] opacity-75">{focusWorkStatus(work.tone)}</div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)]" data-testid={`focus-separated-paths-${endpoint.host}`}>
+        <section className="min-w-0 rounded-lg border border-sky-300/20 bg-sky-300/5 p-1.5" data-testid={`payload-path-${endpoint.host}`}>
+          <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-sky-100/80">Payload path</div>
+          <div className="mt-1 rounded-lg border border-sky-300/25 bg-sky-300/8 p-2" data-testid={`focus-memory-${endpoint.host}`}>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-500">{endpoint.memoryLabel}</div>
+            <div className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-5 text-sky-100"><FocusMemoryContent memory={endpoint.memory} /></div>
+            {endpoint.memoryNote ? <div className="mt-1 text-[10px] leading-4 text-slate-400">{endpoint.memoryNote}</div> : null}
           </div>
-        ))}
+          <div className="mt-1 rounded border border-sky-300/15 bg-slate-950/35 px-1.5 py-1 text-[10px] leading-4 text-sky-100/75">
+            memory ↔ provider ↔ network<br />
+            <span className="text-slate-400">bytes bypass queues</span>
+          </div>
+        </section>
+        <section className="min-w-0 rounded-lg border border-cyan-300/15 bg-cyan-300/4 p-1.5" data-testid={`instruction-path-${endpoint.host}`}>
+          <div className="text-[8px] font-semibold uppercase tracking-[0.12em] text-cyan-100/80">Instruction path</div>
+          <div className="mt-1 rounded border border-white/10 bg-slate-950/40 px-1.5 py-1 text-[10px] leading-4 text-slate-300">
+            app → queue → provider<br />
+            <span className="text-slate-500">instructions only · no payload</span>
+          </div>
+          <div className="mt-1.5 space-y-1.5">
+            {titles.length ? titles.map((title) => <FocusQueueBlock key={title} title={title} entries={work.filter((entry) => entry.title === title)} endpoint={endpoint} />) : <div className="rounded border border-dashed border-white/10 px-1.5 py-1 text-[10px] text-slate-500">no work yet</div>}
+          </div>
+        </section>
       </div>
-      <Arrow direction="both" label="provider executes transport" />
-      <div className="rounded-lg border border-orange-300/25 bg-orange-300/7 p-2 text-center text-xs leading-5 text-orange-100" data-testid={`focus-provider-${endpoint.host}`}>
+      <div className="mt-2 rounded-lg border border-orange-300/25 bg-orange-300/7 p-2 text-center text-xs leading-5 text-orange-100" data-testid={`focus-provider-${endpoint.host}`}>
         RDMA provider{endpoint.providerNote ? <span className="block text-[10px] text-orange-100/70">{endpoint.providerNote}</span> : null}
       </div>
       {endpoint.completion ? <div className="mt-2 rounded-lg border border-lime-300/30 bg-lime-300/8 p-2 text-xs leading-5 text-lime-100" data-testid={`focus-completion-${endpoint.host}`}>{endpoint.completion}</div> : null}
@@ -395,21 +512,26 @@ export function ExperimentFocusDiagram({
   const active = Boolean(transfer.visible);
   return (
     <figure className="rounded-2xl border border-white/10 bg-slate-950/35 p-3" data-testid="experiment-focus-diagram">
-      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1fr)] lg:items-center">
+      <div className="grid grid-cols-[minmax(0,1fr)_3.4rem_minmax(0,1fr)] gap-1.5 sm:gap-2 lg:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1fr)] lg:items-center">
         <FocusEndpoint endpoint={a} />
         <div className={cx("self-center rounded-xl border px-2 py-3 text-center", active ? transfer.kind === "control" ? "border-violet-300/35 bg-violet-300/9" : "border-orange-300/35 bg-orange-300/9" : "border-white/10 bg-slate-950/35")} data-testid="focus-transfer" data-direction={direction} data-kind={transfer.kind || "none"}>
           <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-500">{transfer.kind === "control" ? "TCP control" : "RoCEv2 data"}</div>
           <div className="mt-1 font-mono text-cyan-200" aria-hidden="true">{arrow}</div>
-          {active ? <div className="mt-2 text-xs leading-5 text-orange-100">{transfer.label}</div> : <div className="mt-2 text-[10px] text-slate-600">no packet at this point</div>}
+          {direction !== "none" ? <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-100/75">direction {direction === "a-to-b" ? "A → B" : direction === "b-to-a" ? "B → A" : "both ways"}</div> : null}
+          {active ? <div className="mt-2 break-words text-[10px] leading-4 text-orange-100 sm:text-xs sm:leading-5">{transfer.label}</div> : <div className="mt-2 text-[10px] text-slate-600">no packet at this point</div>}
         </div>
         <FocusEndpoint endpoint={b} />
       </div>
-      {caption ? <figcaption className="mt-2 text-center text-[11px] leading-4 text-slate-500">{caption}</figcaption> : null}
+      <div className="mt-2 rounded-lg border border-white/10 bg-slate-950/35 px-2 py-1.5 text-[9px] leading-4 sm:hidden" data-testid="mobile-path-legend">
+        <div className="text-sky-100/85"><span className="font-semibold uppercase tracking-wide">Payload path:</span> memory ↔ provider ↔ network · bytes bypass queues</div>
+        <div className="mt-0.5 text-cyan-100/85"><span className="font-semibold uppercase tracking-wide">Instruction path:</span> app → queue → provider · instructions only</div>
+      </div>
+      {caption ? <figcaption className="mt-2 text-center text-[11px] leading-4 text-slate-500 max-sm:hidden">{caption}</figcaption> : null}
     </figure>
   );
 }
 
-export function ExpandableTechnicalDiagram({ summary = "Inspect full endpoint and resource relationships", children }: { summary?: string; children: ReactNode }) {
+export function ExpandableTechnicalDiagram({ summary = "Inspect endpoint resources", children }: { summary?: string; children: ReactNode }) {
   const storageKey = "fabriclab.rdma.technical-diagrams-open";
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -433,7 +555,7 @@ export function ExpandableTechnicalDiagram({ summary = "Inspect full endpoint an
   return (
     <section className="rounded-xl border border-white/10 bg-slate-950/30 p-2" data-testid="technical-resource-details">
       <button type="button" onClick={toggle} aria-expanded={open} className="w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-cyan-100 transition hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
-        {open ? "Hide" : "Show"} {summary}
+        {summary}
       </button>
       {open ? <div className="mt-2 border-t border-white/8 pt-2">{children}</div> : null}
     </section>
@@ -607,7 +729,7 @@ export function CompletionLifecycleDiagram({ polled = false, conceptual = true }
           {polled ? (
             <div className="rounded-lg border border-lime-300/30 bg-lime-300/8 px-2 py-1.5 text-xs leading-5 text-lime-100" data-testid="polled-completion-outside-cq">
               <div className="font-mono">Work Completion · check status and WR ID</div>
-              <div className="mt-1 text-[11px] text-lime-100/70">application-observed result · outside the Completion Queue</div>
+              <div className="mt-1 text-[11px] text-lime-100/70">result observed by the application · outside the Completion Queue</div>
             </div>
           ) : "has not yet observed the outcome"}
         </NodeBox>

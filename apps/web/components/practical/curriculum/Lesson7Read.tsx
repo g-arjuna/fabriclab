@@ -68,12 +68,11 @@ function visual(stage: number) {
 [recorded verification]`
     : stage >= 7
       ? `${remoteBefore?.split("#")[0] || "remote data"}
-[causal placement]`
+[illustrated placement]`
       : "local destination waiting";
 
   return (
     <div className="space-y-3">
-      {chain.length ? <CodeOperationChain items={chain} /> : null}
       <ExperimentFocusDiagram
         transfer={focusTransfer}
         caption="Compact ownership/direction view: A initiates, the request goes A→B, payload data returns B→A, and completion belongs to A."
@@ -83,8 +82,8 @@ function visual(stage: number) {
           memoryLabel: "reader destination memory",
           memory: focusLocalMemory,
           memoryNote: stage >= 9 ? "verified after completion" : stage >= 7 ? "placement is causal illustration" : "registered local destination",
-          work: stage >= 3 ? [{ title: "Send Queue", label: `WR ${exactValue(readWr.wrId)} · READ`, tone: readLifecycle === "posted" || readLifecycle === "in-flight" ? "pending" : readLifecycle === "completed" ? "completed" : "empty" }] : [],
-          completion: stage >= 8 ? `application-observed read completion · WR ${exactValue(readCqe.wrId)}` : undefined,
+          work: stage >= 3 ? [{ title: "Send Queue", label: `WR ${exactValue(readWr.wrId)} · READ`, detail: "names remote source + local destination", tone: readLifecycle === "posted" || readLifecycle === "in-flight" ? "pending" : readLifecycle === "completed" ? "completed" : "empty" }] : [],
+          completion: stage >= 8 ? `read completion observed by Server A · WR ${exactValue(readCqe.wrId)}` : undefined,
           providerNote: requestInFlight ? "emits READ request" : responseInFlight ? "receives response payload" : undefined,
         }}
         b={{
@@ -98,6 +97,7 @@ function visual(stage: number) {
           providerNote: requestInFlight ? "reads registered memory" : responseInFlight ? "returns response payload" : undefined,
         }}
       />
+      {chain.length ? <CodeOperationChain items={chain} /> : null}
       <ExpandableTechnicalDiagram>
         <RdmaSystemDiagram
         caption="Guided replay of the validated RDMA READ reference execution. The request travels from reader to source; the payload response travels back from source to reader. Queue lifecycle is a logical instructional reconstruction tied to recorded events."
@@ -125,7 +125,7 @@ function visual(stage: number) {
                   : stage >= 8
                   ? "The READ request/response exchange has completed; the learner is inspecting application completion and memory evidence."
                   : stage === 7
-                    ? "The response has arrived; local memory placement is causally illustrated before completion inspection."
+                    ? "The response has arrived; local memory placement is illustrated before completion inspection."
                     : "READ reverses the data-availability problem.",
         }}
         a={{
@@ -137,7 +137,7 @@ function visual(stage: number) {
           memory: stage >= 9
             ? `${localAfter}\n[recorded memory verification after completion]`
             : stage >= 7
-              ? `${remoteBefore?.split("#")[0] || "remote data"}\n[causal memory-placement illustration]`
+              ? `${remoteBefore?.split("#")[0] || "remote data"}\n[illustrated transport placement]`
               : "local destination buffer waiting",
           provider: requestInFlight ? "emits READ request" : responseInFlight ? "places response bytes into local memory" : "Soft-RoCE provider implementing RDMA transport",
           softRoce: true,
@@ -181,6 +181,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(0),
+      mobileVisualFirst: true,
     },
     {
       id: "local-destination",
@@ -193,6 +194,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(1),
+      mobileVisualFirst: true,
     },
     {
       id: "remote-permission",
@@ -205,6 +207,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(2),
+      mobileVisualFirst: true,
       inspect: <PayloadMemory label="Recorded remote source memory before READ" value={remoteBefore} />,
     },
     {
@@ -218,6 +221,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(3),
+      mobileVisualFirst: true,
       inspect: (
         <div className="space-y-4">
           <WorkRequestSummary request={readWr} title="Recorded RDMA READ Work Request" />
@@ -238,6 +242,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(4),
+      mobileVisualFirst: true,
     },
     {
       id: "read-request",
@@ -250,13 +255,14 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(5),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Captured on the wire">Frame {readRequest.frameNumber} in {readRequest.captureFile} is the genuine READ Request. It contains RETH because it is a READ request.</EvidenceNote>,
       inspect: <PacketSummary packet={readRequest}>Request direction is A → B. Payload direction has not happened yet.</PacketSummary>,
     },
     {
       id: "read-response",
       title: "The response travels from source to reader and carries the payload",
-      actionLabel: "Observe causal local memory placement",
+      actionLabel: "Observe local memory placement",
       body: (
         <>
           <p>The captured READ Response Only packet travels in the reverse direction, from {readResponse.sourceIp} to {readResponse.destinationIp}. Its destination QPN is {exactValue(readResponse.destinationQpn)}, the reader endpoint on Server A.</p>
@@ -264,7 +270,8 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(6),
-      evidence: <EvidenceNote kind="Captured on the wire">Frame {readResponse.frameNumber} in {readResponse.captureFile} is the genuine READ Response Only packet. Reverse-direction destination QPNs are operation-specific and are not copied blindly from the forward packet.</EvidenceNote>,
+      mobileVisualFirst: true,
+      evidence: <EvidenceNote kind="Captured on the wire">Frame {readResponse.frameNumber} in {readResponse.captureFile} is the genuine READ Response Only packet. Reverse-direction destination QPNs depend on the operation and are not copied blindly from the forward packet.</EvidenceNote>,
       inspect: <PacketSummary packet={readResponse}>Response direction is B → A. The response payload is the data being read from Server B’s memory.</PacketSummary>,
     },
     {
@@ -278,6 +285,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(7),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Causal illustration bounded by evidence">The captured response and correlated completion establish the transfer relationship. The exact memory instant is not independently timestamped.</EvidenceNote>,
     },
     {
@@ -291,6 +299,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(8),
+      mobileVisualFirst: true,
       inspect: (
         <div className="space-y-4">
           <CompletionSummary completion={readCqe} title="Reader-local completion" />
@@ -311,6 +320,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(9),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Verified through application memory inspection">The reader compared its local buffer with the expected bytes and logged a successful payload verification.</EvidenceNote>,
       inspect: <PayloadMemory label="Recorded reader memory after READ" value={localAfter} />,
     },
@@ -325,6 +335,7 @@ export function Lesson7Read({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(10),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Recorded application event">The zero-count source CQ poll is a recorded post-synchronization observation. It is not revealed early merely because the protocol outcome is expected.</EvidenceNote>,
     },
     {

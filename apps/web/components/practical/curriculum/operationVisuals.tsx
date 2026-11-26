@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { exact, type Completion, type PacketRecord, type WorkRequest } from "@/lib/practical/rdmaEvidence";
+import { exact, packetLengthBreakdown, type Completion, type PacketRecord, type WorkRequest } from "@/lib/practical/rdmaEvidence";
 import { exactValue, FactGrid } from "./visuals";
 
 export function WorkRequestSummary({ request, title = "Recorded Work Request" }: { request: WorkRequest; title?: string }) {
@@ -43,6 +43,7 @@ export function CompletionSummary({ completion, title = "Recorded completion" }:
 }
 
 export function PacketSummary({ packet, children }: { packet: PacketRecord; children?: ReactNode }) {
+  const lengths = packetLengthBreakdown(packet);
   return (
     <section className="overflow-hidden rounded-2xl border border-orange-300/20 bg-orange-300/6" data-testid="packet-summary">
       <header className="border-b border-orange-300/15 px-4 py-3">
@@ -61,8 +62,17 @@ export function PacketSummary({ packet, children }: { packet: PacketRecord; chil
             { label: "RKEY", value: exact(packet.reth.rkey) },
             { label: "DMA length", value: exact(packet.reth.dmaLength, "decimal") },
           ] : []),
+          { label: "Application payload bytes", value: lengths.applicationPayloadBytes },
+          { label: "BTH padding bytes", value: lengths.transportPaddingBytes },
+          { label: "Captured data incl. padding", value: lengths.capturedDataBytes },
+          { label: "Total frame bytes", value: lengths.totalFrameBytes },
           ...(packet.payloadText ? [{ label: "Payload text", value: packet.payloadText }] : []),
         ]} />
+        {lengths.transportPaddingBytes ? (
+          <p className="mt-3 text-xs leading-5 text-orange-100/75" data-testid="packet-padding-note">
+            The application payload is {lengths.applicationPayloadBytes} bytes. The captured data portion also contains {lengths.transportPaddingBytes} transport padding {lengths.transportPaddingBytes === 1 ? "byte" : "bytes"}, so it is {lengths.capturedDataBytes} bytes before the rest of the frame headers are counted.
+          </p>
+        ) : null}
         {children ? <div className="mt-4 text-sm leading-6 text-slate-300">{children}</div> : null}
       </div>
     </section>

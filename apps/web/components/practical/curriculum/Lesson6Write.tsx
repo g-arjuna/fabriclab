@@ -37,7 +37,7 @@ function visual(stage: number) {
   const writeWork: WorkVisual = {
     id: writeWr.id,
     label: `WR ${exactValue(writeWr.wrId)} · RDMA WRITE`,
-    detail: `${writeWr.byteLength} bytes · local source + remote destination`,
+    detail: `${writeWr.byteLength} bytes · local source + authorized remote destination`,
     lifecycle: writeLifecycle,
   };
   const writerCq: CompletionQueueVisualModel = stage >= 7 ? { state: "post-poll" } : { state: "unknown" };
@@ -75,7 +75,7 @@ function visual(stage: number) {
 [recorded verification]`
     : stage >= 6
       ? `${writeWr.payloadText}
-[causal placement]`
+[illustrated placement]`
       : stage >= 1
         ? `${beforeText}
 [recorded before-state]`
@@ -83,7 +83,6 @@ function visual(stage: number) {
 
   return (
     <div className="space-y-3">
-      {chain.length ? <CodeOperationChain items={chain} /> : null}
       <ExperimentFocusDiagram
         transfer={focusTransfer}
         caption="Compact causal view. Control messages and RDMA data packets use separate laboratory channels; open the technical diagram for complete resources."
@@ -93,8 +92,8 @@ function visual(stage: number) {
           memoryLabel: "local source memory",
           memory: stage >= 3 ? writeWr.payloadText : "source buffer",
           memoryNote: stage >= 3 ? "recorded payload content" : undefined,
-          work: stage >= 3 ? [{ title: "Send Queue", label: `WR ${exactValue(writeWr.wrId)} · WRITE`, tone: writeLifecycle === "posted" || writeLifecycle === "in-flight" ? "pending" : writeLifecycle === "completed" ? "completed" : "empty" }] : [],
-          completion: stage >= 7 ? `application-observed write completion · WR ${exactValue(writeCqe.wrId)}` : undefined,
+          work: stage >= 3 ? [{ title: "Send Queue", label: `WR ${exactValue(writeWr.wrId)} · WRITE`, detail: "names local source + authorized remote destination", tone: writeLifecycle === "posted" || writeLifecycle === "in-flight" ? "pending" : writeLifecycle === "completed" ? "completed" : "empty" }] : [],
+          completion: stage >= 7 ? `write completion observed by Server A · WR ${exactValue(writeCqe.wrId)}` : undefined,
           providerNote: packetInFlight ? "emits WRITE" : undefined,
         }}
         b={{
@@ -108,9 +107,10 @@ function visual(stage: number) {
           providerNote: packetInFlight ? "writes named registered memory" : undefined,
         }}
       />
+      {chain.length ? <CodeOperationChain items={chain} /> : null}
       <ExpandableTechnicalDiagram>
         <RdmaSystemDiagram
-        caption="Guided replay of the validated ordinary RDMA WRITE reference execution. Queue lifecycle is a logical instructional reconstruction tied to application events; intermediate memory placement is causal illustration, while before/after bytes are recorded memory evidence."
+        caption="Guided replay of the validated ordinary RDMA WRITE reference execution. Queue lifecycle is a logical instructional reconstruction tied to application events; intermediate memory placement is an evidence-bounded illustration, while before/after bytes are recorded memory evidence."
         transfer={{
           visible: packetInFlight || ackInFlight || controlVisible,
           direction: packetInFlight || stage === 9 ? "a-to-b" : ackInFlight || stage === 2 ? "b-to-a" : "none",
@@ -127,7 +127,7 @@ function visual(stage: number) {
           detail: packetInFlight
             ? "WRITE request names remote memory directly."
             : ackInFlight
-              ? "Memory placement is causally illustrated while the reverse ACK is in transit; the ACK is not a target application completion."
+              ? "Memory placement is illustrated while the reverse ACK is in transit; the ACK is not a target application completion."
               : stage === 2
                 ? "The target shares address, length and RKEY before the operation."
                 : stage === 9
@@ -167,7 +167,7 @@ function visual(stage: number) {
           memory: stage >= 11
             ? `${afterText}\n[recorded memory verification after synchronization]`
             : stage >= 6
-              ? `${writeWr.payloadText}\n[causal memory-placement illustration]`
+              ? `${writeWr.payloadText}\n[illustrated transport placement]`
               : stage >= 1
                 ? `${beforeText}\n[recorded before-state]`
                 : "registered destination memory not yet inspected",
@@ -267,6 +267,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(0),
+      mobileVisualFirst: true,
     },
     {
       id: "target-memory",
@@ -279,6 +280,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(1),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Verified through application memory inspection">The target application recorded the before-state bytes shown in the diagram. The address and key are run-specific evidence values, not reusable constants.</EvidenceNote>,
       inspect: <PayloadMemory label="Recorded target memory before WRITE" value={beforeText} />,
     },
@@ -293,6 +295,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(2),
+      mobileVisualFirst: true,
       inspect: (
         <SourceExcerpt path="python/exp_c_write.py" start={57} end={69} title="The target shares memory metadata over TCP">
           The TCP control message carries the target's RKEY, memory address and length as metadata. The actual payload will later cross the RDMA data network in a WRITE packet.
@@ -310,6 +313,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(3),
+      mobileVisualFirst: true,
       inspect: (
         <div className="space-y-4">
           <WorkRequestSummary request={writeWr} title="Recorded RDMA WRITE Work Request" />
@@ -330,6 +334,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(4),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Programming-model distinction">“No receive WR required” is not an implementation accident. It is the defining target-side difference of ordinary one-sided WRITE compared with SEND/RECEIVE.</EvidenceNote>,
       inspect: (
         <SourceExcerpt path="python/exp_c_write.py" start={126} end={139} title="Posting the ordinary WRITE">
@@ -340,7 +345,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
     {
       id: "write-packet",
       title: "The captured WRITE packet carries remote-memory instructions in RETH",
-      actionLabel: "Observe causal memory placement",
+      actionLabel: "Observe memory placement",
       body: (
         <>
           <p>The genuine WRITE Only packet travels from {writePacket.sourceIp} to {writePacket.destinationIp}. Its destination QPN is {exactValue(writePacket.destinationQpn)}, the target endpoint. Because it is a WRITE request, it contains an RDMA Extended Transport Header: remote virtual address {exactValue(writePacket.reth?.virtualAddress)}, RKEY {exactValue(writePacket.reth?.rkey)} and DMA length {exactValue(writePacket.reth?.dmaLength, "decimal")} bytes.</p>
@@ -348,6 +353,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(5),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Captured on the wire">Frame {writePacket.frameNumber} in {writePacket.captureFile} is the genuine WRITE request. SEND, ACK and READ-response packets do not all contain this header; header presence depends on the operation.</EvidenceNote>,
       inspect: <PacketSummary packet={writePacket}>The RETH exists because this packet is an RDMA WRITE request. It is the wire representation of the remote memory portion of the Work Request.</PacketSummary>,
     },
@@ -358,11 +364,12 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
       body: (
         <>
           <p>The target transport can place payload bytes directly into the registered memory named by RETH. No target Receive Work Request participates in that placement.</p>
-          <p>The diagram labels this as a causal memory-placement illustration. The actual target application did not independently inspect memory at the packet instant; its verified memory evidence is recorded later after synchronization.</p>
+          <p>The diagram labels this as an illustrated transport placement. The actual target application did not independently inspect memory at the packet instant; its verified memory evidence is recorded later after synchronization.</p>
         </>
       ),
       visual: visual(6),
-      evidence: <EvidenceNote kind="Derived from a validated relationship">Memory placement is derived from captured WRITE semantics and correlated RETH. Do not confuse it with the later application memory inspection.</EvidenceNote>,
+      mobileVisualFirst: true,
+      evidence: <EvidenceNote kind="Evidence-correlated illustration">Memory placement is derived from captured WRITE semantics and correlated RETH. Do not confuse it with the later application memory inspection.</EvidenceNote>,
     },
     {
       id: "initiator-completion",
@@ -375,6 +382,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(7),
+      mobileVisualFirst: true,
       inspect: (
         <div className="space-y-4">
           <CompletionSummary completion={writeCqe} title="Writer-local completion" />
@@ -393,6 +401,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(8),
+      mobileVisualFirst: true,
       interaction: predictionInteraction,
       canAdvance: prediction !== null,
       advanceBlockedReason: "Make a prediction before inspecting the evidence.",
@@ -408,6 +417,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(9),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Control-channel evidence">The synchronization message is TCP control/application coordination. It is separate from the RDMA payload path.</EvidenceNote>,
     },
     {
@@ -421,6 +431,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(10),
+      mobileVisualFirst: true,
       interaction: predictionReview,
       evidence: <EvidenceNote kind="Recorded application event">The target application logged a CQ poll count of zero after receiving the writer’s explicit synchronization signal.</EvidenceNote>,
       inspect: (
@@ -440,6 +451,7 @@ export function Lesson6Write({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(11),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Verified through application memory inspection">The recorded target memory evidence is inspected after the empty CQ observation, not presented as a simultaneous pre-completion observation.</EvidenceNote>,
       inspect: (
         <SourceExcerpt path="python/exp_c_write.py" start={165} end={176} title="Memory verification follows the target CQ observation">

@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { CompletionSummary, PacketSummary, PayloadMemory, WorkRequestSummary } from "./operationVisuals";
 import { cx, EvidenceNote, exactValue, FactGrid, SourceExcerpt } from "./visuals";
-import { exact, rdmaEvidence, type Experiment, type PacketRecord } from "@/lib/practical/rdmaEvidence";
+import { exact, packetLengthBreakdown, rdmaEvidence, type Experiment, type PacketRecord } from "@/lib/practical/rdmaEvidence";
 
 type FieldSelection =
   | "ethernet"
@@ -65,96 +65,157 @@ function WriteCodePacketCorrelation() {
   const write = rdmaEvidence.experiments.find((item) => item.id === "write")!;
   const wr = write.workRequests.find((item) => item.kind === "rdma-write")!;
   const packet = write.packets.find((item) => item.role === "request")!;
+  const source = rdmaEvidence.sources.find((item) => item.path === "python/exp_c_write.py")!;
   const [selected, setSelected] = useState("remote-address");
+  const lineText = (line: number) => source.lines.find((item) => item.number === line)?.text || "";
   const rows = [
     {
       id: "operation",
       application: "Requested operation",
+      sourceLines: [127, 128],
       workRequest: wr.opcode,
       wire: packet.opcodeName,
-      relationship: "Direct semantic encoding: the application-selected RDMA_WRITE operation appears as the transport opcode in the genuine WRITE request.",
+      wireFields: ["opcode"],
+      relationship: "The application-selected RDMA_WRITE operation appears as the transport opcode in the genuine WRITE request.",
     },
     {
       id: "remote-address",
       application: "Remote address assigned with set_wr_rdma",
+      sourceLines: [133],
       workRequest: exact(wr.remoteAddress!),
       wire: `RETH remote address ${exact(packet.reth!.virtualAddress)}`,
-      relationship: "Direct correlation: the remote virtual address supplied by the application is the memory target carried in RETH.",
+      wireFields: ["remote-address"],
+      relationship: "The remote virtual address supplied by the application is the memory target carried in RETH.",
     },
     {
       id: "remote-rkey",
       application: "Remote RKEY assigned with set_wr_rdma",
+      sourceLines: [133],
       workRequest: exact(wr.remoteRkey!),
       wire: `RETH RKEY ${exact(packet.reth!.rkey)}`,
-      relationship: "Direct correlation: the scoped remote-access key for the registered target region is carried in RETH.",
+      wireFields: ["rkey"],
+      relationship: "The scoped remote-access key for the registered target region is carried in RETH.",
     },
     {
       id: "length",
-      application: "Transfer length",
+      application: "Transfer length in the local memory description",
+      sourceLines: [125, 126],
       workRequest: `${wr.byteLength} bytes`,
       wire: `RETH DMA length ${exact(packet.reth!.dmaLength, "decimal")}`,
-      relationship: "Direct semantic correlation for this reference packet. DMA length is not the same as captured frame length because headers and padding also exist.",
+      wireFields: ["dma-length"],
+      relationship: "The SGE length and the WRITE DMA length both describe the amount of application payload data for this transfer. DMA length is not total frame length because headers and transport padding also exist.",
     },
     {
       id: "wr-id",
       application: "WR ID",
+      sourceLines: [127],
       workRequest: exact(wr.wrId),
-      wire: "No corresponding BTH field",
-      relationship: "No direct wire representation: WR ID is local application bookkeeping used to recognize completed work. It is not the Packet Sequence Number.",
+      wire: "No corresponding transmitted BTH/RETH field",
+      wireFields: [],
+      relationship: "WR ID is local application bookkeeping used to recognize completed work. It is not the Packet Sequence Number and is not transmitted as a matching BTH or RETH field.",
     },
     {
       id: "local-memory",
       application: "Local memory address + LKEY",
+      sourceLines: [125, 126],
       workRequest: `${exact(wr.localAddress!)} · LKEY ${exact(wr.localLkey!)}`,
-      wire: "Not transmitted as remote memory fields",
-      relationship: "Used locally to read the initiator's source buffer. Do not confuse the local address or LKEY with the remote address and RKEY carried in RETH.",
+      wire: "No corresponding transmitted BTH/RETH field",
+      wireFields: [],
+      relationship: "The local address and LKEY tell the initiator provider where to read source bytes. They are local memory metadata, not the remote address and RKEY carried in RETH.",
     },
     {
       id: "qpn-psn",
       application: "Endpoint context",
+      sourceLines: [115, 116],
       workRequest: "posted through the writer QP",
       wire: `destination QPN ${exact(packet.destinationQpn)} · PSN ${exact(packet.psn)}`,
+      wireFields: ["qpn", "psn"],
       relationship: "The destination QPN identifies the packet's target endpoint. PSN is transport sequencing, not application WR ID.",
     },
   ] as const;
   const active = rows.find((row) => row.id === selected) || rows[0];
+  const activeLines = active.sourceLines.map((line) => ({ number: line, text: lineText(line) }));
+  const wireRow = (id: string, label: string, value: string | number) => {
+    const highlighted = (active.wireFields as readonly string[]).includes(id);
+    return (
+      <div className={cx("flex justify-between gap-3 rounded px-1.5 py-1", highlighted && "bg-orange-300/15 text-orange-50 shadow-[inset_2px_0_0_rgba(253,186,116,0.8)]")} data-testid={`packet-field-${id}`} data-correlation-highlight={highlighted ? "true" : "false"}>
+        <dt>{label}</dt><dd className="break-all text-right">{value}</dd>
+      </div>
+    );
+  };
   return (
     <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-4" data-testid="write-code-packet-correlation">
       <h3 className="font-semibold text-slate-100">Correlate the real WRITE code with the real packet</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-300">Start with the actual Python instructions, follow the application Work Request, then inspect which relationships exist in the captured RoCEv2 request. Some application fields have direct wire representations; others deliberately do not.</p>
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <SourceExcerpt path="python/exp_c_write.py" start={124} end={140} title="Actual verified WRITE construction and submission" emphasisLines={[125, 127, 133, 134]} emphasisLabel="The highlighted lines construct the SGE and SendWR, assign remote memory metadata, and post the work.">
-          The SGE describes local source memory. <code className="font-mono text-cyan-100">set_wr_rdma</code> supplies remote memory metadata. <code className="font-mono text-cyan-100">qp.post_send(swr)</code> submits the instruction; it does not itself constitute the packet.
-        </SourceExcerpt>
-        <div className="rounded-xl border border-orange-300/20 bg-orange-300/6 p-3" data-testid="correlated-write-wire-fields">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-orange-100">Captured WRITE request · frame {packet.frameNumber}</div>
-          <dl className="mt-2 grid gap-2 font-mono text-xs text-orange-50">
-            <div className="flex justify-between gap-3"><dt>BTH opcode</dt><dd>{packet.opcodeName}</dd></div>
-            <div className="flex justify-between gap-3"><dt>destination QPN</dt><dd>{exact(packet.destinationQpn)}</dd></div>
-            <div className="flex justify-between gap-3"><dt>PSN</dt><dd>{exact(packet.psn)}</dd></div>
-            <div className="flex justify-between gap-3"><dt>RETH address</dt><dd>{exact(packet.reth!.virtualAddress)}</dd></div>
-            <div className="flex justify-between gap-3"><dt>RETH RKEY</dt><dd>{exact(packet.reth!.rkey)}</dd></div>
-            <div className="flex justify-between gap-3"><dt>RETH DMA length</dt><dd>{exact(packet.reth!.dmaLength, "decimal")}</dd></div>
-          </dl>
-        </div>
+      <p className="mt-2 text-sm leading-6 text-slate-300">Choose one relationship. The source instruction, runtime Work Request value and captured packet field stay together here; the complete source and packet decoding remain available below for optional inspection.</p>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4" role="group" aria-label="Choose a code-to-packet relationship">
+        {rows.map((row) => (
+          <button key={row.id} type="button" onClick={() => setSelected(row.id)} aria-pressed={selected === row.id} className={cx("rounded-xl border px-3 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300", selected === row.id ? "border-cyan-300/50 bg-cyan-300/12" : "border-white/10 bg-slate-900/45 hover:border-white/25")} data-testid={`correlation-field-${row.id}`}>
+            <span className="block text-xs font-semibold text-slate-100">{row.application}</span>
+            <span className="mt-1 block break-words font-mono text-[11px] text-slate-400">WR: {row.workRequest}</span>
+          </button>
+        ))}
       </div>
-      <div className="mt-4 grid gap-2 lg:grid-cols-2">
-        <div className="space-y-2">
-          {rows.map((row) => (
-            <button key={row.id} type="button" onClick={() => setSelected(row.id)} aria-pressed={selected === row.id} className={cx("w-full rounded-xl border px-3 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300", selected === row.id ? "border-cyan-300/50 bg-cyan-300/12" : "border-white/10 bg-slate-900/45 hover:border-white/25")} data-testid={`correlation-field-${row.id}`}>
-              <span className="block text-xs font-semibold text-slate-100">{row.application}</span>
-              <span className="mt-1 block font-mono text-xs text-slate-400">WR: {row.workRequest}</span>
-              <span className="mt-1 block font-mono text-xs text-orange-100/80">wire: {row.wire}</span>
-            </button>
-          ))}
+
+      <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/5 p-3" data-testid="selected-correlation-chain">
+        <div className="mb-3 text-sm font-semibold text-cyan-50">{active.application}</div>
+        <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)_2rem_minmax(0,1fr)] lg:items-center">
+          <section className="min-w-0 rounded-xl border border-white/10 bg-slate-950/55 p-3" data-testid="correlation-source-highlight">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Python source</div>
+            <div className="mt-2 space-y-1 font-mono text-xs leading-5 text-cyan-50">
+              {activeLines.map((line) => (
+                <div key={line.number} className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2 rounded bg-cyan-300/8 px-1.5 py-1">
+                  <span className="select-none text-right text-slate-500">{line.number}</span>
+                  <code className="whitespace-pre-wrap break-words">{line.text}</code>
+                </div>
+              ))}
+            </div>
+          </section>
+          <div className="text-center font-mono text-xl text-cyan-200" aria-hidden="true"><span className="lg:hidden">↓</span><span className="hidden lg:inline">→</span></div>
+          <section className="min-w-0 rounded-xl border border-cyan-300/25 bg-cyan-300/8 p-3" data-testid="correlation-wr-highlight">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-100/80">Application Work Request</div>
+            <div className="mt-2 break-words font-mono text-sm text-cyan-50">{active.workRequest}</div>
+          </section>
+          <div className="text-center font-mono text-xl text-orange-200" aria-hidden="true"><span className="lg:hidden">↓</span><span className="hidden lg:inline">→</span></div>
+          <section className="min-w-0 rounded-xl border border-orange-300/25 bg-orange-300/8 p-3" data-testid="correlation-packet-highlight">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-orange-100/80">Captured packet</div>
+            <div className="mt-2 break-words font-mono text-sm text-orange-50">{active.wire}</div>
+          </section>
         </div>
-        <aside className="rounded-xl border border-cyan-300/20 bg-cyan-300/6 p-4" data-testid="correlation-explanation">
+        <aside className="mt-3 rounded-xl border border-white/10 bg-slate-950/45 p-3" data-testid="correlation-explanation">
           <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-100">Selected relationship</div>
-          <h4 className="mt-2 font-semibold text-slate-100">{active.application}</h4>
-          <p className="mt-2 text-sm leading-7 text-slate-300">{active.relationship}</p>
-          <p className="mt-3 text-xs leading-5 text-slate-500">All runtime values come from the validated WRITE evidence bundle. None are independently hardcoded teaching values.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">{active.relationship}</p>
+          {active.wireFields.length === 0 ? <p className="mt-2 text-xs leading-5 text-amber-100/85">There is no corresponding transmitted BTH/RETH field for this local identifier.</p> : null}
         </aside>
       </div>
+
+      <div className="mt-4 grid gap-3 xl:grid-cols-2">
+        <details className="rounded-xl border border-white/10 bg-slate-950/40" data-testid="full-write-source-details">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Inspect the complete source excerpt</summary>
+          <div className="border-t border-white/8 p-2">
+            <SourceExcerpt path="python/exp_c_write.py" start={124} end={140} title="Actual verified WRITE construction and submission" emphasisLines={[...active.sourceLines]} emphasisLabel="The highlighted lines change with the selected relationship.">
+              The SGE describes local source memory. <code className="font-mono text-cyan-100">set_wr_rdma</code> supplies remote memory metadata. <code className="font-mono text-cyan-100">qp.post_send(swr)</code> submits the instruction; it does not itself constitute the packet.
+            </SourceExcerpt>
+          </div>
+        </details>
+        <details className="rounded-xl border border-orange-300/20 bg-orange-300/5" data-testid="full-write-packet-details">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-orange-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">Inspect the complete captured WRITE fields</summary>
+          <div className="border-t border-orange-300/15 p-3">
+            <div className="rounded-xl border border-orange-300/20 bg-orange-300/6 p-3" data-testid="correlated-write-wire-fields">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-orange-100">Captured WRITE request · frame {packet.frameNumber}</div>
+              <dl className="mt-2 grid gap-1 font-mono text-xs text-orange-50">
+                {wireRow("opcode", "BTH opcode", packet.opcodeName)}
+                {wireRow("qpn", "destination QPN", exact(packet.destinationQpn))}
+                {wireRow("psn", "PSN", exact(packet.psn))}
+                {wireRow("remote-address", "RETH address", exact(packet.reth!.virtualAddress))}
+                {wireRow("rkey", "RETH RKEY", exact(packet.reth!.rkey))}
+                {wireRow("dma-length", "RETH DMA length", exact(packet.reth!.dmaLength, "decimal"))}
+              </dl>
+            </div>
+          </div>
+        </details>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">All runtime values come from the validated WRITE evidence bundle. Source-line references are checked against the embedded verified source snapshot.</p>
     </section>
   );
 }
@@ -241,7 +302,10 @@ function PacketInvestigator({ stage }: { stage: number }) {
       );
     }
     if (selection === "dma-length") return <p>The DMA length tells the transport how many bytes of the named memory region the operation concerns. It is not the captured frame length; padding and headers can make those values differ.</p>;
-    if (selection === "payload") return <p>The payload bytes were captured on the wire. They prove what this packet contained, but they do not by themselves prove when application memory was inspected or which completion an application observed.</p>;
+    if (selection === "payload") {
+      const lengths = packetLengthBreakdown(packet);
+      return <p>The application payload is {lengths.applicationPayloadBytes} bytes. The captured data portion is {lengths.capturedDataBytes} bytes because the Base Transport Header also records {lengths.transportPaddingBytes} padding {lengths.transportPaddingBytes === 1 ? "byte" : "bytes"}. These payload bytes prove what the packet contained; they do not by themselves prove when application memory was inspected or which completion an application observed.</p>;
+    }
     return null;
   }, [addressMemory, correlatedWr, destinationEndpoint, experiment.id, packet, rkeyMemory, selection]);
 
@@ -313,7 +377,7 @@ function PacketInvestigator({ stage }: { stage: number }) {
 
           {stage >= 3 ? (
             <section className="rounded-2xl border border-violet-300/20 bg-violet-300/6 p-4">
-              <h4 className="text-sm font-semibold text-violet-100">Operation-specific memory and payload fields</h4>
+              <h4 className="text-sm font-semibold text-violet-100">Memory and payload fields for this operation</h4>
               {packet.reth ? (
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   <FieldButton selected={selection === "remote-address"} onClick={() => setSelection("remote-address")} label="Remote virtual address" value={exact(packet.reth!.virtualAddress)} />
@@ -325,7 +389,7 @@ function PacketInvestigator({ stage }: { stage: number }) {
               )}
               {packet.payloadHex ? (
                 <div className="mt-3">
-                  <FieldButton selected={selection === "payload"} onClick={() => setSelection("payload")} label="Payload" value={packet.payloadText || `${packet.dataLength} binary bytes`} />
+                  <FieldButton selected={selection === "payload"} onClick={() => setSelection("payload")} label="Payload" value={packet.payloadText || (packet.payloadHex ? `${packetLengthBreakdown(packet).applicationPayloadBytes} binary bytes` : "no application payload")} />
                 </div>
               ) : null}
             </section>
@@ -583,9 +647,17 @@ function FinalInvestigation() {
           <div><dt className="text-orange-200/70">BTH opcode</dt><dd>{packet.opcodeName}</dd></div>
           <div><dt className="text-orange-200/70">Destination QPN</dt><dd>{exact(packet.destinationQpn)}</dd></div>
           <div><dt className="text-orange-200/70">PSN</dt><dd>{exact(packet.psn)}</dd></div>
-          <div><dt className="text-orange-200/70">Payload bytes</dt><dd>{packet.payloadHex ? `${packet.dataLength} captured bytes` : "none"}</dd></div>
-          <div className="sm:col-span-2"><dt className="text-orange-200/70">Operation-specific fields</dt><dd>{packet.reth ? `RETH remote address ${exact(packet.reth.virtualAddress)} · RKEY ${exact(packet.reth.rkey)} · DMA length ${exact(packet.reth.dmaLength, "decimal")}` : "no RETH"}</dd></div>
+          <div><dt className="text-orange-200/70">Application payload</dt><dd>{packet.payloadHex ? `${packetLengthBreakdown(packet).applicationPayloadBytes} bytes` : "none"}</dd></div>
+          <div><dt className="text-orange-200/70">BTH padding</dt><dd>{packetLengthBreakdown(packet).transportPaddingBytes} bytes</dd></div>
+          <div><dt className="text-orange-200/70">Captured data incl. padding</dt><dd>{packetLengthBreakdown(packet).capturedDataBytes} bytes</dd></div>
+          <div><dt className="text-orange-200/70">Total frame length</dt><dd>{packetLengthBreakdown(packet).totalFrameBytes} bytes</dd></div>
+          <div className="sm:col-span-2"><dt className="text-orange-200/70">Memory fields for this operation</dt><dd>{packet.reth ? `RETH remote address ${exact(packet.reth.virtualAddress)} · RKEY ${exact(packet.reth.rkey)} · DMA length ${exact(packet.reth.dmaLength, "decimal")}` : "no RETH"}</dd></div>
         </dl>
+        {packet.id === "b:packet:3" ? (
+          <p className="border-t border-orange-300/15 px-3 py-2 text-xs leading-5 text-orange-50/90" data-testid="send-padding-observation">
+            The application requested a transfer of {packetLengthBreakdown(packet).applicationPayloadBytes} bytes. The captured data portion includes {packetLengthBreakdown(packet).transportPaddingBytes === 1 ? "one" : packetLengthBreakdown(packet).transportPaddingBytes === 2 ? "two" : packetLengthBreakdown(packet).transportPaddingBytes === 3 ? "three" : packetLengthBreakdown(packet).transportPaddingBytes} additional padding bytes. Those padding bytes are not part of the application message.
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -730,7 +802,7 @@ export function Lesson8Packets({ onComplete }: { onComplete: () => void }) {
     {
       id: "bth",
       title: "The Base Transport Header identifies operation, endpoint and sequence",
-      actionLabel: "Expose operation-specific memory fields",
+      actionLabel: "Inspect memory fields for each operation",
       body: (
         <>
           <p>The Base Transport Header, or BTH, carries the RDMA operation opcode, destination Queue Pair Number and Packet Sequence Number. These are transport fields, not application Python objects.</p>

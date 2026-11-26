@@ -13,6 +13,8 @@ export type GuidedStep = {
   evidence?: ReactNode;
   interaction?: ReactNode;
   inlineVisual?: boolean;
+  mobileVisualFirst?: boolean;
+  visualFirst?: boolean;
   actionLabel: string;
   canAdvance?: boolean;
   advanceBlockedReason?: string;
@@ -84,6 +86,8 @@ export function GuidedLesson({
   const primaryCanAdvance = canAdvance && !completionReferenceOnly;
   const hasContextPanel = Boolean(step.inspect || step.evidence);
   const inlineVisual = Boolean(step.inlineVisual);
+  const mobileVisualFirst = Boolean(step.mobileVisualFirst) && !inlineVisual;
+  const visualFirst = Boolean(step.visualFirst) && !inlineVisual;
   const firstBlockedIndex = steps.findIndex((item) => item.canAdvance === false);
 
   useEffect(() => {
@@ -173,8 +177,6 @@ export function GuidedLesson({
     }
   }
 
-  const blockedByInteraction = firstBlockedIndex !== -1 && stepIndex < firstBlockedIndex;
-
   return (
     <div data-testid={`guided-lesson-${lessonId}`} data-hydrated={hydrated ? "true" : "false"}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-5 sm:gap-3" data-testid="lesson-progress">
@@ -226,11 +228,10 @@ export function GuidedLesson({
       <article ref={articleRef} className="scroll-mt-20 guided-lesson-article rounded-2xl border border-white/10 bg-slate-900/35 p-3 shadow-[0_20px_70px_rgba(2,6,23,0.22)] max-sm:pb-24 sm:p-6 lg:p-7">
         <div className="border-b border-white/8 pb-3 sm:pb-4">
           <h2 ref={headingRef} tabIndex={-1} className="max-w-4xl text-xl font-semibold tracking-tight text-white outline-none sm:text-3xl">{step.title}</h2>
-          {blockedByInteraction ? <p className="mt-2 text-xs text-amber-200">A later state requires the prerequisite interaction before it can be opened.</p> : null}
         </div>
 
-        <div className={inlineVisual ? "mt-3 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,0.78fr)_minmax(430px,1fr)] xl:items-center" : hasContextPanel ? "mt-3 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_330px]" : "mt-3 sm:mt-5"}>
-          <div className="min-w-0">
+        <div className={inlineVisual ? "mt-3 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,0.78fr)_minmax(430px,1fr)] xl:items-center" : hasContextPanel ? "mt-3 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_330px]" : "mt-3 flex flex-col gap-4 sm:mt-5 sm:gap-5"}>
+          <div className={cx("min-w-0", visualFirst ? "order-2" : mobileVisualFirst && "order-2 xl:order-1")}>
             <div className="max-w-[72ch] space-y-3 text-sm leading-6 text-slate-300 sm:space-y-4 sm:text-[1.01rem] sm:leading-8" data-testid="lesson-narrative">
               {step.body}
             </div>
@@ -243,13 +244,12 @@ export function GuidedLesson({
           ) : null}
 
           {hasContextPanel ? (
-            <aside className="min-w-0 space-y-4 xl:border-l xl:border-white/8 xl:pl-5">
+            <aside className={cx("min-w-0 space-y-4 xl:border-l xl:border-white/8 xl:pl-5", visualFirst ? "order-3" : mobileVisualFirst && "order-3 xl:order-2")}>
               {step.evidence}
               {step.inspect ? (
                 <details className="group rounded-xl border border-cyan-300/20 bg-cyan-300/5 open:bg-cyan-300/7" data-testid="inspect-panel">
                   <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
-                    Inspect the implementation detail
-                    <span className="ml-2 text-xs font-normal text-cyan-200/70 group-open:hidden">show</span>
+                    Inspect implementation detail
                     <span className="ml-2 hidden text-xs font-normal text-cyan-200/70 group-open:inline">hide</span>
                   </summary>
                   <div className="border-t border-cyan-300/15 p-4 text-sm leading-6 text-slate-300">{step.inspect}</div>
@@ -257,13 +257,14 @@ export function GuidedLesson({
               ) : null}
             </aside>
           ) : null}
+
+          {!inlineVisual ? (
+            <div className={cx("min-w-0 xl:col-span-2", visualFirst ? "order-1 xl:col-span-2" : mobileVisualFirst ? "order-1 xl:order-3" : "order-3")} data-testid="lesson-visual">
+              {step.visual}
+            </div>
+          ) : null}
         </div>
 
-        {!inlineVisual ? (
-          <div className="mt-3 sm:mt-5" data-testid="lesson-visual">
-            {step.visual}
-          </div>
-        ) : null}
         {step.interaction ? <div className="mt-3 sm:mt-5">{step.interaction}</div> : null}
 
         <footer className="guided-mobile-footer z-30 mt-7 flex flex-col-reverse gap-2 border-t border-white/8 pt-4 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:m-0 max-sm:bg-slate-950/95 max-sm:px-4 max-sm:py-3 max-sm:shadow-[0_-12px_32px_rgba(2,6,23,0.7)] max-sm:backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-5">

@@ -65,12 +65,12 @@ export function SourceExcerpt({
         </div>
         {emphasisLabel ? <div className="mt-2 text-xs leading-5 text-cyan-100/85">{emphasisLabel}</div> : null}
       </header>
-      <div className="overflow-x-auto p-3">
-        <pre className="min-w-max font-mono text-xs leading-6 text-slate-300">
+      <div className="p-3">
+        <pre className="min-w-0 font-mono text-xs leading-6 text-slate-300">
           {lines.map((line) => (
             <div key={line.number} className={cx("grid grid-cols-[3rem_1fr] gap-3 rounded px-2 hover:bg-white/4", emphasisLines.includes(line.number) && "bg-cyan-300/10 text-cyan-50 shadow-[inset_2px_0_0_rgba(103,232,249,0.75)]")}>
               <span className="select-none text-right text-slate-600">{line.number}</span>
-              <code>{line.text || " "}</code>
+              <code className="whitespace-pre-wrap break-words">{line.text || " "}</code>
             </div>
           ))}
         </pre>

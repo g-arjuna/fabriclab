@@ -35,6 +35,23 @@ for (const experiment of evidence.experiments.filter((item) => item.id !== "reso
     if (packet.payloadText && !packet.payloadHex) {
       failures.push(`${experiment.id}/${packet.id} has payload text without authoritative payload bytes`);
     }
+    const applicationPayloadBytes = packet.payloadHex ? packet.payloadHex.length / 2 : 0;
+    if (packet.dataLength !== applicationPayloadBytes + packet.bth.padCount) {
+      failures.push(`${experiment.id}/${packet.id} captured data length ${packet.dataLength} does not equal application payload ${applicationPayloadBytes} plus BTH padding ${packet.bth.padCount}`);
+    }
+  }
+}
+
+for (const [experimentId, packetRole] of [["send-recv", "request"], ["write", "request"], ["read", "response"]]) {
+  const experiment = evidence.experiments.find((item) => item.id === experimentId);
+  const packet = experiment?.packets.find((item) => item.role === packetRole);
+  if (!packet?.payloadHex) {
+    failures.push(`${experimentId}/${packetRole} payload-bearing reference packet is missing`);
+  } else {
+    const applicationPayloadBytes = packet.payloadHex.length / 2;
+    if (!applicationPayloadBytes || packet.dataLength <= applicationPayloadBytes) {
+      failures.push(`${experimentId}/${packetRole} does not expose a distinct application payload length and padded captured data length`);
+    }
   }
 }
 

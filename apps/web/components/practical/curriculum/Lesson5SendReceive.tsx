@@ -18,6 +18,70 @@ const ackPacket = experiment.packets.find((item) => item.role === "acknowledgeme
 const receiveMemory = experiment.memoryRegions.find((item) => item.host === "hostb")!;
 const receivedText = receiveMemory.snapshots.find((item) => item.id.includes("received"))?.text;
 
+
+function LaboratoryOrientation() {
+  const preparation = [
+    ["1", "Open the Soft-RoCE device context and discover the local RoCEv2 network identity", "device access from Lesson 2"],
+    ["2", "Create the Protection Domain and Completion Queue", "resource boundary and outcome reporting from Lessons 3–4"],
+    ["3", "Allocate memory, register it and create the Queue Pair associated with the CQ", "registered memory plus endpoint resources"],
+    ["4", "Open the separate TCP control connection", "coordination only — not the RDMA payload path"],
+    ["5", "Exchange QPN, packet sequence number and network identity", "peer endpoint metadata"],
+    ["6", "Transition each QP through INIT, RTR and RTS", "endpoint readiness before real work"],
+    ["7", "Receiver posts its Receive Work Request", "destination memory is chosen locally"],
+    ["8", "Sender writes the payload, constructs and posts the SEND Work Request", "the first real data operation"],
+    ["9", "Each application polls its own completion", "local outcome observation"],
+    ["10", "Receiver reads and verifies its memory", "application evidence after completion"],
+  ] as const;
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" data-testid="laboratory-orientation">
+      <section className="rounded-2xl border border-white/10 bg-slate-950/45 p-3">
+        <h3 className="font-semibold text-slate-100">The real laboratory topology</h3>
+        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:gap-2 sm:items-stretch">
+          {([
+            ["SERVER A", "Python program · Sender", rdmaEvidence.hosts.hosta],
+            ["SERVER B", "Python program · Receiver", rdmaEvidence.hosts.hostb],
+          ] as const).map(([server, program, host]) => (
+            <section key={server} className="rounded-xl border border-white/10 bg-slate-900/45 p-1.5 text-center sm:p-2.5">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-400">{server}</div>
+              <div className="mt-2 rounded-lg border border-white/10 bg-slate-950/55 px-1.5 py-1.5 text-xs leading-4 text-slate-200 sm:px-2 sm:text-sm sm:leading-5">{program}</div>
+              <div className="py-1 font-mono text-[9px] leading-3.5 text-cyan-200/75 sm:text-[13px] sm:leading-5" aria-hidden="true">↓ uses Python verbs binding</div>
+              <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/7 px-1.5 py-1.5 text-xs text-cyan-100 sm:px-2 sm:text-sm">Pyverbs</div>
+              <div className="py-1 font-mono text-[9px] leading-3.5 text-cyan-200/75 sm:text-[13px] sm:leading-5" aria-hidden="true">↓ issues verbs operations</div>
+              <div className="rounded-lg border border-orange-300/20 bg-orange-300/7 px-1.5 py-1.5 text-xs text-orange-100 sm:px-2 sm:text-sm">Linux Soft-RoCE</div>
+              <div className="mt-2 break-words font-mono text-[9px] leading-3.5 text-slate-400 sm:text-[11px] sm:leading-5">data {host.dataIp}<br />control {host.controlIp}</div>
+            </section>
+          ))}
+        </div>
+        <div className="mt-3 grid gap-2">
+          <div className="rounded-xl border border-orange-300/25 bg-orange-300/7 px-3 py-2 text-center text-xs leading-5 text-orange-100" data-testid="orientation-data-network">
+            RDMA data network · {rdmaEvidence.hosts.hosta.dataIp} ⇄ {rdmaEvidence.hosts.hostb.dataIp}<br />
+            <span className="text-orange-100/70">carries the real RoCEv2 packets; packet capture records the {rdmaEvidence.source.captureInterface}</span>
+          </div>
+          <div className="rounded-xl border border-violet-300/25 bg-violet-300/7 px-3 py-2 text-center text-xs leading-5 text-violet-100" data-testid="orientation-control-network">
+            TCP control network · {rdmaEvidence.hosts.hosta.controlIp} ⇄ {rdmaEvidence.hosts.hostb.controlIp}<br />
+            <span className="text-violet-100/70">{rdmaEvidence.source.controlInterface}; exchanges setup metadata and coordinates the demonstration</span>
+          </div>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-slate-300">Python is the demonstration application. Pyverbs gives that Python program access to RDMA verbs. Soft-RoCE is the software RDMA implementation used by both servers. Browser buttons replay and inspect this recorded execution; they do not run live RDMA operations.</p>
+      </section>
+
+      <section className="rounded-2xl border border-cyan-300/15 bg-cyan-300/5 p-3">
+        <h3 className="font-semibold text-cyan-100">How the real programs prepare the first SEND</h3>
+        <ol className="mt-3 grid gap-2 lg:grid-cols-2">
+          {preparation.map(([number, action, concept]) => (
+            <li key={number} className="rounded-xl border border-white/10 bg-slate-950/50 p-2.5 text-xs leading-5 text-slate-300">
+              <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-300/15 font-mono text-[10px] text-cyan-100">{number}</span>
+              <span className="font-medium text-slate-100">{action}</span>
+              <span className="block pl-7 text-[11px] text-slate-500">{concept}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-3 text-xs leading-5 text-slate-500">This is the ordering in the validated SEND/RECEIVE program. The first SEND begins with prepared resources because the application has already performed this preparation; those resources did not appear from nowhere.</p>
+      </section>
+    </div>
+  );
+}
+
 function lifecycleForReceive(stage: number): WorkVisual["lifecycle"] {
   if (stage === 2) return "constructed";
   if (stage >= 3 && stage <= 5) return "posted";
@@ -88,11 +152,10 @@ function visual(stage: number) {
   };
   const memoryText = stage >= 9 ? `${receivedText}
 [recorded verification]` : stage >= 7 ? `${sendWr.payloadText}
-[causal placement]` : "waiting";
+[illustrated placement]` : "waiting";
 
   return (
     <div className="space-y-3">
-      {chain.length ? <CodeOperationChain items={chain} /> : null}
       <ExperimentFocusDiagram
         transfer={focusTransfer}
         caption="Compact causal view. Open the technical diagram only when the complete resource relationships are needed."
@@ -102,8 +165,8 @@ function visual(stage: number) {
           memoryLabel: "source memory",
           memory: stage >= 4 ? sendWr.payloadText : "source buffer prepared",
           memoryNote: stage >= 4 ? "recorded payload content" : undefined,
-          work: stage >= 4 ? [{ title: "Send Queue", label: `WR ${exactValue(sendWr.wrId)} · SEND`, tone: sendLifecycle === "posted" || sendLifecycle === "in-flight" ? "pending" : sendLifecycle === "completed" ? "completed" : "empty" }] : [],
-          completion: stage >= 8 ? `application-observed send completion · WR ${exactValue(sendCqe.wrId)}` : undefined,
+          work: stage >= 4 ? [{ title: "Send Queue", label: `WR ${exactValue(sendWr.wrId)} · SEND`, detail: "references source memory", tone: sendLifecycle === "posted" || sendLifecycle === "in-flight" ? "pending" : sendLifecycle === "completed" ? "completed" : "empty" }] : [],
+          completion: stage >= 8 ? `send completion observed by Server A · WR ${exactValue(sendCqe.wrId)}` : undefined,
           providerNote: packetInFlight ? "executes SEND" : undefined,
         }}
         b={{
@@ -112,11 +175,12 @@ function visual(stage: number) {
           memoryLabel: "destination memory",
           memory: memoryText,
           memoryNote: stage >= 9 ? "verified after completion" : stage >= 7 ? "placement is causal illustration" : "receiver chooses this destination",
-          work: stage >= 2 ? [{ title: "Receive Queue", label: `WR ${exactValue(recvWr.wrId)} · RECEIVE`, tone: receiveLifecycle === "posted" || receiveLifecycle === "in-flight" ? "pending" : receiveLifecycle === "consumed" ? "consumed" : receiveLifecycle === "completed" ? "completed" : "empty" }] : [],
-          completion: stage >= 8 ? `application-observed receive completion · WR ${exactValue(recvCqe.wrId)}` : undefined,
+          work: stage >= 2 ? [{ title: "Receive Queue", label: `WR ${exactValue(recvWr.wrId)} · RECEIVE`, detail: "chooses destination memory", tone: receiveLifecycle === "posted" || receiveLifecycle === "in-flight" ? "pending" : receiveLifecycle === "consumed" ? "consumed" : receiveLifecycle === "completed" ? "completed" : "empty" }] : [],
+          completion: stage >= 8 ? `receive completion observed by Server B · WR ${exactValue(recvCqe.wrId)}` : undefined,
           providerNote: packetInFlight ? "consumes posted receive" : undefined,
         }}
       />
+      {chain.length ? <CodeOperationChain items={chain} /> : null}
       <ExpandableTechnicalDiagram>
         <RdmaSystemDiagram
         caption="Guided replay of the validated SEND/RECEIVE reference execution. Queue lifecycle is a logical instructional reconstruction tied to recorded application events; it is not independently measured hardware queue occupancy. Browser actions do not execute live RDMA."
@@ -164,7 +228,7 @@ function visual(stage: number) {
           memory: stage >= 9
             ? `${receivedText}\n[recorded memory verification after completion]`
             : stage >= 7
-              ? `${sendWr.payloadText}\n[causal memory-placement illustration]`
+              ? `${sendWr.payloadText}\n[illustrated transport placement]`
               : "destination buffer waiting",
           provider: packetInFlight ? "consumes the SEND using the posted receive" : "Soft-RoCE provider implementing RDMA transport",
           softRoce: true,
@@ -209,16 +273,27 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
   const steps: GuidedStep[] = [
     {
       id: "building-blocks",
-      title: "We can now perform a real RDMA transfer",
-      actionLabel: "Inspect both servers",
+      title: "The laboratory runs two cooperating Python programs",
+      actionLabel: "Inspect both prepared servers",
       body: (
         <>
-          <p>We now have the building blocks needed to move data. Let us perform our first RDMA transfer. Server A wants to send a message, and Server B is expecting to receive it.</p>
-          <p>The HELLO example established the memory-to-memory objective. The experiment now uses the genuine recorded payload <span className="font-mono text-cyan-100">{sendWr.payloadText}</span>. We will not substitute illustrative bytes into the captured evidence.</p>
+          <p>Lessons 1–4 introduced the individual ideas. This lesson puts them together in one executable application: Server A runs a sender and Server B runs a receiver. Both programs prepare RDMA resources before the first SEND is posted.</p>
+          <p>The memory-to-memory objective is the same one introduced with HELLO. The experiment uses the genuine recorded payload <span className="font-mono text-cyan-100">{sendWr.payloadText}</span>; we will not substitute illustrative bytes into the captured evidence.</p>
         </>
       ),
-      visual: visual(0),
+      visual: <LaboratoryOrientation />,
+      visualFirst: true,
       evidence: <EvidenceNote kind="Evidence boundary">Learner actions control guided replay of recorded execution evidence. They do not execute RDMA operations in the browser or on a live host.</EvidenceNote>,
+      inspect: (
+        <div className="space-y-4">
+          <SourceExcerpt path="python/exp_b_send_recv.py" start={88} end={99} title="Actual preparation order in main()">
+            The program opens the device context, discovers its RoCEv2 identity, creates supporting resources, builds memory/QP resources, opens TCP control and exchanges endpoint metadata before any data work.
+          </SourceExcerpt>
+          <SourceExcerpt path="python/exp_b_send_recv.py" start={50} end={73} title="Resource construction and endpoint transition details">
+            The helper registers memory, creates the QP, exchanges endpoint metadata and transitions the endpoint to a ready state. This is the complete-program inspection path for readers who want implementation detail.
+          </SourceExcerpt>
+        </div>
+      ),
     },
     {
       id: "inspect-servers",
@@ -231,6 +306,7 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(1),
+      mobileVisualFirst: true,
       interaction: <MissingReceiveExercise />,
       inspect: <WorkRequestSummary request={recvWr} title="Recorded receive-side memory description" />,
     },
@@ -245,6 +321,7 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(2),
+      mobileVisualFirst: true,
       inspect: (
         <SourceExcerpt path="python/exp_b_send_recv.py" start={102} end={109} title="The real receive request is constructed and posted">
           The scatter-gather entry names Server B’s buffer address, length and LKEY. <code className="font-mono text-cyan-100">qp.post_recv(rwr)</code> makes that memory available for a subsequent incoming SEND.
@@ -262,6 +339,7 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(3),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Recorded application event">The application log recorded the posted receive with WR ID {exactValue(recvWr.wrId)}, buffer length {recvWr.byteLength} and local key. The exporter correlates that event with the later receive completion by WR ID.</EvidenceNote>,
       inspect: <WorkRequestSummary request={recvWr} title="Posted Receive Work Request" />,
     },
@@ -276,6 +354,7 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(4),
+      mobileVisualFirst: true,
       inspect: (
         <div className="space-y-4">
           <WorkRequestSummary request={sendWr} title="Send Work Request being prepared" />
@@ -296,6 +375,7 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(5),
+      mobileVisualFirst: true,
       inspect: (
         <SourceExcerpt path="python/exp_b_send_recv.py" start={135} end={143} title="The exact submission and application event">
           The embedded source snapshot shows <code className="font-mono text-cyan-100">qp.post_send(swr)</code> followed by the event log record used to correlate the Work Request.
@@ -313,6 +393,7 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(6),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Captured on the wire">Frame {sendPacket.frameNumber} in {sendPacket.captureFile} is genuine RoCEv2 traffic captured on the data network.</EvidenceNote>,
       inspect: <PacketSummary packet={sendPacket}>The UDP destination port is 4791. SEND does not carry a remote memory address or RKEY because the receive request chooses the destination locally.</PacketSummary>,
     },
@@ -322,11 +403,12 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
       actionLabel: "Check the completions",
       body: (
         <>
-          <p>The receive request now leaves the pending Receive Queue: it has been consumed by the incoming SEND. The transport uses its buffer description to place the payload into Server B’s registered memory.</p>
-          <p>This memory placement is shown as a causal illustration of transport execution. The application’s verified memory inspection comes later, after completion observation.</p>
+          <p>The receive request now leaves the pending Receive Queue: it has been consumed by the incoming SEND. Server B previously told its RDMA provider where incoming data should go. When the SEND arrives, the provider places the bytes into that buffer.</p>
+          <p>This memory placement is an evidence-bounded illustration of transport execution. The application’s verified memory inspection comes later, after completion observation.</p>
         </>
       ),
       visual: visual(7),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Causal illustration bounded by evidence">The packet, posted receive and completion relationships are validated. The precise intermediate memory-instant is not independently timestamped, so this state is not presented as a measured memory snapshot.</EvidenceNote>,
     },
     {
@@ -340,6 +422,7 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(8),
+      mobileVisualFirst: true,
       inspect: (
         <div className="space-y-4">
           <CompletionSummary completion={sendCqe} title="Sender-local completion" />
@@ -359,6 +442,7 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(9),
+      mobileVisualFirst: true,
       evidence: <EvidenceNote kind="Verified through application memory inspection">The receiver read the bytes from its own buffer after the receive completion and logged a payload-match verification.</EvidenceNote>,
       inspect: (
         <SourceExcerpt path="python/exp_b_send_recv.py" start={111} end={121} title="The receiver observes memory after completion">
@@ -377,7 +461,8 @@ export function Lesson5SendReceive({ onComplete }: { onComplete: () => void }) {
         </>
       ),
       visual: visual(10),
-      evidence: <EvidenceNote kind="Validated relationship">The exporter correlates the posted SEND, SEND packet and sender completion using operation type, endpoint direction, QPN, PSN and WR ID. The receive completion is independently correlated with Server B’s posted receive by WR ID.</EvidenceNote>,
+      mobileVisualFirst: true,
+      evidence: <EvidenceNote kind="Evidence correlation">The exporter correlates the posted SEND, SEND packet and sender completion using operation type, endpoint direction, QPN, PSN and WR ID. The receive completion is independently correlated with Server B’s posted receive by WR ID.</EvidenceNote>,
       inspect: (
         <SourceExcerpt path="python/exp_b_send_recv.py" start={126} end={148} title="The sender half of the real experiment">
           The sender waits for the receiver-ready control message, writes payload bytes into its registered memory, posts the SEND and polls its own completion queue.
