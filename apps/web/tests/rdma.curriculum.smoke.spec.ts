@@ -227,6 +227,8 @@ test.describe("RDMA first-principles curriculum", () => {
     await expect(page.getByTestId("lesson4-send-queue-hosta")).toBeVisible();
     await expect(page.getByTestId("lesson4-send-queue-hosta")).toContainText(/empty in this illustration/i);
     await expect(page.getByTestId("lesson4-illustrative-work-request")).toContainText(/not submitted/i);
+    await expect(page.getByTestId("lesson-narrative")).toContainText(/Our laboratory prepares both Reliable Connected endpoints before submitting the SEND operation/i);
+    await expect(page.getByTestId("lesson-narrative")).not.toContainText(/every kind of Work Request|universally requires the QP/i);
 
     await clickLessonAction(page);
     await expect(page.getByTestId("lesson4-qp-boundary")).toBeVisible();
@@ -261,6 +263,8 @@ test.describe("RDMA first-principles curriculum", () => {
     await expect(page.getByTestId("laboratory-orientation")).toContainText(/Python program · sender/i);
     await expect(page.getByTestId("laboratory-orientation")).toContainText(/TCP control network/i);
     await expect(page.getByTestId("laboratory-orientation")).toContainText(/recorded execution/i);
+    await expect(page.getByTestId("laboratory-orientation")).toContainText(/independent local outcome sequences, not one global ordering/i);
+    await expect(page.getByTestId("laboratory-orientation")).toContainText(/receiver-local memory evidence; the sender completion is separate/i);
     await clickLessonAction(page);
     await page.getByTestId("missing-receive-exercise").getByRole("button", { name: /packet already waiting/i }).click();
     await expect(page.getByTestId("missing-receive-feedback")).toContainText(/Not correct/i);
@@ -494,7 +498,32 @@ test.describe("RDMA first-principles curriculum", () => {
 
   test("mobile SEND WRITE and READ states show the active two-host observation first", async ({ page }) => {
     const tracker = trackErrors(page);
-    test.setTimeout(90_000);
+    test.setTimeout(150_000);
+    await page.addInitScript(() => window.localStorage.clear());
+
+    for (const width of [320, 360, 390, 430]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/practical/rdma?lesson=write", { waitUntil: "domcontentloaded" });
+      await advanceStates(page, 5);
+      await expect(page.getByRole("heading", { name: /captured WRITE packet/i })).toBeVisible();
+      const endpointA = await page.getByTestId("focus-endpoint-hosta").boundingBox();
+      const endpointB = await page.getByTestId("focus-endpoint-hostb").boundingBox();
+      const transfer = await page.getByTestId("focus-transfer").boundingBox();
+      const arrow = await page.getByTestId("focus-transfer-arrow").boundingBox();
+      expect(endpointA).not.toBeNull();
+      expect(endpointB).not.toBeNull();
+      expect(transfer).not.toBeNull();
+      expect(arrow).not.toBeNull();
+      expect(transfer!.y).toBeGreaterThanOrEqual(Math.max(endpointA!.y + endpointA!.height, endpointB!.y + endpointB!.height) - 1);
+      expect(transfer!.width).toBeGreaterThan(Math.max(endpointA!.width, endpointB!.width));
+      expect(arrow!.height).toBeLessThanOrEqual(24);
+      expect(arrow!.width).toBeGreaterThan(100);
+      const labelMetrics = await page.getByTestId("focus-transfer-label").evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
+      expect(labelMetrics.scrollWidth).toBeLessThanOrEqual(labelMetrics.clientWidth + 1);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBe(0);
+    }
+
     await page.setViewportSize({ width: 390, height: 844 });
     const scenarios = [
       { lesson: "send-receive", advances: 6, heading: /captured SEND packet/i, direction: "a-to-b", kind: "request" },

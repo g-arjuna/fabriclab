@@ -29,8 +29,8 @@ function LaboratoryOrientation() {
     ["6", "Transition each QP through INIT, RTR and RTS", "endpoint readiness before real work"],
     ["7", "Receiver posts its Receive Work Request", "destination memory is chosen locally"],
     ["8", "Sender writes the payload, constructs and posts the SEND Work Request", "the first real data operation"],
-    ["9", "Each application polls its own completion", "local outcome observation"],
-    ["10", "Receiver reads and verifies its memory", "application evidence after completion"],
+    ["9", "Each application polls its own completion when its local operation finishes", "independent local outcome sequences, not one global ordering"],
+    ["10", "The receiver reads and verifies memory after observing its receive completion", "receiver-local memory evidence; the sender completion is separate"],
   ] as const;
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]" data-testid="laboratory-orientation">

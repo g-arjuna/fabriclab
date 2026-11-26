@@ -247,7 +247,7 @@ export function Lesson4Queues({ onComplete }: { onComplete: () => void }) {
       body: (
         <>
           <p>The application does not shout instructions into the network. Once an endpoint is ready, it submits a Work Request by posting it to the appropriate queue. Send-style operations are posted to the <strong className="text-slate-100">Send Queue</strong>.</p>
-          <p>Constructing an instruction and posting it are different actions. Our HELLO instruction remains constructed in this illustration; the real program cannot submit it until the endpoint resources and peer state exist. This is a conceptual preview of where it will eventually go, not the chronological SEND execution.</p>
+          <p>Constructing an instruction and posting it are different actions. Our laboratory prepares both Reliable Connected endpoints before submitting the SEND operation. For now, our illustrative instruction remains unposted. This is a conceptual preview of where it will eventually go, not the chronological SEND execution.</p>
         </>
       ),
       visual: queuesVisual(2),

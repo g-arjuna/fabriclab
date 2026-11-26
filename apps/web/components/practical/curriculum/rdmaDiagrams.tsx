@@ -496,6 +496,31 @@ function FocusEndpoint({ endpoint }: { endpoint: FocusEndpointModel }) {
   );
 }
 
+function TransferArrowHead({ pointing }: { pointing: "left" | "right" }) {
+  const points = pointing === "right" ? "M0 0 L8 5 L0 10 Z" : "M8 0 L0 5 L8 10 Z";
+  return (
+    <svg className="h-2.5 w-2 shrink-0" viewBox="0 0 8 10" aria-hidden="true" focusable="false">
+      <path d={points} fill="currentColor" />
+    </svg>
+  );
+}
+
+function FocusTransferArrow({ direction }: { direction: "a-to-b" | "b-to-a" | "both" | "none" }) {
+  const left = direction === "b-to-a" || direction === "both";
+  const right = direction === "a-to-b" || direction === "both";
+  return (
+    <div className="mt-1 flex items-center gap-1.5 font-mono text-sm leading-none text-cyan-200" data-testid="focus-transfer-arrow" aria-hidden="true">
+      <span>A</span>
+      <span className="flex min-w-0 flex-1 items-center">
+        {left ? <TransferArrowHead pointing="left" /> : null}
+        <span className="h-px min-w-4 flex-1 bg-cyan-200/70"></span>
+        {right ? <TransferArrowHead pointing="right" /> : null}
+      </span>
+      <span>B</span>
+    </div>
+  );
+}
+
 export function ExperimentFocusDiagram({
   a,
   b,
@@ -508,17 +533,18 @@ export function ExperimentFocusDiagram({
   caption?: ReactNode;
 }) {
   const direction = transfer.direction || "none";
-  const arrow = direction === "a-to-b" ? "A ─────→ B" : direction === "b-to-a" ? "A ←───── B" : direction === "both" ? "A ⇄ B" : "A ───── B";
   const active = Boolean(transfer.visible);
   return (
-    <figure className="rounded-2xl border border-white/10 bg-slate-950/35 p-3" data-testid="experiment-focus-diagram">
-      <div className="grid grid-cols-[minmax(0,1fr)_3.4rem_minmax(0,1fr)] gap-1.5 sm:gap-2 lg:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1fr)] lg:items-center">
+    <figure className="rounded-2xl border border-white/10 bg-slate-950/35 p-2 sm:p-3" data-testid="experiment-focus-diagram">
+      <div className="grid grid-cols-2 gap-1.5 sm:gap-2 lg:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1fr)] lg:items-center">
         <FocusEndpoint endpoint={a} />
-        <div className={cx("self-center rounded-xl border px-2 py-3 text-center", active ? transfer.kind === "control" ? "border-violet-300/35 bg-violet-300/9" : "border-orange-300/35 bg-orange-300/9" : "border-white/10 bg-slate-950/35")} data-testid="focus-transfer" data-direction={direction} data-kind={transfer.kind || "none"}>
-          <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-500">{transfer.kind === "control" ? "TCP control" : "RoCEv2 data"}</div>
-          <div className="mt-1 font-mono text-cyan-200" aria-hidden="true">{arrow}</div>
-          {direction !== "none" ? <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-100/75">direction {direction === "a-to-b" ? "A → B" : direction === "b-to-a" ? "B → A" : "both ways"}</div> : null}
-          {active ? <div className="mt-2 break-words text-[10px] leading-4 text-orange-100 sm:text-xs sm:leading-5">{transfer.label}</div> : <div className="mt-2 text-[10px] text-slate-600">no packet at this point</div>}
+        <div className={cx("order-3 col-span-2 self-center rounded-xl border px-2 py-1.5 text-center lg:order-none lg:col-span-1 lg:py-3", active ? transfer.kind === "control" ? "border-violet-300/35 bg-violet-300/9" : "border-orange-300/35 bg-orange-300/9" : "border-white/10 bg-slate-950/35")} data-testid="focus-transfer" data-direction={direction} data-kind={transfer.kind || "none"}>
+          <div className="flex items-center justify-between gap-2 lg:block">
+            <div className="text-[9px] font-semibold uppercase tracking-[0.13em] text-slate-500">{transfer.kind === "control" ? "TCP control" : "RoCEv2 data"}</div>
+            {direction !== "none" ? <div className="text-[9px] font-semibold uppercase tracking-[0.1em] text-cyan-100/75 lg:mt-0.5">direction {direction === "a-to-b" ? "A to B" : direction === "b-to-a" ? "B to A" : "both ways"}</div> : null}
+          </div>
+          <FocusTransferArrow direction={direction} />
+          {active ? <div className="mx-auto mt-1.5 max-w-md break-words text-xs leading-5 text-orange-100" data-testid="focus-transfer-label">{transfer.label}</div> : <div className="mt-2 text-[10px] text-slate-600">no packet at this point</div>}
         </div>
         <FocusEndpoint endpoint={b} />
       </div>

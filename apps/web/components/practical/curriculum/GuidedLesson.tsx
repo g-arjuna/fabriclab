@@ -225,7 +225,7 @@ export function GuidedLesson({
         </details>
       </div>
 
-      <article ref={articleRef} className="scroll-mt-20 guided-lesson-article rounded-2xl border border-white/10 bg-slate-900/35 p-3 shadow-[0_20px_70px_rgba(2,6,23,0.22)] max-sm:pb-24 sm:p-6 lg:p-7">
+      <article ref={articleRef} className="scroll-mt-20 guided-lesson-article rounded-2xl border border-white/10 bg-slate-900/35 p-2 shadow-[0_20px_70px_rgba(2,6,23,0.22)] max-sm:pb-24 sm:p-6 lg:p-7">
         <div className="border-b border-white/8 pb-3 sm:pb-4">
           <h2 ref={headingRef} tabIndex={-1} className="max-w-4xl text-xl font-semibold tracking-tight text-white outline-none sm:text-3xl">{step.title}</h2>
         </div>
