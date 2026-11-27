@@ -27,7 +27,7 @@ export type GuidedStep = {
 };
 
 type PersistedGuidedState = {
-  version: 4;
+  version: 5;
   revision: string;
   current: string;
   visited: string[];
@@ -35,6 +35,20 @@ type PersistedGuidedState = {
 
 const REVISED_FOUNDATION_LESSONS = new Set(["moving-data", "why-rdma", "memory", "queues"]);
 const REVISED_OPERATION_LESSONS = new Set(["send-receive", "write", "read", "packets"]);
+export function guidedLessonStateStorageKey(lessonId: string) {
+  return `fabriclab.rdma.lesson.${lessonId}.guided-state.v5`;
+}
+
+export function guidedLessonLegacyStateStorageKey(lessonId: string) {
+  return `fabriclab.rdma.lesson.${lessonId}.guided-state.v4`;
+}
+
+export function guidedPersistedRevisionForLesson(lessonId: string) {
+  if (REVISED_FOUNDATION_LESSONS.has(lessonId)) return FOUNDATIONS_V2_REVISION;
+  if (REVISED_OPERATION_LESSONS.has(lessonId)) return OPERATIONS_V2_REVISION;
+  return "guided-legacy-v1";
+}
+
 const FOUNDATIONS_V2_REVISION = "guided-foundations-v3";
 const OPERATIONS_V2_REVISION = "guided-operations-v3";
 
@@ -43,11 +57,11 @@ function idToIndex(steps: GuidedStep[], id: string | undefined) {
   return index >= 0 ? index : 0;
 }
 
-function parsePersistedState(value: string | null, steps: GuidedStep[], requiredRevision: string): { stepIndex: number; visitedSteps: number[] } | null {
+function parsePersistedState(value: string | null, steps: GuidedStep[], requiredRevision: string, version: 4 | 5): { stepIndex: number; visitedSteps: number[] } | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value) as Partial<PersistedGuidedState>;
-    if (parsed.version !== 4 || parsed.revision !== requiredRevision || typeof parsed.current !== "string" || !Array.isArray(parsed.visited)) return null;
+    if (parsed.version !== version || parsed.revision !== requiredRevision || typeof parsed.current !== "string" || !Array.isArray(parsed.visited)) return null;
     const validIds = new Set(steps.map((step) => step.id));
     if (!validIds.has(parsed.current)) return null;
     const visitedSteps = Array.from(new Set(parsed.visited.filter((id): id is string => typeof id === "string" && validIds.has(id)).map((id) => idToIndex(steps, id))));
@@ -62,25 +76,30 @@ export function GuidedLesson({
   steps,
   onComplete,
   finalActionLabel,
+  onPreviousLesson,
+  hasPreviousLesson = false,
 }: {
   lessonId: string;
   steps: GuidedStep[];
   onComplete: () => void;
   finalActionLabel: string;
+  onPreviousLesson?: () => void;
+  hasPreviousLesson?: boolean;
 }) {
-  const stateKey = `fabriclab.rdma.lesson.${lessonId}.guided-state.v4`;
+  const stateKey = guidedLessonStateStorageKey(lessonId);
+  const legacyStateKey = guidedLessonLegacyStateStorageKey(lessonId);
   const [stepIndex, setStepIndex] = useState(0);
   const [visitedSteps, setVisitedSteps] = useState<number[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const revisedFoundation = REVISED_FOUNDATION_LESSONS.has(lessonId);
-  const persistedRevision = revisedFoundation ? FOUNDATIONS_V2_REVISION : REVISED_OPERATION_LESSONS.has(lessonId) ? OPERATIONS_V2_REVISION : "guided-legacy-v1";
+  const persistedRevision = guidedPersistedRevisionForLesson(lessonId);
   const articleRef = useRef<HTMLElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const step = steps[stepIndex];
   const isFinal = stepIndex === steps.length - 1;
   const allStepsVisited = steps.every((_, index) => visitedSteps.includes(index));
   const completionReferenceOnly = isFinal && !allStepsVisited;
-  const primaryCanAdvance = !completionReferenceOnly;
+  const firstUnvisitedStep = steps.findIndex((_, index) => !visitedSteps.includes(index));
   const inlineVisual = Boolean(step.inlineVisual);
   const mobileVisualFirst = Boolean(step.mobileVisualFirst) && !inlineVisual;
   const visualFirst = Boolean(step.visualFirst) && !inlineVisual;
@@ -103,7 +122,7 @@ export function GuidedLesson({
 
   useEffect(() => {
     try {
-      const versioned = parsePersistedState(window.localStorage.getItem(stateKey), steps, persistedRevision);
+      const versioned = parsePersistedState(window.localStorage.getItem(stateKey), steps, persistedRevision, 5) || parsePersistedState(window.localStorage.getItem(legacyStateKey), steps, persistedRevision, 4);
       if (versioned) {
         setStepIndex(versioned.stepIndex);
         setVisitedSteps(versioned.visitedSteps);
@@ -112,13 +131,13 @@ export function GuidedLesson({
       // Persistence is a convenience; the lesson remains usable without it.
     }
     setHydrated(true);
-  }, [stateKey, steps, persistedRevision]);
+  }, [stateKey, legacyStateKey, steps, persistedRevision]);
 
   useEffect(() => {
     if (!hydrated) return;
     try {
       const state: PersistedGuidedState = {
-        version: 4,
+        version: 5,
         revision: persistedRevision,
         current: steps[stepIndex]?.id || steps[0].id,
         visited: visitedSteps.map((index) => steps[index]?.id).filter((id): id is string => Boolean(id)),
@@ -150,15 +169,23 @@ export function GuidedLesson({
     revealCurrentState();
   }
 
+  function goPrevious() {
+    if (stepIndex > 0) {
+      goTo(stepIndex - 1);
+    } else if (hasPreviousLesson && onPreviousLesson) {
+      onPreviousLesson();
+    }
+  }
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target && ["A", "INPUT", "SELECT", "TEXTAREA", "SUMMARY", "BUTTON"].includes(target.tagName)) return;
-      if (event.key === "ArrowLeft" && stepIndex > 0) {
+      if (event.key === "ArrowLeft" && (stepIndex > 0 || hasPreviousLesson)) {
         event.preventDefault();
-        goTo(stepIndex - 1);
+        goPrevious();
       }
-      if (event.key === "ArrowRight" && !isFinal && primaryCanAdvance) {
+      if (event.key === "ArrowRight" && !isFinal) {
         event.preventDefault();
         goTo(stepIndex + 1);
       }
@@ -168,7 +195,10 @@ export function GuidedLesson({
   });
 
   function advance() {
-    if (!primaryCanAdvance) return;
+    if (completionReferenceOnly) {
+      goTo(firstUnvisitedStep >= 0 ? firstUnvisitedStep : 0);
+      return;
+    }
     if (isFinal) {
       onComplete();
       revealCurrentState();
@@ -189,7 +219,6 @@ export function GuidedLesson({
             {step.subsectionId ? `${step.subsectionId} — ${step.title}` : step.title}
             {stageCount > 1 ? ` · Stage ${stageIndex + 1} of ${stageCount}` : ""}
           </div>
-          {step.stageLabel ? <div className="mt-1 text-sm text-slate-400" data-testid="guided-stage-label">{step.stageLabel}</div> : null}
         </div>
         <details className="rounded-xl border border-white/10 bg-slate-950/35 px-2.5 py-1.5 text-xs text-slate-400 sm:px-3 sm:py-2 sm:text-sm" data-testid="lesson-outline">
           <summary className="cursor-pointer font-medium text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Lesson outline</summary>
@@ -212,9 +241,9 @@ export function GuidedLesson({
         </details>
       </div>
 
-      <article ref={articleRef} className="scroll-mt-20 guided-lesson-article rounded-2xl border border-white/10 bg-slate-900/35 p-2 shadow-[0_20px_70px_rgba(2,6,23,0.22)] max-lg:pb-28 sm:p-6 lg:p-7" data-testid="guided-article" data-guided-step={step.id} data-stage-index={stageIndex}>
+      <article ref={articleRef} className="scroll-mt-20 guided-lesson-article rounded-2xl border border-white/10 bg-slate-900/35 p-2 shadow-[0_20px_70px_rgba(2,6,23,0.22)] max-lg:pb-20 sm:p-6 lg:p-7" data-testid="guided-article" data-guided-step={step.id} data-stage-index={stageIndex}>
         <div className="border-b border-white/8 pb-3 sm:pb-4">
-          <h2 ref={headingRef} tabIndex={-1} className="max-w-4xl text-xl font-semibold tracking-tight text-white outline-none sm:text-3xl">{step.title}</h2>
+          <h2 ref={headingRef} tabIndex={-1} className="max-w-4xl text-xl font-semibold tracking-tight text-white outline-none sm:text-3xl">{step.stageLabel || step.title}</h2>
         </div>
 
         <div className={inlineVisual ? "mt-3 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,0.78fr)_minmax(430px,1fr)] xl:items-center" : hasContextPanel ? "mt-3 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_330px]" : "mt-3 flex flex-col gap-4 sm:mt-5 sm:gap-5"}>
@@ -253,30 +282,30 @@ export function GuidedLesson({
 
         {step.observation ? <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-300/7 p-4 text-sm leading-6 text-emerald-50 sm:mt-5" data-testid="guided-observation">{step.observation}</div> : null}
 
-        <footer className="guided-mobile-footer z-30 mt-7 flex flex-col gap-2 border-t border-white/8 pt-4 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:m-0 max-lg:bg-slate-950/95 max-lg:px-4 max-lg:py-3 max-lg:shadow-[0_-12px_32px_rgba(2,6,23,0.7)] max-lg:backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-5">
-          {stepIndex > 0 ? (
+        <footer className="guided-mobile-footer z-30 mt-5 flex flex-row items-center justify-between gap-2 border-t border-white/8 pt-3 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:m-0 max-lg:bg-slate-950/95 max-lg:px-3 max-lg:py-2 max-lg:shadow-[0_-12px_32px_rgba(2,6,23,0.7)] max-lg:backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-5">
+          {stepIndex > 0 || hasPreviousLesson ? (
             <button
               type="button"
-              onClick={() => goTo(stepIndex - 1)}
+              onClick={goPrevious}
               data-testid="lesson-previous"
-              className="rounded-full border border-white/10 px-4 py-2.5 text-sm text-slate-300 transition hover:border-white/25 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 motion-reduce:transition-none"
+              className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs sm:px-4 sm:py-2.5 sm:text-sm text-slate-300 transition hover:border-white/25 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 motion-reduce:transition-none"
             >
               ← Previous
             </button>
           ) : <span className="hidden sm:block" />}
-          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <div className="flex items-center gap-2">
             {completionReferenceOnly ? (
-              <div className="text-right text-xs text-amber-200">Direct reference access remains available, but completion is recorded only after each guided state has been viewed.</div>
+              <div className="text-right text-xs text-amber-200">Direct reference access is available. Use the continuation action to review the first unvisited guided state before completion is recorded.</div>
             ) : null}
-            {nextPreview ? <div className="text-right text-xs text-slate-400" data-testid="guided-next-preview">Up next: {nextPreview}</div> : null}
+            {nextPreview ? <div className="hidden text-right text-xs text-slate-400 sm:block" data-testid="guided-next-preview">Up next: {nextPreview}</div> : null}
             <button
               type="button"
               onClick={advance}
-              disabled={!hydrated || !primaryCanAdvance}
+              disabled={!hydrated}
               data-testid="lesson-action"
-              className="w-full rounded-full bg-cyan-300 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none sm:w-auto"
+              className="w-auto whitespace-nowrap rounded-full bg-cyan-300 px-4 py-2.5 text-xs sm:px-5 sm:py-3 sm:text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none sm:w-auto"
             >
-              {isFinal ? finalActionLabel : "Next →"}
+              {completionReferenceOnly ? "Review first unvisited section" : isFinal ? finalActionLabel : "Next →"}
             </button>
           </div>
         </footer>

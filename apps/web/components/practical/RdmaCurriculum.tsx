@@ -12,8 +12,10 @@ import { Lesson6Write } from "./curriculum/Lesson6Write";
 import { Lesson7Read } from "./curriculum/Lesson7Read";
 import { Lesson8Packets } from "./curriculum/Lesson8Packets";
 import { cx } from "./curriculum/visuals";
+import { finalGuidedStepIdForLesson } from "./curriculum/guidedLessonNavigation";
+import { guidedLessonLegacyStateStorageKey, guidedLessonStateStorageKey, guidedPersistedRevisionForLesson } from "./curriculum/GuidedLesson";
 
-type LessonComponent = ComponentType<{ onComplete: () => void }>;
+type LessonComponent = ComponentType<{ onComplete: () => void; onPreviousLesson?: () => void; hasPreviousLesson?: boolean }>;
 
 type LessonMeta = {
   id: string;
@@ -205,6 +207,37 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
     }
   }
 
+  function seedLessonAtFinalGuidedState(lessonId: string) {
+    const finalStepId = finalGuidedStepIdForLesson(lessonId);
+    if (!finalStepId) return;
+    try {
+      const stateKey = guidedLessonStateStorageKey(lessonId);
+      const legacyKey = guidedLessonLegacyStateStorageKey(lessonId);
+      const existingRaw = window.localStorage.getItem(stateKey) || window.localStorage.getItem(legacyKey);
+      let visited: string[] = [];
+      if (existingRaw) {
+        const existing = JSON.parse(existingRaw) as { visited?: unknown };
+        if (Array.isArray(existing.visited)) visited = existing.visited.filter((id): id is string => typeof id === "string");
+      }
+      if (!visited.includes(finalStepId)) visited.push(finalStepId);
+      window.localStorage.setItem(stateKey, JSON.stringify({
+        version: 5,
+        revision: guidedPersistedRevisionForLesson(lessonId),
+        current: finalStepId,
+        visited,
+      }));
+    } catch {
+      // Cross-lesson navigation still opens the preceding lesson if storage is unavailable.
+    }
+  }
+
+  function openPreviousLesson() {
+    if (lessonIndex <= 0) return;
+    const previousIndex = lessonIndex - 1;
+    seedLessonAtFinalGuidedState(LESSONS[previousIndex].id);
+    selectLesson(previousIndex);
+  }
+
   function selectLesson(index: number) {
     markLessonExplicit(LESSONS[index].id);
     try {
@@ -364,7 +397,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
               </div>
             </section>
           ) : (
-            <Lesson key={`${lesson.id}:${resetVersion}`} onComplete={completeLesson} />
+            <Lesson key={`${lesson.id}:${resetVersion}`} onComplete={completeLesson} onPreviousLesson={openPreviousLesson} hasPreviousLesson={lessonIndex > 0} />
           )}
         </main>
       </div>

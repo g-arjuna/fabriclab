@@ -142,12 +142,48 @@ export function TcpSegmentationVisual({ selectedFrame, onSelectFrame, guidedStag
   const segments = appRanges.map((range) => ({ id: `segment-${range.frameNumber}`, frameNumber: range.frameNumber, label: `frame ${range.frameNumber}`, start: range.start, endExclusive: range.endExclusive }));
   const reads = large.receiveEvents.map((event, index) => ({ id: `read-${index}`, label: `read ${index + 1}`, start: event.offset, endExclusive: event.offset + event.count }));
   const stageSegment = stage >= 1 && stage <= 3 ? segments[stage - 1] : undefined;
-  const selectedSegment = stageSegment || segments.find((x) => x.frameNumber === frame);
-  const selectedReadRange = stage === 4 ? reads[0] : undefined;
+  const selectedSegment = stageSegment || (stage < 4 ? segments.find((x) => x.frameNumber === frame) : undefined);
+  const comparingBoundaries = stage >= 4;
   const intersectingReads = selectedSegment ? reads.filter((read) => read.start < selectedSegment.endExclusive && selectedSegment.start < read.endExclusive).map((read) => read.id) : [];
-  const visibleReadHighlights = stage >= 4 ? reads.map((read) => read.id) : intersectingReads;
-  const activeRange = selectedReadRange || selectedSegment;
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="foundation-tcp-segmentation" data-guided-stage={stage}><div className="space-y-3"><div><div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">1 · original application buffer and one sendall operation · application offsets 0–4095</div><RangeBar ranges={[{id:"sendall",label:"sendall(buffer)",start:0,endExclusive:4096}]} total={4096} selected={stage === 0 ? "sendall" : null} testId="application-send-range" />{selectedSegment && stage >= 1 && stage <= 3 ? <div className="mt-1" data-testid="highlighted-application-byte-range"><div className="relative h-2 overflow-hidden rounded bg-slate-950"><div className="absolute inset-y-0 rounded bg-cyan-300/70" style={{ left: `${(selectedSegment.start / 4096) * 100}%`, width: `${((selectedSegment.endExclusive - selectedSegment.start) / 4096) * 100}%` }} /></div><div className="mt-1 font-mono text-[10px] text-cyan-100">highlighted application byte range {selectedSegment.start}–{selectedSegment.endExclusive - 1}</div></div> : null}</div><div><div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">2 · captured TCP segment boundaries · positions are application offsets, while packet fields show TCP sequence numbers</div><RangeBar ranges={segments} total={4096} selected={stageSegment?.id ?? null} testId="captured-segment-ranges" /></div><div><div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">3 · actual application receive boundaries · application reads need not match segment boundaries</div><RangeBar ranges={reads} total={4096} selected={selectedReadRange?.id ?? null} highlighted={visibleReadHighlights} testId="application-read-ranges" /></div><SmallNote testId="selected-byte-range">{selectedReadRange ? `Application ${selectedReadRange.label} returned byte positions ${selectedReadRange.start}–${selectedReadRange.endExclusive - 1}.` : stageSegment ? `Captured frame ${stageSegment.frameNumber} contains application byte positions ${stageSegment.start}–${stageSegment.endExclusive - 1}. Its TCP sequence number names the first byte in TCP sequence space; ACKs name next expected TCP sequence numbers.` : stage >= 5 ? "Segment boundaries and application-read boundaries are different descriptions of the same ordered byte stream." : "The original application byte range is one contiguous sendall buffer before transport segmentation is examined."} The rows describe the same application byte stream but their boundaries differ.</SmallNote><div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-2 text-[11px] text-cyan-50" data-testid="synchronized-selection-state">{selectedSegment ? `payload frame ${selectedSegment.frameNumber} is synchronized with the packet inspector; intersecting receive ranges: ${intersectingReads.length ? intersectingReads.map((id)=>reads.find((read)=>read.id===id)?.label ?? id).join(", ") : "none"}` : frame ? `frame ${frame} is synchronized with the packet inspector as a non-payload packet` : "no packet selected"}</div><div className="grid gap-2 lg:grid-cols-3">{large.payloadSegments.map((segment) => <div key={segment.frameNumber} className={cx("rounded-xl border p-2 font-mono text-[11px]", segment.frameNumber === frame ? "border-cyan-300/50 bg-cyan-300/10 text-cyan-50" : "border-white/10 text-slate-300")}><span className="text-slate-500">frame {segment.frameNumber}</span> [Ethernet 14][IP 20][TCP {large.packets.find(p=>p.frameNumber===segment.frameNumber)?.tcp.headerLength ?? "actual"}][payload {segment.tcpPayloadLength}]</div>)}</div></div></div>;
+  const visibleReadHighlights = comparingBoundaries ? reads.map((read) => read.id) : intersectingReads;
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="foundation-tcp-segmentation" data-guided-stage={stage}>
+      <div className="space-y-3">
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">One application send · application offsets 0–4095</div>
+          <RangeBar ranges={[{ id: "sendall", label: "sendall(buffer) · 4096 bytes", start: 0, endExclusive: 4096 }]} total={4096} selected={stage === 0 ? "sendall" : null} testId="application-send-range" />
+        </div>
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">Captured TCP segment boundaries · same application-byte coordinate system</div>
+          <RangeBar ranges={segments} total={4096} selected={stageSegment?.id ?? null} testId="captured-segment-ranges" />
+        </div>
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">Actual application read boundaries · receive sizes need not match segment sizes</div>
+          <RangeBar ranges={reads} total={4096} highlighted={visibleReadHighlights} testId="application-read-ranges" />
+        </div>
+        <SmallNote testId="selected-byte-range">
+          {stageSegment ? `Captured frame ${stageSegment.frameNumber} contains application byte positions ${stageSegment.start}–${stageSegment.endExclusive - 1}. Its TCP sequence number names the first byte in TCP sequence space; ACKs name next expected TCP sequence numbers.` : comparingBoundaries ? "Segment boundaries and application-read boundaries are different descriptions of the same ordered byte stream. All recorded segment and read boundaries are shown together here." : "The original application byte range is one contiguous sendall buffer before transport segmentation is examined."} The rows describe the same application byte stream but their boundaries differ.
+        </SmallNote>
+        <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-2 text-[11px] text-cyan-50" data-testid="synchronized-selection-state">
+          {stageSegment ? `payload frame ${stageSegment.frameNumber} is synchronized with the compact packet evidence; intersecting receive ranges: ${intersectingReads.length ? intersectingReads.map((id) => reads.find((read) => read.id === id)?.label ?? id).join(", ") : "none"}` : comparingBoundaries ? "comparison mode · no single payload frame is selected" : "the complete application send range is selected before packet inspection"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SelectedTcpSegmentEvidence({ frameNumber }: { frameNumber: number }) {
+  const segment = large.payloadSegments.find((item) => item.frameNumber === frameNumber);
+  const range = large.browserValidation.applicationRanges.find((item) => item.frameNumber === frameNumber);
+  if (!segment || !range) return null;
+  return (
+    <div className="grid gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/7 p-3 text-sm text-cyan-50 sm:grid-cols-4" data-testid="selected-packet-essential-fields">
+      <div><div className="text-[10px] uppercase tracking-[0.14em] text-cyan-100/70">Captured frame</div><div className="mt-1 font-mono font-semibold">Frame {frameNumber}</div></div>
+      <div><div className="text-[10px] uppercase tracking-[0.14em] text-cyan-100/70">TCP payload</div><div className="mt-1 font-mono">{segment.tcpPayloadLength} bytes</div></div>
+      <div><div className="text-[10px] uppercase tracking-[0.14em] text-cyan-100/70">Application offsets</div><div className="mt-1 font-mono">{range.start}–{range.endExclusive - 1}</div></div>
+      <div><div className="text-[10px] uppercase tracking-[0.14em] text-cyan-100/70">TCP sequence start</div><div className="mt-1 font-mono">{segment.relativeSequenceStart}</div></div>
+    </div>
+  );
 }
 
 export function NicTransmitVisual() {
@@ -193,18 +229,32 @@ export function LoopbackComparisonVisual() {
 
 function SynchronizedTcpSegmentationInspection() {
   const stage = useGuidedVisualStage();
-  const payloadFrame = stage >= 1 && stage <= 3
-    ? large.payloadSegments[stage - 1]?.frameNumber
-    : large.payloadSegments[0]?.frameNumber;
-  const selectedFrame = payloadFrame ?? large.packets[0].frameNumber;
-  return <div className="space-y-4"><TcpSegmentationVisual guidedStage={stage} selectedFrame={selectedFrame} /><PacketInspector item={large} testId="tcp-segmentation-inspector" largeDefault selectedFrame={selectedFrame} /></div>;
+  const payloadFrame = stage >= 1 && stage <= 3 ? large.payloadSegments[stage - 1]?.frameNumber : null;
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)] xl:items-start">
+        <TcpSegmentationVisual guidedStage={stage} selectedFrame={payloadFrame} />
+        {payloadFrame ? <SelectedTcpSegmentEvidence frameNumber={payloadFrame} /> : <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-3 text-sm leading-6 text-slate-300" data-testid="segmentation-primary-guidance">The aligned rows are the primary evidence. Open technical inspection only when the relationship among the ranges is clear.</div>}
+      </div>
+      <details className="rounded-xl border border-white/10 bg-white/4 p-3" data-testid="optional-tcp-technical-inspection">
+        <summary className="cursor-pointer text-sm font-semibold text-cyan-100">Inspect complete packet table, decoded fields, checksums and raw bytes</summary>
+        <div className="mt-3"><PacketInspector item={large} testId="tcp-segmentation-inspector" largeDefault selectedFrame={payloadFrame ?? undefined} /></div>
+      </details>
+    </div>
+  );
 }
 
 function TcpEvidenceComparisonVisual() {
   const stage = useGuidedVisualStage();
   const smallPayloadFrame = small.payloadSegments[0]?.frameNumber ?? small.packets[0].frameNumber;
   const largePayloadFrame = large.payloadSegments[0]?.frameNumber ?? large.packets[0].frameNumber;
-  const finAckFrame = small.packets.find((row) => row.tcp.fin && row.tcp.ack && row.ip.source === small.endpoints.senderPeer[0])?.frameNumber ?? small.packets[small.packets.length - 1].frameNumber;
+  const finAckFrame = small.packets.find((row) => row.tcp.fin
+    && row.tcp.ack
+    && row.ip.source === small.endpoints.senderPeer[0]
+    && row.tcp.sourcePort === small.endpoints.senderPeer[1]
+    && row.ip.destination === small.endpoints.senderLocal[0]
+    && row.tcp.destinationPort === small.endpoints.senderLocal[1]
+    && row.tcp.relativeAcknowledgement > small.browserValidation.baseSequence + small.browserValidation.bytes)?.frameNumber ?? small.packets[small.packets.length - 1].frameNumber;
   if (stage === 0) {
     return <div className="space-y-4" data-testid="tcp-small-evidence-stage"><PacketInspector item={small} testId="tcp-evidence-packet-inspector" selectedFrame={smallPayloadFrame} /><SmallNote>The small captured transfer establishes the ordered HELLO payload before it is compared with the large transfer.</SmallNote></div>;
   }
@@ -227,7 +277,7 @@ function TcpEvidenceComparisonVisual() {
   return (
     <div className="space-y-4" data-testid="tcp-evidence-boundary-stage">
       <PacketInspector item={small} testId="tcp-fin-ack-inspector" selectedFrame={finAckFrame} />
-      <div className="rounded-xl border border-amber-300/25 bg-amber-300/8 p-3 text-sm leading-6 text-amber-50" data-testid="tcp-evidence-conclusion-boundary">The captures establish packet structure, sequence/acknowledgement positions and local application observations. ACK and FIN consume transport sequence positions without creating additional application payload bytes; the evidence does not by itself prove every internal kernel, device or hypervisor mechanism.</div>
+      <div className="rounded-xl border border-amber-300/25 bg-amber-300/8 p-3 text-sm leading-6 text-amber-50" data-testid="tcp-evidence-conclusion-boundary">The captures establish packet structure, sequence/acknowledgement positions and local application observations. TCP acknowledgements identify the next expected sequence number. SYN and FIN each consume one sequence-number position, while an ACK flag by itself does not. In our recorded FIN-only packets, no additional application payload bytes are present; the evidence does not by itself prove every internal kernel, device or hypervisor mechanism.</div>
     </div>
   );
 }

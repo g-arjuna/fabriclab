@@ -1,0 +1,122 @@
+[
+  {
+    "file": "01-hardware-software-stage-1.png",
+    "caption": "1.1 stage 1 \u2014 Meet the physical computer"
+  },
+  {
+    "file": "01-hardware-software-stage-2.png",
+    "caption": "1.1 stage 2 \u2014 Introduce the software running on the computer"
+  },
+  {
+    "file": "01-hardware-software-stage-3.png",
+    "caption": "1.1 stage 3 \u2014 Follow an application instruction"
+  },
+  {
+    "file": "01-hardware-software-stage-4.png",
+    "caption": "1.1 stage 4 \u2014 Follow a kernel instruction"
+  },
+  {
+    "file": "02-process-01-program-on-storage.png",
+    "caption": "1.2 stage 1 \u2014 Program stored on disk before any process is shown"
+  },
+  {
+    "file": "02-process-02-first-process-address-space.png",
+    "caption": "1.2 stage 2 \u2014 First process and virtual address space"
+  },
+  {
+    "file": "02-process-03-second-independent-process.png",
+    "caption": "1.2 stage 3 \u2014 Second independent process beside one physical RAM"
+  },
+  {
+    "file": "02-process-04-shared-read-only-frame.png",
+    "caption": "1.2 stage 4 \u2014 Shared read-only frame revealed after both processes exist"
+  },
+  {
+    "file": "03-translation-01-process-a-load-returned.png",
+    "caption": "1.3 stage 3 \u2014 Process A load translated and byte returned"
+  },
+  {
+    "file": "03-translation-02-process-c-same-address.png",
+    "caption": "1.3 stage 5 \u2014 Same numerical virtual address resolved in process C"
+  },
+  {
+    "file": "03-translation-03-permitted-store-byte-change.png",
+    "caption": "1.3 stage 6 \u2014 Permitted store changes the illustrated byte"
+  },
+  {
+    "file": "03-translation-04-read-only-store-rejected.png",
+    "caption": "1.3 stage 7 \u2014 Read-only mapping rejects the store"
+  },
+  {
+    "file": "04-copy-reference-01-beta-write-xello.png",
+    "caption": "1.5 stage 3 \u2014 Reference write changes the continuous source history to XELLO"
+  },
+  {
+    "file": "04-copy-reference-02-copy-created-from-xello.png",
+    "caption": "1.5 stage 4 \u2014 Independent copy is created from the displayed XELLO source"
+  },
+  {
+    "file": "04-copy-reference-03-copy-modified-original-stable.png",
+    "caption": "1.5 stage 5 \u2014 Copy mutation leaves the original XELLO state stable"
+  },
+  {
+    "file": "05-tcp-01-first-segment-aligned-ranges.png",
+    "caption": "2.6 stage 2 \u2014 First recorded TCP segment aligned with stream/read rows"
+  },
+  {
+    "file": "05-tcp-02-second-segment-aligned-ranges.png",
+    "caption": "2.6 stage 3 \u2014 Next recorded TCP segment aligned with stream/read rows"
+  },
+  {
+    "file": "05-tcp-03-all-boundaries-comparison-no-frame-selected.png",
+    "caption": "2.6 final comparison \u2014 All segment/read boundaries with no payload frame selected"
+  },
+  {
+    "file": "06-work-request-01-operation-and-id-only.png",
+    "caption": "4.11 stage 1 \u2014 Work Request operation and application identifier only"
+  },
+  {
+    "file": "06-work-request-02-memory-description-attached.png",
+    "caption": "4.11 stage 2 \u2014 SGE address/length/LKEY linked to registered source memory"
+  },
+  {
+    "file": "06-work-request-03-actual-source-inspection.png",
+    "caption": "4.11 stage 3 \u2014 Actual recorded SEND construction source inspection"
+  },
+  {
+    "file": "07-encapsulation-01-captured-packet-orientation.png",
+    "caption": "8.1 stage 1 \u2014 Captured RoCEv2 packet orientation"
+  },
+  {
+    "file": "07-encapsulation-02-ethernet-ipv4-delivery.png",
+    "caption": "8.1 stage 2 \u2014 Ethernet and IPv4 delivery fields"
+  },
+  {
+    "file": "07-encapsulation-03-udp-4791-rocev2.png",
+    "caption": "8.1 stage 3 \u2014 UDP destination port 4791/RoCEv2 encapsulation"
+  },
+  {
+    "file": "07-encapsulation-04-bth-rdma-data.png",
+    "caption": "8.1 stage 4 \u2014 BTH/RDMA transport header and data portion"
+  },
+  {
+    "file": "08-correlation-01-remote-memory-values.png",
+    "caption": "8.7 stage 1 \u2014 Operation and remote-memory values correlated to transmitted fields"
+  },
+  {
+    "file": "08-correlation-02-endpoint-context-values.png",
+    "caption": "8.7 stage 2 \u2014 Endpoint and sequencing context correlation"
+  },
+  {
+    "file": "08-correlation-03-local-only-values.png",
+    "caption": "8.7 stage 3 \u2014 Local-only source address, LKEY and WR ID correlation"
+  },
+  {
+    "file": "08-correlation-04-complete-write-evidence-chain.png",
+    "caption": "8.7 stage 4 \u2014 Complete Python\u2192WR\u2192packet\u2192ACK\u2192completion\u2192memory evidence chain"
+  },
+  {
+    "file": "09-mobile-390-hardware-software-viewport.png",
+    "caption": "Mobile 390px viewport \u2014 compact software/hardware relationship and persistent compact navigation"
+  }
+]

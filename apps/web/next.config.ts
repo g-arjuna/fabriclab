@@ -6,6 +6,7 @@ const withMDX = createMDX({
 });
 
 export default withMDX({
+  devIndicators: false,
   pageExtensions: ["ts", "tsx", "md", "mdx"],
   turbopack: {
     root: path.resolve(__dirname),

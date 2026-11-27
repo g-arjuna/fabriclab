@@ -4,8 +4,9 @@ import type { ReactNode } from "react";
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { guidedStagesForSection } from "./guidedStagePlans";
+import { selectGuidedInstructionWithReferences, type GuidedInstructionSelection } from "./guidedContent";
 import { GuidedVisualStageProvider } from "./guidedVisualState";
-import { AuthoredCopy, FoundationEvidenceNote, FoundationVisual, sectionsForLesson, useFoundationBindings, type FoundationSourceSection } from "./foundationsShared";
+import { AuthoredCopy, FoundationEvidenceNote, FoundationVisual, foundationSections, sectionsForLesson, useFoundationBindings, type FoundationSourceSection } from "./foundationsShared";
 
 const lesson11Instruction = [
   "Before discussing networking, we need to understand the computer that is sending or receiving data. A server contains a CPU that executes instructions, RAM that stores instructions and data, and a network interface that communicates with other computers.",
@@ -21,37 +22,47 @@ const lesson11Observation = [
   "**What changed:** The CPU is now executing kernel code rather than application code. We have changed the software being executed, not the physical processor.\n\n| Application execution | Kernel execution |\n|---|---|\n| Executes application instructions | Executes operating-system instructions |\n| Normally runs with user-mode privileges | Performs privileged operating-system work |\n| Requests services when needed | Manages and protects shared resources |\n| Uses the computer's CPU and memory | Uses the same computer's CPU and memory |\n\nThe kernel is software running on the CPU. It is not another physical device between the application and memory.",
 ];
 
-function StageLead({ label }: { label: string }) {
-  return <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-2 text-sm text-cyan-50" data-testid="guided-stage-explanation">Current demonstration: <span className="font-semibold">{label}</span></div>;
+function StageExplanation({ selection, children, testId }: { selection: GuidedInstructionSelection; children: ReactNode; testId: string }) {
+  return (
+    <div
+      className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-3"
+      data-testid={testId}
+      data-copy-units={selection.referenceLabels?.length ? selection.referenceLabels.join(";") : selection.unitIndexes.map((index) => index + 1).join(",")}
+      data-copy-unit-count={selection.unitCount}
+    >
+      <div className="space-y-3 text-sm leading-6 text-cyan-50">{children}</div>
+    </div>
+  );
 }
 
-export function AuthoredFoundationsLesson({ lesson, onComplete }: { lesson: FoundationSourceSection["lesson"]; onComplete: () => void }) {
+export function AuthoredFoundationsLesson({ lesson, onComplete, onPreviousLesson, hasPreviousLesson }: { lesson: FoundationSourceSection["lesson"]; onComplete: () => void; onPreviousLesson?: () => void; hasPreviousLesson?: boolean }) {
   const bindings = useFoundationBindings();
   const steps: GuidedStep[] = sectionsForLesson(lesson).flatMap((section) => {
     const stages = guidedStagesForSection(section.id);
     return stages.map((stage, stageIndex): GuidedStep => {
       const exactLesson11 = section.id === "1.1";
       const finalStage = stageIndex === stages.length - 1;
-      let body: ReactNode = stageIndex === 0
-        ? <><AuthoredCopy text={section.learnerCopy} bindings={bindings} testId={`learner-copy-${section.componentId}`} /><FoundationEvidenceNote section={section} /></>
-        : (
-          <>
-            <StageLead label={stage.label} />
-            <details className="rounded-xl border border-white/10 bg-white/4 px-3 py-2 text-sm" data-testid="full-authored-explanation">
-              <summary className="cursor-pointer font-medium text-slate-300">Review the complete subsection explanation</summary>
-              <div className="mt-3"><AuthoredCopy text={section.learnerCopy} bindings={bindings} testId={`learner-copy-${section.componentId}-reference`} /></div>
-            </details>
-          </>
-        );
+      const instructionSelection = selectGuidedInstructionWithReferences(foundationSections, section.id, section.learnerCopy, stageIndex, stages.length, stage.instructionUnitIndexes, stage.instructionReferences);
+      let body: ReactNode = (
+        <>
+          <StageExplanation selection={instructionSelection} testId="guided-stage-explanation">
+            <AuthoredCopy text={instructionSelection.text} bindings={bindings} testId={`learner-copy-${section.componentId}-stage-${stageIndex}`} />
+          </StageExplanation>
+          <details className="rounded-xl border border-white/10 bg-white/4 px-3 py-2 text-sm" data-testid="full-authored-explanation">
+            <summary className="cursor-pointer font-medium text-slate-300">Review the complete subsection explanation</summary>
+            <div className="mt-3"><AuthoredCopy text={section.learnerCopy} bindings={bindings} testId={`learner-copy-${section.componentId}-reference`} /></div>
+          </details>
+          {stageIndex === 0 ? <FoundationEvidenceNote section={section} /> : null}
+        </>
+      );
       let observation: ReactNode | undefined = finalStage && section.revealCopy
         ? <AuthoredCopy text={section.revealCopy} bindings={bindings} testId={`guided-reveal-${section.componentId}`} />
         : undefined;
       if (exactLesson11) {
         body = (
-          <>
-            {stageIndex > 0 ? <StageLead label={stage.label} /> : null}
+          <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-3" data-testid="guided-stage-explanation">
             <AuthoredCopy text={lesson11Instruction[stageIndex]} bindings={bindings} testId={`learner-copy-${section.componentId}-${stageIndex}`} />
-          </>
+          </div>
         );
         observation = <AuthoredCopy text={lesson11Observation[stageIndex]} bindings={bindings} testId={`guided-observation-copy-${section.componentId}-${stageIndex}`} />;
       }
@@ -75,5 +86,5 @@ export function AuthoredFoundationsLesson({ lesson, onComplete }: { lesson: Foun
       };
     });
   });
-  return <GuidedLesson lessonId={lesson} steps={steps} onComplete={onComplete} finalActionLabel="Complete lesson" />;
+  return <GuidedLesson lessonId={lesson} steps={steps} onComplete={onComplete} finalActionLabel="Complete lesson" onPreviousLesson={onPreviousLesson} hasPreviousLesson={hasPreviousLesson} />;
 }

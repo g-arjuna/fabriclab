@@ -86,17 +86,16 @@ test.describe("RDMA guided curriculum smoke", () => {
     await expect(page.getByTestId("rdma-curriculum-complete")).toBeVisible();
     expect(visited.size).toBe(8);
     const stateCounts = Object.fromEntries([...visited.entries()].map(([lesson, steps]) => [lesson, steps.length]));
-    expect(stateCounts).toMatchObject({
-      "guided-lesson-moving-data": expect.any(Number),
-      "guided-lesson-why-rdma": expect.any(Number),
-      "guided-lesson-memory": expect.any(Number),
-      "guided-lesson-queues": expect.any(Number),
-      "guided-lesson-send-receive": expect.any(Number),
-      "guided-lesson-write": expect.any(Number),
-      "guided-lesson-read": expect.any(Number),
-      "guided-lesson-packets": expect.any(Number),
+    expect(stateCounts).toEqual({
+      "guided-lesson-moving-data": 81,
+      "guided-lesson-why-rdma": 22,
+      "guided-lesson-memory": 41,
+      "guided-lesson-queues": 16,
+      "guided-lesson-send-receive": 35,
+      "guided-lesson-write": 32,
+      "guided-lesson-read": 29,
+      "guided-lesson-packets": 51,
     });
-    expect(Object.values(stateCounts).every((count) => count > 1)).toBe(true);
     expectNoBrowserErrors(tracker);
   });
 
@@ -129,13 +128,35 @@ test.describe("RDMA guided curriculum smoke", () => {
       await clickNextAndWait(page, before);
     }
     await expect(page.getByTestId("guided-position")).toContainText("Stage 4 of 4");
-    await expect(page.getByTestId("lesson-action")).toBeDisabled();
-    await expect(page.getByText(/completion is recorded only after each guided state has been viewed/i)).toBeVisible();
+    await expect(page.getByTestId("lesson-action")).toBeEnabled();
+    await expect(page.getByTestId("lesson-action")).toHaveText("Review first unvisited section");
+    await expect(page.getByText(/Direct reference access is available/i)).toBeVisible();
+    await page.getByTestId("lesson-action").click();
+    await expect(page.getByTestId("guided-position")).toContainText("1.1");
+    await expect(page.getByTestId("guided-position")).toContainText("Stage 3 of 4");
 
     await page.getByRole("button", { name: /Restart this lesson/i }).click();
     await expect(page.getByTestId("guided-position")).toContainText("1.1");
     await expect(page.getByTestId("guided-position")).toContainText("Stage 1 of 4");
     await expect(page.getByTestId("lesson-action")).toBeEnabled();
+    expectNoBrowserErrors(tracker);
+  });
+
+
+  test("Previous crosses a lesson boundary into the preceding lesson's final guided state", async ({ page }) => {
+    const tracker = trackErrors(page);
+    await openCurriculum(page, "why-rdma");
+    await expect(page.getByTestId("guided-lesson-why-rdma")).toBeVisible();
+    await expect(page.getByTestId("guided-position")).toContainText("3.1");
+    await expect(page.getByTestId("guided-position")).toContainText("Stage 1 of 5");
+    await expect(page.getByTestId("lesson-previous")).toBeVisible();
+
+    await page.getByTestId("lesson-previous").click();
+    await expect(page.getByTestId("guided-lesson-moving-data")).toBeVisible();
+    await expect(page.getByTestId("guided-position")).toContainText("2.12");
+    await expect(page.getByTestId("guided-position")).toContainText("Stage 4 of 4");
+    await page.getByTestId("lesson-previous").click();
+    await expect(page.getByTestId("guided-position")).toContainText("Stage 3 of 4");
     expectNoBrowserErrors(tracker);
   });
 
@@ -155,7 +176,7 @@ test.describe("RDMA guided curriculum smoke", () => {
     expect(order.visual).toBeLessThan(order.inspect);
     expect(order.scrollWidth).toBeLessThanOrEqual(order.innerWidth + 1);
     await expect(page.getByTestId("lesson-action")).toBeVisible();
-    await expect(page.getByTestId("guided-next-preview")).toBeVisible();
+    await expect(page.getByTestId("guided-next-preview")).not.toBeVisible();
   });
 
   test("unversioned legacy completion is not silently carried into the redesigned guided course", async ({ page }) => {

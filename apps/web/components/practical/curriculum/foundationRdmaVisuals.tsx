@@ -435,19 +435,22 @@ export function ResourcesQuestionVisual() {
 }
 
 export function ConstructedWorkRequestVisual() {
-  const source = useGuidedVisualStage() >= 2;
+  const stage = useGuidedVisualStage();
+  const memoryDescribed = stage >= 1;
+  const source = stage >= 2;
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="illustrative-work-request">
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="illustrative-work-request" data-guided-stage={stage} data-memory-described={memoryDescribed ? "true" : "false"}>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_10rem_minmax(0,1.1fr)] xl:items-center">
-        <FoundationBox title="constructed instruction · unposted Work Request" tone="metadata" active testId="unposted-work-request">
-          <div className="font-mono text-xs">operation SEND<br />WR ID 7<br />SGE addr 0x1000 · length 5 · lkey 0x11<br />request successful send completion · signalled</div>
+        <FoundationBox title="constructed instruction · unposted illustrative Work Request" tone="metadata" active testId="unposted-work-request">
+          <div className="font-mono text-xs">operation SEND<br />WR ID 7</div>
+          {memoryDescribed ? <div className="mt-2 rounded-lg border border-fuchsia-300/25 bg-fuchsia-300/8 px-2 py-1.5 font-mono text-xs" data-testid="wr-local-memory-description">SGE addr 0x1000 · length 5 · lkey 0x11<br />request successful send completion · signalled</div> : <div className="mt-2 rounded-lg border border-dashed border-white/10 px-2 py-1.5 text-xs text-slate-500" data-testid="wr-local-memory-description-pending">local memory description not attached yet</div>}
           <div className="mt-2 text-[11px]">constructed in application software; not submitted and not a packet</div>
         </FoundationBox>
-        <LinkLine label="SGE references memory; payload is not copied into the instruction" kind="reference" direction="right" active testId="wr-memory-reference" />
-        <MemoryObject title="separate source memory cells" />
+        <LinkLine label={memoryDescribed ? "SGE references the registered memory; payload is not copied into the instruction" : "memory reference appears when the SGE is attached"} kind="reference" direction="right" active={memoryDescribed} testId="wr-memory-reference" />
+        <MemoryObject title="existing registered source memory cells" />
       </div>
-      {source ? <SourceExcerpt path="python/exp_b_send_recv.py" start={131} end={138} label="optional actual SEND construction excerpt · separate run" /> : null}
-      <SmallNote>No queue is shown as containing this request yet. WR ID is application-chosen local identification; it is not a packet sequence number.</SmallNote>
+      {source ? <SourceExcerpt path="python/exp_b_send_recv.py" start={131} end={138} label="actual SEND construction excerpt · separate recorded experiment, not this illustrative object" /> : null}
+      <SmallNote>No queue is shown as containing this request yet. WR ID is application-chosen local identification; it is not a packet sequence number. The illustrative request remains unposted.</SmallNote>
     </div>
   );
 }

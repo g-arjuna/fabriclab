@@ -1022,52 +1022,57 @@ function protocolFields(packetValue: PacketRecord, protocolPart: string) {
 function Lesson81() {
   const sendPacket = packet(sendExperiment, "request");
   const layers = [
-    ["ethernet", "Ethernet II", "Follow Ethernet delivery"],
-    ["internet", "IPv4", "Follow IP delivery"],
-    ["user datagram", "UDP", "Open UDP encapsulation"],
-    ["base transport", "BTH", "Inspect the RDMA header"],
+    ["ethernet", "Ethernet II", "frame delivery"],
+    ["internet", "IPv4", "network delivery"],
+    ["user datagram", "UDP", "RoCEv2 encapsulation"],
+    ["base transport", "BTH", "RDMA transport"],
   ] as const;
   const stage = useGuidedVisualStage();
-  const selected = stage === 1 ? 0 : stage === 2 ? 3 : stage === 3 ? 3 : 3;
-  const fields = protocolFields(sendPacket, layers[selected][0]);
+  const highlightedLayerIndexes = stage === 1 ? [0, 1] : stage === 2 ? [2] : stage === 3 ? [3] : [];
+  const inspectedProtocols = stage === 1 ? [layers[0][0], layers[1][0]] : stage === 2 ? [layers[2][0]] : stage === 3 ? [layers[3][0]] : [];
+  const inspectedFields = inspectedProtocols.flatMap((protocol) => protocolFields(sendPacket, protocol));
   return (
     <OperationShell title="RoCEv2 encapsulation in the actual SEND packet" testId="visual-8-1">
       <div className="rounded-xl border border-orange-300/20 bg-orange-300/6 p-3" data-testid="packet-layer-strip">
         <div className="flex flex-wrap gap-1" aria-label="packet encapsulation layers">
-          {layers.map(([key, label], index) => <span key={key} data-testid={`layer-${key.replace(/\s+/g, "-")}`} className={cx("rounded-lg border px-3 py-2 text-xs font-semibold", selected === index ? "border-orange-300/60 bg-orange-300/20 text-orange-50" : "border-white/10 bg-slate-950/50 text-slate-400")}>{label}</span>)}
-          <span className="rounded-lg border border-sky-300/25 bg-sky-300/8 px-3 py-2 text-xs font-semibold text-sky-100">application payload / operation-specific fields</span><span className="rounded-lg border border-lime-300/25 bg-lime-300/8 px-3 py-2 text-xs font-semibold text-lime-100">transport integrity field</span>
+          {layers.map(([key, label], index) => <span key={key} data-testid={`layer-${key.replace(/\s+/g, "-")}`} className={cx("rounded-lg border px-3 py-2 text-xs font-semibold", highlightedLayerIndexes.includes(index) ? "border-orange-300/60 bg-orange-300/20 text-orange-50" : "border-white/10 bg-slate-950/50 text-slate-400")}>{label}</span>)}
+          <span className={cx("rounded-lg border px-3 py-2 text-xs font-semibold", stage === 3 ? "border-sky-300/45 bg-sky-300/14 text-sky-50" : "border-sky-300/25 bg-sky-300/8 text-sky-100")}>application payload / operation-specific fields</span><span className="rounded-lg border border-lime-300/25 bg-lime-300/8 px-3 py-2 text-xs font-semibold text-lime-100">transport integrity field</span>
         </div>
         <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
           <div className="rounded-lg border border-white/10 bg-slate-950/45 p-3">
             {stage === 0 ? (
               <div data-testid="packet-orientation-panel">
                 <div className="text-xs font-semibold text-cyan-100">Captured packet orientation</div>
-                <div className="mt-2 text-xs leading-5 text-slate-300">This is one actual RoCEv2 SEND packet from the recorded laboratory. The guided sequence will identify its outer delivery headers, destination endpoint field, operation opcode, applicable memory headers and evidence boundaries.</div>
+                <div className="mt-2 text-xs leading-5 text-slate-300">This is one actual RoCEv2 SEND packet from the recorded laboratory. First locate the capture and the connection direction; then inspect the nested delivery, encapsulation and RDMA transport responsibilities.</div>
                 <div className="mt-2 font-mono text-[11px] text-cyan-50">{sendPacket.id} · {sendPacket.sourceIp} → {sendPacket.destinationIp} · {sendPacket.opcodeName}</div>
+              </div>
+            ) : stage === 4 ? (
+              <div className="text-xs leading-5 text-slate-300" data-testid="encapsulation-conclusion-panel">
+                <div className="font-semibold text-cyan-100">What this capture establishes</div>
+                <div className="mt-2">Ethernet and IPv4 deliver the frame between network endpoints. UDP destination port 4791 identifies RoCEv2 encapsulation. The BTH and operation-specific portion carry the RDMA transport information and, in this SEND request, the application payload.</div>
+                <div className="mt-2">The corresponding application observation is established only by correlating the separate receive completion and verified memory evidence; the packet bytes alone do not prove what B's application later observed.</div>
               </div>
             ) : (
               <>
-                <div className="text-xs font-semibold text-cyan-100">{layers[selected][1]} decoded fields</div>
+                <div className="text-xs font-semibold text-cyan-100">{stage === 1 ? "Ethernet and IPv4 decoded fields" : stage === 2 ? "UDP decoded fields" : "BTH and RDMA data decoded fields"}</div>
                 <dl className="mt-2 grid gap-1 font-mono text-[11px] text-slate-300" data-testid="selected-layer-fields">
-                  {fields.map((field) => <div key={field.name} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2"><dt className="text-slate-500">{field.name}</dt><dd className="break-all">{field.value}</dd></div>)}
+                  {inspectedFields.map((field, fieldIndex) => <div key={`${field.name}-${fieldIndex}`} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2"><dt className="text-slate-500">{field.name}</dt><dd className="break-all">{field.value}</dd></div>)}
                 </dl>
+                {stage === 2 ? <div className="mt-2 text-xs text-slate-400">Destination UDP port 4791 identifies RoCEv2 encapsulation; UDP itself does not provide Reliable Connected transport semantics.</div> : null}
+                {stage === 3 ? <div className="mt-2 text-xs text-slate-400" data-testid="rdma-transport-essential-fields">BTH destination QPN {exact(sendPacket.destinationQpn)} · opcode {sendPacket.opcodeName} · PSN {exact(sendPacket.psn, "decimal")} · application payload {packetLengthBreakdown(sendPacket).applicationPayloadBytes} bytes. This SEND request has no RETH.</div> : null}
               </>
             )}
           </div>
           <div className="rounded-lg border border-white/10 bg-slate-950/45 p-3">
             <CompactPacketCard packetValue={sendPacket} title={`actual packet ${sendPacket.id}`} />
             <div className="mt-2 rounded-lg border border-white/10 bg-white/4 p-2 text-[11px] text-slate-400" data-testid="packet-capture-topology-inset">control TCP {rdmaEvidence.hosts.hosta.controlIp} ⇄ {rdmaEvidence.hosts.hostb.controlIp} · data RoCEv2 {rdmaEvidence.hosts.hosta.dataIp} ⇄ {rdmaEvidence.hosts.hostb.dataIp}</div>
-            <div className="mt-2 text-xs leading-5 text-slate-400">Outer delivery fields remain visible as context. UDP destination port 4791 identifies RoCEv2 encapsulation; UDP does not itself supply RC reliability. Not every RoCEv2 packet contains application payload; ACKs and READ requests are examples. <CaptureLink experimentValue={sendExperiment} /></div>
+            <div className="mt-2 text-xs leading-5 text-slate-400">The complete decode remains available below. Detailed destination-QPN, opcode, extended-header and length accounting are examined in the following authored subsections. <CaptureLink experimentValue={sendExperiment} /></div>
           </div>
         </div>
       </div>
-      {stage >= 4 ? (
+      {stage >= 3 ? (
         <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-3 text-sm leading-6 text-cyan-50" data-testid="guided-packet-interpretation">
-          {stage === 4 ? "This ordinary SEND request has no RETH. The packet does not name B's destination application memory; B's posted receive description supplies that local destination." : null}
-          {stage === 5 ? `Destination QPN ${exact(sendPacket.destinationQpn)} selects the receiving endpoint context. UDP port 4791 identifies RoCEv2 encapsulation, not the application buffer.` : null}
-          {stage === 6 ? `This packet carries ${packetLengthBreakdown(sendPacket).applicationPayloadBytes} application bytes plus ${packetLengthBreakdown(sendPacket).transportPaddingBytes} transport padding bytes. Packet payload length, operation length and registered capacity are different quantities.` : null}
-          {stage === 7 ? "The corresponding application evidence is B's receive completion and verified received bytes. The packet alone does not prove what the application later observed." : null}
-          {stage >= 8 ? "Conclusion boundary: the packet establishes captured transport structure and content at the capture point. It does not by itself establish application memory placement, application consumption, or a globally ordered cross-host event sequence." : null}
+          {stage === 3 ? "The RDMA transport header identifies the receiving endpoint context and operation. In this ordinary SEND request there is no remote-memory header; B's posted receive description supplies destination memory outside the packet." : "Conclusion boundary: the packet establishes captured transport structure and content at the capture point. It does not by itself establish application memory placement, application consumption, or a globally ordered cross-host event sequence."}
         </div>
       ) : null}
       <details className="rounded-xl border border-white/10 bg-white/4 p-3"><summary className="cursor-pointer text-sm text-orange-100">Inspect complete packet evidence</summary><div className="mt-3"><PacketInspector packetValue={sendPacket} /></div></details>
@@ -1150,30 +1155,37 @@ function Lesson83() {
 
 function Lesson84() {
   const choices = [
-    ["send", packet(sendExperiment, "request"), sendExperiment, "SEND Only"],
+    ["send", packet(sendExperiment, "request"), sendExperiment, "SEND request"],
     ["send-ack", packet(sendExperiment, "acknowledgement"), sendExperiment, "SEND ACK"],
-    ["write", packet(writeExperiment, "request"), writeExperiment, "WRITE Only"],
+    ["write", packet(writeExperiment, "request"), writeExperiment, "WRITE request"],
     ["write-ack", packet(writeExperiment, "acknowledgement"), writeExperiment, "WRITE ACK"],
     ["read-request", packet(readExperiment, "request"), readExperiment, "READ request"],
-    ["read-response", packet(readExperiment, "response"), readExperiment, "READ response Only"],
+    ["read-response", packet(readExperiment, "response"), readExperiment, "READ response"],
   ] as const;
   const stage = useGuidedVisualStage();
-  const selected = guidedEnum(stage, ["send", "write", "read-request", "read-response", "write"] as const);
-  const showPadding = stage >= 3;
-  const choice = choices.find((item) => item[0] === selected) || choices[0];
+  const representativeId = stage === 0 ? "send" : stage === 1 ? "read-request" : "write-ack";
+  const choice = choices.find((item) => item[0] === representativeId) || choices[0];
   const current = choice[1];
   const experimentValue = choice[2];
   const lengths = packetLengthBreakdown(current);
   const transferLength = operationTransferLength(experimentValue, current);
   const capacityEvidence = capacityEvidenceForPacket(experimentValue, current);
   const transferRelevant = transferLength !== null;
-  const hasAeth = current.role === "acknowledgement" || current.role === "response";
-  const rdmaStructure: string[] = ["BTH"];
-  if (current.reth) rdmaStructure.push("RETH");
-  if (hasAeth) rdmaStructure.push("AETH");
-  if (lengths.applicationPayloadBytes) rdmaStructure.push(`payload ${lengths.applicationPayloadBytes}`);
-  if (lengths.transportPaddingBytes) rdmaStructure.push(`padding ${lengths.transportPaddingBytes}`);
-  rdmaStructure.push("ICRC");
+  function structureFor(packetValue: (typeof choices)[number][1]) {
+    const packetLengths = packetLengthBreakdown(packetValue);
+    const structure: string[] = ["BTH"];
+    if (packetValue.reth) structure.push("RETH");
+    if (packetValue.role === "acknowledgement" || packetValue.role === "response") structure.push("AETH");
+    if (packetLengths.applicationPayloadBytes) structure.push(`payload ${packetLengths.applicationPayloadBytes}`);
+    if (packetLengths.transportPaddingBytes) structure.push(`padding ${packetLengths.transportPaddingBytes}`);
+    structure.push("ICRC");
+    return structure;
+  }
+  function categoryFor(id: string) {
+    if (id === "read-request") return "remote-memory metadata, no application payload";
+    if (id.endsWith("ack")) return "transport acknowledgement, no application payload";
+    return "carries application payload";
+  }
   const rows = [
     ["related registered capacity", capacityEvidence ? capacityEvidence.region.length : "not correlated", capacityEvidence ? capacityEvidence.basis : "no validated memory association"],
     ["operation transfer length", transferRelevant ? `${transferLength} bytes` : "not applicable", transferRelevant ? "requested operation bytes; distinct from bytes carried by this packet" : "no operation-level transfer length established"],
@@ -1185,11 +1197,18 @@ function Lesson84() {
   ] as const;
   return (
     <OperationShell title="Capacity, transfer length, padding and frame length" testId="visual-8-4">
+      <div className="grid gap-2 lg:grid-cols-3" data-testid="packet-length-category-strip">
+        {([
+          ["payload", "Packets carrying application payload", "SEND request · WRITE request · READ response", stage === 0],
+          ["metadata", "Remote-memory metadata without payload", "READ request names source/length but carries no payload", stage === 1],
+          ["ack", "Transport acknowledgements", "SEND ACK · WRITE ACK carry transport state without payload", stage === 2],
+        ] as const).map(([id, title, detail, active]) => <div key={id} className={cx("rounded-xl border p-3 text-sm", active ? "border-orange-300/50 bg-orange-300/12 text-orange-50" : "border-white/10 bg-white/4 text-slate-300")}><div className="font-semibold">{title}</div><div className="mt-1 text-xs opacity-80">{detail}</div></div>)}
+      </div>
       <div className="rounded-xl border border-orange-300/20 bg-orange-300/6 p-3" data-testid="packet-length-breakdown" data-packet-id={current.id} data-transfer-length={transferRelevant ? transferLength : "not-applicable"} data-app-payload={lengths.applicationPayloadBytes} data-padding={lengths.transportPaddingBytes} data-frame-length={lengths.totalFrameBytes}>
-        <div className="mb-3 font-semibold text-orange-100">{choice[3]} · selected packet opcode {current.opcodeName} · {current.id}</div>
-        <div className="flex min-w-0 flex-wrap overflow-hidden rounded-lg border border-white/10 font-mono text-[11px]" data-testid="packet-structural-strip" data-structure={`Ethernet/IPv4/UDP>${rdmaStructure.join(">")}`}>
+        <div className="mb-3 font-semibold text-orange-100">Representative selected form: {choice[3]} · opcode {current.opcodeName} · {current.id}</div>
+        <div className="flex min-w-0 flex-wrap overflow-hidden rounded-lg border border-white/10 font-mono text-[11px]" data-testid="packet-structural-strip" data-structure={`Ethernet/IPv4/UDP>${structureFor(current).join(">")}`}>
           <span className="bg-slate-700/80 px-2 py-2 text-slate-100">Ethernet / IPv4 / UDP</span>
-          {rdmaStructure.map((segment) => {
+          {structureFor(current).map((segment) => {
             const style = segment === "BTH" ? "bg-cyan-700/35 text-cyan-50" : segment === "RETH" ? "bg-orange-500/30 text-orange-50" : segment === "AETH" ? "bg-emerald-500/25 text-emerald-50" : segment.startsWith("payload") ? "bg-sky-500/30 text-sky-50" : segment.startsWith("padding") ? "bg-violet-500/30 text-violet-50" : "bg-slate-800 text-slate-300";
             return <span key={segment} className={`px-2 py-2 ${style}`} style={segment.startsWith("payload") ? { flexGrow: lengths.applicationPayloadBytes } : undefined}>{segment}</span>;
           })}
@@ -1197,10 +1216,26 @@ function Lesson84() {
         <div className="mt-1 text-[11px] text-slate-500" data-testid="packet-structure-evidence-note">AETH and ICRC: Protocol structure; individual fields are not decoded in the current reference export.</div>
         <div className="mt-1 text-[11px] text-slate-500" data-testid="packet-strip-scale-note">Structural illustration, not a byte-width measurement or raw-span assertion. Frame length in the capture is distinct from additional physical Ethernet transmission overhead.</div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{rows.map(([label, value, note]) => <div key={label} className="rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2"><div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</div><div className="mt-1 font-mono text-sm text-slate-100">{value}</div><div className="text-[11px] text-slate-500">{note}</div></div>)}</div>
-        {(selected as string) === "read-request" ? <div className="mt-3 rounded-lg border border-sky-300/25 bg-sky-300/8 p-2 text-xs text-sky-50" data-testid="read-request-length-distinction">READ request: operation transfer length {transferLength}; application payload in this request packet {lengths.applicationPayloadBytes}. The requested data length is not request-packet payload.</div> : null}
+        {(representativeId as string) === "read-request" ? <div className="mt-3 rounded-lg border border-sky-300/25 bg-sky-300/8 p-2 text-xs text-sky-50" data-testid="read-request-length-distinction">READ request: operation transfer length {transferLength}; application payload in this request packet {lengths.applicationPayloadBytes}. The requested data length is not request-packet payload.</div> : null}
         {current.role === "acknowledgement" ? <div className="mt-3 rounded-lg border border-sky-300/25 bg-sky-300/8 p-2 text-xs text-sky-50" data-testid="ack-transfer-length-note">ACK: application payload in this packet is zero, but the associated operation-level transfer length is {transferLength}. Do not infer that the operation transferred zero bytes.</div> : null}
       </div>
-      {current.payloadHex ? <ByteCells hex={showPadding ? current.dataHex : current.payloadHex} label={showPadding ? "application payload plus transport padding" : "unpadded application payload bytes"} /> : null}
+      <div className="rounded-xl border border-white/10 bg-slate-950/40 p-3" data-testid="packet-length-comparison-matrix" data-packet-forms={choices.map((item) => item[0]).join(",")}>
+        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">Complete six-packet recorded comparison</div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-2 xl:grid-cols-3">
+          {choices.map(([id, packetValue, , label]) => {
+            const itemLengths = packetLengthBreakdown(packetValue);
+            return (
+              <div key={id} className={cx("rounded-xl border p-3", id === representativeId ? "border-orange-300/45 bg-orange-300/10" : "border-white/10 bg-white/4")} data-testid={`packet-length-form-${id}`} data-structure={`Ethernet/IPv4/UDP>${structureFor(packetValue).join(">")}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-slate-100">{label}</div><div className="font-mono text-[10px] text-slate-500">{packetValue.id}</div></div>
+                <div className="mt-1 text-[11px] text-cyan-100/80">{categoryFor(id)}</div>
+                <div className="mt-2 font-mono text-[11px] leading-5 text-slate-300">{structureFor(packetValue).join(" → ")}</div>
+                <div className="mt-2 grid grid-cols-3 gap-1 font-mono text-[10px] text-slate-400"><span>payload {itemLengths.applicationPayloadBytes}</span><span>padding {itemLengths.transportPaddingBytes}</span><span>frame {itemLengths.totalFrameBytes}</span></div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {current.payloadHex ? <details className="rounded-xl border border-white/10 bg-white/4 p-3"><summary className="cursor-pointer text-sm text-cyan-100">Inspect selected packet bytes</summary><div className="mt-3"><ByteCells hex={current.dataHex} label="application payload plus transport padding" /></div></details> : null}
     </OperationShell>
   );
 }
@@ -1286,56 +1321,72 @@ function Lesson87() {
   const writeWr = workRequest(writeExperiment, "rdma-write");
   const writePacket = packet(writeExperiment, "request");
   const rows = [
-    { id: "operation", label: "Operation", lines: [127, 128, 129, 130], path: "python/exp_c_write.py", wr: writeWr.opcode, wire: writePacket.opcodeName, direct: true, explanation: "application-selected operation ↔ wire opcode" },
-    { id: "remote-address", label: "Remote address", lines: [133], path: "python/exp_c_write.py", wr: exact(writeWr.remoteAddress), wire: exact(writePacket.reth!.virtualAddress), direct: true, explanation: "remote destination address ↔ RETH address" },
-    { id: "remote-key", label: "Remote key", lines: [133], path: "python/exp_c_write.py", wr: exact(writeWr.remoteRkey), wire: exact(writePacket.reth!.rkey), direct: true, explanation: "remote access key ↔ RETH RKEY" },
-    { id: "length", label: "Length", lines: [125, 126], path: "python/exp_c_write.py", wr: `${writeWr.byteLength} bytes`, wire: `${exact(writePacket.reth!.dmaLength, "decimal")} bytes`, direct: true, explanation: "local SGE transfer length ↔ RETH DMA length" },
-    { id: "destination-qpn", label: "Destination QPN", lines: [178], path: "python/rdma_common.py", wr: "QP endpoint context", wire: exact(writePacket.destinationQpn), direct: true, explanation: "helper configuration `attr.dest_qp_num` establishes the peer endpoint context; program lines 115–116 merely log prepared values. QP endpoint context → BTH destination QPN" },
-    { id: "psn", label: "PSN", lines: [188], path: "python/rdma_common.py", wr: "QP transport sequencing state", wire: exact(writePacket.psn), direct: true, explanation: "helper configuration `attr.sq_psn` establishes initial send sequencing; program lines 115–116 merely log prepared values. QP transport sequencing state → PSN" },
-    { id: "local-address", label: "Local address", lines: [125], path: "python/exp_c_write.py", wr: exact(writeWr.localAddress), wire: "No direct transmitted field", direct: false, explanation: "local source memory metadata is used by the initiator provider" },
-    { id: "lkey", label: "LKEY", lines: [126], path: "python/exp_c_write.py", wr: exact(writeWr.localLkey), wire: "No direct transmitted field", direct: false, explanation: "the normal local key is not carried as a BTH/RETH field" },
-    { id: "wr-id", label: "WR ID", lines: [127], path: "python/exp_c_write.py", wr: exact(writeWr.wrId), wire: "No direct transmitted field", direct: false, explanation: "WR ID is local completion bookkeeping, not PSN" },
+    { id: "operation", label: "Operation", group: "remote", lines: [127, 128, 129, 130], path: "python/exp_c_write.py", wr: writeWr.opcode, wire: writePacket.opcodeName, direct: true, explanation: "application-selected operation ↔ wire opcode" },
+    { id: "remote-address", label: "Remote address", group: "remote", lines: [133], path: "python/exp_c_write.py", wr: exact(writeWr.remoteAddress), wire: exact(writePacket.reth!.virtualAddress), direct: true, explanation: "remote destination address ↔ RETH address" },
+    { id: "remote-key", label: "Remote key", group: "remote", lines: [133], path: "python/exp_c_write.py", wr: exact(writeWr.remoteRkey), wire: exact(writePacket.reth!.rkey), direct: true, explanation: "remote access key ↔ RETH RKEY" },
+    { id: "length", label: "Length", group: "remote", lines: [125, 126], path: "python/exp_c_write.py", wr: `${writeWr.byteLength} bytes`, wire: `${exact(writePacket.reth!.dmaLength, "decimal")} bytes`, direct: true, explanation: "local SGE transfer length ↔ RETH DMA length" },
+    { id: "destination-qpn", label: "Destination QPN", group: "context", lines: [178], path: "python/rdma_common.py", wr: "QP endpoint context", wire: exact(writePacket.destinationQpn), direct: true, explanation: "helper configuration `attr.dest_qp_num` establishes the peer endpoint context; program lines 115–116 merely log prepared values. QP endpoint context → BTH destination QPN" },
+    { id: "psn", label: "PSN", group: "context", lines: [188], path: "python/rdma_common.py", wr: "QP transport sequencing state", wire: exact(writePacket.psn), direct: true, explanation: "helper configuration `attr.sq_psn` establishes initial send sequencing; program lines 115–116 merely log prepared values. QP transport sequencing state → PSN" },
+    { id: "local-address", label: "Local address", group: "local", lines: [125], path: "python/exp_c_write.py", wr: exact(writeWr.localAddress), wire: "No direct transmitted field", direct: false, explanation: "local source memory metadata is used by the initiator provider" },
+    { id: "lkey", label: "LKEY", group: "local", lines: [126], path: "python/exp_c_write.py", wr: exact(writeWr.localLkey), wire: "No direct transmitted field", direct: false, explanation: "the normal local key is not carried as a BTH/RETH field" },
+    { id: "wr-id", label: "WR ID", group: "local", lines: [127], path: "python/exp_c_write.py", wr: exact(writeWr.wrId), wire: "No direct transmitted field", direct: false, explanation: "WR ID is local completion bookkeeping, not PSN" },
   ] as const;
   const stage = useGuidedVisualStage();
-  const selected = guidedEnum(stage, ["remote-address", "remote-key", "length", "length", "length", "remote-address"] as const);
-  const payloadMatchVisible = stage >= 3;
-  const active = rows.find((row) => row.id === selected) || rows[0];
+  const group = stage === 0 ? "remote" : stage === 1 ? "context" : stage === 2 ? "local" : "chain";
+  const activeRows = rows.filter((row) => group === "chain" || row.group === group);
+  const active = activeRows[0] || rows[0];
   const targetAfter = snapshot(memoryRegion(writeExperiment, "hostb"), "c:memory:hostb:after");
   const payloadMatches = hexEqual(targetAfter.hex, writePacket.payloadHex);
+  const groupTitle = group === "remote" ? "Values describing the operation and remote memory" : group === "context" ? "Values derived from endpoint and transport context" : group === "local" ? "Values that remain local" : "Complete recorded WRITE evidence chain";
   return (
     <OperationShell title="Actual Python → WR → packet correlation" testId="visual-8-7">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" role="group" aria-label="select WRITE correlation field">
-        {rows.map((row) => <div key={row.id} data-testid={`correlate-${row.id}`} className={cx("rounded-xl border px-3 py-2 text-center text-xs font-semibold", selected === row.id && stage <= 2 ? "border-orange-300/55 bg-orange-300/15 text-orange-50" : "border-white/10 bg-white/4 text-slate-300")}>{row.label}</div>)}
+      <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-3" data-testid="correlation-group-heading">
+        <div className="font-semibold text-cyan-50">{groupTitle}</div>
+        <div className="mt-1 text-xs text-cyan-100/75">All previously supported field relationships remain visible in compact groups; no separate click is required for every field.</div>
       </div>
-      <div className="grid gap-3 xl:grid-cols-3" data-testid="selected-code-wire-chain" data-field={active.id} data-direct-field={active.direct ? "true" : "false"}>
-        <section className="rounded-xl border border-white/10 bg-slate-950/50 p-3" data-testid="correlation-source-lines">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">embedded Python source</div>
-          <div className="mt-1 font-mono text-[10px] text-slate-500">{active.path}</div>
-          <div className="mt-2 space-y-1 font-mono text-xs text-cyan-50">{active.lines.map((line) => <div key={line} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 rounded bg-cyan-300/8 px-1.5 py-1"><span className="text-right text-slate-500">{line}</span><code className="whitespace-pre-wrap break-words">{lineText(active.path, line)}</code></div>)}</div>
-        </section>
-        <section className="rounded-xl border border-cyan-300/25 bg-cyan-300/8 p-3" data-testid="correlation-runtime-value"><div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100/70">runtime WR/evidence</div><div className="mt-2 break-words font-mono text-sm text-cyan-50">{active.wr}</div></section>
-        <section className="rounded-xl border border-orange-300/25 bg-orange-300/8 p-3" data-testid="correlation-packet-value"><div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-orange-100/70">captured packet field</div><div className="mt-2 break-words font-mono text-sm text-orange-50">{active.wire}</div></section>
-      </div>
-      <div className="rounded-xl border border-white/10 bg-white/4 p-3 text-sm text-slate-300" data-testid="correlation-field-explanation">{active.explanation}{active.direct ? "." : "; there is no corresponding transmitted BTH/RETH field."}</div>
+      {group !== "chain" ? (
+        <div className="grid gap-3" data-testid="selected-code-wire-chain" data-field={active.id} data-group={group}>
+          {activeRows.map((row) => (
+            <section key={row.id} className="rounded-xl border border-white/10 bg-slate-950/45 p-3" data-testid={`correlate-${row.id}`} data-direct-field={row.direct ? "true" : "false"}>
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(10rem,0.7fr)_minmax(10rem,0.7fr)]">
+                <div>
+                  <div className="text-sm font-semibold text-slate-100">{row.label}</div>
+                  <div className="mt-1 font-mono text-[10px] text-slate-500">{row.path}</div>
+                  <div className="mt-2 space-y-1 font-mono text-xs text-cyan-50" data-testid={`correlation-source-lines-${row.id}`}>{row.lines.map((line) => <div key={line} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 rounded bg-cyan-300/8 px-1.5 py-1"><span className="text-right text-slate-500">{line}</span><code className="whitespace-pre-wrap break-words">{lineText(row.path, line)}</code></div>)}</div>
+                </div>
+                <div className="rounded-lg border border-cyan-300/25 bg-cyan-300/8 p-2" data-testid={`correlation-runtime-${row.id}`}><div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100/70">runtime WR/evidence</div><div className="mt-2 break-words font-mono text-xs text-cyan-50">{row.wr}</div></div>
+                <div className="rounded-lg border border-orange-300/25 bg-orange-300/8 p-2" data-testid={`correlation-packet-${row.id}`}><div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-orange-100/70">captured packet field</div><div className="mt-2 break-words font-mono text-xs text-orange-50">{row.wire}</div></div>
+              </div>
+              <div className="mt-3 rounded-lg border border-white/10 bg-white/4 p-2 text-sm text-slate-300" data-testid={`correlation-explanation-${row.id}`}>{row.explanation}{row.direct ? "." : "; there is no corresponding transmitted BTH/RETH field."}</div>
+            </section>
+          ))}
+        </div>
+      ) : null}
+      {group === "local" ? <div className="rounded-xl border border-amber-300/20 bg-amber-300/7 p-3 text-sm text-amber-50" data-testid="local-only-correlation-conclusion">Local virtual address, LKEY and WR ID are necessary to construct and complete local work, but they do not have corresponding transmitted BTH/RETH fields in the illustrated WRITE operation.</div> : null}
       <div className="grid gap-3 xl:grid-cols-2">
         <WorkRequestCard request={writeWr} testId="correlation-write-wr" />
         <CompactPacketCard packetValue={writePacket} title={`actual WRITE packet ${writePacket.id}`} />
       </div>
-      <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/6 p-3" data-testid="complete-write-evidence-chain">
-        <div className="font-semibold text-emerald-100">Complete compact causal chain</div>
-        <div className="mt-3 grid gap-2 md:grid-cols-4 xl:grid-cols-7">
-          {[
-            ["Python source", "construction + post_send"],
-            ["Work Request", writeWr.id],
-            ["Captured request", writePacket.id],
-            ["Transport response", packet(writeExperiment, "acknowledgement").id],
-            ["Application completion", completionFor(writeExperiment, "hosta").id],
-            ["Synchronization", "write_done → zero-entry target poll"],
-            ["Verified memory", "c:memory:hostb:after"],
-          ].map(([label, detail]) => <div key={label} className="rounded-lg border border-white/10 bg-slate-950/45 p-2"><div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-100/75">{label}</div><div className="mt-1 break-words font-mono text-[10px] leading-4 text-slate-300">{detail}</div></div>)}
-        </div>
-      </div>
-      {payloadMatchVisible ? <div className="rounded-xl border border-emerald-300/25 bg-emerald-300/8 p-3 text-sm text-emerald-50" data-testid="write-payload-target-match" data-equal={payloadMatches ? "true" : "false"}>Unpadded packet payload equals the recorded target after snapshot across the observed {bytesFromHex(writePacket.payloadHex).length} bytes: {payloadMatches ? "exact match" : "mismatch"}.</div> : null}
+      {group === "chain" ? (
+        <>
+          <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/6 p-3" data-testid="complete-write-evidence-chain">
+            <div className="font-semibold text-emerald-100">Python source → Work Request → captured packets → completions → synchronized verified memory</div>
+            <div className="mt-3 grid gap-2 md:grid-cols-4 xl:grid-cols-8">
+              {[
+                ["Python source", "construction + post_send"],
+                ["Submitted Work Request", writeWr.id],
+                ["Captured WRITE request", writePacket.id],
+                ["Captured transport ACK", packet(writeExperiment, "acknowledgement").id],
+                ["Writer completion", completionFor(writeExperiment, "hosta").id],
+                ["TCP synchronization", "write_done control signal"],
+                ["Target CQ observation", "zero-entry poll"],
+                ["Verified target memory", "c:memory:hostb:after"],
+              ].map(([label, detail]) => <div key={label} className="rounded-lg border border-white/10 bg-slate-950/45 p-2"><div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-100/75">{label}</div><div className="mt-1 break-words font-mono text-[10px] leading-4 text-slate-300">{detail}</div></div>)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-emerald-300/25 bg-emerald-300/8 p-3 text-sm text-emerald-50" data-testid="write-payload-target-match" data-equal={payloadMatches ? "true" : "false"}>Unpadded packet payload equals the recorded target after snapshot across the observed {bytesFromHex(writePacket.payloadHex).length} bytes: {payloadMatches ? "exact match" : "mismatch"}.</div>
+        </>
+      ) : null}
       <details className="rounded-xl border border-white/10 bg-white/4 p-3"><summary className="cursor-pointer text-sm text-cyan-100">Inspect complete WRITE source excerpt</summary><div className="mt-3"><SourceLines path="python/exp_c_write.py" start={124} end={140} title="WRITE construction, submission and completion polling" /></div></details>
     </OperationShell>
   );

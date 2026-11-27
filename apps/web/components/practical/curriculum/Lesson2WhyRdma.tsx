@@ -2,6 +2,6 @@
 
 import { AuthoredFoundationsLesson } from "./AuthoredFoundationsLesson";
 
-export function Lesson2WhyRdma({ onComplete }: { onComplete: () => void }) {
-  return <AuthoredFoundationsLesson lesson="why-rdma" onComplete={onComplete} />;
+export function Lesson2WhyRdma({ onComplete, onPreviousLesson, hasPreviousLesson }: { onComplete: () => void; onPreviousLesson?: () => void; hasPreviousLesson?: boolean }) {
+  return <AuthoredFoundationsLesson lesson="why-rdma" onComplete={onComplete} onPreviousLesson={onPreviousLesson} hasPreviousLesson={hasPreviousLesson} />;
 }

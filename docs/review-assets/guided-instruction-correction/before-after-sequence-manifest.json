@@ -1,0 +1,129 @@
+{
+  "beforeCommit": "7c253c641bab022ac3ec05c50e285aaedb26269e",
+  "beforeCaptureDirectory": "../guided-instruction-correction-before",
+  "afterCaptureDirectory": ".",
+  "note": "Focused sequences only; these are not exhaustive captures of all 307 revised guided states.",
+  "sequences": [
+    {
+      "sequence": "hardware-software-responsibilities",
+      "before": [
+        "guided-instruction-correction-before/before-01-hardware-software-stage-1.png",
+        "guided-instruction-correction-before/before-01-hardware-software-stage-2.png",
+        "guided-instruction-correction-before/before-01-hardware-software-stage-3.png",
+        "guided-instruction-correction-before/before-01-hardware-software-stage-4.png"
+      ],
+      "after": [
+        "guided-instruction-correction/01-hardware-software-stage-1.png",
+        "guided-instruction-correction/01-hardware-software-stage-2.png",
+        "guided-instruction-correction/01-hardware-software-stage-3.png",
+        "guided-instruction-correction/01-hardware-software-stage-4.png"
+      ],
+      "comparison": "Before: serial physical chain and detached explanatory cards. After: software overlays the same CPU and instruction/memory relationships are demonstrated inside the architecture."
+    },
+    {
+      "sequence": "first-and-second-process-creation",
+      "before": [
+        "guided-instruction-correction-before/before-02-process-01-program-on-storage.png",
+        "guided-instruction-correction-before/before-02-process-02-first-process-started.png",
+        "guided-instruction-correction-before/before-02-process-03-address-space-already-complete.png",
+        "guided-instruction-correction-before/before-02-process-04-second-process-started.png"
+      ],
+      "after": [
+        "guided-instruction-correction/02-process-01-program-on-storage.png",
+        "guided-instruction-correction/02-process-02-first-process-address-space.png",
+        "guided-instruction-correction/02-process-03-second-independent-process.png",
+        "guided-instruction-correction/02-process-04-shared-read-only-frame.png"
+      ],
+      "comparison": "Before: shared, demand, unmapped and future comparison information appeared before the causal process sequence. After: storage, first process, second process and shared mapping are introduced causally."
+    },
+    {
+      "sequence": "virtual-address-translation",
+      "before": [
+        "guided-instruction-correction-before/before-03-translation-01-first-process-read.png",
+        "guided-instruction-correction-before/before-03-translation-02-second-process-mapping.png",
+        "guided-instruction-correction-before/before-03-translation-03-permitted-store.png",
+        "guided-instruction-correction-before/before-03-translation-04-rejected-store.png"
+      ],
+      "after": [
+        "guided-instruction-correction/03-translation-01-process-a-load-returned.png",
+        "guided-instruction-correction/03-translation-02-process-c-same-address.png",
+        "guided-instruction-correction/03-translation-03-permitted-store-byte-change.png",
+        "guided-instruction-correction/03-translation-04-read-only-store-rejected.png"
+      ],
+      "comparison": "Before: load/store mechanisms and the translation answer remained visible across highlight-heavy states. After: active instruction, process context, returned byte, permitted mutation and protection fault are sequential."
+    },
+    {
+      "sequence": "continuous-copy-reference-memory-history",
+      "before": [
+        "guided-instruction-correction-before/before-04-copy-reference-01-references-see-xello.png",
+        "guided-instruction-correction-before/before-04-copy-reference-02-independent-copy-source-reset.png",
+        "guided-instruction-correction-before/before-04-copy-reference-03-final-original-unchanged.png"
+      ],
+      "after": [
+        "guided-instruction-correction/04-copy-reference-01-beta-write-xello.png",
+        "guided-instruction-correction/04-copy-reference-02-copy-created-from-xello.png",
+        "guided-instruction-correction/04-copy-reference-03-copy-modified-original-stable.png"
+      ],
+      "comparison": "Before: the source silently returned from XELLO to HELLO when the copy example began. After: the copy is created from the currently displayed XELLO source and subsequent mutation is independent."
+    },
+    {
+      "sequence": "simplified-tcp-segmentation-comparison",
+      "before": [
+        "guided-instruction-correction-before/before-05-tcp-01-first-segment-dense-interface.png",
+        "guided-instruction-correction-before/before-05-tcp-02-remaining-segment-dense-interface.png",
+        "guided-instruction-correction-before/before-05-tcp-03-comparison-frame-focus.png"
+      ],
+      "after": [
+        "guided-instruction-correction/05-tcp-01-first-segment-aligned-ranges.png",
+        "guided-instruction-correction/05-tcp-02-second-segment-aligned-ranges.png",
+        "guided-instruction-correction/05-tcp-03-all-boundaries-comparison-no-frame-selected.png"
+      ],
+      "comparison": "Before: packet-table and raw-field inspection dominated segmentation and the final comparison remained frame-focused. After: aligned stream/segment/read rows are primary, full evidence remains optional, and final comparison selects no single frame."
+    },
+    {
+      "sequence": "progressive-work-request-construction",
+      "before": [
+        "guided-instruction-correction-before/before-06-work-request-01-entire-instruction-visible.png",
+        "guided-instruction-correction-before/before-06-work-request-02-attach-already-visible-memory.png",
+        "guided-instruction-correction-before/before-06-work-request-03-actual-source-inspection.png"
+      ],
+      "after": [
+        "guided-instruction-correction/06-work-request-01-operation-and-id-only.png",
+        "guided-instruction-correction/06-work-request-02-memory-description-attached.png",
+        "guided-instruction-correction/06-work-request-03-actual-source-inspection.png"
+      ],
+      "comparison": "Before: the whole instruction was visible from the first state, making the attachment stage largely redundant. After: operation/ID, local memory description and actual source inspection are distinct meaningful states."
+    },
+    {
+      "sequence": "complete-packet-encapsulation",
+      "before": [
+        "guided-instruction-correction-before/before-07-encapsulation-01-captured-packet.png",
+        "guided-instruction-correction-before/before-07-encapsulation-02-outer-headers.png",
+        "guided-instruction-correction-before/before-07-encapsulation-03-destination-qpn-before-udp.png",
+        "guided-instruction-correction-before/before-07-encapsulation-04-extended-headers.png"
+      ],
+      "after": [
+        "guided-instruction-correction/07-encapsulation-01-captured-packet-orientation.png",
+        "guided-instruction-correction/07-encapsulation-02-ethernet-ipv4-delivery.png",
+        "guided-instruction-correction/07-encapsulation-03-udp-4791-rocev2.png",
+        "guided-instruction-correction/07-encapsulation-04-bth-rdma-data.png"
+      ],
+      "comparison": "Before: the implementation jumped from outer headers toward destination QPN/BTH without a coherent IPv4/UDP encapsulation sequence. After: Ethernet/IPv4, UDP 4791 and BTH/RDMA data are examined in order."
+    },
+    {
+      "sequence": "local-versus-transmitted-rdma-fields",
+      "before": [
+        "guided-instruction-correction-before/before-08-correlation-01-remote-address-only-selection.png",
+        "guided-instruction-correction-before/before-08-correlation-02-length-selection.png",
+        "guided-instruction-correction-before/before-08-correlation-03-evidence-boundary.png"
+      ],
+      "after": [
+        "guided-instruction-correction/08-correlation-01-remote-memory-values.png",
+        "guided-instruction-correction/08-correlation-02-endpoint-context-values.png",
+        "guided-instruction-correction/08-correlation-03-local-only-values.png",
+        "guided-instruction-correction/08-correlation-04-complete-write-evidence-chain.png"
+      ],
+      "comparison": "Before: only selected correlation rows were reachable and several local/transmitted relationships were passive labels. After: transmitted remote-memory values, endpoint context, local-only values and the complete evidence chain are grouped explicitly."
+    }
+  ]
+}

@@ -171,13 +171,18 @@ test.describe("guided operations semantics", () => {
     await expect(page.getByTestId("packet-orientation-panel")).toContainText("actual RoCEv2 SEND packet");
     await next(page);
     await expect(page.getByTestId("selected-layer-fields")).toBeVisible();
-    await next(page, 2);
-    await expect(page.getByTestId("packet-layer-strip")).toContainText("BTH");
+    await expect(page.getByTestId("packet-layer-strip")).toContainText("Ethernet and IPv4 decoded fields");
+    await expect(page.getByTestId("selected-layer-fields")).toContainText("52:54:00:00:13:0a");
+    await expect(page.getByTestId("selected-layer-fields")).toContainText("10.10.10.1");
     await next(page);
-    await expect(page.getByTestId("guided-packet-interpretation")).toContainText("no RETH");
-    await next(page, 2);
-    await expect(page.getByTestId("guided-packet-interpretation")).toContainText("application bytes");
-    await next(page, 2);
+    await expect(page.getByTestId("packet-layer-strip")).toContainText("UDP decoded fields");
+    await expect(page.getByTestId("selected-layer-fields")).toContainText("4791");
+    await next(page);
+    await expect(page.getByTestId("packet-layer-strip")).toContainText("BTH");
+    await expect(page.getByTestId("rdma-transport-essential-fields")).toContainText("no RETH");
+    await expect(page.getByTestId("rdma-transport-essential-fields")).toContainText("application payload 50 bytes");
+    await next(page);
+    await expect(page.getByTestId("encapsulation-conclusion-panel")).toContainText("UDP destination port 4791");
     await expect(page.getByTestId("guided-packet-interpretation")).toContainText("does not by itself establish application memory placement");
     expect(await page.locator('[data-testid="packet-layer-strip"] button').count()).toBe(0);
 
@@ -190,13 +195,55 @@ test.describe("guided operations semantics", () => {
     await expect(page.getByTestId("reth-context-panel")).toHaveAttribute("data-has-reth", "true");
     await expect(page.getByTestId("reth-context-panel")).toContainText("source being read");
 
+
+    await jumpToSection(page, /Count the bytes: buffer capacity, transfer length, padding and frame size/);
+    await expect(page.getByTestId("guided-article")).toHaveAttribute("data-guided-step", "operations-v2-8-4--compare-payload-carrying-packets");
+    await expect(page.getByTestId("guided-article")).toContainText("Compare packets carrying application payload");
+    await expect(page.getByTestId("packet-length-comparison-matrix")).toHaveAttribute(
+      "data-packet-forms",
+      "send,send-ack,write,write-ack,read-request,read-response",
+    );
+    for (const form of ["send", "send-ack", "write", "write-ack", "read-request", "read-response"]) {
+      await expect(page.getByTestId(`packet-length-form-${form}`)).toBeVisible();
+    }
+    await expect(page.getByTestId("packet-length-form-send-ack")).toHaveAttribute("data-structure", /AETH/);
+    await expect(page.getByTestId("packet-length-form-write-ack")).toHaveAttribute("data-structure", /AETH/);
+    await expect(page.getByTestId("packet-length-form-read-response")).toHaveAttribute("data-structure", /AETH/);
+    await expect(page.getByTestId("packet-length-form-read-response")).toContainText("payload 46");
+    await expect(page.getByTestId("packet-length-form-read-request")).toContainText("payload 0");
+    await expect(page.getByTestId("packet-length-breakdown")).toHaveAttribute("data-packet-id", "b:packet:3");
+    await next(page);
+    await expect(page.getByTestId("packet-length-breakdown")).toHaveAttribute("data-packet-id", "d:packet:3");
+    await expect(page.getByTestId("read-request-length-distinction")).toContainText("application payload in this request packet 0");
+    await next(page);
+    await expect(page.getByTestId("packet-length-breakdown")).toHaveAttribute("data-packet-id", "c:packet:8");
+    await expect(page.getByTestId("ack-transfer-length-note")).toContainText("application payload in this packet is zero");
+
     await jumpToSection(page, /A complete correlation: Python → WR → packet → memory → completion/);
-    await expect(page.getByTestId("selected-code-wire-chain")).toHaveAttribute("data-field", "remote-address");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("remote address and key");
+    await expect(page.getByTestId("selected-code-wire-chain")).toHaveAttribute("data-group", "remote");
+    for (const row of ["operation", "remote-address", "remote-key", "length"]) {
+      await expect(page.getByTestId(`correlate-${row}`)).toBeVisible();
+    }
+    await expect(page.getByTestId("correlation-packet-remote-address")).not.toContainText("No direct transmitted field");
     await next(page);
-    await expect(page.getByTestId("selected-code-wire-chain")).toHaveAttribute("data-field", "remote-key");
+    await expect(page.getByTestId("selected-code-wire-chain")).toHaveAttribute("data-group", "context");
+    await expect(page.getByTestId("correlate-destination-qpn")).toBeVisible();
+    await expect(page.getByTestId("correlate-psn")).toBeVisible();
+    await expect(page.getByTestId("correlation-explanation-destination-qpn")).toContainText("configuration");
     await next(page);
-    await expect(page.getByTestId("selected-code-wire-chain")).toHaveAttribute("data-field", "length");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("Other fields are local");
+    await expect(page.getByTestId("selected-code-wire-chain")).toHaveAttribute("data-group", "local");
+    for (const row of ["local-address", "lkey", "wr-id"]) {
+      await expect(page.getByTestId(`correlate-${row}`)).toBeVisible();
+      await expect(page.getByTestId(`correlation-packet-${row}`)).toContainText("No direct transmitted field");
+    }
+    await expect(page.getByTestId("local-only-correlation-conclusion")).toContainText("do not have corresponding transmitted BTH/RETH fields");
     await next(page);
+    await expect(page.getByTestId("selected-code-wire-chain")).toHaveCount(0);
+    await expect(page.getByTestId("complete-write-evidence-chain")).toContainText("Captured WRITE request");
+    await expect(page.getByTestId("complete-write-evidence-chain")).toContainText("Captured transport ACK");
+    await expect(page.getByTestId("complete-write-evidence-chain")).toContainText("Verified target memory");
     await expect(page.getByTestId("write-payload-target-match")).toHaveAttribute("data-equal", "true");
 
     await jumpToSection(page, /Investigation: where did the SEND land/);

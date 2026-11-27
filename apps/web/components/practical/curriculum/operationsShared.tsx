@@ -8,6 +8,7 @@ import rawSections from "@/lib/practical/operationsContent.generated.json";
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { guidedStagesForSection } from "./guidedStagePlans";
+import { selectGuidedInstructionWithReferences } from "./guidedContent";
 import { GuidedVisualStageProvider } from "./guidedVisualState";
 import { OperationsVisual } from "./operationsVisuals";
 import { cx } from "./visuals";
@@ -143,39 +144,45 @@ function actionFor(section: OperationSourceSection) {
   return explicit[section.id] || "Continue";
 }
 
-export function AuthoredOperationsLesson({ lesson, onComplete }: { lesson: OperationSourceSection["lesson"]; onComplete: () => void }) {
+export function AuthoredOperationsLesson({ lesson, onComplete, onPreviousLesson, hasPreviousLesson }: { lesson: OperationSourceSection["lesson"]; onComplete: () => void; onPreviousLesson?: () => void; hasPreviousLesson?: boolean }) {
   const steps: GuidedStep[] = operationsSectionsForLesson(lesson).flatMap((section) => {
     const stages = guidedStagesForSection(section.id);
-    return stages.map((stage, stageIndex): GuidedStep => ({
-      id: `${section.componentId}--${stage.id}`,
-      title: section.title,
-      subsectionId: section.id,
-      stageIndex,
-      stageCount: stages.length,
-      stageLabel: stage.label,
-      nextPreview: stage.nextPreview,
-      body: stageIndex === 0 ? (
-        <>
-          <ProvenanceLegend />
-          <OperationsCopy text={section.learnerCopy} references={section.references} testId={`learner-copy-${section.componentId}`} />
-        </>
-      ) : (
-        <>
-          <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-2 text-sm text-cyan-50" data-testid="guided-stage-explanation">Current demonstration: <span className="font-semibold">{stage.label}</span></div>
-          <details className="rounded-xl border border-white/10 bg-white/4 px-3 py-2 text-sm" data-testid="full-authored-explanation">
-            <summary className="cursor-pointer font-medium text-slate-300">Review the complete subsection explanation</summary>
-            <div className="mt-3"><OperationsCopy text={section.learnerCopy} references={section.references} testId={`learner-copy-${section.componentId}-reference`} /></div>
-          </details>
-        </>
-      ),
-      observation: stageIndex === stages.length - 1 && section.revealCopy ? <OperationsCopy text={section.revealCopy} references={section.references} testId={`guided-reveal-${section.componentId}`} /> : undefined,
-      visual: (
-        <GuidedVisualStageProvider sectionId={section.id} stage={stageIndex} stageId={stage.id}>
-          <OperationsVisual key={`${section.componentId}-${stage.id}`} sectionId={section.id} />
-        </GuidedVisualStageProvider>
-      ),
-      inspect: section.inspectCopy ? <OperationsCopy text={section.inspectCopy} references={section.references} testId={`inspect-copy-${section.componentId}`} /> : undefined,
-    }));
+    return stages.map((stage, stageIndex): GuidedStep => {
+      const instructionSelection = selectGuidedInstructionWithReferences(operationSections, section.id, section.learnerCopy, stageIndex, stages.length, stage.instructionUnitIndexes, stage.instructionReferences);
+      return {
+        id: `${section.componentId}--${stage.id}`,
+        title: section.title,
+        subsectionId: section.id,
+        stageIndex,
+        stageCount: stages.length,
+        stageLabel: stage.label,
+        nextPreview: stage.nextPreview,
+        body: (
+          <>
+            <div
+              className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-3"
+              data-testid="guided-stage-explanation"
+              data-copy-units={instructionSelection.referenceLabels?.length ? instructionSelection.referenceLabels.join(";") : instructionSelection.unitIndexes.map((index) => index + 1).join(",")}
+              data-copy-unit-count={instructionSelection.unitCount}
+            >
+              <OperationsCopy className="text-cyan-50" text={instructionSelection.text} references={stageIndex === 0 ? section.references : []} testId={`learner-copy-${section.componentId}-stage-${stageIndex}`} />
+            </div>
+            <details className="rounded-xl border border-white/10 bg-white/4 px-3 py-2 text-sm" data-testid="full-authored-explanation">
+              <summary className="cursor-pointer font-medium text-slate-300">Review the complete subsection explanation</summary>
+              <div className="mt-3"><OperationsCopy text={section.learnerCopy} references={section.references} testId={`learner-copy-${section.componentId}-reference`} /></div>
+            </details>
+            {stageIndex === 0 ? <ProvenanceLegend /> : null}
+          </>
+        ),
+        observation: stageIndex === stages.length - 1 && section.revealCopy ? <OperationsCopy text={section.revealCopy} references={section.references} testId={`guided-reveal-${section.componentId}`} /> : undefined,
+        visual: (
+          <GuidedVisualStageProvider sectionId={section.id} stage={stageIndex} stageId={stage.id}>
+            <OperationsVisual key={`${section.componentId}-${stage.id}`} sectionId={section.id} />
+          </GuidedVisualStageProvider>
+        ),
+        inspect: section.inspectCopy ? <OperationsCopy text={section.inspectCopy} references={section.references} testId={`inspect-copy-${section.componentId}`} /> : undefined,
+      };
+    });
   });
-  return <GuidedLesson lessonId={lesson} steps={steps} onComplete={onComplete} finalActionLabel="Complete lesson" />;
+  return <GuidedLesson lessonId={lesson} steps={steps} onComplete={onComplete} finalActionLabel="Complete lesson" onPreviousLesson={onPreviousLesson} hasPreviousLesson={hasPreviousLesson} />;
 }

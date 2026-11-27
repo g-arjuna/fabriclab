@@ -2,6 +2,6 @@
 
 import { AuthoredFoundationsLesson } from "./AuthoredFoundationsLesson";
 
-export function Lesson3Memory({ onComplete }: { onComplete: () => void }) {
-  return <AuthoredFoundationsLesson lesson="memory" onComplete={onComplete} />;
+export function Lesson3Memory({ onComplete, onPreviousLesson, hasPreviousLesson }: { onComplete: () => void; onPreviousLesson?: () => void; hasPreviousLesson?: boolean }) {
+  return <AuthoredFoundationsLesson lesson="memory" onComplete={onComplete} onPreviousLesson={onPreviousLesson} hasPreviousLesson={hasPreviousLesson} />;
 }

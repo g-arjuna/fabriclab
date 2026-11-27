@@ -53,11 +53,12 @@ function HardwareMachine({
   );
 }
 
-function GuidedHardwareComponent({ title, responsibility, active = false, testId }: { title: string; responsibility: string; active?: boolean; testId: string }) {
+function GuidedHardwareComponent({ title, responsibility, active = false, testId, children }: { title: string; responsibility: string; active?: boolean; testId: string; children?: React.ReactNode }) {
   return (
     <div className={cx("mx-auto w-full max-w-xl rounded-2xl border px-4 py-3 text-center transition", active ? "border-cyan-300/55 bg-cyan-300/14 text-cyan-50 shadow-[0_0_28px_rgba(103,232,249,0.10)]" : "border-white/12 bg-slate-950/55 text-slate-300")} data-testid={testId}>
       <div className="text-sm font-semibold">{title}</div>
       <div className="mt-1 text-xs text-slate-400">{responsibility}</div>
+      {children ? <div className="mt-2">{children}</div> : null}
     </div>
   );
 }
@@ -68,10 +69,54 @@ function VerticalLink({ label, active = false }: { label: string; active?: boole
       <div className={cx("h-5 w-px", active ? "bg-cyan-300" : "bg-slate-600")} />
       <div className={cx("rounded-full border px-2 py-0.5 text-[10px]", active ? "border-cyan-300/40 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/4 text-slate-500")}>{label}</div>
       <div className={cx("h-5 w-px", active ? "bg-cyan-300" : "bg-slate-600")} />
-      <div className={cx("h-2 w-2 rotate-45 border-b border-r", active ? "border-cyan-300" : "border-slate-600")} />
+      <div className={cx("-my-1 font-mono text-sm leading-none", active ? "text-cyan-300" : "text-slate-600")}>↕</div>
     </div>
   );
 }
+
+function CompactMobileHostModel({ stage, softwareVisible, applicationActive, kernelActive, memoryActive }: { stage: number; softwareVisible: boolean; applicationActive: boolean; kernelActive: boolean; memoryActive: boolean }) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-slate-950/35 p-2 lg:hidden" data-testid="physical-host-model-compact">
+      {softwareVisible ? (
+        <div className="rounded-xl border border-violet-300/25 bg-violet-300/7 p-2" data-testid="mobile-software-relationships">
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className={cx("rounded-lg border border-dashed px-2 py-1.5", applicationActive ? "border-cyan-300/60 bg-cyan-300/14 text-cyan-50" : "border-violet-300/25 text-slate-200")}>
+              <div className="text-xs font-semibold">Application software</div>
+              <div className="text-[11px] opacity-80">user-level instructions</div>
+            </div>
+            <div className={cx("rounded-lg border border-dashed px-2 py-1.5", kernelActive ? "border-amber-300/60 bg-amber-300/14 text-amber-50" : "border-violet-300/25 text-slate-200")}>
+              <div className="text-xs font-semibold">Kernel software</div>
+              <div className="text-[11px] opacity-80">privileged services</div>
+            </div>
+          </div>
+          <div className="mx-auto mt-1 h-4 w-px bg-violet-300/65" aria-hidden="true" />
+          <div className="text-center text-[11px] leading-4 text-violet-100/80">both kinds of instructions execute on the same physical CPU</div>
+        </div>
+      ) : null}
+      <div className="mt-2 grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] items-center gap-1">
+        <div className={cx("rounded-xl border px-2 py-2 text-center", stage >= 2 || stage === 0 ? "border-cyan-300/45 bg-cyan-300/10 text-cyan-50" : "border-white/12 text-slate-300")} data-testid="mobile-hardware-cpu">
+          <div className="text-sm font-semibold">CPU + caches</div>
+          <div className="mt-1 text-[11px] leading-4 text-slate-300">{kernelActive ? "executing kernel instructions" : applicationActive ? "executing application instructions" : "executes software"}</div>
+          {applicationActive ? <div className="mt-1 rounded border border-cyan-300/25 px-1 py-0.5 font-mono text-[10px]">load byte → 0x48 returned</div> : null}
+          {kernelActive ? <div className="mt-1 rounded border border-amber-300/25 px-1 py-0.5 text-[10px] text-amber-50">privileged kernel work</div> : null}
+        </div>
+        <div className={cx("text-center font-mono text-lg", memoryActive ? "text-cyan-300" : "text-slate-500")} aria-label="bidirectional CPU memory access">↕</div>
+        <div className={cx("rounded-xl border px-2 py-2 text-center", memoryActive || stage === 0 ? "border-sky-300/40 bg-sky-300/10 text-sky-50" : "border-white/12 text-slate-300")} data-testid="mobile-hardware-memory">
+          <div className="text-sm font-semibold">Memory / RAM</div>
+          <div className="mt-1 text-[11px] leading-4 text-slate-300">shared physical memory system</div>
+          {applicationActive ? <div className="mt-1 rounded border border-sky-300/25 px-1 py-0.5 font-mono text-[10px]">byte value 0x48</div> : null}
+        </div>
+      </div>
+      <div className="my-1 text-center text-[11px] text-slate-400">bidirectional CPU memory access · device access when configured</div>
+      <div className="grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] items-center gap-1">
+        <div className="rounded-xl border border-white/12 px-2 py-2 text-center text-slate-300" data-testid="mobile-hardware-nic"><div className="text-sm font-semibold">NIC</div><div className="text-[11px]">transmit / receive</div></div>
+        <div className="text-center font-mono text-lg text-slate-500">↔</div>
+        <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-2 py-2 text-center text-cyan-100"><div className="text-sm font-semibold">Network</div><div className="text-[11px]">other computers</div></div>
+      </div>
+    </div>
+  );
+}
+
 
 export function HostHardwareSoftwareVisual() {
   const stage = useGuidedVisualStage();
@@ -83,7 +128,7 @@ export function HostHardwareSoftwareVisual() {
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="foundation-host-architecture" data-guided-stage={stage}>
       {softwareVisible ? (
-        <div className="rounded-2xl border border-violet-300/25 bg-violet-300/7 p-3" data-testid="software-responsibility-overlay">
+        <div className="hidden rounded-2xl border border-violet-300/25 bg-violet-300/7 p-3 lg:block" data-testid="software-responsibility-overlay">
           <div className="mb-3 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-200">Software · executable instructions, not additional hardware</div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className={cx("rounded-xl border border-dashed p-3", applicationActive ? "border-cyan-300/60 bg-cyan-300/14 text-cyan-50" : "border-violet-300/25 bg-slate-950/35 text-slate-200")} data-testid="application-software-box">
@@ -111,37 +156,42 @@ export function HostHardwareSoftwareVisual() {
         </div>
       ) : null}
 
-      <div className="space-y-0" data-testid="physical-host-model">
+      <CompactMobileHostModel stage={stage} softwareVisible={softwareVisible} applicationActive={applicationActive} kernelActive={kernelActive} memoryActive={memoryActive} />
+      <div className="hidden rounded-2xl border border-white/8 bg-slate-950/35 p-2 lg:block" data-testid="physical-host-model">
         <GuidedHardwareComponent
           title={kernelActive ? "Same physical CPU and caches · executing kernel instructions" : applicationActive ? "Same physical CPU and caches · executing application instructions" : "CPU and caches"}
-          responsibility="CPU: executes instructions"
+          responsibility="executes application or kernel instructions"
           active={cpuActive || stage === 0}
           testId="hardware-cpu"
-        />
-        <VerticalLink label="memory system" active={memoryActive} />
-        <GuidedHardwareComponent title="RAM" responsibility="RAM: stores instructions and data" active={memoryActive || stage === 0} testId="hardware-ram" />
-        <VerticalLink label="system/device interconnect" active={stage === 0} />
-        <GuidedHardwareComponent title="Network interface" responsibility="NIC: transmits and receives network traffic" active={stage === 0} testId="hardware-nic" />
-        <VerticalLink label="network" active={stage === 0} />
-        <div className="mx-auto w-full max-w-xl rounded-xl border border-white/10 bg-white/4 px-4 py-2 text-center text-xs text-slate-400" data-testid="network-cable">Network</div>
+        >
+          {applicationActive ? <div className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-2 py-1 font-mono text-[11px] text-cyan-50">load byte: read requested memory</div> : null}
+          {kernelActive ? <div className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-2 py-1 text-[11px] text-amber-50">CPU executes privileged kernel instructions for the requested service</div> : null}
+        </GuidedHardwareComponent>
+        <VerticalLink label="CPU memory access · load/store · bidirectional" active={memoryActive} />
+        <GuidedHardwareComponent
+          title="Memory system / RAM"
+          responsibility="shared physical memory system stores instructions and data"
+          active={memoryActive || stage === 0}
+          testId="hardware-ram"
+        >
+          {applicationActive ? <div className="rounded-lg border border-sky-300/30 bg-sky-300/10 px-2 py-1 font-mono text-[11px] text-sky-50">memory contains 0x48<br /><span className="text-emerald-100">0x48 returned to CPU/application</span></div> : null}
+        </GuidedHardwareComponent>
+        <VerticalLink label="device-access path to memory system · bidirectional when configured" active={stage === 0} />
+        <GuidedHardwareComponent title="Network interface" responsibility="NIC transmits and receives network traffic" active={stage === 0} testId="hardware-nic" />
+        <VerticalLink label="NIC transmission/reception · bidirectional network signalling" active={stage === 0} />
+        <div className="mx-auto w-full max-w-xl rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-4 py-2 text-center text-xs text-cyan-100" data-testid="network-cable">Network</div>
+        <div className="mt-2 text-center text-[10px] uppercase tracking-[0.14em] text-slate-500">simplified shared-system relationships · not a serial forwarding path for application data</div>
       </div>
 
       {stage === 2 ? (
-        <div className="grid gap-3 rounded-2xl border border-cyan-300/25 bg-cyan-300/7 p-3 lg:grid-cols-4" data-testid="application-memory-access">
-          <div className="rounded-xl border border-cyan-300/25 bg-slate-950/40 p-3"><div className="text-xs font-semibold text-cyan-100">Application instruction</div><div className="mt-1 font-mono text-xs">Read a byte from memory</div></div>
-          <div className="rounded-xl border border-cyan-300/25 bg-slate-950/40 p-3"><div className="text-xs font-semibold text-cyan-100">CPU</div><div className="mt-1 text-xs">executes the instruction</div></div>
-          <div className="rounded-xl border border-cyan-300/25 bg-slate-950/40 p-3"><div className="text-xs font-semibold text-cyan-100">Memory access</div><div className="mt-1 font-mono text-xs">memory contains 0x48</div></div>
-          <div className="rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-3"><div className="text-xs font-semibold text-emerald-100">Value returned</div><div className="mt-1 font-mono text-lg">0x48</div></div>
+        <div className="rounded-xl border border-cyan-300/25 bg-cyan-300/7 px-3 py-2 text-xs leading-5 text-cyan-50" data-testid="application-memory-access">
+          Application instruction → CPU memory access → memory contains 0x48 → 0x48 returned to the CPU/application. A CPU load may be served by caches rather than directly accessing physical DRAM.
         </div>
       ) : null}
 
       {stage === 3 ? (
-        <div className="rounded-2xl border border-amber-300/25 bg-amber-300/7 p-3" data-testid="kernel-service-flow">
-          <div className="grid gap-2 md:grid-cols-4">
-            {["Application requests a service", "CPU executes privileged kernel instructions", "Kernel performs the relevant service", "Application continues when appropriate"].map((item, index) => (
-              <div key={item} className="rounded-xl border border-amber-300/25 bg-slate-950/40 px-3 py-2 text-center text-xs text-amber-50"><span className="mr-1 font-mono text-amber-200">{index + 1}</span>{item}</div>
-            ))}
-          </div>
+        <div className="rounded-xl border border-amber-300/25 bg-amber-300/7 px-3 py-2 text-xs leading-5 text-amber-50" data-testid="kernel-service-flow">
+          Application requests a service → the same CPU executes privileged kernel instructions → the kernel performs the relevant service → control returns to the application when appropriate. No separate physical kernel component is introduced.
         </div>
       ) : null}
 
@@ -152,13 +202,13 @@ export function HostHardwareSoftwareVisual() {
   );
 }
 
-function ProcessMap({ name, active, frame, shared = false, demandTouched = false }: { name: "A" | "C"; active: boolean; frame: string; shared?: boolean; demandTouched?: boolean }) {
+function ProcessMap({ name, active, frame, shared = false, demandState = "hidden" }: { name: "A" | "C"; active: boolean; frame: string; shared?: boolean; demandState?: "hidden" | "unpopulated" | "populated" }) {
   const rows = [
     ["code", "0x0800–0x0fff", name === "A" ? "P3" : "P11", false],
     ["data / heap", "0x1000–0x1fff", frame, false],
-    ["shared library", "0x3000–0x30ff", "P12 · read-only shared", true],
+    ...(shared ? [["shared library", "0x3000–0x30ff", "P12 · read-only shared", true] as const] : []),
     ["stack", "0x7f00–0x7fff", name === "A" ? "P5" : "P13", false],
-    ["demand allocation", "0x4000–0x4fff", demandTouched ? (name === "A" ? "P8 · populated on touch" : "P14 · populated on touch") : "dotted · not yet populated", false],
+    ...(demandState !== "hidden" ? [["demand allocation", "0x4000–0x4fff", demandState === "populated" ? (name === "A" ? "P8 · populated on touch" : "P14 · populated on touch") : "dotted · virtual mapping not yet populated", false] as const] : []),
     ["unmapped gap", "…", "no physical frame", false],
   ] as const;
   return (
@@ -178,53 +228,83 @@ function ProcessMap({ name, active, frame, shared = false, demandTouched = false
 export function ProcessCreationVisual() {
   const stage = useGuidedVisualStage();
   const startedA = stage >= 1;
-  const startedC = stage >= 3;
-  const touched = stage >= 6;
-  const compare = stage >= 4;
+  const startedC = stage >= 2;
+  const sharedVisible = stage >= 3;
+  const demandVisible = stage >= 4;
+  const touched = stage >= 5;
+  const compare = stage >= 2;
+  const frames = [
+    ...(startedA ? ["P3", "P5", "P7"] : []),
+    ...(startedC ? ["P9", "P11", "P13"] : []),
+    ...(sharedVisible ? ["P12 RO"] : []),
+    ...(touched ? ["P8"] : []),
+  ];
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="process-creation-visual" data-guided-stage={stage}>
       <div className="grid gap-3 xl:grid-cols-[15rem_minmax(0,1fr)_15rem]">
         <FoundationBox title="storage" tone="neutral" active={stage === 0} testId="program-storage"><div className="font-mono text-xs">sender.py<br />python3 interpreter</div><div className="mt-1 text-[11px] text-slate-400">program stored on disk</div></FoundationBox>
-        <div className="grid gap-3 lg:grid-cols-2">
-          {startedA ? <ProcessMap name="A" active={stage === 1 || stage === 2 || compare} frame="P7" shared={stage >= 5} demandTouched={touched} /> : <FoundationBox title="process A" dashed tone="neutral">not started</FoundationBox>}
-          {startedC ? <ProcessMap name="C" active={stage === 3 || compare} frame="P9" shared={stage >= 5} demandTouched={touched} /> : <FoundationBox title="process C" dashed tone="neutral">not started</FoundationBox>}
+        <div className="grid gap-3 2xl:grid-cols-2">
+          {startedA ? <ProcessMap name="A" active={stage === 1 || compare} frame="P7" shared={sharedVisible} demandState={demandVisible ? (touched ? "populated" : "unpopulated") : "hidden"} /> : <FoundationBox title="process A" dashed tone="neutral">not started</FoundationBox>}
+          {startedC ? <ProcessMap name="C" active={stage === 2 || compare} frame="P9" shared={sharedVisible} demandState={demandVisible ? "unpopulated" : "hidden"} /> : <FoundationBox title="process C" dashed tone="neutral">not started</FoundationBox>}
         </div>
-        <FoundationBox title="one physical RAM" tone="memory" active={compare} testId="shared-physical-ram"><div className="flex flex-wrap gap-1 font-mono text-[11px]">{["P3", "P5", "P7", "P8", "P9", "P11", "P12 RO", "P13", "P14"].map((page) => <span key={page} className={cx("rounded border px-1.5 py-1", page.includes("12") ? stage >= 5 ? "border-violet-300/60 bg-violet-300/18" : "border-violet-300/30 bg-violet-300/10" : "border-sky-300/30 bg-sky-300/10")}>{page}</span>)}</div><div className="mt-2 text-[11px]">One shared read-only library page may be mapped into both processes; writable process memory remains independent.</div></FoundationBox>
+        <FoundationBox title="one physical RAM" tone="memory" active={compare} testId="shared-physical-ram">
+          {frames.length ? <div className="flex flex-wrap gap-1 font-mono text-[11px]">{frames.map((page) => <span key={page} className={cx("rounded border px-1.5 py-1", page.includes("12") ? sharedVisible ? "border-violet-300/60 bg-violet-300/18" : "border-violet-300/30 bg-violet-300/10" : "border-sky-300/30 bg-sky-300/10")}>{page}</span>)}</div> : <div className="text-xs text-slate-400">No process frames are populated yet.</div>}
+          <div className="mt-2 text-[11px]">{sharedVisible ? "The read-only library frame P12 is shared by both mappings; writable process memory remains independent." : "Only frames belonging to introduced processes are shown."}</div>
+        </FoundationBox>
       </div>
-      <SmallNote testId="same-va-different-frame">The same numerical virtual address <span className="font-mono">0x1000</span> maps to frame P7 in process A and frame P9 in process C. These are illustrative mappings in different address-space contexts.{touched ? " The demand-allocation rows are now populated because the memory was touched." : stage >= 2 ? " Demand-allocation rows remain dotted until touched." : ""}</SmallNote>
+      <SmallNote testId="same-va-different-frame">
+        {stage === 0 ? "The program exists on storage before any process or virtual-address mappings are introduced." : null}
+        {stage === 1 ? "Running the program establishes process A and its virtual address space. VA 0x1000 in process A maps to illustrative physical frame P7." : null}
+        {stage === 2 ? "Process C has an independent address-space context. The same numerical virtual address 0x1000 maps to frame P7 in process A and frame P9 in process C." : null}
+        {stage === 3 ? "Both processes can deliberately map the same read-only library frame P12 while their writable memory remains independent." : null}
+        {stage === 4 ? "Each process has a virtual demand-allocation range, but no physical frame is populated for that range yet." : null}
+        {stage >= 5 ? "Process A touched its demand-allocation range, so A's illustrative frame P8 is populated. Process C's corresponding range remains unpopulated because no access by C is shown." : null}
+      </SmallNote>
     </div>
   );
 }
 
 export function AddressTranslationVisual() {
   const stage = useGuidedVisualStage();
-  const process = stage >= 4 ? "C" : "A";
-  const readOnly = stage >= 7;
+  const process = stage >= 3 ? "C" : "A";
+  const isStore = stage >= 5;
+  const readOnly = stage >= 6;
   const frame = process === "A" ? "P7" : "P9";
   const initialValues = { A: "48", C: "99" } as const;
-  const storedC = stage >= 6;
+  const storedC = stage >= 5;
   const value = process === "C" && storedC ? "4c" : initialValues[process];
+  const translationVisible = stage === 1 || stage === 2 || stage >= 4;
+  const byteVisible = stage === 2 || stage >= 5;
+  const activeInstruction = isStore ? "store byte [0x1002] = 0x4c" : "load byte [0x1002]";
   const result = stage === 0
-    ? "A virtual address is introduced before any memory request is performed."
-    : stage < 3
-      ? `process ${process} context is active; VA 0x1002 translates through ${frame}+2`
-      : stage === 3
-        ? `load byte [0x1002] returned 0x${value} through ${frame}+2`
-        : stage < 6
-          ? `the same numerical VA 0x1002 is now interpreted in process C and translates through P9+2`
-          : stage === 6
-            ? "store byte [0x1002] = 0x4c completed in process C; byte is now 0x4c"
-            : stage === 7
-              ? "the mapping has been changed to read-only; no store has been attempted yet"
-              : `store byte [0x1002] = 0x4c rejected: protection fault in process ${process}; memory remains 0x${value}`;
+    ? "Process A is about to execute a load using virtual address 0x1002. No translation or memory result is shown yet."
+    : stage === 1
+      ? "The CPU's Memory Management Unit (MMU) resolves virtual address 0x1002 in process A's address-space context: frame P7 plus byte offset 2."
+      : stage === 2
+        ? "load byte [0x1002] returned 0x48. Address translation selected the location and checked permission; it is not a separate transfer of the application payload."
+        : stage === 3
+          ? "Process C now references the same numerical virtual address 0x1002. Its translation has not been shown yet."
+          : stage === 4
+            ? "In process C's independent address-space context, the same numerical virtual address resolves to frame P9 plus byte offset 2."
+            : stage === 5
+              ? "store byte [0x1002] = 0x4c completed in process C; the illustrated byte is now 0x4c."
+              : "A later store through the now read-only mapping is rejected: protection fault in process C; memory remains 0x4c.";
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="address-translation-visual" data-guided-stage={stage}>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_11rem_minmax(0,1fr)_11rem_minmax(0,1fr)] xl:items-center">
-        <FoundationBox title="CPU execution" tone="cpu" active testId="translation-cpu"><div className="font-mono text-xs">process {process}<br />load byte [0x1002]<br />store byte [0x1002] = 0x4c</div></FoundationBox>
-        <LinkLine label="instruction uses a virtual address" kind="instruction" active={stage >= 1} />
-        <FoundationBox title="MMU translation + permission check" tone="success" active={stage >= 2} testId="mmu-translation"><div className="font-mono text-xs">VA 0x1002<br />process {process} → {frame}+2<br />{readOnly ? "write permission absent" : "write permission present"}</div></FoundationBox>
-        <LinkLine label="translation is metadata, not payload movement" kind="translation" active={stage >= 2} />
-        <FoundationBox title="cache / memory system" tone="memory" active={stage >= 2} testId="translated-memory"><div className="font-mono text-xs">frame {frame}<br />offset 2 = 0x{value}<br />process {process} context</div></FoundationBox>
+        <FoundationBox title="CPU execution" tone="cpu" active testId="translation-cpu">
+          <div className="font-mono text-xs">process {process}</div>
+          <div className="mt-2 rounded-lg border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 font-mono text-xs text-amber-50" data-testid="active-memory-instruction">{activeInstruction}</div>
+          <div className="mt-1 text-[11px] text-slate-400">only the current instruction is active</div>
+        </FoundationBox>
+        <LinkLine label="instruction uses a virtual address" kind="instruction" active />
+        <FoundationBox title="Memory Management Unit (MMU)" tone="success" active={translationVisible} testId="mmu-translation">
+          {translationVisible ? <div className="font-mono text-xs">VA 0x1002<br />process {process} context → frame {frame} + byte offset 2<br />{readOnly ? "write permission absent" : "write permission present"}</div> : <div className="text-xs text-slate-400">translation appears when the instruction needs memory</div>}
+        </FoundationBox>
+        <LinkLine label="translation selects location/permission; it does not move payload" kind="translation" active={translationVisible} />
+        <FoundationBox title="cache / memory system" tone="memory" active={byteVisible} testId="translated-memory">
+          {byteVisible ? <div className="font-mono text-xs">frame {frame}<br />byte offset 2 = 0x{value}<br />process {process} context</div> : <div className="text-xs text-slate-400">the resulting byte appears after translation</div>}
+        </FoundationBox>
       </div>
       <Legend items={[["instruction", "CPU instruction execution"], ["translation", "address translation metadata"], ["memory", "resulting byte value"]]} />
       <SmallNote testId="translation-result">{result}</SmallNote>
@@ -236,8 +316,8 @@ export function AddressTranslationVisual() {
 export function BufferAllocationVisual() {
   const stage = useGuidedVisualStage();
   const allocated = stage >= 1;
-  const cellsVisible = stage >= 2;
-  const written = stage >= 3;
+  const cellsVisible = stage >= 1;
+  const written = stage >= 2;
   const bytes = written ? helloBuffer : zero16;
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="buffer-allocation-visual" data-guided-stage={stage}>
@@ -252,7 +332,7 @@ export function BufferAllocationVisual() {
             <SmallNote testId="payload-length-observation">Meaningful payload length: <span className="font-mono text-slate-200">{written ? 5 : 0} bytes</span>. Allocated capacity remains <span className="font-mono text-slate-200">16 bytes</span>.</SmallNote>
             <SmallNote>Addresses <span className="font-mono">0x1000–0x100f</span> are illustrative virtual addresses. Offsets 0–15 are positions within the buffer.</SmallNote>
           </div>
-          {stage >= 4 ? <SmallNote testId="capacity-length-comparison">Capacity: 16 bytes. Meaningful payload: 5 bytes. The remaining eleven initialized cells are still allocated and unchanged.</SmallNote> : null}
+          {stage >= 3 ? <SmallNote testId="capacity-length-comparison">Capacity: 16 bytes. Meaningful payload: 5 bytes. The remaining eleven initialized cells are still allocated and unchanged.</SmallNote> : null}
         </div>
       )}
     </div>
@@ -261,24 +341,37 @@ export function BufferAllocationVisual() {
 
 export function CopyReferenceVisual() {
   const stage = useGuidedVisualStage();
-  const referenceCreated = stage >= 1 && stage < 4;
-  const referenceModified = stage >= 2 && stage < 4;
-  const copyCreated = stage >= 4;
-  const copyModified = stage >= 5;
+  const referenceCreated = stage >= 1;
+  const referenceModified = stage >= 2;
+  const copyCreated = stage >= 3;
+  const copyModified = stage >= 4;
   const sourceFirst = referenceModified ? "58" : "48";
-  const destinationFirst = copyModified ? "58" : copyCreated ? "48" : "00";
+  const destinationFirst = copyModified ? "59" : sourceFirst;
   const source = [sourceFirst, ...helloHex.slice(1), ...Array.from({ length: 11 }, () => "00")];
-  const destination = copyCreated ? [destinationFirst, ...helloHex.slice(1), ...Array.from({ length: 11 }, () => "00")] : zero16;
+  const destination = copyCreated ? [destinationFirst, ...helloHex.slice(1), ...Array.from({ length: 11 }, () => "00")] : [];
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="copy-reference-visual" data-guided-stage={stage}>
       <div className="grid gap-3 xl:grid-cols-2">
         <FoundationBox title="original buffer · 0x1000" tone="memory" active testId="copy-source-memory"><ByteCells compact bytes={source} /></FoundationBox>
-        <FoundationBox title={copyCreated ? "independent copy · 0x2000" : "no independent copy yet"} tone={copyCreated ? "memory" : "neutral"} dashed={!copyCreated} testId="copy-destination-memory"><ByteCells compact bytes={destination} /></FoundationBox>
+        {copyCreated ? <FoundationBox title="independent copy · 0x2000" tone="memory" testId="copy-destination-memory"><ByteCells compact bytes={destination} /></FoundationBox> : <FoundationBox title="independent copy" tone="neutral" dashed testId="copy-destination-memory">No independent copy exists yet.</FoundationBox>}
       </div>
-      {stage < 4 ? (
-        <div className="space-y-2" data-testid="reference-mechanism"><div className="grid gap-2 sm:grid-cols-2"><FoundationBox title="reference alpha" tone="metadata" active>points to 0x1000</FoundationBox><FoundationBox title="reference beta" tone="metadata" active={referenceCreated}>{referenceCreated ? "points to the same 0x1000 bytes" : "not created yet"}</FoundationBox></div><LinkLine label="both logical handles reference one illustrated buffer" kind="reference" direction="both" active={referenceCreated} /><SmallNote testId="reference-state-result">Observed through alpha: 0x{sourceFirst}; observed through beta: 0x{sourceFirst}. {referenceModified ? "A write through beta changed the same underlying byte visible through alpha." : "No write through beta has occurred yet."}</SmallNote></div>
+      {!copyCreated ? (
+        <div className="space-y-2" data-testid="reference-mechanism">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <FoundationBox title="reference alpha" tone="metadata" active>points to 0x1000</FoundationBox>
+            {referenceCreated ? <FoundationBox title="reference beta" tone="metadata" active={referenceCreated}>points to the same 0x1000 bytes</FoundationBox> : <FoundationBox title="reference beta" tone="neutral" dashed>not created yet</FoundationBox>}
+          </div>
+          <LinkLine label="both logical handles reference one illustrated buffer" kind="reference" direction="both" active={referenceCreated} />
+          <SmallNote testId="reference-state-result">
+            Observed through alpha: 0x{sourceFirst}.{referenceCreated ? ` Observed through beta: 0x${sourceFirst}.` : " Reference beta has not been created, so no beta observation is reported."} {referenceModified ? "A write through beta changed the same underlying byte visible through alpha; the original buffer now contains XELLO." : "No write through beta has occurred yet."}
+          </SmallNote>
+        </div>
       ) : (
-        <div className="space-y-1" data-testid="copy-mechanism"><LinkLine label="CPU reads source bytes into transient register/cache state" kind="instruction" direction="down" active /><LinkLine label="CPU stores byte values into the separate destination" kind="payload" direction="down" active /><SmallNote testId="copy-state-result">Copy state: original first byte 0x48; independent copy first byte 0x{destinationFirst}. {copyModified ? "The copy was modified and the original remains unchanged." : "The copy currently contains the same byte values but is independently stored."}</SmallNote></div>
+        <div className="space-y-1" data-testid="copy-mechanism">
+          <LinkLine label="CPU reads the current source bytes into transient register/cache state" kind="instruction" direction="down" active />
+          <LinkLine label="CPU stores equivalent byte values into the separate destination" kind="payload" direction="down" active />
+          <SmallNote testId="copy-state-result">Copy state: original first byte 0x{sourceFirst}; independent copy first byte 0x{destinationFirst}. {copyModified ? "The copy was modified to YELLO and the original remains XELLO." : "The copy starts with the current XELLO byte values but is independently stored."}</SmallNote>
+        </div>
       )}
     </div>
   );
