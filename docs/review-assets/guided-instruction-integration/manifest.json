@@ -1,0 +1,48 @@
+{
+  "capturedAt": "2026-11-27T10:56:45.925Z",
+  "viewport": "1440x1100",
+  "items": [
+    {
+      "name": "demand-allocation",
+      "file": "demand-allocation.png",
+      "step": "foundation-1-2--touch-demand-memory-and-interpret",
+      "stageIndex": "5",
+      "excerpt": "Now Process A accesses a byte in its own demand-allocation range. If the access is valid but its page is not yet resident, the CPU can raise a page fault."
+    },
+    {
+      "name": "address-translation-load-result",
+      "file": "address-translation-load-result.png",
+      "step": "foundation-1-3--read-the-illustrative-byte",
+      "stageIndex": "2",
+      "excerpt": "The CPU then obtains the byte through its cache and memory system. In our illustrative memory state, that byte contains hexadecimal value 0x48."
+    },
+    {
+      "name": "copy-reference-continuity",
+      "file": "copy-reference-continuity.png",
+      "step": "foundation-1-5--create-an-independent-copy",
+      "stageIndex": "3",
+      "excerpt": "Now we allocate a different buffer and copy the current five meaningful bytes into it. The source currently contains XELLO."
+    },
+    {
+      "name": "sge-construction",
+      "file": "sge-construction.png",
+      "step": "foundation-4-11--attach-the-local-memory-description",
+      "stageIndex": "1",
+      "excerpt": "Recall the illustrative sixteen-byte registered buffer beginning at address 0x1000. Its first five bytes contain HELLO.\n\nWe want the provider to send those five bytes, not the entire registered capacity.\n\nA Scatter/Gather Element, or SGE, describes a local mem"
+    },
+    {
+      "name": "write-construction",
+      "file": "write-construction.png",
+      "step": "operations-v2-6-3--construct-the-write-work-request",
+      "stageIndex": "3",
+      "excerpt": "A constructs a SendWR containing the WRITE opcode, local identifier, SGE and completion-reporting request. The remote destination has not yet been attached."
+    },
+    {
+      "name": "packet-correlation",
+      "file": "packet-correlation.png",
+      "step": "operations-v2-8-7--correlate-endpoint-context",
+      "stageIndex": "1",
+      "excerpt": "Some packet fields come from the Work Request. Others come from the prepared Queue Pair and its transport state.\n\nWhen the program prepares its RC endpoint, the helper configures the peer's QPN and the initial send and receive packet sequence numbers.\n\nThese v"
+    }
+  ]
+}

@@ -125,6 +125,9 @@ test.describe("guided foundations semantics", () => {
     await expect(page.getByTestId("same-va-different-frame")).toContainText("Process A touched its demand-allocation range");
     await expect(page.getByTestId("same-va-different-frame")).toContainText("Process C's corresponding range remains unpopulated");
     await expect(page.getByTestId("shared-physical-ram")).toContainText("P8");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("only Process A accesses the range");
+    await expect(page.getByTestId("guided-observation")).toContainText("C's independent mapping remains unpopulated");
+    await expect(page.getByTestId("guided-observation")).toContainText("not a rule that every valid page fault allocates a completely new physical page");
   });
 
   test("address translation, allocation, copy and reference states are semantic and guided", async ({ page }) => {
@@ -141,6 +144,9 @@ test.describe("guided foundations semantics", () => {
     await next(page);
     await expect(page.getByTestId("translation-result")).toContainText("returned 0x48");
     await expect(page.getByTestId("translation-result")).toContainText("not a separate transfer of the application payload");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("that byte contains hexadecimal value 0x48");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("load returns 0x48 to the CPU");
+    await expect(page.getByTestId("guided-observation")).toContainText("Address translation did not copy the application buffer");
     await expect(page.getByTestId("active-memory-instruction")).toHaveText("load byte [0x1002]");
     await next(page);
     await expect(page.getByTestId("translation-result")).toContainText("Process C now references the same numerical virtual address");
@@ -185,6 +191,8 @@ test.describe("guided foundations semantics", () => {
     await expect(page.getByTestId("copy-state-result")).toContainText("original first byte 0x58");
     await expect(page.getByTestId("copy-state-result")).toContainText("independent copy first byte 0x58");
     await expect(page.getByTestId("copy-state-result")).toContainText("current XELLO byte values");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("source currently contains XELLO");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("not restoring the earlier HELLO state");
     await next(page);
     await expect(page.getByTestId("copy-state-result")).toContainText("original first byte 0x58");
     await expect(page.getByTestId("copy-state-result")).toContainText("independent copy first byte 0x59");
@@ -266,6 +274,8 @@ test.describe("guided foundations semantics", () => {
     await expect(page.getByTestId("illustrative-work-request")).toHaveAttribute("data-memory-described", "true");
     await expect(page.getByTestId("wr-local-memory-description")).toContainText("SGE addr 0x1000 · length 5 · lkey 0x11");
     await expect(page.getByTestId("wr-memory-reference")).toBeVisible();
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("SGE contains address 0x1000, length 5 and LKEY 0x11");
+    await expect(page.getByTestId("guided-observation")).toContainText("HELLO remains in the application buffer");
     await next(page);
     await expect(page.getByTestId("actual-python-source-excerpt")).toContainText("actual SEND construction excerpt");
     await expect(page.getByTestId("illustrative-work-request")).toContainText("not submitted and not a packet");

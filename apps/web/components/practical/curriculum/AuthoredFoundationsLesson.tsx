@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { guidedStagesForSection } from "./guidedStagePlans";
-import { selectGuidedInstructionWithReferences, type GuidedInstructionSelection } from "./guidedContent";
+import { selectGuidedInstructionWithReferences, stripGuidedBlockMarkers, type GuidedInstructionSelection } from "./guidedContent";
 import { GuidedVisualStageProvider } from "./guidedVisualState";
 import { AuthoredCopy, FoundationEvidenceNote, FoundationVisual, foundationSections, sectionsForLesson, useFoundationBindings, type FoundationSourceSection } from "./foundationsShared";
 
@@ -27,8 +27,8 @@ function StageExplanation({ selection, children, testId }: { selection: GuidedIn
     <div
       className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-3"
       data-testid={testId}
-      data-copy-units={selection.referenceLabels?.length ? selection.referenceLabels.join(";") : selection.unitIndexes.map((index) => index + 1).join(",")}
-      data-copy-unit-count={selection.unitCount}
+      data-copy-blocks={selection.referenceLabels.join(";")}
+      data-copy-block-count={selection.blockCount}
     >
       <div className="space-y-3 text-sm leading-6 text-cyan-50">{children}</div>
     </div>
@@ -42,7 +42,8 @@ export function AuthoredFoundationsLesson({ lesson, onComplete, onPreviousLesson
     return stages.map((stage, stageIndex): GuidedStep => {
       const exactLesson11 = section.id === "1.1";
       const finalStage = stageIndex === stages.length - 1;
-      const instructionSelection = selectGuidedInstructionWithReferences(foundationSections, section.id, section.learnerCopy, stageIndex, stages.length, stage.instructionUnitIndexes, stage.instructionReferences);
+      const instructionSelection = selectGuidedInstructionWithReferences(foundationSections, section.id, stage.instructionReferences);
+      const stageObservationSelection = stage.observationReferences ? selectGuidedInstructionWithReferences(foundationSections, section.id, stage.observationReferences) : undefined;
       let body: ReactNode = (
         <>
           <StageExplanation selection={instructionSelection} testId="guided-stage-explanation">
@@ -50,14 +51,16 @@ export function AuthoredFoundationsLesson({ lesson, onComplete, onPreviousLesson
           </StageExplanation>
           <details className="rounded-xl border border-white/10 bg-white/4 px-3 py-2 text-sm" data-testid="full-authored-explanation">
             <summary className="cursor-pointer font-medium text-slate-300">Review the complete subsection explanation</summary>
-            <div className="mt-3"><AuthoredCopy text={section.learnerCopy} bindings={bindings} testId={`learner-copy-${section.componentId}-reference`} /></div>
+            <div className="mt-3"><AuthoredCopy text={stripGuidedBlockMarkers(section.learnerCopy)} bindings={bindings} testId={`learner-copy-${section.componentId}-reference`} /></div>
           </details>
           {stageIndex === 0 ? <FoundationEvidenceNote section={section} /> : null}
         </>
       );
-      let observation: ReactNode | undefined = finalStage && section.revealCopy
-        ? <AuthoredCopy text={section.revealCopy} bindings={bindings} testId={`guided-reveal-${section.componentId}`} />
-        : undefined;
+      let observation: ReactNode | undefined = stageObservationSelection?.text
+        ? <AuthoredCopy text={stageObservationSelection.text} bindings={bindings} testId={`guided-stage-observation-${section.componentId}-${stageIndex}`} />
+        : finalStage && section.revealCopy
+          ? <AuthoredCopy text={section.revealCopy} bindings={bindings} testId={`guided-reveal-${section.componentId}`} />
+          : undefined;
       if (exactLesson11) {
         body = (
           <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-3" data-testid="guided-stage-explanation">

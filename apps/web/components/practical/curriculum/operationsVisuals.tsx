@@ -1530,8 +1530,6 @@ function Lesson811() {
 }
 
 function Lesson812() {
-  const stage = useGuidedVisualStage();
-  const area = guidedEnum(stage, ["objective", "preparation", "submission", "transport", "observation"] as const);
   const areas = [
     ["objective", "Objective", "Which application bytes must move, in which direction, and what result must be verified?"],
     ["preparation", "Preparation", "Which memory regions, permissions, endpoints, keys and receive descriptions are required before work is submitted?"],
@@ -1539,13 +1537,12 @@ function Lesson812() {
     ["transport", "Transport", "Which packets, directions, opcodes, QPNs, PSNs, RETH/payload/padding and acknowledgements are visible?"],
     ["observation", "Application observation", "Which completion, synchronization and exact memory verification establish the application result?"],
   ] as const;
-  const active = areas.find((item) => item[0] === area) || areas[0];
   return (
     <OperationShell title="Final causal troubleshooting checklist" testId="visual-8-12">
       <div className="grid gap-2 md:grid-cols-5" data-testid="causal-troubleshooting-map">
-        {areas.map(([id, label], index) => <div key={id} data-testid={`checklist-${id}`} className={cx("rounded-xl border p-3 text-center text-xs font-semibold", area === id ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-50" : "border-white/10 bg-white/4 text-slate-300")}><span className="text-cyan-200">{index + 1}</span><br />{label}</div>)}
+        {areas.map(([id, label, question], index) => <div key={id} data-testid={`checklist-${id}`} className="rounded-xl border border-cyan-300/25 bg-cyan-300/8 p-3 text-xs text-slate-200"><div className="text-center font-semibold text-cyan-50"><span className="text-cyan-200">{index + 1}</span><br />{label}</div><p className="mt-2 leading-5 text-slate-300">{question}</p></div>)}
       </div>
-      <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-4" data-testid="selected-checklist-area"><div className="font-semibold text-cyan-100">{active[1]}</div><p className="mt-2 text-sm leading-6 text-slate-300">{active[2]}</p><div className="mt-3 flex flex-wrap gap-2 text-xs">{[["send-receive", "SEND/RECEIVE"], ["write", "WRITE"], ["read", "READ"]].map(([id, label]) => <a key={id} className="rounded-full border border-cyan-300/25 px-2.5 py-1 text-cyan-100 underline-offset-4 hover:underline" href={`/practical/rdma?lesson=${id}`}>Review {label}</a>)}</div></div>
+      <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/7 p-4" data-testid="checklist-evidence-boundary"><div className="font-semibold text-emerald-100">Evidence boundary</div><p className="mt-2 text-sm leading-6 text-slate-300">A missing observation is not the same as a failed observation. Establish which artifact answers each question before inferring a fault.</p><div className="mt-3 flex flex-wrap gap-2 text-xs">{[["send-receive", "SEND/RECEIVE"], ["write", "WRITE"], ["read", "READ"]].map(([id, label]) => <a key={id} className="rounded-full border border-cyan-300/25 px-2.5 py-1 text-cyan-100 underline-offset-4 hover:underline" href={`/practical/rdma?lesson=${id}`}>Review {label}</a>)}</div></div>
       <details className="rounded-xl border border-white/10 bg-white/4 p-3"><summary className="cursor-pointer text-sm font-semibold text-cyan-100">Review one real run</summary><div className="mt-3 grid gap-3 md:grid-cols-3" data-testid="real-run-review-links">
         {[sendExperiment, writeExperiment, readExperiment].map((item) => <div key={item.id} className="rounded-xl border border-white/10 bg-slate-950/45 p-3"><div className="font-semibold text-slate-100">{item.id}</div><div className="mt-1 text-xs text-slate-500">{item.packets.map((itemPacket) => itemPacket.id).join(" · ")}</div><div className="mt-2"><CaptureLink experimentValue={item} /></div></div>)}
       </div></details>

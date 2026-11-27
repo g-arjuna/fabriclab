@@ -1,108 +1,77 @@
-export type GuidedInstructionSelection = {
-  text: string;
-  unitIndexes: number[];
-  unitCount: number;
-  referenceLabels?: string[];
+export type GuidedContentBlock = {
+  id: string;
+  markdown: string;
 };
 
-function isStructuralMarkdownBlock(block: string) {
-  const trimmed = block.trim();
-  return trimmed.startsWith("```") || trimmed.startsWith("|") || /^[-*+]\s/m.test(trimmed) || /^\d+\.\s/m.test(trimmed) || trimmed.startsWith(">");
-}
+export type GuidedInstructionSelection = {
+  text: string;
+  referenceLabels: string[];
+  missingReferences: string[];
+  blockCount: number;
+};
 
-function splitProseSentences(block: string) {
-  const sentences: string[] = [];
-  let start = 0;
-  for (let index = 0; index < block.length; index += 1) {
-    const character = block[index];
-    if (![".", "!", "?"].includes(character)) continue;
-    const next = block[index + 1];
-    const following = block[index + 2];
-    if ((next === " " || next === "\n") && following && /[A-Z0-9`“"'\[]/.test(following)) {
-      const sentence = block.slice(start, index + 1).trim();
-      if (sentence) sentences.push(sentence);
-      start = index + 1;
-    }
-  }
-  const remainder = block.slice(start).trim();
-  if (remainder) sentences.push(remainder);
-  return sentences.length ? sentences : [block.trim()];
-}
-
-export function authoredInstructionUnits(markdown: string) {
-  return markdown
-    .trim()
-    .split(/\n\s*\n/)
-    .flatMap((block) => {
-      const trimmed = block.trim();
-      if (!trimmed) return [];
-      return isStructuralMarkdownBlock(trimmed) ? [trimmed] : splitProseSentences(trimmed);
-    })
-    .filter(Boolean);
-}
-
-/**
- * Selects deterministic canonical authored-copy units for one guided state.
- * The default windows partition the subsection in presentation order; exact
- * stage plans may instead reference the specific units that explain the active
- * mechanism. No replacement educational prose is generated here.
- */
-export function selectGuidedInstruction(markdown: string, stageIndex: number, stageCount: number, explicitUnitIndexes?: number[]): GuidedInstructionSelection {
-  const units = authoredInstructionUnits(markdown);
-  if (!units.length) return { text: "", unitIndexes: [], unitCount: 0 };
-  const boundedStage = Math.max(0, Math.min(Math.max(0, stageCount - 1), stageIndex));
-  let indexes: number[];
-  if (explicitUnitIndexes?.length) {
-    indexes = explicitUnitIndexes.filter((index) => index >= 0 && index < units.length);
-  } else {
-    const start = Math.floor((boundedStage * units.length) / stageCount);
-    let end = Math.floor(((boundedStage + 1) * units.length) / stageCount);
-    if (boundedStage === stageCount - 1) end = units.length;
-    if (end <= start) end = Math.min(units.length, start + 1);
-    indexes = Array.from({ length: Math.max(1, end - start) }, (_, offset) => Math.min(units.length - 1, start + offset));
-  }
-  const uniqueIndexes = Array.from(new Set(indexes));
-  return {
-    text: uniqueIndexes.map((index) => units[index]).join("\n\n"),
-    unitIndexes: uniqueIndexes,
-    unitCount: units.length,
-  };
-}
+export type GuidedContentReferenceInput = {
+  sectionId: string;
+  blockIds: string[];
+};
 
 export type CanonicalInstructionSection = {
   id: string;
   learnerCopy: string;
+  contentBlocks?: GuidedContentBlock[];
 };
 
+export function stripGuidedBlockMarkers(markdown: string) {
+  return markdown.replace(/^[^\S\n]*<!--\s*guided-block:[^\n]*?-->[^\S\n]*$/gm, "");
+}
+
+function sectionBlocks(section: CanonicalInstructionSection | undefined) {
+  return new Map((section?.contentBlocks || []).map((block) => [block.id, block.markdown]));
+}
+
+/**
+ * Resolves exact authored content blocks for one guided state.
+ *
+ * There is intentionally no positional or proportional fallback: a stage must
+ * name the authored blocks that explain its mechanism. Validation treats every
+ * missing reference as a curriculum error rather than silently omitting copy.
+ */
 export function selectGuidedInstructionWithReferences(
   sections: CanonicalInstructionSection[],
   currentSectionId: string,
-  currentMarkdown: string,
-  stageIndex: number,
-  stageCount: number,
-  instructionUnitIndexes?: number[],
-  instructionReferences?: { sectionId: string; unitIndexes: number[] }[],
+  instructionReferences?: GuidedContentReferenceInput[],
 ): GuidedInstructionSelection {
-  if (!instructionReferences?.length) {
-    return { ...selectGuidedInstruction(currentMarkdown, stageIndex, stageCount, instructionUnitIndexes), referenceLabels: [] };
-  }
-  const parts: string[] = [];
   const referenceLabels: string[] = [];
-  const flatIndexes: number[] = [];
-  for (const reference of instructionReferences) {
-    const section = reference.sectionId === currentSectionId
-      ? { learnerCopy: currentMarkdown }
-      : sections.find((item) => item.id === reference.sectionId);
-    if (!section) continue;
-    const selected = selectGuidedInstruction(section.learnerCopy, 0, 1, reference.unitIndexes);
-    if (selected.text) parts.push(selected.text);
-    flatIndexes.push(...selected.unitIndexes);
-    referenceLabels.push(`${reference.sectionId}:${reference.unitIndexes.map((index) => index + 1).join("+")}`);
+  const missingReferences: string[] = [];
+  const parts: string[] = [];
+  const seen = new Set<string>();
+
+  for (const reference of instructionReferences || []) {
+    const section = sections.find((item) => item.id === reference.sectionId);
+    const blocks = sectionBlocks(section);
+    for (const blockId of reference.blockIds) {
+      const label = `${reference.sectionId}:${blockId}`;
+      const markdown = blocks.get(blockId);
+      if (!section || markdown === undefined) {
+        missingReferences.push(label);
+        continue;
+      }
+      if (!markdown.trim()) {
+        missingReferences.push(`${label} (empty)`);
+        continue;
+      }
+      if (seen.has(label)) continue;
+      seen.add(label);
+      referenceLabels.push(label);
+      parts.push(markdown.trim());
+    }
   }
+
+  const currentBlockCount = sections.find((item) => item.id === currentSectionId)?.contentBlocks?.length || 0;
   return {
     text: parts.join("\n\n"),
-    unitIndexes: flatIndexes,
-    unitCount: authoredInstructionUnits(currentMarkdown).length,
     referenceLabels,
+    missingReferences,
+    blockCount: currentBlockCount,
   };
 }

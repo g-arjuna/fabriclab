@@ -3,7 +3,21 @@
     "id": "1.1",
     "lesson": "moving-data",
     "title": "What is actually inside a server?",
-    "learnerCopy": "Before we connect two computers, we need to understand one computer. When a network engineer says that a server sends data, which part of the server is doing the sending? Where did the data come from? Where does it go when the server receives a packet?\n\nA typical server contains processors (CPUs), system memory (RAM), and devices such as network interface cards (NICs). These are pieces of hardware. A CPU executes instructions. RAM holds bytes that software and suitably configured devices can access. A NIC exchanges network signals and frames with the network. An interconnect, often including PCI Express for the NIC, allows devices to communicate with the rest of the machine.\n\nLinux is software running on that hardware. The kernel is the privileged core of Linux: it manages memory, schedules execution, controls access to devices and provides services to programs. It is not another processor, and it is not a box that bytes physically travel through. When the kernel executes instructions, a CPU executes them, just as a CPU executes instructions belonging to a user application.",
+    "learnerCopy": "<!-- guided-block: before-we-connect-two-computers -->\n\nBefore we connect two computers, we need to understand one computer. When a network engineer says that a server sends data, which part of the server is doing the sending? Where did the data come from? Where does it go when the server receives a packet?\n\n<!-- guided-block: a-typical-server-contains-processors -->\n\nA typical server contains processors (CPUs), system memory (RAM), and devices such as network interface cards (NICs). These are pieces of hardware. A CPU executes instructions. RAM holds bytes that software and suitably configured devices can access. A NIC exchanges network signals and frames with the network. An interconnect, often including PCI Express for the NIC, allows devices to communicate with the rest of the machine.\n\n<!-- guided-block: linux-is-software-running-on -->\n\nLinux is software running on that hardware. The kernel is the privileged core of Linux: it manages memory, schedules execution, controls access to devices and provides services to programs. It is not another processor, and it is not a box that bytes physically travel through. When the kernel executes instructions, a CPU executes them, just as a CPU executes instructions belonging to a user application.",
+    "contentBlocks": [
+      {
+        "id": "before-we-connect-two-computers",
+        "markdown": "Before we connect two computers, we need to understand one computer. When a network engineer says that a server sends data, which part of the server is doing the sending? Where did the data come from? Where does it go when the server receives a packet?"
+      },
+      {
+        "id": "a-typical-server-contains-processors",
+        "markdown": "A typical server contains processors (CPUs), system memory (RAM), and devices such as network interface cards (NICs). These are pieces of hardware. A CPU executes instructions. RAM holds bytes that software and suitably configured devices can access. A NIC exchanges network signals and frames with the network. An interconnect, often including PCI Express for the NIC, allows devices to communicate with the rest of the machine."
+      },
+      {
+        "id": "linux-is-software-running-on",
+        "markdown": "Linux is software running on that hardware. The kernel is the privileged core of Linux: it manages memory, schedules execution, controls access to devices and provides services to programs. It is not another processor, and it is not a box that bytes physically travel through. When the kernel executes instructions, a CPU executes them, just as a CPU executes instructions belonging to a user application."
+      }
+    ],
     "visualSpec": "Start with one server, not two. Show CPU cores, caches (small label), RAM, a NIC and an interconnect. Connect CPU to RAM bidirectionally via memory system; NIC to RAM via interconnect. Network cable leaves NIC. A second logical overlay shows user applications and Linux kernel above the hardware; no arrows between software boxes suggesting physical wiring. Toggle **Show hardware / Show software responsibilities**, preserving the same physical machine. Highlight CPU when either application or kernel code is executing. Show three brief labels: `CPU executes`, `RAM stores`, `NIC transmits/receives`.",
     "revealCopy": "The kernel and the application are different pieces of software that can execute on the same CPU core at different times. They can also execute on different cores concurrently. The distinction is one of responsibility and privilege, not two separate machines inside the server.",
     "inspectCopy": "On a real server there may be several CPU sockets, memory controllers, caches, NUMA nodes and multiple NICs. We use one simplified host to teach the data path. [S1–S3]",
@@ -14,7 +28,41 @@
     "id": "1.2",
     "lesson": "moving-data",
     "title": "From a program on disk to a running process",
-    "learnerCopy": "A Python script or a compiled executable stored on disk is a program. When we run it, Linux creates or prepares an executing instance called a process. For example, starting `python3 sender.py` launches a Python interpreter that executes the script inside a process. Linux tracks that process, its execution state, open files and address space. A process can contain several threads; threads in one process ordinarily share its address space.\n\nThe operating system gives a process a virtual address space. Think of it as the set of memory addresses that the process can use, subject to mappings and permissions. It contains things such as executable code, stack memory for calls and local state, and dynamically allocated objects. Some regions can be shared deliberately with other processes. Most private writable application memory is not automatically accessible to another process.\n\nThe process does not get a whole separate physical RAM chip. Linux maps parts of the process's virtual address space onto physical memory. It can create mappings when a program starts and change or populate them as it runs and allocates memory. Some mapped pages need not be resident until accessed.",
+    "learnerCopy": "<!-- guided-block: a-python-script-or-a -->\n\nA Python script or a compiled executable stored on disk is a program. When we run it, Linux creates or prepares an executing instance called a process. For example, starting `python3 sender.py` launches a Python interpreter that executes the script inside a process. Linux tracks that process, its execution state, open files and address space. A process can contain several threads; threads in one process ordinarily share its address space.\n\n<!-- guided-block: the-operating-system-gives-a -->\n\nThe operating system gives a process a virtual address space. Think of it as the set of memory addresses that the process can use, subject to mappings and permissions. It contains things such as executable code, stack memory for calls and local state, and dynamically allocated objects. Some regions can be shared deliberately with other processes. Most private writable application memory is not automatically accessible to another process.\n\n<!-- guided-block: the-process-does-not-get -->\n\nThe process does not get a whole separate physical RAM chip. Linux maps parts of the process's virtual address space onto physical memory. It can create mappings when a program starts and change or populate them as it runs and allocates memory. Some mapped pages need not be resident until accessed.\n\n<!-- guided-block: both-processes-have-a-virtual -->\n\nBoth processes have a virtual memory range that has not yet been populated with physical backing in our illustration. Having a virtual range does not necessarily mean that physical memory has already been assigned to every page in that range.\n\n<!-- guided-block: now-process-a-accesses-a -->\n\nNow Process A accesses a byte in its own demand-allocation range. If the access is valid but its page is not yet resident, the CPU can raise a page fault. Linux can establish the required backing and update the mapping so that execution can continue.\n\n<!-- guided-block: in-our-example-only-process -->\n\nIn our example, only Process A accesses the range. Process C has not accessed its corresponding range.\n\n<!-- guided-block: a-s-illustrated-mapping-is -->\n\nA's illustrated mapping is now populated, while C's independent mapping remains unpopulated. The same numerical virtual address in another process does not automatically refer to the same physical page.\n\n<!-- guided-block: demand-allocation-is-associated-with -->\n\nDemand allocation is associated with a particular memory mapping and access context. This is a conceptual example of independent private mappings, not a rule that every valid page fault allocates a completely new physical page.",
+    "contentBlocks": [
+      {
+        "id": "a-python-script-or-a",
+        "markdown": "A Python script or a compiled executable stored on disk is a program. When we run it, Linux creates or prepares an executing instance called a process. For example, starting `python3 sender.py` launches a Python interpreter that executes the script inside a process. Linux tracks that process, its execution state, open files and address space. A process can contain several threads; threads in one process ordinarily share its address space."
+      },
+      {
+        "id": "the-operating-system-gives-a",
+        "markdown": "The operating system gives a process a virtual address space. Think of it as the set of memory addresses that the process can use, subject to mappings and permissions. It contains things such as executable code, stack memory for calls and local state, and dynamically allocated objects. Some regions can be shared deliberately with other processes. Most private writable application memory is not automatically accessible to another process."
+      },
+      {
+        "id": "the-process-does-not-get",
+        "markdown": "The process does not get a whole separate physical RAM chip. Linux maps parts of the process's virtual address space onto physical memory. It can create mappings when a program starts and change or populate them as it runs and allocates memory. Some mapped pages need not be resident until accessed."
+      },
+      {
+        "id": "both-processes-have-a-virtual",
+        "markdown": "Both processes have a virtual memory range that has not yet been populated with physical backing in our illustration. Having a virtual range does not necessarily mean that physical memory has already been assigned to every page in that range."
+      },
+      {
+        "id": "now-process-a-accesses-a",
+        "markdown": "Now Process A accesses a byte in its own demand-allocation range. If the access is valid but its page is not yet resident, the CPU can raise a page fault. Linux can establish the required backing and update the mapping so that execution can continue."
+      },
+      {
+        "id": "in-our-example-only-process",
+        "markdown": "In our example, only Process A accesses the range. Process C has not accessed its corresponding range."
+      },
+      {
+        "id": "a-s-illustrated-mapping-is",
+        "markdown": "A's illustrated mapping is now populated, while C's independent mapping remains unpopulated. The same numerical virtual address in another process does not automatically refer to the same physical page."
+      },
+      {
+        "id": "demand-allocation-is-associated-with",
+        "markdown": "Demand allocation is associated with a particular memory mapping and access context. This is a conceptual example of independent private mappings, not a rule that every valid page fault allocates a completely new physical page."
+      }
+    ],
     "visualSpec": "Action **Start a program**: show a file `sender.py` and interpreter on storage; reveal process A with code, stack, heap/data, shared library mapping and unmapped gaps. RAM stays a single physical object. Draw mappings to selected physical pages, including a demand-populated page as dotted until touched. Action **Start another program** creates process C with independent mappings to the same RAM. Show identical virtual address `0x1000` in A and C mapping to different illustrative physical frames; optionally one shared read-only library page. Never imply all threads or all mapped pages are private.",
     "revealCopy": "A virtual address has meaning in a particular address-space context. Two applications can use the same numerical address and refer to different bytes. An address on another server is not an address that your CPU can simply dereference.",
     "inspectCopy": "`/proc/<pid>/maps` on Linux describes mapped virtual ranges and their permissions. It does not reveal every physical page location. A process ID identifies a running process; it is not an address or a socket number. [S1–S3]",
@@ -25,7 +73,65 @@
     "id": "1.3",
     "lesson": "moving-data",
     "title": "How the CPU finds a byte",
-    "learnerCopy": "A byte is eight bits. To read or change a byte, the CPU executes a load or store instruction using an address. On a typical modern Linux server, the address generated by the instruction is virtual. The CPU's memory management unit (MMU) translates it using mappings managed by Linux and checks access permissions. Recent translations can be cached in the translation lookaside buffer (TLB).\n\nFor this illustration, suppose a process has a writable page mapped at virtual address `0x1000`. The address `0x1002` refers to the third byte in that page. If the page is not currently mapped or the operation violates permissions, the CPU can raise a fault. Linux handles valid cases such as demand allocation and can reject invalid accesses.\n\nThe CPU normally accesses data through its caches and the memory system. The latest value may reside in a cache rather than having just been written to a RAM chip. Our diagram follows logical memory values, not electrical bus transactions or cache-line timings.",
+    "learnerCopy": "<!-- guided-block: a-byte-is-eight-bits -->\n\nA byte is eight bits. To read or change a byte, the CPU executes a load or store instruction using an address. On a typical modern Linux server, the address generated by the instruction is virtual. The CPU's memory management unit (MMU) translates it using mappings managed by Linux and checks access permissions. Recent translations can be cached in the translation lookaside buffer (TLB).\n\n<!-- guided-block: for-this-illustration-suppose-a -->\n\nFor this illustration, suppose a process has a writable page mapped at virtual address `0x1000`. The address `0x1002` refers to the third byte in that page. If the page is not currently mapped or the operation violates permissions, the CPU can raise a fault. Linux handles valid cases such as demand allocation and can reject invalid accesses.\n\n<!-- guided-block: the-cpu-is-executing-a -->\n\nThe CPU is executing a load instruction in Process A. The instruction references virtual address `0x1002`.\n\n<!-- guided-block: address-translation-identifies-frame-p7 -->\n\nAddress translation identifies frame P7, byte offset 2, and establishes that the requested access is permitted.\n\n<!-- guided-block: the-cpu-then-obtains-the -->\n\nThe CPU then obtains the byte through its cache and memory system. In our illustrative memory state, that byte contains hexadecimal value `0x48`, which represents the character H in ASCII.\n\n<!-- guided-block: the-load-returns-0x48-to -->\n\nThe load returns `0x48` to the CPU for use by the running application.\n\n<!-- guided-block: address-translation-did-not-copy -->\n\nAddress translation did not copy the application buffer. It established which memory location the instruction refers to and whether the access is permitted. Obtaining the byte is the memory-access part of the instruction.\n\n<!-- guided-block: the-diagram-shows-logical-values -->\n\nThe diagram shows logical values. It does not establish whether the load reached physical DRAM or was satisfied by a cache.\n\n<!-- guided-block: the-cpu-normally-accesses-data -->\n\nThe CPU normally accesses data through its caches and the memory system. The latest value may reside in a cache rather than having just been written to a RAM chip. Our diagram follows logical memory values, not electrical bus transactions or cache-line timings.\n\n<!-- guided-block: process-a-executes-an-instruction -->\n\nProcess A executes an instruction using virtual address `0x1002`. Now consider Process C executing an instruction using exactly the same numerical address.\n\n<!-- guided-block: a-virtual-address-is-interpreted -->\n\nA virtual address is interpreted in the active address-space context. The CPU uses the mappings associated with that context when translating the address and checking access permissions.\n\n<!-- guided-block: in-our-illustration-address-0x1000 -->\n\nIn our illustration, address `0x1000` in Process A maps to frame P7, while the same address in Process C maps to frame P9. Therefore, address `0x1002` refers to byte offset 2 in different underlying memory locations.\n\n<!-- guided-block: the-numerical-address-has-not -->\n\nThe numerical address has not changed. The address-space context has changed, and therefore the resulting memory location can be different.\n\n<!-- guided-block: this-is-one-reason-separate -->\n\nThis is one reason separate processes can use similar virtual addresses without accidentally sharing their writable memory. Deliberately shared mappings are a separate case.",
+    "contentBlocks": [
+      {
+        "id": "a-byte-is-eight-bits",
+        "markdown": "A byte is eight bits. To read or change a byte, the CPU executes a load or store instruction using an address. On a typical modern Linux server, the address generated by the instruction is virtual. The CPU's memory management unit (MMU) translates it using mappings managed by Linux and checks access permissions. Recent translations can be cached in the translation lookaside buffer (TLB)."
+      },
+      {
+        "id": "for-this-illustration-suppose-a",
+        "markdown": "For this illustration, suppose a process has a writable page mapped at virtual address `0x1000`. The address `0x1002` refers to the third byte in that page. If the page is not currently mapped or the operation violates permissions, the CPU can raise a fault. Linux handles valid cases such as demand allocation and can reject invalid accesses."
+      },
+      {
+        "id": "the-cpu-is-executing-a",
+        "markdown": "The CPU is executing a load instruction in Process A. The instruction references virtual address `0x1002`."
+      },
+      {
+        "id": "address-translation-identifies-frame-p7",
+        "markdown": "Address translation identifies frame P7, byte offset 2, and establishes that the requested access is permitted."
+      },
+      {
+        "id": "the-cpu-then-obtains-the",
+        "markdown": "The CPU then obtains the byte through its cache and memory system. In our illustrative memory state, that byte contains hexadecimal value `0x48`, which represents the character H in ASCII."
+      },
+      {
+        "id": "the-load-returns-0x48-to",
+        "markdown": "The load returns `0x48` to the CPU for use by the running application."
+      },
+      {
+        "id": "address-translation-did-not-copy",
+        "markdown": "Address translation did not copy the application buffer. It established which memory location the instruction refers to and whether the access is permitted. Obtaining the byte is the memory-access part of the instruction."
+      },
+      {
+        "id": "the-diagram-shows-logical-values",
+        "markdown": "The diagram shows logical values. It does not establish whether the load reached physical DRAM or was satisfied by a cache."
+      },
+      {
+        "id": "the-cpu-normally-accesses-data",
+        "markdown": "The CPU normally accesses data through its caches and the memory system. The latest value may reside in a cache rather than having just been written to a RAM chip. Our diagram follows logical memory values, not electrical bus transactions or cache-line timings."
+      },
+      {
+        "id": "process-a-executes-an-instruction",
+        "markdown": "Process A executes an instruction using virtual address `0x1002`. Now consider Process C executing an instruction using exactly the same numerical address."
+      },
+      {
+        "id": "a-virtual-address-is-interpreted",
+        "markdown": "A virtual address is interpreted in the active address-space context. The CPU uses the mappings associated with that context when translating the address and checking access permissions."
+      },
+      {
+        "id": "in-our-illustration-address-0x1000",
+        "markdown": "In our illustration, address `0x1000` in Process A maps to frame P7, while the same address in Process C maps to frame P9. Therefore, address `0x1002` refers to byte offset 2 in different underlying memory locations."
+      },
+      {
+        "id": "the-numerical-address-has-not",
+        "markdown": "The numerical address has not changed. The address-space context has changed, and therefore the resulting memory location can be different."
+      },
+      {
+        "id": "this-is-one-reason-separate",
+        "markdown": "This is one reason separate processes can use similar virtual addresses without accidentally sharing their writable memory. Deliberately shared mappings are a separate case."
+      }
+    ],
     "visualSpec": "Show `load byte [0x1002]` and `store byte [0x1002] = 0x4c` at CPU, MMU translation, mapped frame, cache/memory system. Select same VA in process C and show different frame. Toggle read-only page and request store; show protection fault, not an unauthorized physical write. A thin note says **Illustrative addresses; simplified cache behavior**. Use distinct arrows for instruction execution, address translation, byte transfer. Do not animate a kernel box sitting between CPU and memory on every load.",
     "revealCopy": "A normal permitted load/store does not require the kernel to run for each byte. The kernel sets up the mappings and permissions; the CPU's hardware uses them. A fault or an operating-system service request is a different kind of event.",
     "inspectCopy": "",
@@ -36,7 +142,25 @@
     "id": "1.4",
     "lesson": "moving-data",
     "title": "Allocate a buffer, then put data into it",
-    "learnerCopy": "Suppose our program wants to hold a message. A buffer is simply a range of memory used to store data. It is not a new piece of hardware. When Python executes `buf = bytearray(16)`, the interpreter creates a mutable object with room for 16 data bytes and initializes them to zero. Its bookkeeping is separate from the bytes we are interested in. The interpreter's allocator uses memory available to the process and may obtain more mapped memory from the operating system when necessary; it does not need to request a new physical page for every small object.\n\nNow the program writes five ASCII characters into that buffer. In the example below, `b` before the quotes indicates a Python bytes literal. The slice `[:5]` selects offsets 0 through 4. The remaining eleven bytes stay zero.\n\n```python\nbuf = bytearray(16)\nbuf[:5] = b\"HELLO\"\n```\n\nThe application does not itself consist of five bytes. It has code, data and runtime state. We are choosing five bytes within one buffer as the payload we will eventually send.",
+    "learnerCopy": "<!-- guided-block: suppose-our-program-wants-to -->\n\nSuppose our program wants to hold a message. A buffer is simply a range of memory used to store data. It is not a new piece of hardware. When Python executes `buf = bytearray(16)`, the interpreter creates a mutable object with room for 16 data bytes and initializes them to zero. Its bookkeeping is separate from the bytes we are interested in. The interpreter's allocator uses memory available to the process and may obtain more mapped memory from the operating system when necessary; it does not need to request a new physical page for every small object.\n\n<!-- guided-block: now-the-program-writes-five -->\n\nNow the program writes five ASCII characters into that buffer. In the example below, `b` before the quotes indicates a Python bytes literal. The slice `[:5]` selects offsets 0 through 4. The remaining eleven bytes stay zero.\n\n<!-- guided-block: python-buf-bytearray-16-buf -->\n\n```python\nbuf = bytearray(16)\nbuf[:5] = b\"HELLO\"\n```\n\n<!-- guided-block: the-application-does-not-itself -->\n\nThe application does not itself consist of five bytes. It has code, data and runtime state. We are choosing five bytes within one buffer as the payload we will eventually send.",
+    "contentBlocks": [
+      {
+        "id": "suppose-our-program-wants-to",
+        "markdown": "Suppose our program wants to hold a message. A buffer is simply a range of memory used to store data. It is not a new piece of hardware. When Python executes `buf = bytearray(16)`, the interpreter creates a mutable object with room for 16 data bytes and initializes them to zero. Its bookkeeping is separate from the bytes we are interested in. The interpreter's allocator uses memory available to the process and may obtain more mapped memory from the operating system when necessary; it does not need to request a new physical page for every small object."
+      },
+      {
+        "id": "now-the-program-writes-five",
+        "markdown": "Now the program writes five ASCII characters into that buffer. In the example below, `b` before the quotes indicates a Python bytes literal. The slice `[:5]` selects offsets 0 through 4. The remaining eleven bytes stay zero."
+      },
+      {
+        "id": "python-buf-bytearray-16-buf",
+        "markdown": "```python\nbuf = bytearray(16)\nbuf[:5] = b\"HELLO\"\n```"
+      },
+      {
+        "id": "the-application-does-not-itself",
+        "markdown": "The application does not itself consist of five bytes. It has code, data and runtime state. We are choosing five bytes within one buffer as the payload we will eventually send."
+      }
+    ],
     "visualSpec": "Action **Allocate 16 bytes**: show virtual addresses `0x1000` to `0x100f`, illustrative, zero-filled cells. Action **Write HELLO**: highlight CPU executing the store/copy operation, then change cells 0–4 to `48 45 4c 4c 4f` hex with ASCII underneath. Show offsets separately from addresses and label 16-byte capacity versus five-byte meaningful payload. Include the memory range in the process address map. Keep the source bytes visible thereafter. Do not imply Python `id()` is a data buffer address.",
     "revealCopy": "A starting address and a length identify a range. A 16-byte buffer starting at `0x1000` ends at `0x100f` inclusive; `0x1010` is the first address outside it. The five-byte payload is only part of that range. This distinction will become important when we register RDMA memory and specify transfer sizes.",
     "inspectCopy": "A writable Python buffer's address can be inspected with `ctypes.addressof(ctypes.c_char.from_buffer(buf))` while that object remains alive and is not resized. Such an address is a process virtual address, not a universal physical address. Our diagram's small addresses are invented teaching values, not output of this expression.",
@@ -47,7 +171,45 @@
     "id": "1.5",
     "lesson": "moving-data",
     "title": "What does it mean to copy data?",
-    "learnerCopy": "Imagine a second 16-byte buffer in the same process. Copying five bytes means reading the five values from the source and writing equivalent values into the destination. The source remains unchanged. A CPU can carry out a copy through load and store instructions, often using efficient instructions that handle many bytes at a time. A copy consumes memory-system resources; it is not the same as passing a reference to an already existing buffer.\n\nA program can also give another function a reference to a buffer. In that case the function may access the same bytes instead of creating a second copy. Whether a copy happens depends on the interface and implementation. We will distinguish those cases rather than count a fixed number of copies for all networking systems.",
+    "learnerCopy": "<!-- guided-block: our-original-sixteen-byte-buffer -->\n\nOur original sixteen-byte buffer contains the five meaningful bytes HELLO. The remaining eleven bytes are initialized to zero. We will compare two ways another part of the program can access these bytes.\n\n<!-- guided-block: we-create-a-second-reference -->\n\nWe create a second reference to the existing buffer. Both references identify the same underlying memory object. We have not created another copy of the sixteen bytes.\n\n<!-- guided-block: using-the-second-reference-we -->\n\nUsing the second reference, we replace H with X. The underlying buffer now contains XELLO.\n\n<!-- guided-block: reading-through-either-reference-returns -->\n\nReading through either reference returns the changed value because both references identify the same memory.\n\n<!-- guided-block: now-we-allocate-a-different -->\n\nNow we allocate a different buffer and copy the current five meaningful bytes into it.\n\n<!-- guided-block: the-source-currently-contains-xello -->\n\nThe source currently contains XELLO, so the new copy must also contain XELLO. We are continuing the same example, not restoring the earlier HELLO state.\n\n<!-- guided-block: we-replace-x-with-y -->\n\nWe replace X with Y in the independent copy. The destination now contains YELLO, while the original remains XELLO.\n\n<!-- guided-block: the-two-buffers-contain-independently -->\n\nThe two buffers contain independently stored byte values. Changing one does not change the other.\n\n<!-- guided-block: a-reference-provides-another-way -->\n\nA reference provides another way to access an existing memory object. A copy creates corresponding byte values at a different location. This distinction matters when we later examine socket buffering, DMA and registered memory.",
+    "contentBlocks": [
+      {
+        "id": "our-original-sixteen-byte-buffer",
+        "markdown": "Our original sixteen-byte buffer contains the five meaningful bytes HELLO. The remaining eleven bytes are initialized to zero. We will compare two ways another part of the program can access these bytes."
+      },
+      {
+        "id": "we-create-a-second-reference",
+        "markdown": "We create a second reference to the existing buffer. Both references identify the same underlying memory object. We have not created another copy of the sixteen bytes."
+      },
+      {
+        "id": "using-the-second-reference-we",
+        "markdown": "Using the second reference, we replace H with X. The underlying buffer now contains XELLO."
+      },
+      {
+        "id": "reading-through-either-reference-returns",
+        "markdown": "Reading through either reference returns the changed value because both references identify the same memory."
+      },
+      {
+        "id": "now-we-allocate-a-different",
+        "markdown": "Now we allocate a different buffer and copy the current five meaningful bytes into it."
+      },
+      {
+        "id": "the-source-currently-contains-xello",
+        "markdown": "The source currently contains XELLO, so the new copy must also contain XELLO. We are continuing the same example, not restoring the earlier HELLO state."
+      },
+      {
+        "id": "we-replace-x-with-y",
+        "markdown": "We replace X with Y in the independent copy. The destination now contains YELLO, while the original remains XELLO."
+      },
+      {
+        "id": "the-two-buffers-contain-independently",
+        "markdown": "The two buffers contain independently stored byte values. Changing one does not change the other."
+      },
+      {
+        "id": "a-reference-provides-another-way",
+        "markdown": "A reference provides another way to access an existing memory object. A copy creates corresponding byte values at a different location. This distinction matters when we later examine socket buffering, DMA and registered memory."
+      }
+    ],
     "visualSpec": "Two ranges at illustrative `0x1000` and `0x2000`, both mapped. Action **Copy five bytes**: CPU read source -> transient register/cache representation -> CPU store destination; five destination cells become HELLO; source persists. Action **Pass a reference instead**: show second logical handle pointing to source, no destination copy. Keep the two demonstrations independent/resettable. Use stable colors for memory, instruction, byte transfer, and metadata.",
     "revealCopy": "A copy creates another set of byte values at another location. Passing a reference does not. TCP and RDMA both transfer information, not the original memory object or ownership of the source buffer.",
     "inspectCopy": "",
@@ -58,7 +220,21 @@
     "id": "1.6",
     "lesson": "moving-data",
     "title": "Why does the kernel get involved at all?",
-    "learnerCopy": "Applications normally execute in user mode. This limits what they can do directly to protect the rest of the machine. For instance, if every process could freely program every device, it could interfere with another process's network traffic or overwrite memory belonging to someone else.\n\nLinux provides controlled entry points called system calls. When an application needs a service such as opening a socket, it invokes an operating-system interface; the CPU enters kernel mode and executes the appropriate kernel code on its behalf. When that operation is ready to return, the CPU resumes user-mode execution. If the operation must wait for an event, Linux can suspend the waiting thread and let another thread run.\n\nThe kernel can also run in response to device events and scheduled processing, not only system calls. A NIC may signal that receive work is ready, and the kernel may then process a batch of received packets. The same physical CPU hardware is involved; the executing code and context are different.",
+    "learnerCopy": "<!-- guided-block: applications-normally-execute-in-user -->\n\nApplications normally execute in user mode. This limits what they can do directly to protect the rest of the machine. For instance, if every process could freely program every device, it could interfere with another process's network traffic or overwrite memory belonging to someone else.\n\n<!-- guided-block: linux-provides-controlled-entry-points -->\n\nLinux provides controlled entry points called system calls. When an application needs a service such as opening a socket, it invokes an operating-system interface; the CPU enters kernel mode and executes the appropriate kernel code on its behalf. When that operation is ready to return, the CPU resumes user-mode execution. If the operation must wait for an event, Linux can suspend the waiting thread and let another thread run.\n\n<!-- guided-block: the-kernel-can-also-run -->\n\nThe kernel can also run in response to device events and scheduled processing, not only system calls. A NIC may signal that receive work is ready, and the kernel may then process a batch of received packets. The same physical CPU hardware is involved; the executing code and context are different.",
+    "contentBlocks": [
+      {
+        "id": "applications-normally-execute-in-user",
+        "markdown": "Applications normally execute in user mode. This limits what they can do directly to protect the rest of the machine. For instance, if every process could freely program every device, it could interfere with another process's network traffic or overwrite memory belonging to someone else."
+      },
+      {
+        "id": "linux-provides-controlled-entry-points",
+        "markdown": "Linux provides controlled entry points called system calls. When an application needs a service such as opening a socket, it invokes an operating-system interface; the CPU enters kernel mode and executes the appropriate kernel code on its behalf. When that operation is ready to return, the CPU resumes user-mode execution. If the operation must wait for an event, Linux can suspend the waiting thread and let another thread run."
+      },
+      {
+        "id": "the-kernel-can-also-run",
+        "markdown": "The kernel can also run in response to device events and scheduled processing, not only system calls. A NIC may signal that receive work is ready, and the kernel may then process a batch of received packets. The same physical CPU hardware is involved; the executing code and context are different."
+      }
+    ],
     "visualSpec": "Use time lane `CPU executing user code → system-call entry → CPU executing kernel code → return to user code`. Below show one hardware CPU and the same RAM. Action **Ask Linux for a service** highlights mode switch. Action **Wait for device** shows thread sleep and another runnable thread, then wakeup. Separate asynchronous device notification from synchronous call. No fake timing or claim that mode switch necessarily switches process.",
     "revealCopy": "Kernel involvement means that privileged Linux code is being executed by a CPU, or that kernel-managed resources are involved. CPU involvement is broader: application code also runs on a CPU. Those two expressions are not opposites.",
     "inspectCopy": "",
@@ -69,7 +245,17 @@
     "id": "1.7",
     "lesson": "moving-data",
     "title": "Now introduce two hosts",
-    "learnerCopy": "We can finally state our networking problem precisely. On Server A, a running Python process has allocated a buffer and written HELLO into its first five bytes. On Server B, another running Python process will allocate a destination buffer. The processes have independent address spaces, and the servers have independent physical memory.\n\nServer A cannot access Server B's memory using an ordinary CPU load or store. Instead, the two processes will communicate using a network interface provided by Linux. Our objective is to make the five byte values appear in Server B's buffer while leaving Server A's source unchanged.",
+    "learnerCopy": "<!-- guided-block: we-can-finally-state-our -->\n\nWe can finally state our networking problem precisely. On Server A, a running Python process has allocated a buffer and written HELLO into its first five bytes. On Server B, another running Python process will allocate a destination buffer. The processes have independent address spaces, and the servers have independent physical memory.\n\n<!-- guided-block: server-a-cannot-access-server -->\n\nServer A cannot access Server B's memory using an ordinary CPU load or store. Instead, the two processes will communicate using a network interface provided by Linux. Our objective is to make the five byte values appear in Server B's buffer while leaving Server A's source unchanged.",
+    "contentBlocks": [
+      {
+        "id": "we-can-finally-state-our",
+        "markdown": "We can finally state our networking problem precisely. On Server A, a running Python process has allocated a buffer and written HELLO into its first five bytes. On Server B, another running Python process will allocate a destination buffer. The processes have independent address spaces, and the servers have independent physical memory."
+      },
+      {
+        "id": "server-a-cannot-access-server",
+        "markdown": "Server A cannot access Server B's memory using an ordinary CPU load or store. Instead, the two processes will communicate using a network interface provided by Linux. Our objective is to make the five byte values appear in Server B's buffer while leaving Server A's source unchanged."
+      }
+    ],
     "visualSpec": "Duplicate the single-host architecture; show process A buffer in its RAM, process B buffer in its RAM, distinct physical machines joined by NICs and Ethernet. Start with both processes, empty destination (zero values, not unspecified physical contents). Action **Use the network** leads to 02. No RDMA, keys or queues on this opening view.",
     "revealCopy": "We know where the bytes live, what a copy is and why software requests controlled access to a device. We can now follow an ordinary TCP transfer without treating the operating system as a black box.",
     "inspectCopy": "",
@@ -80,7 +266,21 @@
     "id": "2.1",
     "lesson": "moving-data",
     "title": "Why use a socket instead of directly programming the NIC?",
-    "learnerCopy": "Consider a web browser, an SSH session and our Python sender running on Server A at the same time. They may all use the same network card. How would the card know which application owns a connection, what should happen if packets are lost, and which process should receive an incoming message?\n\nLinux provides a shared networking service. Its TCP/IP stack tracks connections, reliable delivery, routing and buffering; its network drivers coordinate access to the hardware. Applications normally request this service through sockets rather than manipulating NIC registers or transmit rings themselves. This gives applications a portable interface and prevents them from indiscriminately controlling a shared device. Specialized interfaces, such as RDMA or userspace packet-processing frameworks, can change this arrangement, but they still require controlled setup and access.\n\nA socket is an operating-system communication endpoint. The Python socket object is a user-space handle to a kernel-managed socket; on Linux the process refers to it through a file descriptor, a small integer indexing that process’s file-descriptor table. The socket is not a physical port on the NIC, and a file descriptor is not a TCP port number.",
+    "learnerCopy": "<!-- guided-block: consider-a-web-browser-an -->\n\nConsider a web browser, an SSH session and our Python sender running on Server A at the same time. They may all use the same network card. How would the card know which application owns a connection, what should happen if packets are lost, and which process should receive an incoming message?\n\n<!-- guided-block: linux-provides-a-shared-networking -->\n\nLinux provides a shared networking service. Its TCP/IP stack tracks connections, reliable delivery, routing and buffering; its network drivers coordinate access to the hardware. Applications normally request this service through sockets rather than manipulating NIC registers or transmit rings themselves. This gives applications a portable interface and prevents them from indiscriminately controlling a shared device. Specialized interfaces, such as RDMA or userspace packet-processing frameworks, can change this arrangement, but they still require controlled setup and access.\n\n<!-- guided-block: a-socket-is-an-operating -->\n\nA socket is an operating-system communication endpoint. The Python socket object is a user-space handle to a kernel-managed socket; on Linux the process refers to it through a file descriptor, a small integer indexing that process’s file-descriptor table. The socket is not a physical port on the NIC, and a file descriptor is not a TCP port number.",
+    "contentBlocks": [
+      {
+        "id": "consider-a-web-browser-an",
+        "markdown": "Consider a web browser, an SSH session and our Python sender running on Server A at the same time. They may all use the same network card. How would the card know which application owns a connection, what should happen if packets are lost, and which process should receive an incoming message?"
+      },
+      {
+        "id": "linux-provides-a-shared-networking",
+        "markdown": "Linux provides a shared networking service. Its TCP/IP stack tracks connections, reliable delivery, routing and buffering; its network drivers coordinate access to the hardware. Applications normally request this service through sockets rather than manipulating NIC registers or transmit rings themselves. This gives applications a portable interface and prevents them from indiscriminately controlling a shared device. Specialized interfaces, such as RDMA or userspace packet-processing frameworks, can change this arrangement, but they still require controlled setup and access."
+      },
+      {
+        "id": "a-socket-is-an-operating",
+        "markdown": "A socket is an operating-system communication endpoint. The Python socket object is a user-space handle to a kernel-managed socket; on Linux the process refers to it through a file descriptor, a small integer indexing that process’s file-descriptor table. The socket is not a physical port on the NIC, and a file descriptor is not a TCP port number."
+      }
+    ],
     "visualSpec": "Three process boxes sharing one NIC, each has a logical handle; Linux socket objects and connection state are separate from physical components. Select **Create a TCP socket** to reveal a new handle and kernel object, not a packet. Compare physical NIC port, TCP port, and process-local FD in a small legend. No transfer arrow until connection or data submission.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -91,7 +291,33 @@
     "id": "2.2",
     "lesson": "moving-data",
     "title": "Create the endpoint and choose a peer",
-    "learnerCopy": "Python includes a standard-library module called `socket`. We import it to request Linux networking services. The following expression creates an IPv4 stream socket; for this combination, TCP is the default transport. It does not by itself connect to anyone or send HELLO.\n\n```python\nimport socket\ns = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n```\n\n`AF_INET` selects IPv4 addressing. `SOCK_STREAM` selects a reliable byte-stream interface when used with TCP. The variable `s` is our Python handle to the socket. The kernel now has an endpoint to manage.\n\nWe need two cooperating programs. The receiving service on Server B asks Linux to listen at a chosen local IP address and TCP port. The sender on Server A asks to connect to that address and port.\n\n```python\n# Server B: prepare a listening socket\nlistener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\nlistener.bind((\"10.10.10.2\", 5001))\nlistener.listen(1)\n\n# Server A: establish a connection\ns.connect((\"10.10.10.2\", 5001))\n```\n\nPort 5001 is an arbitrary teaching choice. Both programs must agree on it. Linux normally selects a suitable local source address and ephemeral source port for the client when it connects. The listening socket does not hold the data of every client connection in a single stream.",
+    "learnerCopy": "<!-- guided-block: python-includes-a-standard-library -->\n\nPython includes a standard-library module called `socket`. We import it to request Linux networking services. The following expression creates an IPv4 stream socket; for this combination, TCP is the default transport. It does not by itself connect to anyone or send HELLO.\n\n<!-- guided-block: python-import-socket-s-socket -->\n\n```python\nimport socket\ns = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n```\n\n<!-- guided-block: af-inet-selects-ipv4-addressing -->\n\n`AF_INET` selects IPv4 addressing. `SOCK_STREAM` selects a reliable byte-stream interface when used with TCP. The variable `s` is our Python handle to the socket. The kernel now has an endpoint to manage.\n\n<!-- guided-block: we-need-two-cooperating-programs -->\n\nWe need two cooperating programs. The receiving service on Server B asks Linux to listen at a chosen local IP address and TCP port. The sender on Server A asks to connect to that address and port.\n\n<!-- guided-block: python-server-b-prepare-a -->\n\n```python\n# Server B: prepare a listening socket\nlistener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\nlistener.bind((\"10.10.10.2\", 5001))\nlistener.listen(1)\n\n# Server A: establish a connection\ns.connect((\"10.10.10.2\", 5001))\n```\n\n<!-- guided-block: port-5001-is-an-arbitrary -->\n\nPort 5001 is an arbitrary teaching choice. Both programs must agree on it. Linux normally selects a suitable local source address and ephemeral source port for the client when it connects. The listening socket does not hold the data of every client connection in a single stream.",
+    "contentBlocks": [
+      {
+        "id": "python-includes-a-standard-library",
+        "markdown": "Python includes a standard-library module called `socket`. We import it to request Linux networking services. The following expression creates an IPv4 stream socket; for this combination, TCP is the default transport. It does not by itself connect to anyone or send HELLO."
+      },
+      {
+        "id": "python-import-socket-s-socket",
+        "markdown": "```python\nimport socket\ns = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n```"
+      },
+      {
+        "id": "af-inet-selects-ipv4-addressing",
+        "markdown": "`AF_INET` selects IPv4 addressing. `SOCK_STREAM` selects a reliable byte-stream interface when used with TCP. The variable `s` is our Python handle to the socket. The kernel now has an endpoint to manage."
+      },
+      {
+        "id": "we-need-two-cooperating-programs",
+        "markdown": "We need two cooperating programs. The receiving service on Server B asks Linux to listen at a chosen local IP address and TCP port. The sender on Server A asks to connect to that address and port."
+      },
+      {
+        "id": "python-server-b-prepare-a",
+        "markdown": "```python\n# Server B: prepare a listening socket\nlistener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\nlistener.bind((\"10.10.10.2\", 5001))\nlistener.listen(1)\n\n# Server A: establish a connection\ns.connect((\"10.10.10.2\", 5001))\n```"
+      },
+      {
+        "id": "port-5001-is-an-arbitrary",
+        "markdown": "Port 5001 is an arbitrary teaching choice. Both programs must agree on it. Linux normally selects a suitable local source address and ephemeral source port for the client when it connects. The listening socket does not hold the data of every client connection in a single stream."
+      }
+    ],
     "visualSpec": "Start B listener before A connect. Show listener `B:5001`, A source port `{{tcp.small.client_port}}` only in the recorded view; illustrative view uses `ephemeral port`. Show four-tuple for a connection: A IP, A port, B IP, B port; explain transport/protocol context. A second connected client example (conceptual) illustrates same B port but different connection. Show state of socket object and FD, not globally fixed FD. **Connect to Server B** reveals handshake.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -102,7 +328,21 @@
     "id": "2.3",
     "lesson": "moving-data",
     "title": "The TCP handshake and accept()",
-    "learnerCopy": "When Server A calls `connect()`, the TCP implementations in the two kernels establish a connection. TCP uses sequence numbers so the endpoints can keep track of data. A SYN, SYN-ACK and ACK establish the connection and exchange the initial sequence information and supported options. The sender can then write to the connected socket. Server B uses `accept()` to obtain a separate connected socket for this particular client.\n\n```python\nconn, peer = listener.accept()\n```\n\n`conn` is the socket handle for this connection. `peer` describes the remote address and port. The listener remains available for other connections. A blocking `accept()` can wait until a connection is available. On Linux the kernel can establish and queue an incoming connection before the receiving application actually calls `accept()`; the three-way handshake does not require the application to handle each individual packet.",
+    "learnerCopy": "<!-- guided-block: when-server-a-calls-connect -->\n\nWhen Server A calls `connect()`, the TCP implementations in the two kernels establish a connection. TCP uses sequence numbers so the endpoints can keep track of data. A SYN, SYN-ACK and ACK establish the connection and exchange the initial sequence information and supported options. The sender can then write to the connected socket. Server B uses `accept()` to obtain a separate connected socket for this particular client.\n\n<!-- guided-block: python-conn-peer-listener-accept -->\n\n```python\nconn, peer = listener.accept()\n```\n\n<!-- guided-block: conn-is-the-socket-handle -->\n\n`conn` is the socket handle for this connection. `peer` describes the remote address and port. The listener remains available for other connections. A blocking `accept()` can wait until a connection is available. On Linux the kernel can establish and queue an incoming connection before the receiving application actually calls `accept()`; the three-way handshake does not require the application to handle each individual packet.",
+    "contentBlocks": [
+      {
+        "id": "when-server-a-calls-connect",
+        "markdown": "When Server A calls `connect()`, the TCP implementations in the two kernels establish a connection. TCP uses sequence numbers so the endpoints can keep track of data. A SYN, SYN-ACK and ACK establish the connection and exchange the initial sequence information and supported options. The sender can then write to the connected socket. Server B uses `accept()` to obtain a separate connected socket for this particular client."
+      },
+      {
+        "id": "python-conn-peer-listener-accept",
+        "markdown": "```python\nconn, peer = listener.accept()\n```"
+      },
+      {
+        "id": "conn-is-the-socket-handle",
+        "markdown": "`conn` is the socket handle for this connection. `peer` describes the remote address and port. The listener remains available for other connections. A blocking `accept()` can wait until a connection is available. On Linux the kernel can establish and queue an incoming connection before the receiving application actually calls `accept()`; the three-way handshake does not require the application to handle each individual packet."
+      }
+    ],
     "visualSpec": "Show actual TCP handshake capture from small case with selected rows, direction, SYN/ACK flags, relative or absolute sequence numbers labelled. Use the genuine capture and `{{tcp.small.handshake_frames}}`. Reveal each actual row with the matching syscall/event. Include listening and accepted socket objects on B. Show `connect()` completion and `accept()` return as local observations, not a fabricated globally exact ordering.",
     "revealCopy": "The handshake establishes TCP transport state. It does not register application memory or give Server A access to Server B's process addresses. The connection identifies an ordered byte stream in each direction.",
     "inspectCopy": "",
@@ -113,7 +353,17 @@
     "id": "2.4",
     "lesson": "moving-data",
     "title": "What is a byte stream?",
-    "learnerCopy": "Suppose the sender writes `HE` and then `LLO`. TCP offers an ordered sequence of bytes, so the receiving application sees the sequence `H E L L O`. It does not promise that each write becomes a packet, or that each write is returned by one receive call. There is no built-in application-message boundary in a TCP stream.\n\nThe application must decide how to interpret the stream. It might agree on a fixed message length, include a length prefix, use a delimiter, or read until the peer closes its sending direction. For our first experiment both programs agree to exchange exactly five payload bytes. That agreement belongs to the application, not TCP.",
+    "learnerCopy": "<!-- guided-block: suppose-the-sender-writes-he -->\n\nSuppose the sender writes `HE` and then `LLO`. TCP offers an ordered sequence of bytes, so the receiving application sees the sequence `H E L L O`. It does not promise that each write becomes a packet, or that each write is returned by one receive call. There is no built-in application-message boundary in a TCP stream.\n\n<!-- guided-block: the-application-must-decide-how -->\n\nThe application must decide how to interpret the stream. It might agree on a fixed message length, include a length prefix, use a delimiter, or read until the peer closes its sending direction. For our first experiment both programs agree to exchange exactly five payload bytes. That agreement belongs to the application, not TCP.",
+    "contentBlocks": [
+      {
+        "id": "suppose-the-sender-writes-he",
+        "markdown": "Suppose the sender writes `HE` and then `LLO`. TCP offers an ordered sequence of bytes, so the receiving application sees the sequence `H E L L O`. It does not promise that each write becomes a packet, or that each write is returned by one receive call. There is no built-in application-message boundary in a TCP stream."
+      },
+      {
+        "id": "the-application-must-decide-how",
+        "markdown": "The application must decide how to interpret the stream. It might agree on a fixed message length, include a length prefix, use a delimiter, or read until the peer closes its sending direction. For our first experiment both programs agree to exchange exactly five payload bytes. That agreement belongs to the application, not TCP."
+      }
+    ],
     "visualSpec": "Three rows: application writes `HE | LLO`, continuous numbered byte stream `H E L L O`, possible receives `H | EL | LO` or `HE | LL | O`. A separate line marked **Illustrative alternative** shows different packet grouping. Learner chooses two possible read chunkings, both yield HELLO. Do not claim these alternatives were captured. Use a different boundary pattern for each row; do not use same colors to imply equality of write, segment and read boundaries.",
     "revealCopy": "A write call describes bytes to submit; a TCP segment is a transport unit; a receive call returns available ordered bytes. These are three different boundaries. TCP can split or combine writes, retransmit data, and deliver an application a different grouping of bytes.",
     "inspectCopy": "",
@@ -124,7 +374,25 @@
     "id": "2.5",
     "lesson": "moving-data",
     "title": "What happens when Python calls sendall()?",
-    "learnerCopy": "We already have a connected socket and a buffer containing five meaningful bytes. Python provides a method named `sendall()` on socket objects. It is a convenience method that keeps attempting to submit the supplied bytes until all are accepted through the socket interface, or an error occurs. A single underlying `send()` can accept fewer bytes than requested; the convenience method handles repeated submission.\n\n```python\nbuf = bytearray(16)\nbuf[:5] = b\"HELLO\"\ns.sendall(memoryview(buf)[:5])\n```\n\n`memoryview(buf)[:5]` describes the first five bytes without making a Python slice-copy of the payload. It does not promise that the kernel avoids copying. Python executes on the CPU in user mode; when it requests a send operation, Linux executes kernel code on a CPU. In the ordinary buffered socket path used as our model, the kernel obtains the submitted bytes from user memory and copies them into kernel-managed send storage. This is not the application placing a frame directly on the wire.\n\nThe kernel's TCP implementation retains the necessary state and data for reliable delivery. If send storage fills up because transmission or acknowledgement progress is slow, a blocking send may need to wait. Successful `sendall()` means the bytes have been accepted for sending. It does not establish that they have already left the NIC, reached the other host, or been read by its application.",
+    "learnerCopy": "<!-- guided-block: we-already-have-a-connected -->\n\nWe already have a connected socket and a buffer containing five meaningful bytes. Python provides a method named `sendall()` on socket objects. It is a convenience method that keeps attempting to submit the supplied bytes until all are accepted through the socket interface, or an error occurs. A single underlying `send()` can accept fewer bytes than requested; the convenience method handles repeated submission.\n\n<!-- guided-block: python-buf-bytearray-16-buf -->\n\n```python\nbuf = bytearray(16)\nbuf[:5] = b\"HELLO\"\ns.sendall(memoryview(buf)[:5])\n```\n\n<!-- guided-block: memoryview-buf-5-describes-the -->\n\n`memoryview(buf)[:5]` describes the first five bytes without making a Python slice-copy of the payload. It does not promise that the kernel avoids copying. Python executes on the CPU in user mode; when it requests a send operation, Linux executes kernel code on a CPU. In the ordinary buffered socket path used as our model, the kernel obtains the submitted bytes from user memory and copies them into kernel-managed send storage. This is not the application placing a frame directly on the wire.\n\n<!-- guided-block: the-kernel-s-tcp-implementation -->\n\nThe kernel's TCP implementation retains the necessary state and data for reliable delivery. If send storage fills up because transmission or acknowledgement progress is slow, a blocking send may need to wait. Successful `sendall()` means the bytes have been accepted for sending. It does not establish that they have already left the NIC, reached the other host, or been read by its application.",
+    "contentBlocks": [
+      {
+        "id": "we-already-have-a-connected",
+        "markdown": "We already have a connected socket and a buffer containing five meaningful bytes. Python provides a method named `sendall()` on socket objects. It is a convenience method that keeps attempting to submit the supplied bytes until all are accepted through the socket interface, or an error occurs. A single underlying `send()` can accept fewer bytes than requested; the convenience method handles repeated submission."
+      },
+      {
+        "id": "python-buf-bytearray-16-buf",
+        "markdown": "```python\nbuf = bytearray(16)\nbuf[:5] = b\"HELLO\"\ns.sendall(memoryview(buf)[:5])\n```"
+      },
+      {
+        "id": "memoryview-buf-5-describes-the",
+        "markdown": "`memoryview(buf)[:5]` describes the first five bytes without making a Python slice-copy of the payload. It does not promise that the kernel avoids copying. Python executes on the CPU in user mode; when it requests a send operation, Linux executes kernel code on a CPU. In the ordinary buffered socket path used as our model, the kernel obtains the submitted bytes from user memory and copies them into kernel-managed send storage. This is not the application placing a frame directly on the wire."
+      },
+      {
+        "id": "the-kernel-s-tcp-implementation",
+        "markdown": "The kernel's TCP implementation retains the necessary state and data for reliable delivery. If send storage fills up because transmission or acknowledgement progress is slow, a blocking send may need to wait. Successful `sendall()` means the bytes have been accepted for sending. It does not establish that they have already left the NIC, reached the other host, or been read by its application."
+      }
+    ],
     "visualSpec": "Use the same physical host diagram from 01 with RAM split into mapped user buffer and logical kernel-managed send storage. Step **Submit the five bytes**: CPU runs Python call, enters system call, CPU reads permitted user memory and writes kernel-owned memory; source stays HELLO. Indicate CPU activity, not a kernel-to-memory hardware arrow. Draw copy arrow between memory locations via CPU/cache, with separate control arrow for syscall. Socket buffer depicted as ordered ranges/queued storage and metadata, not necessarily a contiguous byte array. After return keep TCP state visible; never imply exact send-queue occupancy without evidence.",
     "revealCopy": "",
     "inspectCopy": "The exact Linux internal structures and copy path vary; data may reside in socket-associated `sk_buff` structures and page fragments. Specialized zero-copy interfaces are different. Our diagram is the ordinary buffered path, not a trace of all internal instructions. [S4–S9]",
@@ -135,7 +403,21 @@
     "id": "2.6",
     "lesson": "moving-data",
     "title": "TCP processing: turn a stream into segments",
-    "learnerCopy": "TCP is responsible for transferring an ordered sequence of bytes across a network that can lose, duplicate or reorder packets. The kernel assigns sequence numbers to bytes, keeps track of what has been acknowledged, limits transmission using the receiver's advertised window and congestion-control state, and retransmits when necessary.\n\nTCP sends portions of the stream in segments. Each segment carries a TCP header with source and destination ports, sequence information, flags and other control fields, followed by its data if present. The IP layer supplies source/destination IP addresses and determines the next hop and egress interface. Ethernet frames carry the resulting IP packets across a link. The Ethernet destination MAC may be a router's MAC on a routed path, not the final server's MAC.\n\nOur HELLO payload may fit into one segment, but large data requires multiple segments. The maximum segment size (MSS) and path constraints influence the amount of TCP data in a segment. An Ethernet MTU of 1500 does not mean every TCP packet carries exactly 1500 payload bytes: IP/TCP headers and options consume space. TCP is free to send smaller segments. IP fragmentation is a different mechanism from TCP segmentation.",
+    "learnerCopy": "<!-- guided-block: tcp-is-responsible-for-transferring -->\n\nTCP is responsible for transferring an ordered sequence of bytes across a network that can lose, duplicate or reorder packets. The kernel assigns sequence numbers to bytes, keeps track of what has been acknowledged, limits transmission using the receiver's advertised window and congestion-control state, and retransmits when necessary.\n\n<!-- guided-block: tcp-sends-portions-of-the -->\n\nTCP sends portions of the stream in segments. Each segment carries a TCP header with source and destination ports, sequence information, flags and other control fields, followed by its data if present. The IP layer supplies source/destination IP addresses and determines the next hop and egress interface. Ethernet frames carry the resulting IP packets across a link. The Ethernet destination MAC may be a router's MAC on a routed path, not the final server's MAC.\n\n<!-- guided-block: our-hello-payload-may-fit -->\n\nOur HELLO payload may fit into one segment, but large data requires multiple segments. The maximum segment size (MSS) and path constraints influence the amount of TCP data in a segment. An Ethernet MTU of 1500 does not mean every TCP packet carries exactly 1500 payload bytes: IP/TCP headers and options consume space. TCP is free to send smaller segments. IP fragmentation is a different mechanism from TCP segmentation.",
+    "contentBlocks": [
+      {
+        "id": "tcp-is-responsible-for-transferring",
+        "markdown": "TCP is responsible for transferring an ordered sequence of bytes across a network that can lose, duplicate or reorder packets. The kernel assigns sequence numbers to bytes, keeps track of what has been acknowledged, limits transmission using the receiver's advertised window and congestion-control state, and retransmits when necessary."
+      },
+      {
+        "id": "tcp-sends-portions-of-the",
+        "markdown": "TCP sends portions of the stream in segments. Each segment carries a TCP header with source and destination ports, sequence information, flags and other control fields, followed by its data if present. The IP layer supplies source/destination IP addresses and determines the next hop and egress interface. Ethernet frames carry the resulting IP packets across a link. The Ethernet destination MAC may be a router's MAC on a routed path, not the final server's MAC."
+      },
+      {
+        "id": "our-hello-payload-may-fit",
+        "markdown": "Our HELLO payload may fit into one segment, but large data requires multiple segments. The maximum segment size (MSS) and path constraints influence the amount of TCP data in a segment. An Ethernet MTU of 1500 does not mean every TCP packet carries exactly 1500 payload bytes: IP/TCP headers and options consume space. TCP is free to send smaller segments. IP fragmentation is a different mechanism from TCP segmentation."
+      }
+    ],
     "visualSpec": "Use observed recorded large-case chunks; do not combine counts from different examples. Preferred default actual large capture `{{tcp.large.payload_segments}}`, sort by TCP sequence for unique byte ranges; show first few actual ranges and total. For simple conceptual step use 2500 bytes with capacity 1000 -> 1000,1000,500. Explicitly label examples. At each segment add TCP, IP, Ethernet header layers using bracketed sizes from actual capture only. Highlight sequence number as first byte of that segment, ACK as next expected byte. Show a toy out-of-order arrival where second range waits for first; no invented observed loss. Action **Inspect a real segment** opens matching Wireshark screenshot and field table.",
     "revealCopy": "The segments are made from the stream. The stream is not made from application message boundaries. Captured segments and returned receive chunks can have different lengths. An ACK for a sequence range is TCP transport evidence, not confirmation that the receiving Python process read it.",
     "inspectCopy": "",
@@ -146,7 +428,17 @@
     "id": "2.7",
     "lesson": "moving-data",
     "title": "How does the NIC get the bytes?",
-    "learnerCopy": "The kernel's network stack prepares transmit data and metadata. A typical NIC driver arranges buffers and transmit descriptors so the device knows which memory to access and what work to do. With a physical DMA-capable NIC, the NIC can read the prepared data from memory through the interconnect and transmit a frame. The CPU does not have to execute a store instruction for every byte sent onto the cable.\n\nThe kernel and CPU still have important work: managing protocol state, preparing transmission and handling results. Some NICs also perform checksum calculation or TCP segmentation offload. The exact boundary between software processing and hardware work depends on the system configuration.",
+    "learnerCopy": "<!-- guided-block: the-kernel-s-network-stack -->\n\nThe kernel's network stack prepares transmit data and metadata. A typical NIC driver arranges buffers and transmit descriptors so the device knows which memory to access and what work to do. With a physical DMA-capable NIC, the NIC can read the prepared data from memory through the interconnect and transmit a frame. The CPU does not have to execute a store instruction for every byte sent onto the cable.\n\n<!-- guided-block: the-kernel-and-cpu-still -->\n\nThe kernel and CPU still have important work: managing protocol state, preparing transmission and handling results. Some NICs also perform checksum calculation or TCP segmentation offload. The exact boundary between software processing and hardware work depends on the system configuration.",
+    "contentBlocks": [
+      {
+        "id": "the-kernel-s-network-stack",
+        "markdown": "The kernel's network stack prepares transmit data and metadata. A typical NIC driver arranges buffers and transmit descriptors so the device knows which memory to access and what work to do. With a physical DMA-capable NIC, the NIC can read the prepared data from memory through the interconnect and transmit a frame. The CPU does not have to execute a store instruction for every byte sent onto the cable."
+      },
+      {
+        "id": "the-kernel-and-cpu-still",
+        "markdown": "The kernel and CPU still have important work: managing protocol state, preparing transmission and handling results. Some NICs also perform checksum calculation or TCP segmentation offload. The exact boundary between software processing and hardware work depends on the system configuration."
+      }
+    ],
     "visualSpec": "Show logical stack -> driver descriptor metadata (pointer, length, flags, illustrative) -> NIC; separate payload route RAM -> NIC via interconnect -> Ethernet. Do not draw payload flowing through the descriptor ring. Highlight CPU in kernel mode for driver setup, NIC active for DMA transfer. Use a callout **Representative physical NIC**. If using virtual machines, explain that virtual device/hypervisor paths are not evidence of physical DMA or exact hardware activity. Capture screenshot proves packet content, not this hardware diagram.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -157,7 +449,21 @@
     "id": "2.8",
     "lesson": "moving-data",
     "title": "Follow the frame through the receiving host",
-    "learnerCopy": "At Server B, the NIC receives a frame. On a representative physical system, the driver has already prepared receive buffers for the NIC. The device can place received data into those buffers using DMA and report receive work. Linux may process incoming work in batches, for example through NAPI polling. This processing runs on CPUs, often outside the receiving application's execution context.\n\nThe kernel checks and interprets the protocol headers. IP identifies local delivery, and TCP identifies the appropriate connected socket using addresses and ports, validates transport state and tracks sequence ranges. If a segment arrives out of order, TCP can retain data until missing bytes are available. Only the contiguous ordered stream is exposed to the application. It may also acknowledge data and update receive-window information. These operations can occur even while the receiving application is not executing a receive call.\n\nThe kernel associates available bytes with the socket's receive storage. It need not literally assemble them into one contiguous array at that moment. This storage and its accounting are kernel-managed, not the Python destination buffer.",
+    "learnerCopy": "<!-- guided-block: at-server-b-the-nic -->\n\nAt Server B, the NIC receives a frame. On a representative physical system, the driver has already prepared receive buffers for the NIC. The device can place received data into those buffers using DMA and report receive work. Linux may process incoming work in batches, for example through NAPI polling. This processing runs on CPUs, often outside the receiving application's execution context.\n\n<!-- guided-block: the-kernel-checks-and-interprets -->\n\nThe kernel checks and interprets the protocol headers. IP identifies local delivery, and TCP identifies the appropriate connected socket using addresses and ports, validates transport state and tracks sequence ranges. If a segment arrives out of order, TCP can retain data until missing bytes are available. Only the contiguous ordered stream is exposed to the application. It may also acknowledge data and update receive-window information. These operations can occur even while the receiving application is not executing a receive call.\n\n<!-- guided-block: the-kernel-associates-available-bytes -->\n\nThe kernel associates available bytes with the socket's receive storage. It need not literally assemble them into one contiguous array at that moment. This storage and its accounting are kernel-managed, not the Python destination buffer.",
+    "contentBlocks": [
+      {
+        "id": "at-server-b-the-nic",
+        "markdown": "At Server B, the NIC receives a frame. On a representative physical system, the driver has already prepared receive buffers for the NIC. The device can place received data into those buffers using DMA and report receive work. Linux may process incoming work in batches, for example through NAPI polling. This processing runs on CPUs, often outside the receiving application's execution context."
+      },
+      {
+        "id": "the-kernel-checks-and-interprets",
+        "markdown": "The kernel checks and interprets the protocol headers. IP identifies local delivery, and TCP identifies the appropriate connected socket using addresses and ports, validates transport state and tracks sequence ranges. If a segment arrives out of order, TCP can retain data until missing bytes are available. Only the contiguous ordered stream is exposed to the application. It may also acknowledge data and update receive-window information. These operations can occur even while the receiving application is not executing a receive call."
+      },
+      {
+        "id": "the-kernel-associates-available-bytes",
+        "markdown": "The kernel associates available bytes with the socket's receive storage. It need not literally assemble them into one contiguous array at that moment. This storage and its accounting are kernel-managed, not the Python destination buffer."
+      }
+    ],
     "visualSpec": "Receiver mirrored physical diagram: wire -> NIC -> kernel-owned RX buffers (DMA path representative), CPU executing driver/IP/TCP -> socket-associated ordered ranges. Highlight demultiplex by four-tuple into correct socket among two. Show out-of-order toy ranges only when requested. Show receiver user buffer still zeros and source unchanged. **Inspect the socket before the application reads** reveals recorded late-reader `ss` and local app log (see lab). No claim that every NIC interrupt maps to one packet or every internal move copies bytes. [S7–S10]",
     "revealCopy": "",
     "inspectCopy": "",
@@ -168,7 +474,33 @@
     "id": "2.9",
     "lesson": "moving-data",
     "title": "Where does recv() come from, and what does it do?",
-    "learnerCopy": "The `recv()` method belongs to a connected Python socket, just as `sendall()` does. It asks Linux for up to a specified number of bytes from that socket's incoming stream. The already connected socket determines which peer and connection we are reading from. We do not pass a remote IP address to each `recv()` call.\n\n```python\npart = conn.recv(5)\n```\n\nThis returns a new Python bytes object containing up to five bytes. It can return fewer than five. An empty bytes object means end of the stream when the call asked for a positive length. If there are no bytes available and the connection remains open, an ordinary blocking receive waits; a nonblocking receive instead reports that the operation would block.\n\nFor our visual experiment we want to see bytes enter a specific mutable application buffer, so we use a closely related method, `recv_into()`. It lets the program supply a destination buffer. Linux's normal buffered receive path copies available data from socket-associated kernel storage into user memory. The CPU executes the necessary kernel instructions and returns the number of bytes copied. The Python application can then inspect the bytes.\n\n```python\nbuf = bytearray(5)\nreceived = 0\nwhile received < len(buf):\n    n = conn.recv_into(memoryview(buf)[received:])\n    if n == 0:\n        raise EOFError(\"connection ended before the message was complete\")\n    received += n\n```\n\nThe loop is required because TCP does not guarantee that one receive call returns the entire agreed message. Each iteration selects the unused part of the destination buffer. The total reaches five only when all five bytes have been read.",
+    "learnerCopy": "<!-- guided-block: the-recv-method-belongs-to -->\n\nThe `recv()` method belongs to a connected Python socket, just as `sendall()` does. It asks Linux for up to a specified number of bytes from that socket's incoming stream. The already connected socket determines which peer and connection we are reading from. We do not pass a remote IP address to each `recv()` call.\n\n<!-- guided-block: python-part-conn-recv-5 -->\n\n```python\npart = conn.recv(5)\n```\n\n<!-- guided-block: this-returns-a-new-python -->\n\nThis returns a new Python bytes object containing up to five bytes. It can return fewer than five. An empty bytes object means end of the stream when the call asked for a positive length. If there are no bytes available and the connection remains open, an ordinary blocking receive waits; a nonblocking receive instead reports that the operation would block.\n\n<!-- guided-block: for-our-visual-experiment-we -->\n\nFor our visual experiment we want to see bytes enter a specific mutable application buffer, so we use a closely related method, `recv_into()`. It lets the program supply a destination buffer. Linux's normal buffered receive path copies available data from socket-associated kernel storage into user memory. The CPU executes the necessary kernel instructions and returns the number of bytes copied. The Python application can then inspect the bytes.\n\n<!-- guided-block: python-buf-bytearray-5-received -->\n\n```python\nbuf = bytearray(5)\nreceived = 0\nwhile received < len(buf):\n    n = conn.recv_into(memoryview(buf)[received:])\n    if n == 0:\n        raise EOFError(\"connection ended before the message was complete\")\n    received += n\n```\n\n<!-- guided-block: the-loop-is-required-because -->\n\nThe loop is required because TCP does not guarantee that one receive call returns the entire agreed message. Each iteration selects the unused part of the destination buffer. The total reaches five only when all five bytes have been read.",
+    "contentBlocks": [
+      {
+        "id": "the-recv-method-belongs-to",
+        "markdown": "The `recv()` method belongs to a connected Python socket, just as `sendall()` does. It asks Linux for up to a specified number of bytes from that socket's incoming stream. The already connected socket determines which peer and connection we are reading from. We do not pass a remote IP address to each `recv()` call."
+      },
+      {
+        "id": "python-part-conn-recv-5",
+        "markdown": "```python\npart = conn.recv(5)\n```"
+      },
+      {
+        "id": "this-returns-a-new-python",
+        "markdown": "This returns a new Python bytes object containing up to five bytes. It can return fewer than five. An empty bytes object means end of the stream when the call asked for a positive length. If there are no bytes available and the connection remains open, an ordinary blocking receive waits; a nonblocking receive instead reports that the operation would block."
+      },
+      {
+        "id": "for-our-visual-experiment-we",
+        "markdown": "For our visual experiment we want to see bytes enter a specific mutable application buffer, so we use a closely related method, `recv_into()`. It lets the program supply a destination buffer. Linux's normal buffered receive path copies available data from socket-associated kernel storage into user memory. The CPU executes the necessary kernel instructions and returns the number of bytes copied. The Python application can then inspect the bytes."
+      },
+      {
+        "id": "python-buf-bytearray-5-received",
+        "markdown": "```python\nbuf = bytearray(5)\nreceived = 0\nwhile received < len(buf):\n    n = conn.recv_into(memoryview(buf)[received:])\n    if n == 0:\n        raise EOFError(\"connection ended before the message was complete\")\n    received += n\n```"
+      },
+      {
+        "id": "the-loop-is-required-because",
+        "markdown": "The loop is required because TCP does not guarantee that one receive call returns the entire agreed message. Each iteration selects the unused part of the destination buffer. The total reaches five only when all five bytes have been read."
+      }
+    ],
     "visualSpec": "Show actual small experiment read calls, each requested max two bytes; use actual `{{tcp.small.read_events}}` for counts, hex and cumulative buffer. Animate CPU user -> kernel -> copy from receive storage -> user mode; highlight destination offsets, not all memory. In the actual script the slice is capped by `--chunk`; explain the cap as a deliberate application choice. The general snippet above is conceptual and differs only in its requested chunk size. **Read the next available bytes** steps through actual records. Show EOF only if observed in separate test or explain conceptually; no false assertion that TCP packet boundaries caused read sizes.",
     "revealCopy": "Receiving a frame, acknowledging its TCP bytes, making bytes available to a socket, and the application actually reading those bytes are separate milestones. The network capture can establish some of them; the application log is needed to establish the last one.",
     "inspectCopy": "",
@@ -179,7 +511,21 @@
     "id": "2.10",
     "lesson": "moving-data",
     "title": "Does the receiver have to call recv() before the sender sends?",
-    "learnerCopy": "No. Once the TCP connection is established, the sender can submit data even when the receiving program has not called `recv()` yet. The receiving kernel can store incoming bytes and acknowledge them independently of whether the receiving application is ready to consume them. If the receiver does not drain its buffers, TCP flow control eventually limits the amount the sender may put into the network. This is not unlimited storage.\n\nIf the receiver calls `recv()` before data is available, a blocking call can wait for the data. The CPU does not need to keep running that application's thread continuously while it waits. Linux can schedule other work and wake the waiting thread when appropriate.\n\nThis is an important contrast with ordinary RDMA SEND: later we will see that the receiver needs to provide a suitable receive Work Request for that RDMA transport operation. A TCP receive call and a posted RDMA receive request are not interchangeable concepts.",
+    "learnerCopy": "<!-- guided-block: no-once-the-tcp-connection -->\n\nNo. Once the TCP connection is established, the sender can submit data even when the receiving program has not called `recv()` yet. The receiving kernel can store incoming bytes and acknowledge them independently of whether the receiving application is ready to consume them. If the receiver does not drain its buffers, TCP flow control eventually limits the amount the sender may put into the network. This is not unlimited storage.\n\n<!-- guided-block: if-the-receiver-calls-recv -->\n\nIf the receiver calls `recv()` before data is available, a blocking call can wait for the data. The CPU does not need to keep running that application's thread continuously while it waits. Linux can schedule other work and wake the waiting thread when appropriate.\n\n<!-- guided-block: this-is-an-important-contrast -->\n\nThis is an important contrast with ordinary RDMA SEND: later we will see that the receiver needs to provide a suitable receive Work Request for that RDMA transport operation. A TCP receive call and a posted RDMA receive request are not interchangeable concepts.",
+    "contentBlocks": [
+      {
+        "id": "no-once-the-tcp-connection",
+        "markdown": "No. Once the TCP connection is established, the sender can submit data even when the receiving program has not called `recv()` yet. The receiving kernel can store incoming bytes and acknowledge them independently of whether the receiving application is ready to consume them. If the receiver does not drain its buffers, TCP flow control eventually limits the amount the sender may put into the network. This is not unlimited storage."
+      },
+      {
+        "id": "if-the-receiver-calls-recv",
+        "markdown": "If the receiver calls `recv()` before data is available, a blocking call can wait for the data. The CPU does not need to keep running that application's thread continuously while it waits. Linux can schedule other work and wake the waiting thread when appropriate."
+      },
+      {
+        "id": "this-is-an-important-contrast",
+        "markdown": "This is an important contrast with ordinary RDMA SEND: later we will see that the receiver needs to provide a suitable receive Work Request for that RDMA transport operation. A TCP receive call and a posted RDMA receive request are not interchangeable concepts."
+      }
+    ],
     "visualSpec": "Two actual cases from supplied lab: **Receiver reads first** and **Sender sends first**. For early-read case sender is gated before send; receiver logs read-enter then blocks. Show gate release and actual receive-return. For late-read case receiver is gated before first read; sender sends, capture shows arrival/ACK; `ss` snapshot while receiver is gated shows receive queue with unread bytes, and app log shows zero-filled buffer before reading. Only make this claim if snapshot, capture and logs corroborate it. Use no cross-host timestamp claim unless synchronization supports it; use explicit human gate order and per-host logs. Show timeline lanes `sender app`, `sender TCP`, `receiver TCP`, `receiver app`, with known event order only.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -190,7 +536,17 @@
     "id": "2.11",
     "lesson": "moving-data",
     "title": "Local sender versus remote sender",
-    "learnerCopy": "The socket interface also works when the two processes run on the same Linux host. If a client connects to `127.0.0.1`, IP selects the loopback interface. The TCP implementations and socket buffering still exist, but the data does not need to travel through a physical Ethernet NIC or cable. It stays inside the host's networking implementation.\n\nAn ordinary TCP connection to another server uses the selected network route and network devices. A Unix-domain socket is yet another local communication interface, and shared memory can let cooperating processes access a shared region without sending the data through a TCP stream. These are different choices, not synonyms for loopback.",
+    "learnerCopy": "<!-- guided-block: the-socket-interface-also-works -->\n\nThe socket interface also works when the two processes run on the same Linux host. If a client connects to `127.0.0.1`, IP selects the loopback interface. The TCP implementations and socket buffering still exist, but the data does not need to travel through a physical Ethernet NIC or cable. It stays inside the host's networking implementation.\n\n<!-- guided-block: an-ordinary-tcp-connection-to -->\n\nAn ordinary TCP connection to another server uses the selected network route and network devices. A Unix-domain socket is yet another local communication interface, and shared memory can let cooperating processes access a shared region without sending the data through a TCP stream. These are different choices, not synonyms for loopback.",
+    "contentBlocks": [
+      {
+        "id": "the-socket-interface-also-works",
+        "markdown": "The socket interface also works when the two processes run on the same Linux host. If a client connects to `127.0.0.1`, IP selects the loopback interface. The TCP implementations and socket buffering still exist, but the data does not need to travel through a physical Ethernet NIC or cable. It stays inside the host's networking implementation."
+      },
+      {
+        "id": "an-ordinary-tcp-connection-to",
+        "markdown": "An ordinary TCP connection to another server uses the selected network route and network devices. A Unix-domain socket is yet another local communication interface, and shared memory can let cooperating processes access a shared region without sending the data through a TCP stream. These are different choices, not synonyms for loopback."
+      }
+    ],
     "visualSpec": "Toggle **Same machine (loopback)** / **Two machines (Ethernet)**. Same machine has two process address spaces, one physical RAM and kernel; draw software loopback route. Remote path has separate NICs/memory. Inspect actual `lo` capture versus actual `data0` capture, not fabricated Ethernet link for localhost. Link-layer capture format on `lo` may differ; no assertion of physical frame transmission.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -201,7 +557,25 @@
     "id": "2.12",
     "lesson": "moving-data",
     "title": "Read the evidence, then ask why RDMA is needed",
-    "learnerCopy": "We have traced our five bytes from the sender's buffer through a connected TCP socket, through transport and network processing, into the receiver's socket and finally into the receiver's application buffer. We can now connect source code, kernel-managed state, packets and application observations.\n\nIn the captured small transfer, locate the data segment, compare its TCP data bytes with our HELLO buffer, and find the acknowledgement covering that range. Then compare the receiver's recorded read operations with the same data. The data might appear in one segment but be read in smaller chunks; our application decides the read size.\n\nIn the larger transfer, inspect how many distinct TCP byte ranges were carried in the recorded data segments. Compare them with the application's single `sendall()` call and repeated `recv_into()` calls. A large write can become multiple segments and many reads. None of those boundaries necessarily coincide.\n\nNow consider an AI or HPC application that repeatedly transfers large buffers. What if a device could move data between prepared application buffers while taking on more of the transport and memory-placement work? To understand that, we first need to understand DMA itself.",
+    "learnerCopy": "<!-- guided-block: we-have-traced-our-five -->\n\nWe have traced our five bytes from the sender's buffer through a connected TCP socket, through transport and network processing, into the receiver's socket and finally into the receiver's application buffer. We can now connect source code, kernel-managed state, packets and application observations.\n\n<!-- guided-block: in-the-captured-small-transfer -->\n\nIn the captured small transfer, locate the data segment, compare its TCP data bytes with our HELLO buffer, and find the acknowledgement covering that range. Then compare the receiver's recorded read operations with the same data. The data might appear in one segment but be read in smaller chunks; our application decides the read size.\n\n<!-- guided-block: in-the-larger-transfer-inspect -->\n\nIn the larger transfer, inspect how many distinct TCP byte ranges were carried in the recorded data segments. Compare them with the application's single `sendall()` call and repeated `recv_into()` calls. A large write can become multiple segments and many reads. None of those boundaries necessarily coincide.\n\n<!-- guided-block: now-consider-an-ai-or -->\n\nNow consider an AI or HPC application that repeatedly transfers large buffers. What if a device could move data between prepared application buffers while taking on more of the transport and memory-placement work? To understand that, we first need to understand DMA itself.",
+    "contentBlocks": [
+      {
+        "id": "we-have-traced-our-five",
+        "markdown": "We have traced our five bytes from the sender's buffer through a connected TCP socket, through transport and network processing, into the receiver's socket and finally into the receiver's application buffer. We can now connect source code, kernel-managed state, packets and application observations."
+      },
+      {
+        "id": "in-the-captured-small-transfer",
+        "markdown": "In the captured small transfer, locate the data segment, compare its TCP data bytes with our HELLO buffer, and find the acknowledgement covering that range. Then compare the receiver's recorded read operations with the same data. The data might appear in one segment but be read in smaller chunks; our application decides the read size."
+      },
+      {
+        "id": "in-the-larger-transfer-inspect",
+        "markdown": "In the larger transfer, inspect how many distinct TCP byte ranges were carried in the recorded data segments. Compare them with the application's single `sendall()` call and repeated `recv_into()` calls. A large write can become multiple segments and many reads. None of those boundaries necessarily coincide."
+      },
+      {
+        "id": "now-consider-an-ai-or",
+        "markdown": "Now consider an AI or HPC application that repeatedly transfers large buffers. What if a device could move data between prepared application buffers while taking on more of the transport and memory-placement work? To understand that, we first need to understand DMA itself."
+      }
+    ],
     "visualSpec": "Show actual Wireshark screenshots (see file 05): handshake, small payload/hex, ACK, large data ranges, follow TCP stream, and `ss`/app log. User can click a packet and see relevant byte offsets and read events. Use optional detail for checksums/offloads. Final action **Understand DMA**. No RDMA acronyms before the question is motivated.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -212,7 +586,17 @@
     "id": "3.1",
     "lesson": "why-rdma",
     "title": "A local memory transfer without CPU copying every byte",
-    "learnerCopy": "We saw a CPU copy bytes by executing instructions that read a source and write a destination. Devices also need to exchange data with memory. Suppose a network device has received HELLO and needs to place those bytes into system memory. A CPU could repeatedly read device data and copy it into memory, but modern devices commonly support direct memory access (DMA).\n\nDMA allows a suitably configured device to initiate memory reads or writes without the CPU executing the corresponding data-copy instructions for every byte. Software still has to prepare buffers, configure access and arrange the work. It may also need to handle completion, synchronization and cache-coherency requirements. The device performs the data transfer through the machine's interconnect and memory system.",
+    "learnerCopy": "<!-- guided-block: we-saw-a-cpu-copy -->\n\nWe saw a CPU copy bytes by executing instructions that read a source and write a destination. Devices also need to exchange data with memory. Suppose a network device has received HELLO and needs to place those bytes into system memory. A CPU could repeatedly read device data and copy it into memory, but modern devices commonly support direct memory access (DMA).\n\n<!-- guided-block: dma-allows-a-suitably-configured -->\n\nDMA allows a suitably configured device to initiate memory reads or writes without the CPU executing the corresponding data-copy instructions for every byte. Software still has to prepare buffers, configure access and arrange the work. It may also need to handle completion, synchronization and cache-coherency requirements. The device performs the data transfer through the machine's interconnect and memory system.",
+    "contentBlocks": [
+      {
+        "id": "we-saw-a-cpu-copy",
+        "markdown": "We saw a CPU copy bytes by executing instructions that read a source and write a destination. Devices also need to exchange data with memory. Suppose a network device has received HELLO and needs to place those bytes into system memory. A CPU could repeatedly read device data and copy it into memory, but modern devices commonly support direct memory access (DMA)."
+      },
+      {
+        "id": "dma-allows-a-suitably-configured",
+        "markdown": "DMA allows a suitably configured device to initiate memory reads or writes without the CPU executing the corresponding data-copy instructions for every byte. Software still has to prepare buffers, configure access and arrange the work. It may also need to handle completion, synchronization and cache-coherency requirements. The device performs the data transfer through the machine's interconnect and memory system."
+      }
+    ],
     "visualSpec": "Reuse physical host from 01. Three discrete states: (1) CPU configures device with a destination range and length (dashed instruction/control path); (2) device writes HELLO into destination RAM (solid payload path), CPU not shown copying; (3) device reports done and software observes status. Compare CPU copy state from 01. Show destination before/after. Label no measured throughput or CPU load. Do not show a CPU completely inactive for the duration.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -223,7 +607,17 @@
     "id": "3.2",
     "lesson": "why-rdma",
     "title": "Why the device needs an address it can use",
-    "learnerCopy": "Earlier, the CPU used a process virtual address and the MMU translated it. A device cannot generally treat an arbitrary process pointer as its own usable DMA address. It needs a valid device-accessible mapping to the relevant memory and permission to perform the operation. A system may use an I/O memory management unit (IOMMU) to translate device DMA addresses into physical memory addresses and restrict access.\n\nA driver and operating system arrange the necessary mappings and lifetime of buffers. We do not need to study every IOMMU or PCIe detail here. The important distinction is between an application's virtual pointer, a CPU physical address and the address used by a device. They may refer to the same underlying storage through different address spaces; they need not be numerically identical.",
+    "learnerCopy": "<!-- guided-block: earlier-the-cpu-used-a -->\n\nEarlier, the CPU used a process virtual address and the MMU translated it. A device cannot generally treat an arbitrary process pointer as its own usable DMA address. It needs a valid device-accessible mapping to the relevant memory and permission to perform the operation. A system may use an I/O memory management unit (IOMMU) to translate device DMA addresses into physical memory addresses and restrict access.\n\n<!-- guided-block: a-driver-and-operating-system -->\n\nA driver and operating system arrange the necessary mappings and lifetime of buffers. We do not need to study every IOMMU or PCIe detail here. The important distinction is between an application's virtual pointer, a CPU physical address and the address used by a device. They may refer to the same underlying storage through different address spaces; they need not be numerically identical.",
+    "contentBlocks": [
+      {
+        "id": "earlier-the-cpu-used-a",
+        "markdown": "Earlier, the CPU used a process virtual address and the MMU translated it. A device cannot generally treat an arbitrary process pointer as its own usable DMA address. It needs a valid device-accessible mapping to the relevant memory and permission to perform the operation. A system may use an I/O memory management unit (IOMMU) to translate device DMA addresses into physical memory addresses and restrict access."
+      },
+      {
+        "id": "a-driver-and-operating-system",
+        "markdown": "A driver and operating system arrange the necessary mappings and lifetime of buffers. We do not need to study every IOMMU or PCIe detail here. The important distinction is between an application's virtual pointer, a CPU physical address and the address used by a device. They may refer to the same underlying storage through different address spaces; they need not be numerically identical."
+      }
+    ],
     "visualSpec": "Illustrative process VA `0x1000`, physical page `P7`, DMA address `D42` (symbolic), arrows to same RAM page. CPU/MMU and device/IOMMU or direct mapping lanes separately. Show software establishes mapping before device access. Toggle **CPU reads** / **Device writes**. Explain real hardware and provider variations. [S2, S10]",
     "revealCopy": "",
     "inspectCopy": "",
@@ -234,7 +628,21 @@
     "id": "3.3",
     "lesson": "why-rdma",
     "title": "Conventional NICs already use DMA — why RDMA?",
-    "learnerCopy": "Our TCP data path already included a NIC that can use DMA. On the ordinary buffered path, however, the NIC generally transfers packet data to or from buffers managed by the networking stack. The kernel then processes TCP state and the receiving application asks to read bytes from its socket into user memory.\n\nThe question RDMA addresses is not whether a NIC can perform DMA at all. It is whether the application can prepare its own memory for a transport that supports direct placement into appropriate application buffers and exposes operations other than a byte stream. In suitable hardware implementations, the RDMA-capable NIC executes much of the transport and memory movement, reducing the need for the conventional kernel socket data path.\n\nThe CPU does not disappear. It runs application code, performs setup, submits work, checks results and coordinates when memory is safe to use. RDMA is not automatically faster for every workload, and an implementation can use software rather than hardware for the transport.",
+    "learnerCopy": "<!-- guided-block: our-tcp-data-path-already -->\n\nOur TCP data path already included a NIC that can use DMA. On the ordinary buffered path, however, the NIC generally transfers packet data to or from buffers managed by the networking stack. The kernel then processes TCP state and the receiving application asks to read bytes from its socket into user memory.\n\n<!-- guided-block: the-question-rdma-addresses-is -->\n\nThe question RDMA addresses is not whether a NIC can perform DMA at all. It is whether the application can prepare its own memory for a transport that supports direct placement into appropriate application buffers and exposes operations other than a byte stream. In suitable hardware implementations, the RDMA-capable NIC executes much of the transport and memory movement, reducing the need for the conventional kernel socket data path.\n\n<!-- guided-block: the-cpu-does-not-disappear -->\n\nThe CPU does not disappear. It runs application code, performs setup, submits work, checks results and coordinates when memory is safe to use. RDMA is not automatically faster for every workload, and an implementation can use software rather than hardware for the transport.",
+    "contentBlocks": [
+      {
+        "id": "our-tcp-data-path-already",
+        "markdown": "Our TCP data path already included a NIC that can use DMA. On the ordinary buffered path, however, the NIC generally transfers packet data to or from buffers managed by the networking stack. The kernel then processes TCP state and the receiving application asks to read bytes from its socket into user memory."
+      },
+      {
+        "id": "the-question-rdma-addresses-is",
+        "markdown": "The question RDMA addresses is not whether a NIC can perform DMA at all. It is whether the application can prepare its own memory for a transport that supports direct placement into appropriate application buffers and exposes operations other than a byte stream. In suitable hardware implementations, the RDMA-capable NIC executes much of the transport and memory movement, reducing the need for the conventional kernel socket data path."
+      },
+      {
+        "id": "the-cpu-does-not-disappear",
+        "markdown": "The CPU does not disappear. It runs application code, performs setup, submits work, checks results and coordinates when memory is safe to use. RDMA is not automatically faster for every workload, and an implementation can use software rather than hardware for the transport."
+      }
+    ],
     "visualSpec": "Two aligned diagrams using same A/B HELLO objective. TCP: app buffer -> CPU copy into socket-associated storage -> conventional NIC DMA -> network -> conventional NIC DMA -> kernel receive storage -> CPU copy -> app buffer. Show the kernel processing roles separately from physical payload links. Hardware RDMA representative: app instructs RNIC, prepared application buffer -> RNIC memory access -> network -> peer RNIC memory access -> appropriate app buffer. Separate instruction and completion/control paths. Toggle same view, source/destination positions preserved. Caption **Representative buffered TCP and hardware RDMA; optimizations and operations vary**. No fixed copy count, no performance bars.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -245,7 +653,21 @@
     "id": "3.4",
     "lesson": "why-rdma",
     "title": "What does Remote Direct Memory Access actually mean?",
-    "learnerCopy": "Remote Direct Memory Access (RDMA) is a communication and memory-access programming model. Applications prepare memory and communication endpoints, then describe operations for an RDMA implementation to execute.\n\nThere are three basic operations we will study later. With SEND, the sending application supplies data and the receiving application supplies an appropriate receive buffer in advance. With ordinary WRITE, the initiating side names authorized remote memory into which it wants to place data. With READ, it requests data from authorized remote memory and places the returned bytes in a local buffer. For these operations we will use registered memory and Reliable Connected endpoints.\n\nRDMA still needs a network. RoCEv2 (RDMA over Converged Ethernet version 2) carries the RDMA transport using UDP/IP and Ethernet on our lab network. UDP supplies encapsulation; the RDMA transport supplies the operation and reliability semantics for our connected service. The UDP port alone does not identify an application's registered memory or communication endpoint.",
+    "learnerCopy": "<!-- guided-block: remote-direct-memory-access-rdma -->\n\nRemote Direct Memory Access (RDMA) is a communication and memory-access programming model. Applications prepare memory and communication endpoints, then describe operations for an RDMA implementation to execute.\n\n<!-- guided-block: there-are-three-basic-operations -->\n\nThere are three basic operations we will study later. With SEND, the sending application supplies data and the receiving application supplies an appropriate receive buffer in advance. With ordinary WRITE, the initiating side names authorized remote memory into which it wants to place data. With READ, it requests data from authorized remote memory and places the returned bytes in a local buffer. For these operations we will use registered memory and Reliable Connected endpoints.\n\n<!-- guided-block: rdma-still-needs-a-network -->\n\nRDMA still needs a network. RoCEv2 (RDMA over Converged Ethernet version 2) carries the RDMA transport using UDP/IP and Ethernet on our lab network. UDP supplies encapsulation; the RDMA transport supplies the operation and reliability semantics for our connected service. The UDP port alone does not identify an application's registered memory or communication endpoint.",
+    "contentBlocks": [
+      {
+        "id": "remote-direct-memory-access-rdma",
+        "markdown": "Remote Direct Memory Access (RDMA) is a communication and memory-access programming model. Applications prepare memory and communication endpoints, then describe operations for an RDMA implementation to execute."
+      },
+      {
+        "id": "there-are-three-basic-operations",
+        "markdown": "There are three basic operations we will study later. With SEND, the sending application supplies data and the receiving application supplies an appropriate receive buffer in advance. With ordinary WRITE, the initiating side names authorized remote memory into which it wants to place data. With READ, it requests data from authorized remote memory and places the returned bytes in a local buffer. For these operations we will use registered memory and Reliable Connected endpoints."
+      },
+      {
+        "id": "rdma-still-needs-a-network",
+        "markdown": "RDMA still needs a network. RoCEv2 (RDMA over Converged Ethernet version 2) carries the RDMA transport using UDP/IP and Ethernet on our lab network. UDP supplies encapsulation; the RDMA transport supplies the operation and reliability semantics for our connected service. The UDP port alone does not identify an application's registered memory or communication endpoint."
+      }
+    ],
     "visualSpec": "One compact preview, three choices with fixed memory locations: SEND `A data → B receiver-selected buffer`, WRITE `A data → B named authorized buffer`, READ `A request → B; data B → A`. Label these as upcoming mechanisms, not current actual experiments. No keys/headers until 04. Keep this preview one optional compare action, then introduce the real lab. [S11–S15]",
     "revealCopy": "",
     "inspectCopy": "",
@@ -256,7 +678,21 @@
     "id": "3.5",
     "lesson": "why-rdma",
     "title": "What is Soft-RoCE and why are we using it?",
-    "learnerCopy": "A hardware RDMA-capable NIC includes logic that supports RDMA transport and memory access. We do not need that hardware to learn the programming model and inspect RoCEv2 packets. Linux has a software implementation called RXE, also known as Soft-RoCE. It exposes RDMA capabilities to applications using the Linux RDMA stack while implementing RDMA transport in software over an underlying network interface.\n\nOur two Linux lab hosts each have a data-network interface and an RXE RDMA device associated with it. A normal Ethernet interface provides network connectivity; the RXE device gives applications an RDMA endpoint and the corresponding programming interface. It is not an extra physical NIC. In RXE, CPUs execute the software transport and memory-access logic; packets are sent and received using Linux networking machinery. If the underlying network uses a physical NIC, that NIC can still do its ordinary DMA and offloads. In a VM, the virtual network path introduces other implementation details.\n\nThe application does not call Python's ordinary TCP `sendall()` to issue an RDMA WRITE. Instead, our Python program uses Pyverbs, a Python binding to Linux's RDMA userspace interfaces. Those interfaces are backed by libibverbs and a provider appropriate to the RDMA device. With RXE, the provider and Linux kernel RDMA/RXE implementation arrange the work and execute the software RoCE transport. With a suitable hardware provider, some common work-submission and completion operations can use userspace-accessible queues and hardware interfaces; setup and memory management still involve the operating system.",
+    "learnerCopy": "<!-- guided-block: a-hardware-rdma-capable-nic -->\n\nA hardware RDMA-capable NIC includes logic that supports RDMA transport and memory access. We do not need that hardware to learn the programming model and inspect RoCEv2 packets. Linux has a software implementation called RXE, also known as Soft-RoCE. It exposes RDMA capabilities to applications using the Linux RDMA stack while implementing RDMA transport in software over an underlying network interface.\n\n<!-- guided-block: our-two-linux-lab-hosts -->\n\nOur two Linux lab hosts each have a data-network interface and an RXE RDMA device associated with it. A normal Ethernet interface provides network connectivity; the RXE device gives applications an RDMA endpoint and the corresponding programming interface. It is not an extra physical NIC. In RXE, CPUs execute the software transport and memory-access logic; packets are sent and received using Linux networking machinery. If the underlying network uses a physical NIC, that NIC can still do its ordinary DMA and offloads. In a VM, the virtual network path introduces other implementation details.\n\n<!-- guided-block: the-application-does-not-call -->\n\nThe application does not call Python's ordinary TCP `sendall()` to issue an RDMA WRITE. Instead, our Python program uses Pyverbs, a Python binding to Linux's RDMA userspace interfaces. Those interfaces are backed by libibverbs and a provider appropriate to the RDMA device. With RXE, the provider and Linux kernel RDMA/RXE implementation arrange the work and execute the software RoCE transport. With a suitable hardware provider, some common work-submission and completion operations can use userspace-accessible queues and hardware interfaces; setup and memory management still involve the operating system.",
+    "contentBlocks": [
+      {
+        "id": "a-hardware-rdma-capable-nic",
+        "markdown": "A hardware RDMA-capable NIC includes logic that supports RDMA transport and memory access. We do not need that hardware to learn the programming model and inspect RoCEv2 packets. Linux has a software implementation called RXE, also known as Soft-RoCE. It exposes RDMA capabilities to applications using the Linux RDMA stack while implementing RDMA transport in software over an underlying network interface."
+      },
+      {
+        "id": "our-two-linux-lab-hosts",
+        "markdown": "Our two Linux lab hosts each have a data-network interface and an RXE RDMA device associated with it. A normal Ethernet interface provides network connectivity; the RXE device gives applications an RDMA endpoint and the corresponding programming interface. It is not an extra physical NIC. In RXE, CPUs execute the software transport and memory-access logic; packets are sent and received using Linux networking machinery. If the underlying network uses a physical NIC, that NIC can still do its ordinary DMA and offloads. In a VM, the virtual network path introduces other implementation details."
+      },
+      {
+        "id": "the-application-does-not-call",
+        "markdown": "The application does not call Python's ordinary TCP `sendall()` to issue an RDMA WRITE. Instead, our Python program uses Pyverbs, a Python binding to Linux's RDMA userspace interfaces. Those interfaces are backed by libibverbs and a provider appropriate to the RDMA device. With RXE, the provider and Linux kernel RDMA/RXE implementation arrange the work and execute the software RoCE transport. With a suitable hardware provider, some common work-submission and completion operations can use userspace-accessible queues and hardware interfaces; setup and memory management still involve the operating system."
+      }
+    ],
     "visualSpec": "Show two side-by-side software/control stacks with physical hardware below: `Python → Pyverbs → libibverbs + device provider → Linux RDMA/RXE → Linux network stack → data0 (underlying interface) → network`. Contrast representative hardware stack `Python → Pyverbs → libibverbs + hardware provider → prepared RNIC resources → RNIC → network`; separate kernel control/setup arrows, not a claim that all WRs are syscalls or no kernel involvement. CPU highlight for RXE software; hardware RNIC for representative transport. Distinct physical NIC and logical RXE device boxes, connecting label `associated with data0`. Show actual lab host names/IPs from evidence, and explicit label that CPU/offload performance is not measured. [S12–S16]",
     "revealCopy": "",
     "inspectCopy": "For an isolated Linux machine, a typical setup uses `rdma link add rxe0 type rxe netdev data0` after the underlying interface is configured and the RXE driver is available. `rdma link show` and `ibv_devices` expose configured RDMA devices. Use actual lab setup and capture these outputs if available; otherwise display the commands as examples, not recorded outputs. The FabricLab runtime already has a validated Soft-RoCE setup; no live browser privilege is required.",
@@ -267,7 +703,21 @@
     "id": "3.6",
     "lesson": "why-rdma",
     "title": "How does an application initiate RDMA work?",
-    "learnerCopy": "With a TCP socket, we connected the endpoints and called a method to submit bytes. RDMA also needs preparation before it can transfer data. The application opens the RDMA device and creates objects that describe the allowed memory and communication state. Then it describes a requested operation and submits it to an endpoint. The provider executes that work asynchronously, and the application observes the outcome through completion reporting.\n\nThe term **verbs** refers to the programming operations exposed by the RDMA interface: opening a device, registering memory, creating communication resources, posting work and polling completions. A verb is not a RoCEv2 packet. It is a local programming interface operation. Some verbs configure state; other verbs submit work that can cause packets to be generated. Pyverbs makes those operations available as Python classes, methods and functions.\n\nThe next lesson builds these objects from the same buffer we created earlier. We will find out exactly what is being registered, who returns a memory key, and why a peer cannot simply guess an address and write there.",
+    "learnerCopy": "<!-- guided-block: with-a-tcp-socket-we -->\n\nWith a TCP socket, we connected the endpoints and called a method to submit bytes. RDMA also needs preparation before it can transfer data. The application opens the RDMA device and creates objects that describe the allowed memory and communication state. Then it describes a requested operation and submits it to an endpoint. The provider executes that work asynchronously, and the application observes the outcome through completion reporting.\n\n<!-- guided-block: the-term-verbs-refers-to -->\n\nThe term **verbs** refers to the programming operations exposed by the RDMA interface: opening a device, registering memory, creating communication resources, posting work and polling completions. A verb is not a RoCEv2 packet. It is a local programming interface operation. Some verbs configure state; other verbs submit work that can cause packets to be generated. Pyverbs makes those operations available as Python classes, methods and functions.\n\n<!-- guided-block: the-next-lesson-builds-these -->\n\nThe next lesson builds these objects from the same buffer we created earlier. We will find out exactly what is being registered, who returns a memory key, and why a peer cannot simply guess an address and write there.",
+    "contentBlocks": [
+      {
+        "id": "with-a-tcp-socket-we",
+        "markdown": "With a TCP socket, we connected the endpoints and called a method to submit bytes. RDMA also needs preparation before it can transfer data. The application opens the RDMA device and creates objects that describe the allowed memory and communication state. Then it describes a requested operation and submits it to an endpoint. The provider executes that work asynchronously, and the application observes the outcome through completion reporting."
+      },
+      {
+        "id": "the-term-verbs-refers-to",
+        "markdown": "The term **verbs** refers to the programming operations exposed by the RDMA interface: opening a device, registering memory, creating communication resources, posting work and polling completions. A verb is not a RoCEv2 packet. It is a local programming interface operation. Some verbs configure state; other verbs submit work that can cause packets to be generated. Pyverbs makes those operations available as Python classes, methods and functions."
+      },
+      {
+        "id": "the-next-lesson-builds-these",
+        "markdown": "The next lesson builds these objects from the same buffer we created earlier. We will find out exactly what is being registered, who returns a memory key, and why a peer cannot simply guess an address and write there."
+      }
+    ],
     "visualSpec": "Four steps `Prepare memory/resources → Describe work → Submit to endpoint → Observe result`, each expands one plain-language sentence, no jargon list. Show an actual lab program filename as a label, no unexplained code dump. Link to 04. Keep RXE path context in a small optional legend, not permanently repeated.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -278,7 +728,21 @@
     "id": "4.1",
     "lesson": "memory",
     "title": "A buffer is not yet an RDMA Memory Region",
-    "learnerCopy": "Return to our 16-byte buffer at the illustrative virtual address `0x1000`. The first five bytes contain HELLO. The program can read and write that buffer using ordinary CPU instructions because it has a valid writable mapping in its process address space. But the buffer has not yet been made available to an RDMA implementation.\n\nWe need to establish which memory an RDMA provider can use, how to find it, how long the access arrangement remains valid and what operations are allowed. This is memory registration. The application requests registration through an RDMA verb. The operating system and provider establish the required access information and mappings. The result is an RDMA Memory Region (MR), an object describing access to a range of memory. The original buffer still holds the bytes; the MR is not a second copy of the buffer.\n\nIn a conventional hardware registration, the provider may pin pages and establish device-visible mappings and translation information. Other models, such as on-demand paging, can handle residency differently. RXE provides the same verbs-level registration and access model using software. The diagram does not claim RXE installs hardware translation tables in an RNIC.",
+    "learnerCopy": "<!-- guided-block: return-to-our-16-byte -->\n\nReturn to our 16-byte buffer at the illustrative virtual address `0x1000`. The first five bytes contain HELLO. The program can read and write that buffer using ordinary CPU instructions because it has a valid writable mapping in its process address space. But the buffer has not yet been made available to an RDMA implementation.\n\n<!-- guided-block: we-need-to-establish-which -->\n\nWe need to establish which memory an RDMA provider can use, how to find it, how long the access arrangement remains valid and what operations are allowed. This is memory registration. The application requests registration through an RDMA verb. The operating system and provider establish the required access information and mappings. The result is an RDMA Memory Region (MR), an object describing access to a range of memory. The original buffer still holds the bytes; the MR is not a second copy of the buffer.\n\n<!-- guided-block: in-a-conventional-hardware-registration -->\n\nIn a conventional hardware registration, the provider may pin pages and establish device-visible mappings and translation information. Other models, such as on-demand paging, can handle residency differently. RXE provides the same verbs-level registration and access model using software. The diagram does not claim RXE installs hardware translation tables in an RNIC.",
+    "contentBlocks": [
+      {
+        "id": "return-to-our-16-byte",
+        "markdown": "Return to our 16-byte buffer at the illustrative virtual address `0x1000`. The first five bytes contain HELLO. The program can read and write that buffer using ordinary CPU instructions because it has a valid writable mapping in its process address space. But the buffer has not yet been made available to an RDMA implementation."
+      },
+      {
+        "id": "we-need-to-establish-which",
+        "markdown": "We need to establish which memory an RDMA provider can use, how to find it, how long the access arrangement remains valid and what operations are allowed. This is memory registration. The application requests registration through an RDMA verb. The operating system and provider establish the required access information and mappings. The result is an RDMA Memory Region (MR), an object describing access to a range of memory. The original buffer still holds the bytes; the MR is not a second copy of the buffer."
+      },
+      {
+        "id": "in-a-conventional-hardware-registration",
+        "markdown": "In a conventional hardware registration, the provider may pin pages and establish device-visible mappings and translation information. Other models, such as on-demand paging, can handle residency differently. RXE provides the same verbs-level registration and access model using software. The diagram does not claim RXE installs hardware translation tables in an RNIC."
+      }
+    ],
     "visualSpec": "Show the CPU writing HELLO to allocated memory before registration. Device access overlay initially absent. Action **Prepare this region for RDMA** reveals a logical registration object connected to the existing buffer with base and length; no data moved, no packet. Toggle representative hardware mapping vs RXE software association as optional detail. Do not show an MR or keys before registration.",
     "revealCopy": "Allocation gives the application memory to use. Registration establishes an RDMA access relationship for a chosen range. They are separate operations.",
     "inspectCopy": "",
@@ -289,7 +753,21 @@
     "id": "4.2",
     "lesson": "memory",
     "title": "Who is involved in registration?",
-    "learnerCopy": "Our Python program asks to use a particular RDMA device. In the FabricLab source, a helper opens the device context. That context represents the application's access to the device through the RDMA software interface. The application then creates a Protection Domain (PD), a resource association that helps ensure that compatible communication and memory resources belong together.\n\nThe Protection Domain is not a piece of RAM and does not create a private physical memory partition. The operating system and provider use it as part of enforcing which resources can interact. A Memory Region is associated with a PD; a Queue Pair is associated with a PD. A Completion Queue is created from a device context and can be associated with Queue Pairs, not nested inside the PD as if the CQ were part of a memory permission range.\n\nThe program supplies the PD, a buffer address, a length and access flags to the registration interface. On success the provider returns an MR object with information needed for subsequent operations. If setup or registration fails, the program must handle the error; a valid registration cannot be assumed merely because a buffer exists.",
+    "learnerCopy": "<!-- guided-block: our-python-program-asks-to -->\n\nOur Python program asks to use a particular RDMA device. In the FabricLab source, a helper opens the device context. That context represents the application's access to the device through the RDMA software interface. The application then creates a Protection Domain (PD), a resource association that helps ensure that compatible communication and memory resources belong together.\n\n<!-- guided-block: the-protection-domain-is-not -->\n\nThe Protection Domain is not a piece of RAM and does not create a private physical memory partition. The operating system and provider use it as part of enforcing which resources can interact. A Memory Region is associated with a PD; a Queue Pair is associated with a PD. A Completion Queue is created from a device context and can be associated with Queue Pairs, not nested inside the PD as if the CQ were part of a memory permission range.\n\n<!-- guided-block: the-program-supplies-the-pd -->\n\nThe program supplies the PD, a buffer address, a length and access flags to the registration interface. On success the provider returns an MR object with information needed for subsequent operations. If setup or registration fails, the program must handle the error; a valid registration cannot be assumed merely because a buffer exists.",
+    "contentBlocks": [
+      {
+        "id": "our-python-program-asks-to",
+        "markdown": "Our Python program asks to use a particular RDMA device. In the FabricLab source, a helper opens the device context. That context represents the application's access to the device through the RDMA software interface. The application then creates a Protection Domain (PD), a resource association that helps ensure that compatible communication and memory resources belong together."
+      },
+      {
+        "id": "the-protection-domain-is-not",
+        "markdown": "The Protection Domain is not a piece of RAM and does not create a private physical memory partition. The operating system and provider use it as part of enforcing which resources can interact. A Memory Region is associated with a PD; a Queue Pair is associated with a PD. A Completion Queue is created from a device context and can be associated with Queue Pairs, not nested inside the PD as if the CQ were part of a memory permission range."
+      },
+      {
+        "id": "the-program-supplies-the-pd",
+        "markdown": "The program supplies the PD, a buffer address, a length and access flags to the registration interface. On success the provider returns an MR object with information needed for subsequent operations. If setup or registration fails, the program must handle the error; a valid registration cannot be assumed merely because a buffer exists."
+      }
+    ],
     "visualSpec": "Show one process -> Pyverbs/library -> selected device context; logical PD boundary containing MR and future QP association placeholders. CQ outside PD with later association. Highlight calls in sequence using actual source excerpts from `python/exp_a_resources.py` and `python/rdma_common.py` via existing evidence snapshots. At this point show only context, PD and MR; do not render QP/CQ acronym-filled placeholders in beginner view. Reveal arrows `application asks`, `provider establishes access`, `MR returned`.",
     "revealCopy": "",
     "inspectCopy": "The C verbs interface expresses registration as `ibv_reg_mr(pd, addr, length, access)`. FabricLab uses Pyverbs and a helper that registers an existing buffer. Show the exact helper body from the embedded snapshot; do not invent Pyverbs constructor signatures. [S14–S16]",
@@ -300,7 +778,17 @@
     "id": "4.3",
     "lesson": "memory",
     "title": "Addresses, offsets and lengths",
-    "learnerCopy": "A registration describes a starting address and a number of bytes. For our conceptual 16-byte region, addresses from `0x1000` through `0x100f` are included. `0x1010` is outside the range. A request can reference a subrange of the registration. For instance, eight bytes starting at `0x1004` occupy addresses `0x1004` through `0x100b`. Those fit. Eight bytes starting at `0x100c` would extend through `0x1013`, crossing the boundary.\n\nThe address in this lesson is a virtual address in the process owning the buffer, as used by the lab's ordinary registration model. It is not the IP address, the NIC's MAC address, or a global physical memory address. An RDMA provider interprets the address within its registered memory context. Some registration interfaces allow different I/O address conventions; our lab uses its recorded buffer addresses.",
+    "learnerCopy": "<!-- guided-block: a-registration-describes-a-starting -->\n\nA registration describes a starting address and a number of bytes. For our conceptual 16-byte region, addresses from `0x1000` through `0x100f` are included. `0x1010` is outside the range. A request can reference a subrange of the registration. For instance, eight bytes starting at `0x1004` occupy addresses `0x1004` through `0x100b`. Those fit. Eight bytes starting at `0x100c` would extend through `0x1013`, crossing the boundary.\n\n<!-- guided-block: the-address-in-this-lesson -->\n\nThe address in this lesson is a virtual address in the process owning the buffer, as used by the lab's ordinary registration model. It is not the IP address, the NIC's MAC address, or a global physical memory address. An RDMA provider interprets the address within its registered memory context. Some registration interfaces allow different I/O address conventions; our lab uses its recorded buffer addresses.",
+    "contentBlocks": [
+      {
+        "id": "a-registration-describes-a-starting",
+        "markdown": "A registration describes a starting address and a number of bytes. For our conceptual 16-byte region, addresses from `0x1000` through `0x100f` are included. `0x1010` is outside the range. A request can reference a subrange of the registration. For instance, eight bytes starting at `0x1004` occupy addresses `0x1004` through `0x100b`. Those fit. Eight bytes starting at `0x100c` would extend through `0x1013`, crossing the boundary."
+      },
+      {
+        "id": "the-address-in-this-lesson",
+        "markdown": "The address in this lesson is a virtual address in the process owning the buffer, as used by the lab's ordinary registration model. It is not the IP address, the NIC's MAC address, or a global physical memory address. An RDMA provider interprets the address within its registered memory context. Some registration interfaces allow different I/O address conventions; our lab uses its recorded buffer addresses."
+      }
+    ],
     "visualSpec": "Use 24 cells with offset labels 0–23 and address labels on endpoints/boundary, registered 0–15 highlighted. **Inspect eight bytes from offset 4**, then **Inspect eight bytes from offset 12**. Draw start, end and length, show selected bytes and out-of-range cells. Feedback distinguishes `offset + length <= registered length` for this bounded nonnegative example. No keys required yet. Keep the region visible when explaining permissions.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -311,7 +799,21 @@
     "id": "4.4",
     "lesson": "memory",
     "title": "What does local write mean? Who is local?",
-    "learnerCopy": "The words local and remote are relative to the host that owns a particular registered region. Suppose the region belongs to Server B. Server B's CPU can write to its ordinary writable application buffer through its process mapping, whether or not that buffer has RDMA local-write permission. That is a CPU memory operation, not an RDMA operation.\n\nFor an MR, local write is permission for the local RDMA device/provider to write the registered memory as part of RDMA work. Examples include Server B receiving an RDMA SEND into its registered buffer, or a local RDMA READ initiator receiving returned data into its own registered buffer. Local read access by the RDMA provider is enabled for registered memory in the ordinary verbs model, so a local source buffer can be read for a SEND or WRITE.\n\nRemote write allows an authorized peer to initiate a WRITE into the region. Remote read allows an authorized peer to initiate a READ from it. Those are separate permissions. For ordinary verbs registrations, remote-write permission also requires local-write permission. Remote access additionally depends on endpoint access configuration and operation-specific checks. Enabling a flag does not allow arbitrary hosts to access the region.",
+    "learnerCopy": "<!-- guided-block: the-words-local-and-remote -->\n\nThe words local and remote are relative to the host that owns a particular registered region. Suppose the region belongs to Server B. Server B's CPU can write to its ordinary writable application buffer through its process mapping, whether or not that buffer has RDMA local-write permission. That is a CPU memory operation, not an RDMA operation.\n\n<!-- guided-block: for-an-mr-local-write -->\n\nFor an MR, local write is permission for the local RDMA device/provider to write the registered memory as part of RDMA work. Examples include Server B receiving an RDMA SEND into its registered buffer, or a local RDMA READ initiator receiving returned data into its own registered buffer. Local read access by the RDMA provider is enabled for registered memory in the ordinary verbs model, so a local source buffer can be read for a SEND or WRITE.\n\n<!-- guided-block: remote-write-allows-an-authorized -->\n\nRemote write allows an authorized peer to initiate a WRITE into the region. Remote read allows an authorized peer to initiate a READ from it. Those are separate permissions. For ordinary verbs registrations, remote-write permission also requires local-write permission. Remote access additionally depends on endpoint access configuration and operation-specific checks. Enabling a flag does not allow arbitrary hosts to access the region.",
+    "contentBlocks": [
+      {
+        "id": "the-words-local-and-remote",
+        "markdown": "The words local and remote are relative to the host that owns a particular registered region. Suppose the region belongs to Server B. Server B's CPU can write to its ordinary writable application buffer through its process mapping, whether or not that buffer has RDMA local-write permission. That is a CPU memory operation, not an RDMA operation."
+      },
+      {
+        "id": "for-an-mr-local-write",
+        "markdown": "For an MR, local write is permission for the local RDMA device/provider to write the registered memory as part of RDMA work. Examples include Server B receiving an RDMA SEND into its registered buffer, or a local RDMA READ initiator receiving returned data into its own registered buffer. Local read access by the RDMA provider is enabled for registered memory in the ordinary verbs model, so a local source buffer can be read for a SEND or WRITE."
+      },
+      {
+        "id": "remote-write-allows-an-authorized",
+        "markdown": "Remote write allows an authorized peer to initiate a WRITE into the region. Remote read allows an authorized peer to initiate a READ from it. Those are separate permissions. For ordinary verbs registrations, remote-write permission also requires local-write permission. Remote access additionally depends on endpoint access configuration and operation-specific checks. Enabling a flag does not allow arbitrary hosts to access the region."
+      }
+    ],
     "visualSpec": "Use one B buffer with three selectable paths. (1) `B CPU → B memory` through CPU/MMU; note CPU writable mapping, not MR flag. (2) `B provider → B memory` with local-write flag check, conceptual incoming SEND. (3) `A initiates WRITE → B provider → B memory` with remote-write and other access checks. Add separate remote READ path with B memory -> B provider -> network. Show arrows and correct actor at each path. Do not conflate local write with a WRITE opcode: local write is a permission, not a network operation.",
     "revealCopy": "A CPU writing its own buffer and an RDMA provider writing a registered buffer are different access mechanisms. The MR flags govern RDMA access. They do not replace the CPU's virtual-memory protections.",
     "inspectCopy": "",
@@ -322,7 +824,21 @@
     "id": "4.5",
     "lesson": "memory",
     "title": "A local key identifies registered access",
-    "learnerCopy": "Imagine the application has registered several buffers. Later, when it asks the provider to access one of them, giving an address and length alone does not fully identify the registered access relationship it intends to use. Registration returns a local key, usually written LKEY (local key), which the application includes in a local buffer description for a Work Request.\n\nA local buffer description typically contains its address, length and LKEY. This is called a Scatter/Gather Entry (SGE). A Work Request can reference one or more such entries, depending on the operation and device capabilities. In this introductory example we use one. The provider checks that the specified range and key are valid for the operation and associated resources. It then knows which registered memory access to use.\n\nThe local key is supplied by the application on the same host that owns the local buffer. It is used by that host's provider. The LKEY is not a TCP port or a network authentication password, and it is not a field transmitted in the RoCEv2 SEND header.",
+    "learnerCopy": "<!-- guided-block: imagine-the-application-has-registered -->\n\nImagine the application has registered several buffers. Later, when it asks the provider to access one of them, giving an address and length alone does not fully identify the registered access relationship it intends to use. Registration returns a local key, usually written LKEY (local key), which the application includes in a local buffer description for a Work Request.\n\n<!-- guided-block: a-local-buffer-description-typically -->\n\nA local buffer description typically contains its address, length and LKEY. This is called a Scatter/Gather Entry (SGE). A Work Request can reference one or more such entries, depending on the operation and device capabilities. In this introductory example we use one. The provider checks that the specified range and key are valid for the operation and associated resources. It then knows which registered memory access to use.\n\n<!-- guided-block: the-local-key-is-supplied -->\n\nThe local key is supplied by the application on the same host that owns the local buffer. It is used by that host's provider. The LKEY is not a TCP port or a network authentication password, and it is not a field transmitted in the RoCEv2 SEND header.",
+    "contentBlocks": [
+      {
+        "id": "imagine-the-application-has-registered",
+        "markdown": "Imagine the application has registered several buffers. Later, when it asks the provider to access one of them, giving an address and length alone does not fully identify the registered access relationship it intends to use. Registration returns a local key, usually written LKEY (local key), which the application includes in a local buffer description for a Work Request."
+      },
+      {
+        "id": "a-local-buffer-description-typically",
+        "markdown": "A local buffer description typically contains its address, length and LKEY. This is called a Scatter/Gather Entry (SGE). A Work Request can reference one or more such entries, depending on the operation and device capabilities. In this introductory example we use one. The provider checks that the specified range and key are valid for the operation and associated resources. It then knows which registered memory access to use."
+      },
+      {
+        "id": "the-local-key-is-supplied",
+        "markdown": "The local key is supplied by the application on the same host that owns the local buffer. It is used by that host's provider. The LKEY is not a TCP port or a network authentication password, and it is not a field transmitted in the RoCEv2 SEND header."
+      }
+    ],
     "visualSpec": "Show local registration table with conceptual MR1 at `0x1000` length 16 LKEY `0x11`, MR2 at `0x2000` length 16 LKEY `0x22`. Mark numbers illustrative. Construct SGE `[addr 0x1000, length 5, lkey 0x11]`, provider matches local MR, range highlighted. Toggle wrong LKEY `0x22` with same address; show conceptual invalid association, no fabricated error packet/code. Toggle operation local write versus local read; check permissions only when applicable. Explain this is a simplified model, not the implementation's literal lookup data structure.",
     "revealCopy": "An LKEY references local registered memory access. It helps the provider interpret the memory description supplied by its local application. It is not an address and does not specify a number of bytes.",
     "inspectCopy": "",
@@ -333,7 +849,21 @@
     "id": "4.6",
     "lesson": "memory",
     "title": "A remote key is for an authorized remote operation",
-    "learnerCopy": "Now imagine Server A wants to perform an ordinary RDMA WRITE into Server B's buffer. Server A cannot use its own local key to refer to Server B's memory. Server B first registers its own region with appropriate remote access permission. Registration returns a remote key, written RKEY (remote key). The owner can share the relevant remote address, RKEY and available length with a cooperating peer through an application-defined mechanism.\n\nServer A uses its own local address, length and LKEY to describe its source memory. It uses Server B's remote address and RKEY to name the remote destination. The provider on Server A prepares the transport operation, and Server B's provider validates the remote access against its registered resources, range, permissions and endpoint context before allowing the memory operation. Server A's CPU is not dereferencing Server B's virtual address.\n\nThe RKEY is an access identifier used as part of RDMA protection. It is not encryption, general host authentication or sufficient authorization by itself. Applications must decide which peers receive such information and manage its lifetime. When an MR is deregistered or access is changed, old remote access information must no longer be assumed valid.",
+    "learnerCopy": "<!-- guided-block: now-imagine-server-a-wants -->\n\nNow imagine Server A wants to perform an ordinary RDMA WRITE into Server B's buffer. Server A cannot use its own local key to refer to Server B's memory. Server B first registers its own region with appropriate remote access permission. Registration returns a remote key, written RKEY (remote key). The owner can share the relevant remote address, RKEY and available length with a cooperating peer through an application-defined mechanism.\n\n<!-- guided-block: server-a-uses-its-own -->\n\nServer A uses its own local address, length and LKEY to describe its source memory. It uses Server B's remote address and RKEY to name the remote destination. The provider on Server A prepares the transport operation, and Server B's provider validates the remote access against its registered resources, range, permissions and endpoint context before allowing the memory operation. Server A's CPU is not dereferencing Server B's virtual address.\n\n<!-- guided-block: the-rkey-is-an-access -->\n\nThe RKEY is an access identifier used as part of RDMA protection. It is not encryption, general host authentication or sufficient authorization by itself. Applications must decide which peers receive such information and manage its lifetime. When an MR is deregistered or access is changed, old remote access information must no longer be assumed valid.",
+    "contentBlocks": [
+      {
+        "id": "now-imagine-server-a-wants",
+        "markdown": "Now imagine Server A wants to perform an ordinary RDMA WRITE into Server B's buffer. Server A cannot use its own local key to refer to Server B's memory. Server B first registers its own region with appropriate remote access permission. Registration returns a remote key, written RKEY (remote key). The owner can share the relevant remote address, RKEY and available length with a cooperating peer through an application-defined mechanism."
+      },
+      {
+        "id": "server-a-uses-its-own",
+        "markdown": "Server A uses its own local address, length and LKEY to describe its source memory. It uses Server B's remote address and RKEY to name the remote destination. The provider on Server A prepares the transport operation, and Server B's provider validates the remote access against its registered resources, range, permissions and endpoint context before allowing the memory operation. Server A's CPU is not dereferencing Server B's virtual address."
+      },
+      {
+        "id": "the-rkey-is-an-access",
+        "markdown": "The RKEY is an access identifier used as part of RDMA protection. It is not encryption, general host authentication or sufficient authorization by itself. Applications must decide which peers receive such information and manage its lifetime. When an MR is deregistered or access is changed, old remote access information must no longer be assumed valid."
+      }
+    ],
     "visualSpec": "Two host tables. A conceptual local source `0x1000`, LKEY `0x11`, length 16; B conceptual destination `0x2000`, RKEY `0x42`, length 16, remote write enabled. B's application shares tuple `0x2000, 0x42, 16` via dashed TCP control path. A constructs source SGE and remote fields. In a later separate preview state, show abstract request with remote address/RKEY/transfer length on network; B checks tuple, range, permissions; no actual WRITE execution in this lesson. Color local A values differently from remote B values; labels always present. Do not show B sending its local key or use a shared color to imply LKEY=RKEY required.",
     "revealCopy": "For an RDMA SEND, the receiver chooses its own local receive buffer; the sender does not need its address and RKEY in the SEND operation. For ordinary WRITE or READ, the initiator needs the appropriate remote memory information. We will see the actual packets later.",
     "inspectCopy": "",
@@ -344,7 +874,21 @@
     "id": "4.7",
     "lesson": "memory",
     "title": "How do keys and endpoint information get exchanged in this lab?",
-    "learnerCopy": "RDMA memory registration is local. It does not automatically notify another server of a memory address or key. The two programs must communicate the information they need before issuing remote operations. In our laboratory they use a separate ordinary TCP connection on the control network. We already know how TCP sockets work, so this is no longer a mysterious extra connection.\n\nDuring the resource and SEND experiments, the programs exchange information needed to prepare the communication endpoints, such as the endpoint number, transport sequence information and network identity. The SEND receiver does not need to advertise its memory address and RKEY as a destination for an ordinary SEND. In the WRITE experiment, the target additionally sends its registered buffer address, RKEY and length through the control connection. The initiator then uses those values when constructing its WRITE Work Request.\n\nThe control connection carries metadata and coordination messages. It does not carry the RDMA transfer payload. Our lab uses separate interfaces, but control and data communication need not universally use physically separate networks.",
+    "learnerCopy": "<!-- guided-block: rdma-memory-registration-is-local -->\n\nRDMA memory registration is local. It does not automatically notify another server of a memory address or key. The two programs must communicate the information they need before issuing remote operations. In our laboratory they use a separate ordinary TCP connection on the control network. We already know how TCP sockets work, so this is no longer a mysterious extra connection.\n\n<!-- guided-block: during-the-resource-and-send -->\n\nDuring the resource and SEND experiments, the programs exchange information needed to prepare the communication endpoints, such as the endpoint number, transport sequence information and network identity. The SEND receiver does not need to advertise its memory address and RKEY as a destination for an ordinary SEND. In the WRITE experiment, the target additionally sends its registered buffer address, RKEY and length through the control connection. The initiator then uses those values when constructing its WRITE Work Request.\n\n<!-- guided-block: the-control-connection-carries-metadata -->\n\nThe control connection carries metadata and coordination messages. It does not carry the RDMA transfer payload. Our lab uses separate interfaces, but control and data communication need not universally use physically separate networks.",
+    "contentBlocks": [
+      {
+        "id": "rdma-memory-registration-is-local",
+        "markdown": "RDMA memory registration is local. It does not automatically notify another server of a memory address or key. The two programs must communicate the information they need before issuing remote operations. In our laboratory they use a separate ordinary TCP connection on the control network. We already know how TCP sockets work, so this is no longer a mysterious extra connection."
+      },
+      {
+        "id": "during-the-resource-and-send",
+        "markdown": "During the resource and SEND experiments, the programs exchange information needed to prepare the communication endpoints, such as the endpoint number, transport sequence information and network identity. The SEND receiver does not need to advertise its memory address and RKEY as a destination for an ordinary SEND. In the WRITE experiment, the target additionally sends its registered buffer address, RKEY and length through the control connection. The initiator then uses those values when constructing its WRITE Work Request."
+      },
+      {
+        "id": "the-control-connection-carries-metadata",
+        "markdown": "The control connection carries metadata and coordination messages. It does not carry the RDMA transfer payload. Our lab uses separate interfaces, but control and data communication need not universally use physically separate networks."
+      }
+    ],
     "visualSpec": "Show A/B lab addresses from existing evidence: data 10.10.10.1/2, control 192.168.100.1/2, labels sourced from evidence. Toggle **SEND setup** / **WRITE setup preview**. SEND metadata tuple without remote MR fields; WRITE B -> A address/rkey/length. Use actual source from `exp_b_send_recv.py` metadata function and `exp_c_write.py` metadata function, including conditional sharing in WRITE. Label distinct reference experiments; never reuse resource-run QPNs with WRITE values as if same execution. The TCP control connection was not present in RDMA data captures. Show log/source evidence, not a fabricated packet screenshot. The new TCP experiment in 02 is separate.",
     "revealCopy": "",
     "inspectCopy": "Other implementations can use a connection manager or an application protocol to coordinate setup. The specific JSON/control message exchange is FabricLab's choice, not an RDMA wire requirement.",
@@ -355,7 +899,13 @@
     "id": "4.8",
     "lesson": "memory",
     "title": "Test access requirements: one range, different operations",
-    "learnerCopy": "Let's use our registered 16-byte region to test what we have learned. The illustrative owner has enabled remote read but not remote write. Assume the peer has the correct RKEY and a correctly configured endpoint unless we explicitly change those assumptions. We can now ask three separate questions about each operation: does it name the appropriate registration, does the requested range fit, and does the required access permission exist?",
+    "learnerCopy": "<!-- guided-block: let-s-use-our-registered -->\n\nLet's use our registered 16-byte region to test what we have learned. The illustrative owner has enabled remote read but not remote write. Assume the peer has the correct RKEY and a correctly configured endpoint unless we explicitly change those assumptions. We can now ask three separate questions about each operation: does it name the appropriate registration, does the requested range fit, and does the required access permission exist?",
+    "contentBlocks": [
+      {
+        "id": "let-s-use-our-registered",
+        "markdown": "Let's use our registered 16-byte region to test what we have learned. The illustrative owner has enabled remote read but not remote write. Assume the peer has the correct RKEY and a correctly configured endpoint unless we explicitly change those assumptions. We can now ask three separate questions about each operation: does it name the appropriate registration, does the requested range fit, and does the required access permission exist?"
+      }
+    ],
     "visualSpec": "Use same address grid as 4.3, not a new design. Four selectable cases with exact outcomes:\n\n| Requested operation | Key | Range | Permission | Result under stated model |\n|---|---|---|---|---|\n| Read 8 bytes at 0x1004 | correct | fits | remote read present | Permitted |\n| Write 8 bytes at 0x1004 | correct | fits | remote write absent | Rejected |\n| Read 8 bytes at 0x100c | correct | crosses boundary | remote read present | Rejected |\n| Read 8 bytes at 0x1004 | incorrect | fits | remote read present | Rejected |\n\nShow checks individually and highlight region cells. No simulated completion status or observed failure capture. User selects each case, can retry/skip.",
     "revealCopy": "A correct key does not make an out-of-range request valid. A valid range does not grant missing write permission. A valid range and access flag do not replace the correct registration reference. RDMA access is the combination of these conditions and a suitable endpoint, not just knowledge of an address.",
     "inspectCopy": "",
@@ -366,7 +916,25 @@
     "id": "4.9",
     "lesson": "memory",
     "title": "Look at the real registration record",
-    "learnerCopy": "We now have enough background to read an actual FabricLab registration record. The resource-creation experiment allocates a buffer, registers it and records information from the resulting MR. The table below shows values from Server A in that particular run.\n\n- Buffer address: `{{rdma.resources.hosta.address}}` — starting virtual address used by the program.\n- Registered length: `{{rdma.resources.hosta.length}}` bytes — how much memory the registration describes, not how many bytes a future operation must transfer.\n- LKEY: `{{rdma.resources.hosta.lkey}}` — used when describing local registered memory.\n- RKEY: `{{rdma.resources.hosta.rkey}}` — relevant for permitted remote memory operations, if shared with an appropriate peer.\n\nThese are real runtime values from one registration, not permanent identifiers. In this run the two key fields may display the same number. Their roles remain distinct; the verbs model does not require every provider or registration to produce different numerical values.\n\nThe source helper used by this lab enables local write, remote write and remote read access. That is the lab's registration choice for these demonstrations, not a recommendation to grant every permission in a production application. A production design should request only the access needed.",
+    "learnerCopy": "<!-- guided-block: we-now-have-enough-background -->\n\nWe now have enough background to read an actual FabricLab registration record. The resource-creation experiment allocates a buffer, registers it and records information from the resulting MR. The table below shows values from Server A in that particular run.\n\n<!-- guided-block: buffer-address-rdma-resources-hosta -->\n\n- Buffer address: `{{rdma.resources.hosta.address}}` — starting virtual address used by the program.\n- Registered length: `{{rdma.resources.hosta.length}}` bytes — how much memory the registration describes, not how many bytes a future operation must transfer.\n- LKEY: `{{rdma.resources.hosta.lkey}}` — used when describing local registered memory.\n- RKEY: `{{rdma.resources.hosta.rkey}}` — relevant for permitted remote memory operations, if shared with an appropriate peer.\n\n<!-- guided-block: these-are-real-runtime-values -->\n\nThese are real runtime values from one registration, not permanent identifiers. In this run the two key fields may display the same number. Their roles remain distinct; the verbs model does not require every provider or registration to produce different numerical values.\n\n<!-- guided-block: the-source-helper-used-by -->\n\nThe source helper used by this lab enables local write, remote write and remote read access. That is the lab's registration choice for these demonstrations, not a recommendation to grant every permission in a production application. A production design should request only the access needed.",
+    "contentBlocks": [
+      {
+        "id": "we-now-have-enough-background",
+        "markdown": "We now have enough background to read an actual FabricLab registration record. The resource-creation experiment allocates a buffer, registers it and records information from the resulting MR. The table below shows values from Server A in that particular run."
+      },
+      {
+        "id": "buffer-address-rdma-resources-hosta",
+        "markdown": "- Buffer address: `{{rdma.resources.hosta.address}}` — starting virtual address used by the program.\n- Registered length: `{{rdma.resources.hosta.length}}` bytes — how much memory the registration describes, not how many bytes a future operation must transfer.\n- LKEY: `{{rdma.resources.hosta.lkey}}` — used when describing local registered memory.\n- RKEY: `{{rdma.resources.hosta.rkey}}` — relevant for permitted remote memory operations, if shared with an appropriate peer."
+      },
+      {
+        "id": "these-are-real-runtime-values",
+        "markdown": "These are real runtime values from one registration, not permanent identifiers. In this run the two key fields may display the same number. Their roles remain distinct; the verbs model does not require every provider or registration to produce different numerical values."
+      },
+      {
+        "id": "the-source-helper-used-by",
+        "markdown": "The source helper used by this lab enables local write, remote write and remote read access. That is the lab's registration choice for these demonstrations, not a recommendation to grant every permission in a production application. A production design should request only the access needed."
+      }
+    ],
     "visualSpec": "Display actual `resources` experiment host A MR from existing evidence JSON, no hardcoded runtime values. Source excerpts from `python/exp_a_resources.py` at allocation/registration and `python/rdma_common.py` ACCESS and registration helper; highlight matching address/length/key fields. Bind and validate source references. Include separate illustrative address grid only when explicitly selected, not as same real address. Never imply MR contains copied bytes or that recorded keys are reusable on a live host.",
     "revealCopy": "",
     "inspectCopy": "At the reviewed baseline the resource experiment recorded a 4096-byte MR; the common helper defines `ACCESS` with `IBV_ACCESS_LOCAL_WRITE`, `IBV_ACCESS_REMOTE_WRITE` and `IBV_ACCESS_REMOTE_READ`, and the QP setup uses this access selection. Show the exact snapshot, including the actual helper call. The real SEND, WRITE and READ experiments create their own resources, so their identifiers differ from this resource-only run.",
@@ -377,7 +945,21 @@
     "id": "4.10",
     "lesson": "queues",
     "title": "Why create communication resources before transferring anything?",
-    "learnerCopy": "The application now has registered memory. But that only says what memory can be used, not what the application wants to do, where the peer is, or how it will learn whether the operation succeeded.\n\nConsider our ordinary TCP example. Before transmitting, Linux had to create a socket, establish a connection and maintain state for its byte stream. In RDMA, applications prepare explicit resources that serve related purposes, but the programming model is different. A resource is an object and associated state maintained by the software/provider and, where applicable, the hardware. Resource creation sets up that state. It is not itself a transfer of the RDMA payload.\n\nThe application needs a communication endpoint, a place to submit work and a place to observe completion results. We will build those ideas one at a time. First, the program needs to express the desired work.",
+    "learnerCopy": "<!-- guided-block: the-application-now-has-registered -->\n\nThe application now has registered memory. But that only says what memory can be used, not what the application wants to do, where the peer is, or how it will learn whether the operation succeeded.\n\n<!-- guided-block: consider-our-ordinary-tcp-example -->\n\nConsider our ordinary TCP example. Before transmitting, Linux had to create a socket, establish a connection and maintain state for its byte stream. In RDMA, applications prepare explicit resources that serve related purposes, but the programming model is different. A resource is an object and associated state maintained by the software/provider and, where applicable, the hardware. Resource creation sets up that state. It is not itself a transfer of the RDMA payload.\n\n<!-- guided-block: the-application-needs-a-communication -->\n\nThe application needs a communication endpoint, a place to submit work and a place to observe completion results. We will build those ideas one at a time. First, the program needs to express the desired work.",
+    "contentBlocks": [
+      {
+        "id": "the-application-now-has-registered",
+        "markdown": "The application now has registered memory. But that only says what memory can be used, not what the application wants to do, where the peer is, or how it will learn whether the operation succeeded."
+      },
+      {
+        "id": "consider-our-ordinary-tcp-example",
+        "markdown": "Consider our ordinary TCP example. Before transmitting, Linux had to create a socket, establish a connection and maintain state for its byte stream. In RDMA, applications prepare explicit resources that serve related purposes, but the programming model is different. A resource is an object and associated state maintained by the software/provider and, where applicable, the hardware. Resource creation sets up that state. It is not itself a transfer of the RDMA payload."
+      },
+      {
+        "id": "the-application-needs-a-communication",
+        "markdown": "The application needs a communication endpoint, a place to submit work and a place to observe completion results. We will build those ideas one at a time. First, the program needs to express the desired work."
+      }
+    ],
     "visualSpec": "Reuse single A host and registered HELLO memory. Three unresolved labels in plain language: `What task?`, `Where to submit it?`, `How to learn result?`. Do not display QPN or CQ until introduced. Action **Describe a task**.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -388,7 +970,57 @@
     "id": "4.11",
     "lesson": "queues",
     "title": "Work Requests: a description of work, not data",
-    "learnerCopy": "The program wants the provider to send the first five bytes of its registered buffer. It constructs a description of the task. In RDMA terminology this is a Work Request (WR). It contains information such as the operation to perform and the memory involved. For a SEND using one SGE, the local address, length and LKEY identify the source. A WR ID is an application-chosen identifier that helps the program recognize the result when it observes a completion.\n\nConstructing the request only prepares the instruction in the application's software. Posting it is a separate operation: the program submits it through the verbs interface to an appropriate communication resource. The provider may translate it into an implementation-specific work queue entry (WQE). The request is not the network packet, and its local WR ID is not the packet sequence number.",
+    "learnerCopy": "<!-- guided-block: the-program-wants-the-provider -->\n\nThe program wants the provider to send the first five bytes of its registered buffer. It constructs a description of the task. In RDMA terminology this is a Work Request (WR). It contains information such as the operation to perform and the memory involved. A WR ID is an application-chosen identifier that helps the program recognize the result when it observes a completion.\n\n<!-- guided-block: recall-the-illustrative-sixteen-byte -->\n\nRecall the illustrative sixteen-byte registered buffer beginning at address `0x1000`. Its first five bytes contain HELLO.\n\n<!-- guided-block: we-want-the-provider-to -->\n\nWe want the provider to send those five bytes, not the entire registered capacity.\n\n<!-- guided-block: a-scatter-gather-element-or -->\n\nA Scatter/Gather Element, or SGE, describes a local memory range involved in the operation. In our illustrative SEND instruction, the SGE contains address `0x1000`, length 5 and LKEY `0x11`.\n\n<!-- guided-block: sge-field-illustrative-value-meaning -->\n\n| SGE field | Illustrative value | Meaning |\n|---|---|---|\n| Address | `0x1000` | Where the selected local bytes begin |\n| Length | `5` | How many bytes are involved |\n| LKEY | `0x11` | Identifies the applicable local registration in its protection context |\n\n<!-- guided-block: the-provider-can-use-this -->\n\nThe provider can use this description to identify the first five bytes of the registered buffer. The Work Request contains the description of the work; HELLO remains in the application buffer.\n\n<!-- guided-block: constructing-the-instruction-does-not -->\n\nConstructing the instruction does not itself transmit those bytes. Posting the instruction is a separate step.\n\n<!-- guided-block: constructing-the-request-only-prepares -->\n\nConstructing the request only prepares the instruction in the application's software. Posting it is a separate operation: the program submits it through the verbs interface to an appropriate communication resource. The provider may translate it into an implementation-specific work queue entry (WQE). The request is not the network packet, and its local WR ID is not the packet sequence number.\n\n<!-- guided-block: this-is-an-illustrative-logical -->\n\nThis is an illustrative logical construction sequence.\n\n<!-- guided-block: in-the-actual-pyverbs-program -->\n\nIn the actual Pyverbs program, the application constructs the SGE and supplies it when creating the SendWR object.\n\n<!-- guided-block: do-not-imply-that-the -->\n\nDo not imply that the illustrative order is necessarily the executable Python API order.\n\n<!-- guided-block: keep-the-genuine-source-excerpt -->\n\nKeep the genuine source excerpt clearly identified as a separate recorded experiment.",
+    "contentBlocks": [
+      {
+        "id": "the-program-wants-the-provider",
+        "markdown": "The program wants the provider to send the first five bytes of its registered buffer. It constructs a description of the task. In RDMA terminology this is a Work Request (WR). It contains information such as the operation to perform and the memory involved. A WR ID is an application-chosen identifier that helps the program recognize the result when it observes a completion."
+      },
+      {
+        "id": "recall-the-illustrative-sixteen-byte",
+        "markdown": "Recall the illustrative sixteen-byte registered buffer beginning at address `0x1000`. Its first five bytes contain HELLO."
+      },
+      {
+        "id": "we-want-the-provider-to",
+        "markdown": "We want the provider to send those five bytes, not the entire registered capacity."
+      },
+      {
+        "id": "a-scatter-gather-element-or",
+        "markdown": "A Scatter/Gather Element, or SGE, describes a local memory range involved in the operation. In our illustrative SEND instruction, the SGE contains address `0x1000`, length 5 and LKEY `0x11`."
+      },
+      {
+        "id": "sge-field-illustrative-value-meaning",
+        "markdown": "| SGE field | Illustrative value | Meaning |\n|---|---|---|\n| Address | `0x1000` | Where the selected local bytes begin |\n| Length | `5` | How many bytes are involved |\n| LKEY | `0x11` | Identifies the applicable local registration in its protection context |"
+      },
+      {
+        "id": "the-provider-can-use-this",
+        "markdown": "The provider can use this description to identify the first five bytes of the registered buffer. The Work Request contains the description of the work; HELLO remains in the application buffer."
+      },
+      {
+        "id": "constructing-the-instruction-does-not",
+        "markdown": "Constructing the instruction does not itself transmit those bytes. Posting the instruction is a separate step."
+      },
+      {
+        "id": "constructing-the-request-only-prepares",
+        "markdown": "Constructing the request only prepares the instruction in the application's software. Posting it is a separate operation: the program submits it through the verbs interface to an appropriate communication resource. The provider may translate it into an implementation-specific work queue entry (WQE). The request is not the network packet, and its local WR ID is not the packet sequence number."
+      },
+      {
+        "id": "this-is-an-illustrative-logical",
+        "markdown": "This is an illustrative logical construction sequence."
+      },
+      {
+        "id": "in-the-actual-pyverbs-program",
+        "markdown": "In the actual Pyverbs program, the application constructs the SGE and supplies it when creating the SendWR object."
+      },
+      {
+        "id": "do-not-imply-that-the",
+        "markdown": "Do not imply that the illustrative order is necessarily the executable Python API order."
+      },
+      {
+        "id": "keep-the-genuine-source-excerpt",
+        "markdown": "Keep the genuine source excerpt clearly identified as a separate recorded experiment."
+      }
+    ],
     "visualSpec": "Create actual visible illustrative instruction with `operation SEND`, `SGE(addr 0x1000,length 5,lkey 0x11)`, `WR ID 7`, `request successful send completion` (signalled). Show source cells HELLO remain separate. The request stays constructed, not posted. Arrow from WR to SGE references memory; no payload inside queue. Optional inspection actual SEND SGE/SendWR source, clearly a separate run. Do not execute SEND before peer setup.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -399,7 +1031,17 @@
     "id": "4.12",
     "lesson": "queues",
     "title": "A queue, then a Queue Pair",
-    "learnerCopy": "The provider may execute work asynchronously, so an application needs a way to submit instructions for it to handle. A work queue is a logical collection of submitted work entries. It is not an Ethernet switch packet queue. In our RDMA programming model, SEND, READ and WRITE are initiated through a Send Queue. Even READ starts from the Send Queue because the application initiates the operation, although the requested payload comes back toward it.\n\nFor incoming ordinary SEND messages, the local application needs to supply buffers where the arriving bytes can be placed. It posts receive Work Requests to a Receive Queue. Each receive request describes local destination memory. A Queue Pair (QP) combines these send and receive work-queue roles and transport endpoint state. Our lab uses a Reliable Connected (RC) QP, which is prepared to communicate with a specific peer endpoint.",
+    "learnerCopy": "<!-- guided-block: the-provider-may-execute-work -->\n\nThe provider may execute work asynchronously, so an application needs a way to submit instructions for it to handle. A work queue is a logical collection of submitted work entries. It is not an Ethernet switch packet queue. In our RDMA programming model, SEND, READ and WRITE are initiated through a Send Queue. Even READ starts from the Send Queue because the application initiates the operation, although the requested payload comes back toward it.\n\n<!-- guided-block: for-incoming-ordinary-send-messages -->\n\nFor incoming ordinary SEND messages, the local application needs to supply buffers where the arriving bytes can be placed. It posts receive Work Requests to a Receive Queue. Each receive request describes local destination memory. A Queue Pair (QP) combines these send and receive work-queue roles and transport endpoint state. Our lab uses a Reliable Connected (RC) QP, which is prepared to communicate with a specific peer endpoint.",
+    "contentBlocks": [
+      {
+        "id": "the-provider-may-execute-work",
+        "markdown": "The provider may execute work asynchronously, so an application needs a way to submit instructions for it to handle. A work queue is a logical collection of submitted work entries. It is not an Ethernet switch packet queue. In our RDMA programming model, SEND, READ and WRITE are initiated through a Send Queue. Even READ starts from the Send Queue because the application initiates the operation, although the requested payload comes back toward it."
+      },
+      {
+        "id": "for-incoming-ordinary-send-messages",
+        "markdown": "For incoming ordinary SEND messages, the local application needs to supply buffers where the arriving bytes can be placed. It posts receive Work Requests to a Receive Queue. Each receive request describes local destination memory. A Queue Pair (QP) combines these send and receive work-queue roles and transport endpoint state. Our lab uses a Reliable Connected (RC) QP, which is prepared to communicate with a specific peer endpoint."
+      }
+    ],
     "visualSpec": "First show one empty Send Queue next to constructed WR outside it, label where future submission goes. Reveal Receive Queue and one illustrative receive description (not posted). Enclose both queue roles in a QP logical boundary and show peer-state placeholder. Do not claim physical location of hardware queue entries. No actual packet. Keep source buffer separate from instruction path.",
     "revealCopy": "The queues contain instructions and memory descriptions. The provider accesses the referenced buffers through the applicable memory path. A SEND payload does not ordinarily travel through the queue itself as a separate physical intermediate buffer.",
     "inspectCopy": "",
@@ -410,7 +1052,21 @@
     "id": "4.13",
     "lesson": "queues",
     "title": "What is the Queue Pair Number (QPN)?",
-    "learnerCopy": "A host can have multiple RDMA endpoints. The transport needs a way to identify which endpoint should handle an arriving RDMA packet. Creating a QP gives it a Queue Pair Number, or QPN. The number identifies an endpoint in the relevant RDMA device/transport context; it is not globally unique across all machines or all runs.\n\nConsider a conceptual A endpoint numbered 17 and a B endpoint numbered 18. When preparing an RC connection, each side learns which peer endpoint it should communicate with, along with network addressing and initial transport sequence information. An A-to-B request will identify B's QPN as its destination QPN. A reverse-direction packet will identify A's QPN as its destination. This is distinct from the destination IP, which identifies the network destination, and the UDP port used by RoCEv2 encapsulation.\n\nIn our lab, the two applications exchange this setup information using TCP control messages. They then program their local QPs into the necessary ready states. RESET, INIT, RTR (Ready to Receive) and RTS (Ready to Send) are state names; these transitions establish local endpoint configuration. They are not the ordinary TCP handshake. The exact permitted posting and transition requirements depend on the verb and transport; this lab prepares both endpoints before its SEND data operation.",
+    "learnerCopy": "<!-- guided-block: a-host-can-have-multiple -->\n\nA host can have multiple RDMA endpoints. The transport needs a way to identify which endpoint should handle an arriving RDMA packet. Creating a QP gives it a Queue Pair Number, or QPN. The number identifies an endpoint in the relevant RDMA device/transport context; it is not globally unique across all machines or all runs.\n\n<!-- guided-block: consider-a-conceptual-a-endpoint -->\n\nConsider a conceptual A endpoint numbered 17 and a B endpoint numbered 18. When preparing an RC connection, each side learns which peer endpoint it should communicate with, along with network addressing and initial transport sequence information. An A-to-B request will identify B's QPN as its destination QPN. A reverse-direction packet will identify A's QPN as its destination. This is distinct from the destination IP, which identifies the network destination, and the UDP port used by RoCEv2 encapsulation.\n\n<!-- guided-block: in-our-lab-the-two -->\n\nIn our lab, the two applications exchange this setup information using TCP control messages. They then program their local QPs into the necessary ready states. RESET, INIT, RTR (Ready to Receive) and RTS (Ready to Send) are state names; these transitions establish local endpoint configuration. They are not the ordinary TCP handshake. The exact permitted posting and transition requirements depend on the verb and transport; this lab prepares both endpoints before its SEND data operation.",
+    "contentBlocks": [
+      {
+        "id": "a-host-can-have-multiple",
+        "markdown": "A host can have multiple RDMA endpoints. The transport needs a way to identify which endpoint should handle an arriving RDMA packet. Creating a QP gives it a Queue Pair Number, or QPN. The number identifies an endpoint in the relevant RDMA device/transport context; it is not globally unique across all machines or all runs."
+      },
+      {
+        "id": "consider-a-conceptual-a-endpoint",
+        "markdown": "Consider a conceptual A endpoint numbered 17 and a B endpoint numbered 18. When preparing an RC connection, each side learns which peer endpoint it should communicate with, along with network addressing and initial transport sequence information. An A-to-B request will identify B's QPN as its destination QPN. A reverse-direction packet will identify A's QPN as its destination. This is distinct from the destination IP, which identifies the network destination, and the UDP port used by RoCEv2 encapsulation."
+      },
+      {
+        "id": "in-our-lab-the-two",
+        "markdown": "In our lab, the two applications exchange this setup information using TCP control messages. They then program their local QPs into the necessary ready states. RESET, INIT, RTR (Ready to Receive) and RTS (Ready to Send) are state names; these transitions establish local endpoint configuration. They are not the ordinary TCP handshake. The exact permitted posting and transition requirements depend on the verb and transport; this lab prepares both endpoints before its SEND data operation."
+      }
+    ],
     "visualSpec": "One A with QP, reveal B with QP. Show conceptual QPN 17/18 or use *only* actual resource-run QPNs, clearly label. Toggle packet direction with a small illustrative BTH destination QPN field; no actual captured resource-run RDMA data packet. A->B target B, B->A target A. Separate dashed TCP metadata exchange from future data path. On **Inspect recorded endpoint setup**, show `resources` experiment local QPNs, destination QPNs and ready events from JSON. Show source lines for exchange and `bring_qp_to_rts` (optional). Explain PSN here only as initial transport packet sequence information; do not confuse TCP byte numbering or WR ID.",
     "revealCopy": "",
     "inspectCopy": "",
@@ -421,7 +1077,25 @@
     "id": "4.14",
     "lesson": "queues",
     "title": "Completion reporting and what the resource-only run proves",
-    "learnerCopy": "Submitting work does not by itself tell the application that the provider has finished it. The application associates its work queues with a separate Completion Queue (CQ). A completion entry records the outcome of work for which completion reporting applies, including status and information that helps the application identify the work. The application polls the CQ (or uses an appropriate notification mechanism) to retrieve the result. Polling removes the retrieved entries from the CQ. A local Work Completion is not a network acknowledgement.\n\nA CQ is created separately and can be associated with more than one QP. The send and receive queues of a QP can use the same CQ or different ones. In this lab the programs create a CQ and associate it with the QP. The CQ is not one of the two queues inside the QP.\n\nWe can now explain why the resource-creation experiment is valuable even though it produces no RDMA data-operation packets. The program opens the device, creates its PD, allocates/registers memory, creates a CQ and QP, exchanges endpoint information and prepares the QP. It has established the ability to submit subsequent work. In this particular experiment it deliberately does not post a data Work Request. It therefore performs setup without a SEND, WRITE or READ transfer. The TCP control messages used for setup are on the control interface, outside the isolated data-interface captures.\n\nIn the next practical the two programs will actually post receive and send work and examine the packet and the resulting memory. We have already learned why each resource is needed. Nothing should appear without a purpose.",
+    "learnerCopy": "<!-- guided-block: submitting-work-does-not-by -->\n\nSubmitting work does not by itself tell the application that the provider has finished it. The application associates its work queues with a separate Completion Queue (CQ). A completion entry records the outcome of work for which completion reporting applies, including status and information that helps the application identify the work. The application polls the CQ (or uses an appropriate notification mechanism) to retrieve the result. Polling removes the retrieved entries from the CQ. A local Work Completion is not a network acknowledgement.\n\n<!-- guided-block: a-cq-is-created-separately -->\n\nA CQ is created separately and can be associated with more than one QP. The send and receive queues of a QP can use the same CQ or different ones. In this lab the programs create a CQ and associate it with the QP. The CQ is not one of the two queues inside the QP.\n\n<!-- guided-block: we-can-now-explain-why -->\n\nWe can now explain why the resource-creation experiment is valuable even though it produces no RDMA data-operation packets. The program opens the device, creates its PD, allocates/registers memory, creates a CQ and QP, exchanges endpoint information and prepares the QP. It has established the ability to submit subsequent work. In this particular experiment it deliberately does not post a data Work Request. It therefore performs setup without a SEND, WRITE or READ transfer. The TCP control messages used for setup are on the control interface, outside the isolated data-interface captures.\n\n<!-- guided-block: in-the-next-practical-the -->\n\nIn the next practical the two programs will actually post receive and send work and examine the packet and the resulting memory. We have already learned why each resource is needed. Nothing should appear without a purpose.",
+    "contentBlocks": [
+      {
+        "id": "submitting-work-does-not-by",
+        "markdown": "Submitting work does not by itself tell the application that the provider has finished it. The application associates its work queues with a separate Completion Queue (CQ). A completion entry records the outcome of work for which completion reporting applies, including status and information that helps the application identify the work. The application polls the CQ (or uses an appropriate notification mechanism) to retrieve the result. Polling removes the retrieved entries from the CQ. A local Work Completion is not a network acknowledgement."
+      },
+      {
+        "id": "a-cq-is-created-separately",
+        "markdown": "A CQ is created separately and can be associated with more than one QP. The send and receive queues of a QP can use the same CQ or different ones. In this lab the programs create a CQ and associate it with the QP. The CQ is not one of the two queues inside the QP."
+      },
+      {
+        "id": "we-can-now-explain-why",
+        "markdown": "We can now explain why the resource-creation experiment is valuable even though it produces no RDMA data-operation packets. The program opens the device, creates its PD, allocates/registers memory, creates a CQ and QP, exchanges endpoint information and prepares the QP. It has established the ability to submit subsequent work. In this particular experiment it deliberately does not post a data Work Request. It therefore performs setup without a SEND, WRITE or READ transfer. The TCP control messages used for setup are on the control interface, outside the isolated data-interface captures."
+      },
+      {
+        "id": "in-the-next-practical-the",
+        "markdown": "In the next practical the two programs will actually post receive and send work and examine the packet and the resulting memory. We have already learned why each resource is needed. Nothing should appear without a purpose."
+      }
+    ],
     "visualSpec": "First single endpoint: provider -> CQ conceptual entry -> app poll -> observed result outside CQ. Signalled successful send-side operation illustrated only generically; no claim all send WRs produce success CQEs. Then a compact setup ledger from `exp_a_resources.py` and its actual evidence: device open, PD, allocated buffer, MR, CQ, QP, metadata exchange, ready; exact order follows source. Show **No data WR posted in this run** and **No RDMA data-operation packets recorded** only if existing validation confirms. Avoid inventing packets, completion entries or empty-queue samples. Show event logs as real evidence; compare to future actual SEND run as distinct experiment. Primary action **Start the real SEND/RECEIVE practical** links existing Lesson 5.",
     "revealCopy": "",
     "inspectCopy": "A setup failure can occur even without a data packet. A successful resource setup is not evidence that an application transfer succeeded. When we debug RDMA later, we will examine setup, submitted work, transport and completion/verification evidence separately. [S11, S14–S18]",

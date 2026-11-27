@@ -6,11 +6,19 @@ Canonical content; all evidence belongs to the separate READ run unless explicit
 
 ### Learner copy
 
+<!-- guided-block: in-send-and-write-a -->
+
 In SEND and WRITE, A had the message and wanted to place it in B's memory. Suppose instead that B already has data which A needs. Perhaps B is holding a portion of an array and A wants to retrieve it into a local buffer.
+
+<!-- guided-block: one-possible-design-is-to -->
 
 One possible design is to send B a request message and have B's application issue a SEND reply. That is an application-level request/reply protocol. But if B has registered an authorized region for remote reads, A can request the data directly through an RDMA READ. B's provider services the request using the prepared transport and memory-access context; B's application does not have to submit a new SendWR for the response.
 
+<!-- guided-block: this-gives-us-four-separate -->
+
 This gives us four separate roles to track. Which host initiates the operation? Which host contains the source data? Which host receives the data? Which application observes completion? In our READ experiment, A initiates, B supplies the data, A receives it, and A observes its READ completion.
+
+<!-- guided-block: the-distinction-matters-because-the -->
 
 The distinction matters because the first packet travels from A to B, whereas the data returns from B to A. A is using its Send Queue even though its local memory is the destination of the payload.
 
@@ -26,11 +34,19 @@ The word sender can be ambiguous in READ: A transmits the request, B transmits t
 
 ### Learner copy
 
+<!-- guided-block: our-actual-program-is-exp -->
+
 Our actual program is `exp_d_read.py`. On B, the source process allocates a 4,096-byte buffer, fills it with `#` bytes, registers it and puts a known message into the beginning of the registered memory. That message contains 46 bytes including a newline. The recorded initial snapshot shows the message followed by hash characters.
+
+<!-- guided-block: on-a-the-reader-allocates -->
 
 On A, the reader allocates and registers its own 4,096-byte buffer. That is where the response data should land. In READ, A's local SGE will describe a destination rather than a source. The provider must be able to write into that local destination, so the applicable local-write access is important. B must have authorized remote-read access to the source. The shared registration helper enables both in the reference lab, along with remote-write access; a production design should grant only necessary access.
 
+<!-- guided-block: b-shares-the-remote-address -->
+
 B shares the remote address, RKEY and the available data length with A over the control connection. This time the advertised length is the length of the valid message, not the full 4,096-byte registration. That is an application decision: the receiver of metadata needs to know how much meaningful data the source intends to expose. It must still keep requests within the registered range.
+
+<!-- guided-block: the-programs-prepare-their-qps -->
 
 The programs prepare their QPs and B signals readiness. The resources are new for this READ run, so we will not reuse addresses or QPNs from the previous WRITE.
 
@@ -46,11 +62,35 @@ Source code `exp_d_read.py:61–82` establishes allocation and source initializa
 
 ### Learner copy
 
+<!-- guided-block: a-will-initiate-a-read -->
+
+A will initiate a READ, even though the requested application data is stored at B.
+
+<!-- guided-block: the-name-sendwr-may-seem -->
+
 The name `SendWR` may seem odd now. We want A to receive data. Why would the reader use `SendWR` and call `post_send()`?
+
+<!-- guided-block: the-send-queue-is-the -->
 
 The Send Queue is the queue on which an application submits initiated operations. Those operations can send a message, write remote memory or request a remote read, depending on the opcode and QP type. The word Send in the API name is describing the queue, not necessarily the direction of the eventual payload.
 
-The reader constructs an SGE using its own buffer address, length and LKEY. For a READ this is the local destination. It constructs a SendWR with opcode `IBV_WR_RDMA_READ`, a local WR ID and a request for completion reporting. Then it sets the remote source address and RKEY from the earlier metadata exchange.
+<!-- guided-block: a-s-sge-identifies-its -->
+
+A's SGE identifies its own registered destination address, transfer length and LKEY. Unlike SEND and WRITE, this local range is where returned data should be placed.
+
+<!-- guided-block: a-creates-the-sendwr-with -->
+
+A creates the SendWR with the READ opcode, local identifier, destination SGE and completion-reporting request.
+
+<!-- guided-block: a-supplies-b-s-previously -->
+
+A supplies B's previously exchanged remote source address and RKEY using `set_wr_rdma()`.
+
+<!-- guided-block: a-calls-post-send-because -->
+
+A calls `post_send()` because the Send Queue accepts initiated operations. The READ request travels from A to B, although the requested payload will return from B to A.
+
+<!-- guided-block: once-a-calls-qp-post -->
 
 Once A calls `qp.post_send(swr)`, its provider has enough information to request the remote data and place the returned bytes into the correct local region. The local destination address and LKEY stay part of A's local work context. B does not need to receive them to service the READ.
 
@@ -66,11 +106,19 @@ SEND and WRITE use the local SGE as a data source; READ uses the local SGE as a 
 
 ### Learner copy
 
+<!-- guided-block: the-first-captured-read-packet -->
+
 The first captured READ packet goes from A to B. Its opcode says RDMA READ Request. It identifies B's QP and contains a RETH that names the remote source address, remote key and requested byte count.
+
+<!-- guided-block: this-packet-is-unlike-the -->
 
 This packet is unlike the SEND and WRITE request packets we have already seen. It contains a request for data, not the 46 bytes themselves. The amount requested is in RETH, even though the packet has no application payload.
 
+<!-- guided-block: at-b-the-provider-uses -->
+
 At B, the provider uses the endpoint context and remote-memory description to check whether the requested region can be read. It can then obtain the data from the authorized source. In the actual Soft-RoCE lab, software performs this transport processing; in the representative hardware model, the RNIC performs the equivalent operation using device access to registered memory.
+
+<!-- guided-block: b-does-not-have-to -->
 
 B does not have to wait for its application to notice the READ packet and manually construct a reply. The prepared transport handles the response. No ordinary receive WR is consumed by the READ request, and no new application SendWR is needed to produce the response.
 
@@ -86,11 +134,19 @@ A request can describe a 46-byte transfer without carrying any of those 46 bytes
 
 ### Learner copy
 
+<!-- guided-block: the-second-packet-in-our -->
+
 The second packet in our READ evidence is a response. It comes from B and is addressed to A's QP. The destination QPN has changed because the packet direction has changed. The response's opcode identifies a complete single-packet READ response.
+
+<!-- guided-block: it-carries-the-data-requested -->
 
 It carries the data requested by A. It does not repeat the remote address and RKEY from the request as a RETH. A's provider has an outstanding READ context describing where to place the returned bytes. That context includes A's local SGE; the packet does not need to transmit A's local LKEY or destination virtual address.
 
+<!-- guided-block: the-provider-places-the-data -->
+
 The provider places the data into A's registered destination. Our diagram illustrates this memory placement. The subsequent completion and application verification are the recorded observations. We are not measuring the precise physical moment at which each cache line or memory location changes.
+
+<!-- guided-block: a-read-does-not-mean -->
 
 A READ does not mean moving the original object out of B's memory. It obtains a copy of bytes from the source. The initial source snapshot in this run contains the expected message; the reference does not record a later B-memory comparison, so we will not claim to have measured the entire unchanged source after the READ.
 
@@ -106,11 +162,19 @@ The provider on B sends the response as part of servicing A's operation. The app
 
 ### Learner copy
 
+<!-- guided-block: a-polls-its-cq-and -->
+
 A polls its CQ and obtains a successful RDMA READ Work Completion. The local WR ID identifies the original request. The result tells the reader that the operation has completed. In this case the completion reports the transferred length, and the program uses that to read its own buffer.
+
+<!-- guided-block: only-after-observing-completion-does -->
 
 Only after observing completion does the program read and compare the bytes with the expected message. The recorded `read_complete` event contains the data and a successful verification. Reading that Python buffer is ordinary local CPU memory access after the network transfer. The result is a local copy of bytes that were stored on the other machine.
 
+<!-- guided-block: now-consider-b-s-application -->
+
 Now consider B's application. It provided registered source memory and coordinated the experiment. Did it get a normal local completion for servicing A's ordinary READ? No matching local WR was submitted. The ordinary READ responder does not receive a normal CQE simply because a remote peer read its memory.
+
+<!-- guided-block: the-actual-program-makes-this -->
 
 The actual program makes this observable: after A has verified the data, it sends `{"read_done": true}` over the TCP control connection. B receives it and polls its CQ once. That poll returns zero entries in this run. This is a distinct, later observation, not something we measured when the response packet was first seen.
 
@@ -126,11 +190,19 @@ The lab uses an explicit synchronization message to coordinate verification and 
 
 ### Learner copy
 
+<!-- guided-block: we-can-now-describe-the -->
+
 We can now describe the three operations without memorizing API class names. Ask who supplies the data, who selects the destination, what memory metadata is required and which application receives a local completion.
+
+<!-- guided-block: for-ordinary-send-a-supplies -->
 
 For ordinary SEND, A supplies the message and B chooses its destination with a posted receive description. For ordinary WRITE, A supplies data and names an authorized destination at B. For READ, A names an authorized source at B and supplies its own local destination. The request goes outward and the payload comes back.
 
+<!-- guided-block: the-transport-uses-endpoint-context -->
+
 The transport uses endpoint context for all three. It can acknowledge or respond as required by the operation. A local Work Completion is the application-facing result of eligible work, not a network packet. We used signalled operations and recorded successful completions in this lab; more advanced programs may use selective signalling and different CQ associations.
+
+<!-- guided-block: none-of-these-facts-tells -->
 
 None of these facts tells us that every RDMA-based library uses one particular operation. A library can choose operations, queue layouts and synchronization strategies to meet its needs. But if you know these basic mechanisms, you have the tools to understand why a library might use them.
 

@@ -81,14 +81,21 @@ test.describe("guided operations semantics", () => {
     await openOperations(page, "write");
     await jumpToSection(page, /Build a WRITE instruction from two memory descriptions/);
 
-    await next(page, 2);
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("has not yet written the message or submitted a WRITE");
+    await next(page);
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("local memory operation, not a network RDMA WRITE");
+    await next(page);
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("describes the source bytes the provider will access");
     await expect(page.getByTestId("write-memory-descriptions")).toContainText("local source");
     await expect(page.getByTestId("write-memory-descriptions")).not.toContainText("remote destination");
     await next(page);
     await expect(page.getByTestId("write-wr-lifecycle")).toHaveAttribute("data-stage", "constructed");
     await expect(page.getByTestId("actual-write-wr")).toHaveAttribute("data-remote-fields", "not-attached");
     await expect(page.getByTestId("actual-write-wr")).not.toContainText("remote addr:");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("remote destination has not yet been attached");
+    await expect(page.getByTestId("guided-stage-explanation")).not.toContainText("set_wr_rdma");
     await next(page);
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("supplying B's previously advertised address and RKEY");
     await expect(page.getByTestId("write-source-line-remote-attachment")).toContainText("set_wr_rdma");
     await expect(page.getByTestId("actual-write-wr")).toHaveAttribute("data-remote-fields", "included");
     await expect(page.getByTestId("actual-write-wr")).toContainText("remote addr:");
@@ -99,6 +106,8 @@ test.describe("guided operations semantics", () => {
     await expect(page.getByTestId("fill-write-source")).toHaveCount(0);
 
     await jumpToSection(page, /Does B receive a normal completion when its memory changes/);
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("Before continuing, consider whether B will receive a normal receive completion");
+    await expect(page.getByTestId("guided-stage-explanation")).not.toContainText("recorded poll returned zero entries");
     await expect(page.getByTestId("write-target-cqe-prediction")).toHaveAttribute("data-result-revealed", "false");
     await expect(page.getByTestId("write-prediction-feedback")).toHaveCount(0);
     await page.getByTestId("target-cqe-predict-yes").click();
@@ -133,10 +142,16 @@ test.describe("guided operations semantics", () => {
 
     await openOperations(page, "read");
     await jumpToSection(page, /Why does the reader use a Send Work Request/);
-    await next(page, 2);
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("requested application data is stored at B");
+    await next(page);
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("local range is where returned data should be placed");
+    await next(page);
     await expect(page.getByTestId("read-wr-lifecycle")).toHaveAttribute("data-stage", "constructed");
     await expect(page.getByTestId("actual-read-wr")).toHaveAttribute("data-remote-fields", "not-attached");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("READ opcode, local identifier, destination SGE");
+    await expect(page.getByTestId("guided-stage-explanation")).not.toContainText("set_wr_rdma");
     await next(page);
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("remote source address and RKEY using set_wr_rdma()");
     await expect(page.getByTestId("actual-read-wr")).toHaveAttribute("data-remote-fields", "included");
     await next(page);
     await expect(page.getByTestId("read-wr-lifecycle")).toHaveAttribute("data-stage", "posted");
@@ -218,6 +233,11 @@ test.describe("guided operations semantics", () => {
     await next(page);
     await expect(page.getByTestId("packet-length-breakdown")).toHaveAttribute("data-packet-id", "c:packet:8");
     await expect(page.getByTestId("ack-transfer-length-note")).toContainText("application payload in this packet is zero");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("Not every packet associated with an RDMA operation carries application data");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("SEND request");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("READ response");
+    await expect(page.getByTestId("guided-observation")).toContainText("Acknowledgement Extended Transport Header");
+    await expect(page.getByTestId("guided-observation")).toContainText("captured frame length answer different questions");
 
     await jumpToSection(page, /A complete correlation: Python → WR → packet → memory → completion/);
     await expect(page.getByTestId("guided-stage-explanation")).toContainText("remote address and key");
@@ -231,6 +251,10 @@ test.describe("guided operations semantics", () => {
     await expect(page.getByTestId("correlate-destination-qpn")).toBeVisible();
     await expect(page.getByTestId("correlate-psn")).toBeVisible();
     await expect(page.getByTestId("correlation-explanation-destination-qpn")).toContainText("configuration");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("attr.dest_qp_num");
+    await expect(page.getByTestId("guided-stage-explanation")).toContainText("log.emit");
+    await expect(page.getByTestId("guided-observation")).toContainText("logging does not configure it");
+    await expect(page.getByTestId("guided-observation")).toContainText("Subsequent packets need not retain that initial PSN");
     await next(page);
     await expect(page.getByTestId("guided-stage-explanation")).toContainText("Other fields are local");
     await expect(page.getByTestId("selected-code-wire-chain")).toHaveAttribute("data-group", "local");

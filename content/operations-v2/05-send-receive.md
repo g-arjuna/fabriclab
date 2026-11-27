@@ -6,13 +6,23 @@ This is canonical learner copy. Section IDs are stable. The **Visual and interac
 
 ### Learner copy
 
+<!-- guided-block: we-have-spent-the-first -->
+
 We have spent the first four lessons looking inside a computer. We know how a process obtains memory, how the CPU executes instructions, and how a conventional TCP connection moves bytes between processes. We have also seen how an RDMA provider prepares memory and communication resources.
+
+<!-- guided-block: now-we-will-follow-two -->
 
 Now we will follow two real Python programs through a complete transfer. We are not going to write a new program in the browser. Instead, we will examine an experiment that FabricLab has already run on two Linux virtual machines.
 
+<!-- guided-block: on-server-a-hosta-the -->
+
 On Server A (`hosta`), the Python process plays the sender. On Server B (`hostb`), another Python process plays the receiver. Both execute the same file, `exp_b_send_recv.py`, with different role arguments. They use Pyverbs to request RDMA operations through the Linux RDMA stack. Their RDMA device is the software device `rxe0`, associated with the data Ethernet interface. Remember: RXE executes the RDMA transport in software. A physical RNIC can implement much of this transport in hardware, but this experiment does not measure hardware offload.
 
+<!-- guided-block: there-are-two-conversations-between -->
+
 There are two conversations between the machines. The control connection uses ordinary TCP on the control network. The programs use it to tell each other which RDMA endpoints they created and when they are ready. The data network carries actual RoCEv2 traffic. These are separate interfaces in our laboratory, not a universal requirement for RDMA.
+
+<!-- guided-block: we-will-follow-the-source -->
 
 We will follow the source code, instructions, packets and memory observations. The browser lets us reveal the recorded execution at our own pace. An illustrated queue transition is our explanation of the mechanism; a packet or application log is what was actually recorded.
 
@@ -28,13 +38,23 @@ The control path prepares the experiment. The data path carries the RDMA message
 
 ### Learner copy
 
+<!-- guided-block: before-either-program-can-transfer -->
+
 Before either program can transfer a message, it needs a local RDMA device context, a protection domain (PD), a completion queue (CQ), a buffer associated with a memory region (MR), and a queue pair (QP). These are the objects we learned to build in the previous lesson.
+
+<!-- guided-block: look-at-the-actual-setup -->
 
 Look at the actual setup code. It opens the device and identifies a local GID, creates a PD and CQ, then calls a helper that allocates a buffer, registers it and creates a QP. The CQ is separate from the QP; this particular helper associates one CQ with both the send and receive queues. The two queues can hold multiple requests. Here we use only one send and one receive.
 
+<!-- guided-block: a-newly-created-qp-is -->
+
 A newly created QP is not ready to perform this transfer. Each process needs information about its peer. In this program the processes exchange a QPN, initial packet sequence number (PSN) and GID over TCP. The GID is a network identity used by the RDMA addressing machinery; in this lab it represents an IPv4-mapped address. It is not the QPN or an RKEY.
 
+<!-- guided-block: the-helper-configures-the-qps -->
+
 The helper configures the QPs in stages. In INIT it sets local port and access attributes. In RTR (Ready to Receive) it sets peer addressing, peer QPN and the expected incoming packet sequence. In RTS (Ready to Send) it sets outgoing sequence and retry attributes. These are local configuration actions, not a TCP three-way handshake. The lab takes both QPs through RTS before posting the SEND operation.
+
+<!-- guided-block: the-numbers-here-belong-to -->
 
 The numbers here belong to this SEND experiment. The QPNs we saw in the resource-only experiment belonged to a different run. A number that appears in two runs is not a guarantee that it identifies the same object.
 
@@ -50,13 +70,23 @@ The helper requests RC (Reliable Connected) QPs, one CQ for send and receive, ca
 
 ### Learner copy
 
+<!-- guided-block: think-back-to-the-tcp -->
+
 Think back to the TCP experiment. The receiver could delay calling `recv()`. The kernel's TCP socket could already contain unread bytes when we inspected it with `ss`.
+
+<!-- guided-block: rdma-send-uses-a-different -->
 
 RDMA SEND uses a different arrangement. Before a normal SEND arrives, the receiver needs to make suitable receive work available. The receiver chooses the memory in which the provider should place the incoming message. It describes that memory using its own local address, available length and LKEY. It then submits that description to its Receive Queue.
 
+<!-- guided-block: in-this-run-the-buffer -->
+
 In this run the buffer can hold 4,096 bytes. That does not mean the sender has to transmit 4,096 bytes. It means that the receiver has supplied space for a message within that capacity. Our sender will send a much shorter message.
 
+<!-- guided-block: the-program-constructs-an-sge -->
+
 The program constructs an SGE (scatter/gather entry). An SGE identifies a range of locally registered memory. It then wraps that description in a Receive Work Request (`RecvWR`) and gives the request a local identifier. The identifier allows the receiving application to recognize the completion later. It is not an address on the network.
+
+<!-- guided-block: calling-qp-post-recv-rwr -->
 
 Calling `qp.post_recv(rwr)` submits the receive instruction. It does not itself move any payload. There is no new data packet simply because the receiver has posted this request. Once the receiver has posted the request, it sends the sender a `ready` message over the TCP control connection. The sender waits for that message before it starts the SEND.
 
@@ -72,11 +102,19 @@ The receiver has prepared a destination. It has not received a message yet. The 
 
 ### Learner copy
 
+<!-- guided-block: suppose-a-submits-a-normal -->
+
 Suppose A submits a normal RC SEND and B has no suitable receive request waiting. Where would B's provider put the incoming message? B has an RDMA endpoint, but it has not supplied a destination description for this operation.
+
+<!-- guided-block: this-is-different-from-tcp -->
 
 This is different from TCP's ordinary socket buffering. A normal RC SEND that needs a receive request can encounter Receiver Not Ready, often abbreviated RNR. The receiving transport can respond that it is not ready to accept the message. The initiating transport may retry after a delay according to its configuration. With finite configured retries, failure can eventually be reported. A request can also remain outstanding while the application itself stops waiting.
 
+<!-- guided-block: in-fabriclab-s-actual-send -->
+
 In FabricLab's actual SEND program, B posts receive work before notifying A. That deliberately avoids this situation. We have no recorded RNR packet in the successful reference run, so we will illustrate the possible problem rather than pretend that we measured it.
+
+<!-- guided-block: there-is-another-separate-constraint -->
 
 There is another separate constraint: if the receive work exists but the supplied destination space is too small for the message, the operation can fail rather than behaving like a series of TCP `recv()` calls. The application must arrange suitable receive capacity.
 
@@ -92,11 +130,19 @@ A receive queue is not a store of arrived messages. It holds descriptions of whe
 
 ### Learner copy
 
+<!-- guided-block: now-the-receiving-side-is -->
+
 Now the receiving side is ready. The sender can prepare its own memory. The real program defines a bytes literal ending in a newline. It writes the message into its registered local buffer using `mr.write(...)`.
+
+<!-- guided-block: do-not-confuse-this-call -->
 
 Do not confuse this call with an RDMA WRITE operation. Here `mr.write` is a local Pyverbs memory helper: the CPU executing the application puts bytes into the local buffer. There is no remote transfer yet. The actual RDMA operation is determined by the opcode in the Work Request that the application submits afterward.
 
+<!-- guided-block: the-sender-s-sge-identifies -->
+
 The sender's SGE identifies the local starting address, message length and LKEY. The SendWR says which operation to perform, associates that SGE with the request and asks for successful completion reporting. The WR ID is chosen by the local program. In our run the opcode is SEND. The request has no remote-memory address or RKEY because the receive request at B supplies the destination.
+
+<!-- guided-block: finally-qp-post-send-swr -->
 
 Finally, `qp.post_send(swr)` submits the instruction to A's Send Queue. The function is named for the queue; later we will use it for WRITE and READ as well. Submission is asynchronous: a successful return does not by itself establish that the bytes have reached the other host. The application must observe completion and check its status before treating the operation as finished.
 
@@ -112,11 +158,19 @@ The lab logs a successful post call and uses a finite completion wait. A posting
 
 ### Learner copy
 
+<!-- guided-block: the-provider-now-has-an -->
+
 The provider now has an instruction and a way to access the source bytes. It also has a prepared peer endpoint. In the actual lab, software RXE uses the local memory description and executes the Reliable Connected transport through the Linux network path.
+
+<!-- guided-block: on-the-network-we-no -->
 
 On the network we no longer see Python objects, addresses meaningful only to A's local CPU, or the local WR ID. We see a RoCEv2 request. The captured packet is addressed to B's data IP, uses UDP destination port 4791 and names B's destination QPN in its Base Transport Header (BTH).
 
+<!-- guided-block: the-transport-opcode-says-that -->
+
 The transport opcode says that this is a SEND message contained in one transport packet. The Packet Sequence Number (PSN) identifies its place in the transport's sequence. We will examine these fields in detail in Lesson 8. For now, the important point is that the packet identifies the communication endpoint and carries the message; it does not tell B an arbitrary virtual address to write to.
+
+<!-- guided-block: on-b-the-provider-identifies -->
 
 On B, the provider identifies the prepared QP, associates the SEND with the posted receive work, and places the message into the memory that B described. The receive work is consumed. This is a conceptual explanation of the transport mechanism; we did not instrument the exact moment a queue slot was retired or a RAM/cache location changed. The actual packet and later receive completion and buffer check are our evidence.
 
@@ -132,9 +186,15 @@ Why can the SEND packet omit B's virtual memory address? Because B's provider ca
 
 ### Learner copy
 
+<!-- guided-block: we-chose-reliable-connected-transport -->
+
 We chose Reliable Connected transport. In our capture B responds to the SEND with a transport acknowledgement. The ACK travels from B to A, so its destination QPN identifies A, not B. It has no copy of the application message. The transport uses acknowledgement information to establish progress and support reliable delivery; it is not a Python message returned by `recv()`.
 
+<!-- guided-block: a-completion-is-a-different -->
+
 A completion is a different object. A provider reports the result of eligible local work in a Completion Queue. A polls its CQ to find out whether its SEND completed. B polls its own CQ to find out whether its posted RECEIVE completed. The two results refer to different locally chosen WR IDs and QPs, even though both relate to the same transfer.
+
+<!-- guided-block: a-successful-send-completion-in -->
 
 A successful SEND completion in this RC example is not a promise that B's application has already examined, processed or acted on the message. The receiving application's own completion and subsequent verification establish that part of the story. In particular, we should not arrange the two CQ polls on one global timeline unless the evidence establishes that order.
 
@@ -150,11 +210,19 @@ The program's polling helper returns a WC only after SUCCESS, otherwise raises o
 
 ### Learner copy
 
+<!-- guided-block: b-s-application-has-now -->
+
 B's application has now retrieved its successful receive completion. It uses the received byte count to decide how many bytes to inspect in its buffer. Notice that this is not another socket `recv()` call. The RDMA provider has already placed the message in the memory B supplied. The program reads its own buffer using ordinary CPU memory access.
+
+<!-- guided-block: the-actual-source-uses-bytes -->
 
 The actual source uses `bytes(buf.raw[:n])`. In Python, producing this bytes object can itself involve a local copy. That is application processing after the RDMA operation, not another network transfer. The program compares the received bytes with the expected literal and records whether the lengths and contents match.
 
+<!-- guided-block: our-evidence-shows-a-50 -->
+
 Our evidence shows a 50-byte message, even though the receive buffer had capacity for 4,096 bytes. The packet carries exactly those message bytes, including the final newline. Transport padding is not part of the message. We have not captured every byte of the remaining destination buffer and should not present those bytes as independently measured.
+
+<!-- guided-block: we-now-have-several-complementary -->
 
 We now have several complementary observations: the request was submitted, the SEND packet was captured, the receiver reported a successful completion, and the application verified the resulting data. Together they establish what this experiment accomplished.
 
@@ -170,7 +238,11 @@ TCP gives an application an ordered byte stream; individual writes and reads may
 
 ### Learner copy
 
+<!-- guided-block: before-moving-on-see-if -->
+
 Before moving on, see if you can explain the transfer without relying on the names of the API calls. B decided where to put the message. A decided which message to send. The providers used their prepared endpoints to communicate. The receiving provider placed the bytes in B's registered buffer, and both applications observed their own work completions.
+
+<!-- guided-block: now-imagine-you-only-have -->
 
 Now imagine you only have the captured SEND packet. Can you find B's application buffer address in it? Can you establish that B has actually consumed the data? We need more than the network capture to answer those questions.
 

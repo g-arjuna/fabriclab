@@ -1,6 +1,6 @@
 export type GuidedContentReference = {
   sectionId: string;
-  unitIndexes: number[];
+  blockIds: string[];
 };
 
 export type GuidedStageDefinition = {
@@ -8,10 +8,10 @@ export type GuidedStageDefinition = {
   id: string;
   /** Human-presented stage name; editing this text does not alter stored progress. */
   label: string;
-  /** Zero-based canonical instruction-unit references within this subsection; absent means deterministic proportional selection. */
-  instructionUnitIndexes?: number[];
-  /** Exact canonical content references, including cross-subsection references where the mechanism was authored earlier. */
+  /** Exact canonical content-block references, including cross-subsection references where the mechanism was authored earlier. */
   instructionReferences?: GuidedContentReference[];
+  /** Exact authored observation blocks to present separately from the mechanism instruction. */
+  observationReferences?: GuidedContentReference[];
   nextPreview?: string;
 };
 
@@ -315,69 +315,493 @@ export const operationGuidedStages: Record<string, GuidedStageDefinition[]> = {
   "8.9": plan([["frame-the-write-investigation", "Frame the WRITE investigation"], ["reveal-writer-completion", "Reveal writer completion"], ["reveal-control-signal-and-target-poll", "Reveal control signal and target poll"], ["reveal-target-memory-evidence", "Reveal target memory evidence"]]),
   "8.10": plan([["frame-the-read-response-investigation", "Frame the READ-response investigation"], ["find-the-earlier-request", "Find the earlier request"], ["inspect-originating-read-work", "Inspect originating read work"], ["inspect-data-and-completion-evidence", "Inspect data and completion evidence"]]),
   "8.11": plan([["compare-the-host-memory-path", "Compare the host-memory path"], ["inspect-a-possible-gpu-memory-path", "Inspect a possible GPU-memory path"], ["inspect-fabric-congestion", "Inspect fabric congestion"]]),
-  "8.12": plan([["objective", "Objective"], ["preparation", "Preparation"], ["submission", "Submission"], ["transport", "Transport"], ["application-observation", "Application observation"]]),
+  "8.12": plan([["review-the-complete-investigation-checklist", "Review the complete investigation checklist"]]),
 };
+
+function content(sectionId: string, ...blockIds: string[]): GuidedContentReference[] {
+  return [{ sectionId, blockIds }];
+}
 
 const instructionReferencesBySection: Record<string, Record<string, GuidedContentReference[]>> = {
+  "1.1": {
+    "meet-the-physical-computer": content("1.1", "before-we-connect-two-computers", "a-typical-server-contains-processors"),
+    "introduce-the-software-running-on-the-computer": content("1.1", "linux-is-software-running-on"),
+    "follow-an-application-instruction": content("1.1", "a-typical-server-contains-processors", "linux-is-software-running-on"),
+    "follow-a-kernel-instruction": content("1.1", "linux-is-software-running-on"),
+  },
   "1.2": {
-    "show-program-stored-on-disk": [{ sectionId: "1.2", unitIndexes: [0] }],
-    "start-the-first-process": [{ sectionId: "1.2", unitIndexes: [1, 2, 5, 7] }],
-    "start-a-second-process": [{ sectionId: "1.2", unitIndexes: [5, 9, 10, 11] }],
-    "demonstrate-shared-read-only-mappings": [{ sectionId: "1.2", unitIndexes: [8, 9] }],
-    "introduce-demand-allocation": [{ sectionId: "1.2", unitIndexes: [12, 13] }],
-    "touch-demand-memory-and-interpret": [{ sectionId: "1.2", unitIndexes: [12, 13] }],
+    "show-program-stored-on-disk": content("1.2", "a-python-script-or-a"),
+    "start-the-first-process": content("1.2", "a-python-script-or-a", "the-operating-system-gives-a", "the-process-does-not-get"),
+    "start-a-second-process": content("1.2", "the-operating-system-gives-a", "the-process-does-not-get"),
+    "demonstrate-shared-read-only-mappings": content("1.2", "the-operating-system-gives-a", "the-process-does-not-get"),
+    "introduce-demand-allocation": content("1.2", "the-process-does-not-get", "both-processes-have-a-virtual"),
+    "touch-demand-memory-and-interpret": content("1.2", "now-process-a-accesses-a", "in-our-example-only-process"),
   },
   "1.3": {
-    "introduce-a-virtual-address": [{ sectionId: "1.3", unitIndexes: [1, 2] }],
-    "resolve-first-process-translation": [{ sectionId: "1.3", unitIndexes: [3, 5, 6] }],
-    "read-the-illustrative-byte": [{ sectionId: "1.3", unitIndexes: [1, 9, 10, 11] }],
-    "introduce-second-process-same-address": [{ sectionId: "1.3", unitIndexes: [2] }, { sectionId: "1.2", unitIndexes: [9, 10, 11] }],
-    "resolve-second-process-translation": [{ sectionId: "1.3", unitIndexes: [3, 6] }, { sectionId: "1.2", unitIndexes: [10, 11] }],
-    "demonstrate-a-permitted-store": [{ sectionId: "1.3", unitIndexes: [1, 3] }],
-    "demonstrate-a-rejected-store": [{ sectionId: "1.3", unitIndexes: [3, 7, 8] }],
+    "introduce-a-virtual-address": content("1.3", "a-byte-is-eight-bits", "the-cpu-is-executing-a"),
+    "resolve-first-process-translation": content("1.3", "a-byte-is-eight-bits", "for-this-illustration-suppose-a", "address-translation-identifies-frame-p7"),
+    "read-the-illustrative-byte": content("1.3", "the-cpu-then-obtains-the", "the-load-returns-0x48-to", "the-cpu-normally-accesses-data"),
+    "introduce-second-process-same-address": content("1.3", "process-a-executes-an-instruction", "a-virtual-address-is-interpreted"),
+    "resolve-second-process-translation": content("1.3", "a-virtual-address-is-interpreted", "in-our-illustration-address-0x1000"),
+    "demonstrate-a-permitted-store": content("1.3", "a-byte-is-eight-bits", "for-this-illustration-suppose-a"),
+    "demonstrate-a-rejected-store": content("1.3", "a-byte-is-eight-bits", "for-this-illustration-suppose-a"),
   },
   "1.4": {
-    "no-allocated-buffer": [{ sectionId: "1.4", unitIndexes: [0, 1, 2] }],
-    "allocate-sixteen-bytes": [{ sectionId: "1.4", unitIndexes: [3, 4, 5] }],
-    "write-hello-into-the-first-five-cells": [{ sectionId: "1.4", unitIndexes: [6, 7, 8, 9, 10] }],
-    "highlight-capacity-versus-meaningful-data-length": [{ sectionId: "1.4", unitIndexes: [9, 11, 12, 13] }],
+    "no-allocated-buffer": content("1.4", "suppose-our-program-wants-to"),
+    "allocate-sixteen-bytes": content("1.4", "suppose-our-program-wants-to", "python-buf-bytearray-16-buf"),
+    "write-hello-into-the-first-five-cells": content("1.4", "now-the-program-writes-five", "python-buf-bytearray-16-buf"),
+    "highlight-capacity-versus-meaningful-data-length": content("1.4", "suppose-our-program-wants-to", "the-application-does-not-itself"),
   },
   "1.5": {
-    "original-buffer": [{ sectionId: "1.5", unitIndexes: [0, 1, 2] }],
-    "create-a-second-reference": [{ sectionId: "1.5", unitIndexes: [5, 6] }],
-    "modify-through-that-reference": [{ sectionId: "1.5", unitIndexes: [5, 6, 7] }],
-    "create-an-independent-copy": [{ sectionId: "1.5", unitIndexes: [1, 2, 3] }],
-    "modify-the-copy": [{ sectionId: "1.5", unitIndexes: [4, 7, 8] }],
+    "original-buffer": content("1.5", "our-original-sixteen-byte-buffer"),
+    "create-a-second-reference": content("1.5", "we-create-a-second-reference"),
+    "modify-through-that-reference": content("1.5", "using-the-second-reference-we", "reading-through-either-reference-returns"),
+    "create-an-independent-copy": content("1.5", "now-we-allocate-a-different", "the-source-currently-contains-xello"),
+    "modify-the-copy": content("1.5", "we-replace-x-with-y", "the-two-buffers-contain-independently", "a-reference-provides-another-way"),
+  },
+  "1.6": {
+    "application-executes-in-user-mode": content("1.6", "applications-normally-execute-in-user"),
+    "application-requests-a-kernel-service": content("1.6", "linux-provides-controlled-entry-points"),
+    "cpu-executes-kernel-instructions": content("1.6", "linux-provides-controlled-entry-points"),
+    "waiting-and-device-wakeup-are-separate": content("1.6", "the-kernel-can-also-run"),
+    "control-returns-to-user-mode": content("1.6", "linux-provides-controlled-entry-points", "the-kernel-can-also-run"),
+  },
+  "1.7": {
+    "compare-the-two-distinct-host-memory-systems": content("1.7", "we-can-finally-state-our", "server-a-cannot-access-server"),
+  },
+  "2.1": {
+    "inspect-existing-processes-and-their-socket-handles": content("2.1", "consider-a-web-browser-an"),
+    "create-the-python-tcp-socket": content("2.1", "a-socket-is-an-operating"),
+    "show-the-kernel-managed-socket-object": content("2.1", "linux-provides-a-shared-networking", "a-socket-is-an-operating"),
+    "distinguish-nic-port-tcp-port-and-file-descriptor": content("2.1", "consider-a-web-browser-an", "linux-provides-a-shared-networking", "a-socket-is-an-operating"),
+  },
+  "2.2": {
+    "create-the-client-socket": content("2.2", "python-includes-a-standard-library", "python-import-socket-s-socket", "af-inet-selects-ipv4-addressing"),
+    "create-the-listener-on-server-b": content("2.2", "we-need-two-cooperating-programs", "python-server-b-prepare-a"),
+    "establish-the-connection": content("2.2", "python-server-b-prepare-a", "port-5001-is-an-arbitrary"),
+    "identify-the-accepted-connected-socket": content("2.2", "we-need-two-cooperating-programs", "python-server-b-prepare-a", "port-5001-is-an-arbitrary"),
+  },
+  "2.3": {
+    "start-with-distinct-listener-and-client-endpoints": content("2.3", "when-server-a-calls-connect"),
+    "follow-the-recorded-syn": content("2.3", "when-server-a-calls-connect"),
+    "follow-the-recorded-syn-ack": content("2.3", "when-server-a-calls-connect"),
+    "follow-the-recorded-ack-and-established-state": content("2.3", "when-server-a-calls-connect", "python-conn-peer-listener-accept", "conn-is-the-socket-handle"),
+  },
+  "2.4": {
+    "inspect-the-application-writes": content("2.4", "suppose-the-sender-writes-he"),
+    "inspect-continuous-byte-stream-positions": content("2.4", "suppose-the-sender-writes-he"),
+    "observe-one-valid-receive-chunking": content("2.4", "suppose-the-sender-writes-he"),
+    "compare-another-valid-receive-chunking": content("2.4", "suppose-the-sender-writes-he", "the-application-must-decide-how"),
+  },
+  "2.5": {
+    "prepare-the-application-send-buffer": content("2.5", "we-already-have-a-connected", "python-buf-bytearray-16-buf", "memoryview-buf-5-describes-the"),
+    "submit-bytes-through-the-socket-interface": content("2.5", "we-already-have-a-connected", "python-buf-bytearray-16-buf", "memoryview-buf-5-describes-the"),
+    "copy-bytes-into-kernel-managed-send-storage": content("2.5", "the-kernel-s-tcp-implementation"),
+    "return-to-the-application-while-the-source-remains-unchanged": content("2.5", "we-already-have-a-connected", "the-kernel-s-tcp-implementation"),
+  },
+  "2.6": {
+    "show-the-original-application-byte-range": content("2.6", "tcp-is-responsible-for-transferring", "our-hello-payload-may-fit"),
+    "highlight-the-first-recorded-tcp-segment": content("2.6", "tcp-sends-portions-of-the", "our-hello-payload-may-fit"),
+    "highlight-the-next-recorded-segment": content("2.6", "tcp-sends-portions-of-the", "our-hello-payload-may-fit"),
+    "highlight-the-remaining-recorded-segment": content("2.6", "tcp-sends-portions-of-the", "our-hello-payload-may-fit"),
+    "compare-segment-and-application-read-boundaries": content("2.6", "tcp-is-responsible-for-transferring", "tcp-sends-portions-of-the", "our-hello-payload-may-fit"),
+  },
+  "2.7": {
+    "inspect-kernel-tcp-ip-and-driver-processing": content("2.7", "the-kernel-s-network-stack", "the-kernel-and-cpu-still"),
+    "prepare-the-transmit-descriptor": content("2.7", "the-kernel-s-network-stack"),
+    "nic-accesses-prepared-memory": content("2.7", "the-kernel-s-network-stack"),
+    "transmit-the-ethernet-frame": content("2.7", "the-kernel-s-network-stack", "the-kernel-and-cpu-still"),
+  },
+  "2.8": {
+    "receive-the-recorded-frame": content("2.8", "at-server-b-the-nic"),
+    "place-bytes-in-kernel-receive-storage": content("2.8", "at-server-b-the-nic", "the-kernel-associates-available-bytes"),
+    "inspect-the-socket-before-the-application-reads": content("2.8", "the-kernel-checks-and-interprets", "the-kernel-associates-available-bytes"),
+    "contrast-a-conceptual-out-of-order-arrival": content("2.8", "the-kernel-checks-and-interprets", "the-kernel-associates-available-bytes"),
+  },
+  "2.9": {
+    "start-with-bytes-waiting-in-kernel-receive-storage": content("2.9", "the-recv-method-belongs-to", "this-returns-a-new-python"),
+    "read-the-first-available-bytes": content("2.9", "the-recv-method-belongs-to", "python-part-conn-recv-5", "this-returns-a-new-python"),
+    "read-the-next-available-bytes": content("2.9", "for-our-visual-experiment-we", "python-buf-bytearray-5-received", "the-loop-is-required-because"),
+    "read-the-remaining-bytes": content("2.9", "for-our-visual-experiment-we", "python-buf-bytearray-5-received", "the-loop-is-required-because"),
+  },
+  "2.10": {
+    "inspect-the-receiver-reads-first-case": content("2.10", "if-the-receiver-calls-recv"),
+    "release-the-sender-and-observe-the-blocked-receive-complete": content("2.10", "no-once-the-tcp-connection", "if-the-receiver-calls-recv"),
+    "inspect-the-sender-sends-first-case": content("2.10", "no-once-the-tcp-connection"),
+    "observe-unread-bytes-waiting-in-kernel-storage": content("2.10", "no-once-the-tcp-connection"),
+    "compare-ordering-and-delivery-results": content("2.10", "no-once-the-tcp-connection", "if-the-receiver-calls-recv", "this-is-an-important-contrast"),
+  },
+  "2.11": {
+    "inspect-same-machine-loopback": content("2.11", "the-socket-interface-also-works"),
+    "inspect-two-machine-ethernet": content("2.11", "an-ordinary-tcp-connection-to"),
+    "compare-the-software-and-physical-network-paths": content("2.11", "the-socket-interface-also-works", "an-ordinary-tcp-connection-to"),
+  },
+  "2.12": {
+    "inspect-the-small-captured-transfer": content("2.12", "we-have-traced-our-five", "in-the-captured-small-transfer"),
+    "inspect-the-large-captured-transfer": content("2.12", "in-the-larger-transfer-inspect"),
+    "connect-packets-to-application-byte-ranges": content("2.12", "in-the-captured-small-transfer", "in-the-larger-transfer-inspect"),
+    "establish-what-the-evidence-does-and-does-not-show": content("2.12", "we-have-traced-our-five", "now-consider-an-ai-or"),
+  },
+  "3.1": {
+    "cpu-mediated-memory-operation": content("3.1", "we-saw-a-cpu-copy"),
+    "cpu-prepares-device-work": content("3.1", "we-saw-a-cpu-copy", "dma-allows-a-suitably-configured"),
+    "device-accesses-the-memory-system": content("3.1", "dma-allows-a-suitably-configured"),
+    "destination-memory-changes": content("3.1", "dma-allows-a-suitably-configured"),
+    "cpu-software-observes-the-result": content("3.1", "we-saw-a-cpu-copy", "dma-allows-a-suitably-configured"),
+  },
+  "3.2": {
+    "introduce-the-application-virtual-address": content("3.2", "earlier-the-cpu-used-a"),
+    "follow-cpu-mmu-translation": content("3.2", "earlier-the-cpu-used-a"),
+    "reveal-the-device-visible-address-view": content("3.2", "earlier-the-cpu-used-a", "a-driver-and-operating-system"),
+  },
+  "3.3": {
+    "follow-the-representative-tcp-memory-path": content("3.3", "our-tcp-data-path-already"),
+    "follow-the-representative-hardware-rdma-path": content("3.3", "the-question-rdma-addresses-is"),
+    "compare-instruction-control-payload-and-completion-paths": content("3.3", "the-question-rdma-addresses-is", "the-cpu-does-not-disappear"),
+  },
+  "3.4": {
+    "preview-the-shared-memory-to-memory-objective": content("3.4", "remote-direct-memory-access-rdma", "rdma-still-needs-a-network"),
+    "preview-send": content("3.4", "there-are-three-basic-operations"),
+    "preview-write": content("3.4", "there-are-three-basic-operations"),
+    "preview-read": content("3.4", "there-are-three-basic-operations", "rdma-still-needs-a-network"),
+  },
+  "3.5": {
+    "establish-the-actual-rxe-software-path": content("3.5", "our-two-linux-lab-hosts", "the-application-does-not-call"),
+    "compare-the-representative-hardware-rnic-path": content("3.5", "a-hardware-rdma-capable-nic"),
+    "distinguish-software-transport-execution-from-hardware-transport-execution": content("3.5", "a-hardware-rdma-capable-nic", "our-two-linux-lab-hosts", "the-application-does-not-call"),
+  },
+  "3.6": {
+    "prepare-memory-and-communication-resources": content("3.6", "with-a-tcp-socket-we", "the-next-lesson-builds-these"),
+    "describe-work": content("3.6", "the-term-verbs-refers-to"),
+    "submit-work-to-the-endpoint": content("3.6", "with-a-tcp-socket-we", "the-term-verbs-refers-to"),
+    "observe-the-result": content("3.6", "with-a-tcp-socket-we", "the-term-verbs-refers-to", "the-next-lesson-builds-these"),
+  },
+  "4.1": {
+    "existing-application-buffer": content("4.1", "return-to-our-16-byte"),
+    "application-requests-registration": content("4.1", "we-need-to-establish-which"),
+    "provider-establishes-registered-access": content("4.1", "we-need-to-establish-which", "in-a-conventional-hardware-registration"),
+    "memory-region-metadata-appears": content("4.1", "we-need-to-establish-which", "in-a-conventional-hardware-registration"),
+    "address-and-length-are-explained": content("4.1", "return-to-our-16-byte", "we-need-to-establish-which", "in-a-conventional-hardware-registration"),
+    "permissions-and-keys-are-revealed": content("4.1", "we-need-to-establish-which", "in-a-conventional-hardware-registration"),
+  },
+  "4.2": {
+    "application-asks-through-pyverbs": content("4.2", "our-python-program-asks-to"),
+    "provider-and-protection-domain-establish-the-mr": content("4.2", "our-python-program-asks-to", "the-protection-domain-is-not", "the-program-supplies-the-pd"),
+    "mr-is-returned-to-the-application": content("4.2", "the-program-supplies-the-pd"),
+  },
+  "4.3": {
+    "inspect-the-registered-byte-range": content("4.3", "a-registration-describes-a-starting", "the-address-in-this-lesson"),
+    "inspect-a-valid-bounded-range": content("4.3", "a-registration-describes-a-starting"),
+    "inspect-a-boundary-crossing-range": content("4.3", "a-registration-describes-a-starting"),
+    "explain-base-offset-length-and-end-exclusive-boundary": content("4.3", "a-registration-describes-a-starting", "the-address-in-this-lesson"),
+  },
+  "4.4": {
+    "ordinary-cpu-memory-access": content("4.4", "the-words-local-and-remote"),
+    "local-provider-write-access": content("4.4", "for-an-mr-local-write"),
+    "remote-write-access": content("4.4", "remote-write-allows-an-authorized"),
+    "remote-read-access": content("4.4", "remote-write-allows-an-authorized"),
+    "compare-the-access-types": content("4.4", "the-words-local-and-remote", "for-an-mr-local-write", "remote-write-allows-an-authorized"),
+  },
+  "4.5": {
+    "valid-local-registration-reference": content("4.5", "imagine-the-application-has-registered", "a-local-buffer-description-typically", "the-local-key-is-supplied"),
+    "incorrect-local-key": content("4.5", "imagine-the-application-has-registered", "the-local-key-is-supplied"),
+    "correct-key-but-invalid-requested-range": content("4.5", "imagine-the-application-has-registered", "a-local-buffer-description-typically"),
+    "correct-association-and-applicable-permission": content("4.5", "imagine-the-application-has-registered", "a-local-buffer-description-typically", "the-local-key-is-supplied"),
+  },
+  "4.6": {
+    "b-owns-a-registered-memory-region": content("4.6", "now-imagine-server-a-wants"),
+    "b-shares-address-rkey-and-valid-length": content("4.6", "now-imagine-server-a-wants", "the-rkey-is-an-access"),
+    "a-receives-the-remote-metadata": content("4.6", "now-imagine-server-a-wants", "the-rkey-is-an-access"),
+    "a-constructs-the-relevant-memory-description": content("4.6", "server-a-uses-its-own"),
+    "b-s-provider-validates-the-valid-illustrated-request": content("4.6", "server-a-uses-its-own", "the-rkey-is-an-access"),
+    "inspect-an-incorrect-remote-key": content("4.6", "the-rkey-is-an-access"),
+    "inspect-an-out-of-range-remote-request": content("4.6", "now-imagine-server-a-wants", "the-rkey-is-an-access"),
+    "inspect-missing-remote-write-permission": content("4.6", "the-rkey-is-an-access"),
+  },
+  "4.7": {
+    "inspect-send-setup-metadata": content("4.7", "rdma-memory-registration-is-local", "during-the-resource-and-send"),
+    "preview-write-setup-metadata": content("4.7", "rdma-memory-registration-is-local", "during-the-resource-and-send"),
+    "exchange-control-metadata": content("4.7", "rdma-memory-registration-is-local", "during-the-resource-and-send", "the-control-connection-carries-metadata"),
+    "distinguish-control-metadata-from-rdma-payload-traffic": content("4.7", "the-control-connection-carries-metadata"),
+  },
+  "4.8": {
+    "validate-a-correct-remote-read": content("4.8", "let-s-use-our-registered"),
+    "reject-missing-remote-write-permission": content("4.8", "let-s-use-our-registered"),
+    "reject-a-boundary-crossing-range": content("4.8", "let-s-use-our-registered"),
+    "reject-an-incorrect-key": content("4.8", "let-s-use-our-registered"),
+  },
+  "4.9": {
+    "move-from-illustrative-registration-to-recorded-registration": content("4.9", "we-now-have-enough-background"),
+    "inspect-recorded-host-memory-region-metadata": content("4.9", "buffer-address-rdma-resources-hosta", "these-are-real-runtime-values"),
+    "connect-the-values-to-immutable-source-lines": content("4.9", "these-are-real-runtime-values", "the-source-helper-used-by"),
+  },
+  "4.10": {
+    "start-with-registered-memory-but-no-described-task": content("4.10", "the-application-now-has-registered", "consider-our-ordinary-tcp-example"),
+    "describe-the-desired-task": content("4.10", "consider-our-ordinary-tcp-example", "the-application-needs-a-communication"),
   },
   "4.11": {
-    "construct-an-unposted-work-request": [{ sectionId: "4.11", unitIndexes: [0, 1, 2, 3, 5] }],
-    "attach-the-local-memory-description": [{ sectionId: "4.11", unitIndexes: [3, 4] }],
-    "inspect-the-actual-send-construction-source": [{ sectionId: "4.11", unitIndexes: [6, 7, 8, 9] }],
+    "construct-an-unposted-work-request": content("4.11", "the-program-wants-the-provider", "constructing-the-instruction-does-not", "constructing-the-request-only-prepares"),
+    "attach-the-local-memory-description": content("4.11", "recall-the-illustrative-sixteen-byte", "we-want-the-provider-to", "a-scatter-gather-element-or", "sge-field-illustrative-value-meaning"),
+    "inspect-the-actual-send-construction-source": content("4.11", "constructing-the-request-only-prepares", "this-is-an-illustrative-logical", "in-the-actual-pyverbs-program", "do-not-imply-that-the", "keep-the-genuine-source-excerpt"),
+  },
+  "4.12": {
+    "start-with-one-send-queue": content("4.12", "the-provider-may-execute-work"),
+    "reveal-the-receive-queue": content("4.12", "for-incoming-ordinary-send-messages"),
+    "form-a-queue-pair": content("4.12", "the-provider-may-execute-work", "for-incoming-ordinary-send-messages"),
+  },
+  "4.13": {
+    "inspect-endpoint-metadata-exchange": content("4.13", "a-host-can-have-multiple", "in-our-lab-the-two"),
+    "follow-destination-qpn-a-to-b": content("4.13", "consider-a-conceptual-a-endpoint"),
+    "follow-destination-qpn-b-to-a": content("4.13", "consider-a-conceptual-a-endpoint"),
+    "inspect-recorded-endpoint-setup": content("4.13", "consider-a-conceptual-a-endpoint", "in-our-lab-the-two"),
+  },
+  "4.14": {
+    "post-signalled-work-conceptually": content("4.14", "submitting-work-does-not-by"),
+    "provider-produces-a-completion": content("4.14", "submitting-work-does-not-by", "a-cq-is-created-separately"),
+    "application-polls-the-completion-queue": content("4.14", "submitting-work-does-not-by", "a-cq-is-created-separately"),
+    "inspect-the-resource-only-evidence-boundary": content("4.14", "we-can-now-explain-why", "in-the-next-practical-the"),
+  },
+  "5.1": {
+    "locate-the-two-recorded-programs": content("5.1", "we-have-spent-the-first", "now-we-will-follow-two", "on-server-a-hosta-the"),
+    "inspect-the-two-program-roles": content("5.1", "on-server-a-hosta-the", "there-are-two-conversations-between"),
+    "locate-the-isolated-data-capture": content("5.1", "there-are-two-conversations-between", "we-will-follow-the-source"),
+  },
+  "5.2": {
+    "start-before-resources-are-introduced": content("5.2", "before-either-program-can-transfer"),
+    "open-device-and-create-resources": content("5.2", "before-either-program-can-transfer", "look-at-the-actual-setup"),
+    "exchange-endpoint-metadata": content("5.2", "a-newly-created-qp-is", "the-numbers-here-belong-to"),
+    "prepare-the-qps": content("5.2", "the-helper-configures-the-qps", "the-numbers-here-belong-to"),
+  },
+  "5.3": {
+    "start-before-receive-work-is-described": content("5.3", "think-back-to-the-tcp", "rdma-send-uses-a-different"),
+    "describe-receive-memory": content("5.3", "in-this-run-the-buffer", "the-program-constructs-an-sge"),
+    "post-receive-work": content("5.3", "the-program-constructs-an-sge", "calling-qp-post-recv-rwr"),
+    "tell-a-the-receiver-is-ready": content("5.3", "calling-qp-post-recv-rwr"),
+  },
+  "5.4": {
+    "start-with-no-posted-receive": content("5.4", "suppose-a-submits-a-normal"),
+    "try-send-with-no-receive": content("5.4", "suppose-a-submits-a-normal", "this-is-different-from-tcp"),
+    "observe-the-receiver-not-ready-state": content("5.4", "this-is-different-from-tcp"),
+    "prepare-receive-work": content("5.4", "in-fabriclab-s-actual-send", "there-is-another-separate-constraint"),
+    "return-to-the-recorded-experiment": content("5.4", "in-fabriclab-s-actual-send"),
+  },
+  "5.5": {
+    "start-with-prepared-endpoints": content("5.5", "now-the-receiving-side-is"),
+    "write-bytes-into-a-s-buffer": content("5.5", "now-the-receiving-side-is", "do-not-confuse-this-call"),
+    "construct-the-send-instruction": content("5.5", "the-sender-s-sge-identifies"),
+    "submit-to-the-send-queue": content("5.5", "finally-qp-post-send-swr"),
+  },
+  "5.6": {
+    "start-after-send-submission": content("5.6", "the-provider-now-has-an"),
+    "inspect-the-captured-send-packet": content("5.6", "on-the-network-we-no", "the-transport-opcode-says-that"),
+    "follow-placement-at-b": content("5.6", "on-b-the-provider-identifies"),
+  },
+  "5.7": {
+    "start-with-packet-exchange-complete": content("5.7", "we-chose-reliable-connected-transport", "a-completion-is-a-different"),
+    "inspect-the-reverse-ack": content("5.7", "we-chose-reliable-connected-transport"),
+    "observe-a-s-completion": content("5.7", "a-completion-is-a-different", "a-successful-send-completion-in"),
+    "observe-b-s-completion": content("5.7", "a-completion-is-a-different", "a-successful-send-completion-in"),
+  },
+  "5.8": {
+    "start-before-application-memory-verification": content("5.8", "b-s-application-has-now"),
+    "read-the-received-bytes": content("5.8", "b-s-application-has-now", "the-actual-source-uses-bytes"),
+    "inspect-verified-receiver-memory": content("5.8", "the-actual-source-uses-bytes", "our-evidence-shows-a-50", "we-now-have-several-complementary"),
+    "compare-with-tcp": content("5.8", "our-evidence-shows-a-50", "we-now-have-several-complementary"),
+  },
+  "5.9": {
+    "reconstruct-resources": content("5.9", "before-moving-on-see-if"),
+    "reconstruct-receive-readiness": content("5.9", "before-moving-on-see-if"),
+    "reconstruct-submission": content("5.9", "before-moving-on-see-if"),
+    "reconstruct-packet-and-completion-evidence": content("5.9", "before-moving-on-see-if", "now-imagine-you-only-have"),
+  },
+  "6.1": {
+    "recall-send-destination-selection": content("6.1", "in-the-preceding-experiment-b"),
+    "compare-ordinary-write-destination-selection": content("6.1", "what-if-the-two-applications", "the-word-ordinary-is-important", "one-sided-does-not-mean"),
+    "open-the-recorded-write-experiment": content("6.1", "we-will-compare-the-same"),
+  },
+  "6.2": {
+    "start-before-target-metadata-is-shared": content("6.2", "the-actual-write-program-exp"),
+    "inspect-target-before": content("6.2", "the-actual-write-program-exp", "b-records-the-first-64"),
+    "share-destination-information": content("6.2", "during-the-tcp-metadata-exchange"),
+    "prepare-endpoints-and-signal-readiness": content("6.2", "the-programs-then-prepare-their"),
+  },
+  "6.3": {
+    "start-with-an-empty-local-source": content("6.3", "a-already-has-registered-local"),
+    "fill-a-s-source-buffer": content("6.3", "mr-write-puts-the-message", "the-message-is-53-bytes"),
+    "describe-local-source-memory": content("6.3", "a-constructs-the-sge-using"),
+    "construct-the-write-work-request": content("6.3", "a-constructs-a-sendwr-containing"),
+    "attach-the-remote-destination": content("6.3", "a-calls-swr-set-wr", "python-swr-set-wr-rdma", "the-remote-key-and-address", "the-wr-id-is-local"),
+    "submit-the-completed-work-request": content("6.3", "a-calls-qp-post-send", "constructing-the-sendwr-prepares-the"),
+  },
+  "6.4": {
+    "start-after-write-submission": content("6.4", "the-provider-on-a-has"),
+    "inspect-the-write-request": content("6.4", "the-provider-on-a-has", "reth-identifies-the-remote-virtual", "the-captured-write-fits-in"),
+    "check-target-access": content("6.4", "reth-identifies-the-remote-virtual"),
+    "follow-target-placement": content("6.4", "after-these-checks-the-target", "the-captured-write-fits-in"),
+  },
+  "6.5": {
+    "start-with-the-request-on-the-wire": content("6.5", "b-sends-a-transport-acknowledgement"),
+    "inspect-the-ack": content("6.5", "b-sends-a-transport-acknowledgement"),
+    "poll-writer-cq": content("6.5", "a-polls-its-cq-the"),
+    "observe-write-complete": content("6.5", "a-polls-its-cq-the", "it-does-not-establish-that", "this-distinction-is-easy-to"),
+  },
+  "6.6": {
+    "consider-the-target-completion-question": content("6.6", "in-the-send-experiment-b", "before-continuing-consider-whether-b", "the-memory-being-updated-and"),
+    "follow-the-synchronization-signal": content("6.6", "a-observes-successful-completion-of"),
+    "poll-b-s-cq": content("6.6", "after-receiving-that-control-message"),
+    "reveal-the-recorded-target-observation": content("6.6", "the-recorded-poll-returned-zero", "the-target-memory-may-have", "b-could-have-unrelated-cq"),
+  },
+  "6.7": {
+    "start-before-target-memory-verification": content("6.7", "now-look-at-b-s", "the-control-message-does-not"),
+    "inspect-before-and-after": content("6.7", "now-look-at-b-s", "the-before-event-contains-the"),
+    "verify-exact-target-bytes": content("6.7", "the-actual-program-reads-exactly", "the-before-event-contains-the"),
+  },
+  "6.8": {
+    "compare-ordinary-write": content("6.8", "we-have-now-seen-two", "in-ordinary-write-a-names"),
+    "compare-send": content("6.8", "we-have-now-seen-two", "in-send-b-chooses-where"),
+    "inspect-write-with-immediate-conceptually": content("6.8", "there-are-other-ways-for"),
+    "review-operation-selection": content("6.8", "in-send-b-chooses-where", "in-ordinary-write-a-names", "for-this-lesson-remember-the"),
+  },
+  "7.1": {
+    "inspect-the-application-request-reply-problem": content("7.1", "in-send-and-write-a"),
+    "compare-application-request-reply": content("7.1", "one-possible-design-is-to"),
+    "choose-rdma-read": content("7.1", "one-possible-design-is-to", "this-gives-us-four-separate", "the-distinction-matters-because-the"),
+    "open-the-recorded-read-experiment": content("7.1", "this-gives-us-four-separate", "the-distinction-matters-because-the"),
+  },
+  "7.2": {
+    "start-before-read-metadata-is-shared": content("7.2", "our-actual-program-is-exp", "on-a-the-reader-allocates"),
+    "inspect-b-s-source": content("7.2", "our-actual-program-is-exp"),
+    "prepare-a-s-destination": content("7.2", "on-a-the-reader-allocates"),
+    "exchange-source-metadata": content("7.2", "b-shares-the-remote-address"),
+    "confirm-readiness": content("7.2", "the-programs-prepare-their-qps"),
+  },
+  "7.3": {
+    "start-with-prepared-endpoints": content("7.3", "a-will-initiate-a-read", "the-name-sendwr-may-seem", "the-send-queue-is-the"),
+    "describe-a-s-local-destination": content("7.3", "a-s-sge-identifies-its"),
+    "construct-the-read-work-request": content("7.3", "a-creates-the-sendwr-with"),
+    "attach-b-s-remote-source": content("7.3", "a-supplies-b-s-previously"),
+    "submit-to-a-s-send-queue": content("7.3", "a-calls-post-send-because", "once-a-calls-qp-post"),
+  },
+  "7.4": {
+    "start-after-read-submission": content("7.4", "the-first-captured-read-packet", "this-packet-is-unlike-the"),
+    "inspect-the-captured-read-request": content("7.4", "the-first-captured-read-packet", "this-packet-is-unlike-the"),
+    "check-source-access": content("7.4", "at-b-the-provider-uses", "b-does-not-have-to"),
+  },
+  "7.5": {
+    "start-after-source-access": content("7.5", "the-second-packet-in-our", "it-carries-the-data-requested"),
+    "inspect-the-captured-read-response": content("7.5", "the-second-packet-in-our", "it-carries-the-data-requested"),
+    "place-returned-bytes": content("7.5", "the-provider-places-the-data", "a-read-does-not-mean"),
+  },
+  "7.6": {
+    "start-after-response-placement": content("7.6", "a-polls-its-cq-and"),
+    "poll-reader-cq": content("7.6", "a-polls-its-cq-and"),
+    "inspect-verified-reader-memory": content("7.6", "only-after-observing-completion-does"),
+    "signal-read-done": content("7.6", "the-actual-program-makes-this"),
+    "inspect-source-cq": content("7.6", "now-consider-b-s-application", "the-actual-program-makes-this"),
+  },
+  "7.7": {
+    "trace-read": content("7.7", "for-ordinary-send-a-supplies", "the-transport-uses-endpoint-context"),
+    "trace-send": content("7.7", "for-ordinary-send-a-supplies"),
+    "trace-write": content("7.7", "for-ordinary-send-a-supplies"),
+    "compare-operation-semantics": content("7.7", "we-can-now-describe-the", "for-ordinary-send-a-supplies", "the-transport-uses-endpoint-context", "none-of-these-facts-tells"),
   },
   "8.1": {
-    "show-the-captured-packet": [{ sectionId: "8.1", unitIndexes: [0, 1, 2] }],
-    "identify-outer-network-headers": [{ sectionId: "8.1", unitIndexes: [3, 4, 5, 6] }],
-    "examine-udp-encapsulation": [{ sectionId: "8.1", unitIndexes: [6, 7, 8, 9, 10, 11, 12] }],
-    "identify-rdma-transport-header": [{ sectionId: "8.1", unitIndexes: [13, 14, 15] }],
-    "explain-what-can-and-cannot-be-concluded": [{ sectionId: "8.1", unitIndexes: [15, 16, 17, 18] }],
+    "show-the-captured-packet": content("8.1", "we-have-followed-three-real", "we-will-use-fabriclab-s"),
+    "identify-outer-network-headers": content("8.1", "start-with-the-familiar-part"),
+    "examine-udp-encapsulation": content("8.1", "udp-is-not-providing-the", "a-network-device-that-forwards"),
+    "identify-rdma-transport-header": content("8.1", "udp-is-not-providing-the", "a-network-device-that-forwards"),
+    "explain-what-can-and-cannot-be-concluded": content("8.1", "we-have-followed-three-real", "a-network-device-that-forwards", "we-will-use-fabriclab-s"),
+  },
+  "8.2": {
+    "inspect-the-send-request-bth": content("8.2", "immediately-after-the-udp-header", "start-with-the-destination-qpn", "the-opcode-tells-the-transport", "the-psn-is-a-24"),
+    "switch-to-the-ack-bth": content("8.2", "immediately-after-the-udp-header", "start-with-the-destination-qpn", "the-psn-is-a-24"),
+    "interpret-destination-qpn": content("8.2", "start-with-the-destination-qpn"),
+    "interpret-opcode-and-psn": content("8.2", "the-opcode-tells-the-transport", "the-psn-is-a-24"),
+    "compare-hexadecimal-and-decimal-representations": content("8.2", "start-with-the-destination-qpn", "the-psn-is-a-24"),
+  },
+  "8.3": {
+    "inspect-write-extended-headers": content("8.3", "compare-a-send-request-with", "a-write-needs-to-identify"),
+    "inspect-send-packet-structure": content("8.3", "compare-a-send-request-with", "a-send-request-does-not"),
+    "inspect-read-extended-headers": content("8.3", "an-rdma-read-request-also"),
+    "compare-applicable-header-types": content("8.3", "compare-a-send-request-with", "a-write-needs-to-identify", "an-rdma-read-request-also", "a-send-request-does-not"),
   },
   "8.4": {
-    "compare-payload-carrying-packets": [{ sectionId: "8.4", unitIndexes: [0, 1, 5, 7, 9, 10] }],
-    "inspect-metadata-only-requests": [{ sectionId: "8.4", unitIndexes: [2, 3, 12] }],
-    "compare-all-recorded-packet-forms": [{ sectionId: "8.4", unitIndexes: [4, 6, 8, 11, 13, 14, 15] }],
+    "compare-payload-carrying-packets": content("8.4", "earlier-we-saw-a-4", "the-registered-length-bounds-memory", "not-every-packet-associated-with", "our-send-and-ordinary-write", "roce-transport-may-add-padding", "when-you-compare-a-captured"),
+    "inspect-metadata-only-requests": content("8.4", "not-every-packet-associated-with", "the-read-request-also-contains", "registered-capacity-operation-transfer-length"),
+    "compare-all-recorded-packet-forms": content("8.4", "not-every-packet-associated-with", "our-send-and-ordinary-write", "the-read-request-also-contains", "the-reverse-acknowledgements-for-send", "recorded-packet-application-bytes-padding", "all-lengths-are-in-bytes", "these-values-are-reference-run"),
+  },
+  "8.5": {
+    "introduce-a-conceptual-multi-packet-send": content("8.5", "our-actual-messages-are-deliberately", "the-transport-needs-to-respect", "our-small-reference-runs-do"),
+    "highlight-conceptual-packet-one": content("8.5", "the-transport-needs-to-respect", "here-is-where-the-tcp"),
+    "highlight-conceptual-packet-two": content("8.5", "the-transport-needs-to-respect", "here-is-where-the-tcp"),
+    "highlight-conceptual-packet-three": content("8.5", "the-transport-needs-to-respect", "here-is-where-the-tcp"),
+    "compare-the-small-captured-send": content("8.5", "our-actual-messages-are-deliberately", "here-is-where-the-tcp", "our-small-reference-runs-do"),
+  },
+  "8.6": {
+    "start-with-the-complete-conceptual-exchange": content("8.6", "udp-encapsulation-does-not-make", "we-should-therefore-not-jump"),
+    "illustrate-a-missing-packet": content("8.6", "imagine-that-one-packet-of"),
+    "illustrate-transport-recovery": content("8.6", "udp-encapsulation-does-not-make", "imagine-that-one-packet-of"),
+    "inspect-receiver-not-ready": content("8.6", "there-is-another-kind-of"),
+    "inspect-remote-access-rejection": content("8.6", "there-is-another-kind-of", "we-should-therefore-not-jump"),
+    "inspect-laboratory-retry-settings": content("8.6", "udp-encapsulation-does-not-make", "we-should-therefore-not-jump"),
   },
   "8.7": {
-    "correlate-operation-and-remote-memory": [{ sectionId: "8.7", unitIndexes: [0, 1, 2, 4, 5, 7, 8, 9] }],
-    "correlate-endpoint-context": [{ sectionId: "8.7", unitIndexes: [3, 6, 14, 15] }],
-    "identify-local-only-values": [{ sectionId: "8.7", unitIndexes: [10, 11, 12, 13] }],
-    "connect-complete-write-evidence-chain": [{ sectionId: "8.7", unitIndexes: [16, 17, 18] }],
+    "correlate-operation-and-remote-memory": content("8.7", "let-us-put-everything-together", "look-at-the-corresponding-captured", "some-packet-fields-come-from", "text-work-request-operation-local"),
+    "correlate-endpoint-context": content("8.7", "some-packet-fields-come-from", "when-the-program-prepares-its", "these-values-establish-communication-and", "python-attr-dest-qp-num", "contrast-this-with", "python-log-emit-qp-ready", "text-work-request-operation-local"),
+    "identify-local-only-values": content("8.7", "some-packet-fields-come-from", "text-work-request-operation-local", "other-fields-are-local-a"),
+    "connect-complete-write-evidence-chain": content("8.7", "let-us-put-everything-together", "look-at-the-corresponding-captured", "we-can-follow-the-request"),
+  },
+  "8.8": {
+    "frame-the-send-investigation": content("8.8", "imagine-you-are-investigating-a", "we-will-ask-you-to"),
+    "reveal-receive-instruction-evidence": content("8.8", "imagine-you-are-investigating-a", "we-will-ask-you-to"),
+    "reveal-completion-and-verified-bytes": content("8.8", "imagine-you-are-investigating-a", "we-will-ask-you-to"),
+  },
+  "8.9": {
+    "frame-the-write-investigation": content("8.9", "a-network-engineer-may-see", "look-at-the-actual-write"),
+    "reveal-writer-completion": content("8.9", "a-network-engineer-may-see", "look-at-the-actual-write"),
+    "reveal-control-signal-and-target-poll": content("8.9", "a-network-engineer-may-see", "look-at-the-actual-write"),
+    "reveal-target-memory-evidence": content("8.9", "a-network-engineer-may-see", "look-at-the-actual-write"),
+  },
+  "8.10": {
+    "frame-the-read-response-investigation": content("8.10", "this-time-begin-with-a", "consider-the-four-roles-we"),
+    "find-the-earlier-request": content("8.10", "this-time-begin-with-a", "consider-the-four-roles-we"),
+    "inspect-originating-read-work": content("8.10", "this-time-begin-with-a", "consider-the-four-roles-we"),
+    "inspect-data-and-completion-evidence": content("8.10", "this-time-begin-with-a", "consider-the-four-roles-we"),
+  },
+  "8.11": {
+    "compare-the-host-memory-path": content("8.11", "so-far-we-have-used", "the-application-may-use-a"),
+    "inspect-a-possible-gpu-memory-path": content("8.11", "the-application-may-use-a", "in-a-hardware-supported-gpudirect"),
+    "inspect-fabric-congestion": content("8.11", "a-real-cluster-has-many", "when-someone-tells-you-an"),
+  },
+  "8.12": {
+    "review-the-complete-investigation-checklist": content("8.12", "we-began-by-looking-at", "you-do-not-need-to", "first-establish-the-application-objective", "a-missing-observation-is-not"),
   },
 };
 
+
+const observationReferencesBySection: Record<string, Record<string, GuidedContentReference[]>> = {
+  "1.2": {
+    "touch-demand-memory-and-interpret": content("1.2", "a-s-illustrated-mapping-is", "demand-allocation-is-associated-with"),
+  },
+  "1.3": {
+    "read-the-illustrative-byte": content("1.3", "address-translation-did-not-copy", "the-diagram-shows-logical-values"),
+    "resolve-second-process-translation": content("1.3", "the-numerical-address-has-not", "this-is-one-reason-separate"),
+  },
+  "4.11": {
+    "attach-the-local-memory-description": content("4.11", "the-provider-can-use-this", "constructing-the-instruction-does-not"),
+  },
+  "8.4": {
+    "compare-all-recorded-packet-forms": content("8.4", "the-recorded-acknowledgement-packets-and", "transport-headers-integrity-fields-and", "registered-capacity-operation-transfer-length"),
+  },
+  "8.7": {
+    "correlate-endpoint-context": content("8.7", "the-helper-configures-endpoint-and", "the-captured-write-packet-s", "in-this-particular-reference-exchange"),
+    "identify-local-only-values": content("8.7", "the-local-wr-id-is"),
+  },
+};
 
 export function guidedStagesForSection(sectionId: string) {
   const stages = foundationGuidedStages[sectionId] || operationGuidedStages[sectionId] || plan([["inspect-the-concept", "Inspect the concept"]]);
   const references = instructionReferencesBySection[sectionId];
   if (!references) return stages;
-  return stages.map((stage) => references[stage.id] ? { ...stage, instructionReferences: references[stage.id] } : stage);
+  return stages.map((stage) => ({ ...stage, instructionReferences: references[stage.id], observationReferences: observationReferencesBySection[sectionId]?.[stage.id] }));
 }

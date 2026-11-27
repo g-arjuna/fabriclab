@@ -8,7 +8,7 @@ import rawSections from "@/lib/practical/operationsContent.generated.json";
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
 import { guidedStagesForSection } from "./guidedStagePlans";
-import { selectGuidedInstructionWithReferences } from "./guidedContent";
+import { selectGuidedInstructionWithReferences, stripGuidedBlockMarkers } from "./guidedContent";
 import { GuidedVisualStageProvider } from "./guidedVisualState";
 import { OperationsVisual } from "./operationsVisuals";
 import { cx } from "./visuals";
@@ -148,7 +148,8 @@ export function AuthoredOperationsLesson({ lesson, onComplete, onPreviousLesson,
   const steps: GuidedStep[] = operationsSectionsForLesson(lesson).flatMap((section) => {
     const stages = guidedStagesForSection(section.id);
     return stages.map((stage, stageIndex): GuidedStep => {
-      const instructionSelection = selectGuidedInstructionWithReferences(operationSections, section.id, section.learnerCopy, stageIndex, stages.length, stage.instructionUnitIndexes, stage.instructionReferences);
+      const instructionSelection = selectGuidedInstructionWithReferences(operationSections, section.id, stage.instructionReferences);
+      const stageObservationSelection = stage.observationReferences ? selectGuidedInstructionWithReferences(operationSections, section.id, stage.observationReferences) : undefined;
       return {
         id: `${section.componentId}--${stage.id}`,
         title: section.title,
@@ -162,19 +163,23 @@ export function AuthoredOperationsLesson({ lesson, onComplete, onPreviousLesson,
             <div
               className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-3"
               data-testid="guided-stage-explanation"
-              data-copy-units={instructionSelection.referenceLabels?.length ? instructionSelection.referenceLabels.join(";") : instructionSelection.unitIndexes.map((index) => index + 1).join(",")}
-              data-copy-unit-count={instructionSelection.unitCount}
+              data-copy-blocks={instructionSelection.referenceLabels.join(";")}
+              data-copy-block-count={instructionSelection.blockCount}
             >
               <OperationsCopy className="text-cyan-50" text={instructionSelection.text} references={stageIndex === 0 ? section.references : []} testId={`learner-copy-${section.componentId}-stage-${stageIndex}`} />
             </div>
             <details className="rounded-xl border border-white/10 bg-white/4 px-3 py-2 text-sm" data-testid="full-authored-explanation">
               <summary className="cursor-pointer font-medium text-slate-300">Review the complete subsection explanation</summary>
-              <div className="mt-3"><OperationsCopy text={section.learnerCopy} references={section.references} testId={`learner-copy-${section.componentId}-reference`} /></div>
+              <div className="mt-3"><OperationsCopy text={stripGuidedBlockMarkers(section.learnerCopy)} references={section.references} testId={`learner-copy-${section.componentId}-reference`} /></div>
             </details>
             {stageIndex === 0 ? <ProvenanceLegend /> : null}
           </>
         ),
-        observation: stageIndex === stages.length - 1 && section.revealCopy ? <OperationsCopy text={section.revealCopy} references={section.references} testId={`guided-reveal-${section.componentId}`} /> : undefined,
+        observation: stageObservationSelection?.text
+          ? <OperationsCopy text={stageObservationSelection.text} references={section.references} testId={`guided-stage-observation-${section.componentId}-${stageIndex}`} />
+          : stageIndex === stages.length - 1 && section.revealCopy
+            ? <OperationsCopy text={section.revealCopy} references={section.references} testId={`guided-reveal-${section.componentId}`} />
+            : undefined,
         visual: (
           <GuidedVisualStageProvider sectionId={section.id} stage={stageIndex} stageId={stage.id}>
             <OperationsVisual key={`${section.componentId}-${stage.id}`} sectionId={section.id} />

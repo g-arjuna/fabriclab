@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
+import ts from "typescript";
 
 const evidence = JSON.parse(fs.readFileSync(new URL("../public/practical/rdma/reference-evidence.json", import.meta.url), "utf8"));
 const sources = new Map(evidence.sources.map((source) => [source.path, new Map(source.lines.map((line) => [line.number, line.text]))]));
@@ -226,6 +227,85 @@ for (const section of operations) {
 for (const [lesson, count] of [["send-receive", 9], ["write", 8], ["read", 7], ["packets", 12]]) {
   if (operations.filter((section) => section.lesson === lesson).length !== count) failures.push(`${lesson} does not contain ${count} authored operations sections`);
 }
+
+const guidedContentSource = fs.readFileSync(new URL("../components/practical/curriculum/guidedContent.ts", import.meta.url), "utf8");
+if (/Math\.floor|unitIndexes|stageCount\s*\)/.test(guidedContentSource)) {
+  failures.push("guided content selection still contains positional or numeric proportional fallback logic");
+}
+
+const stagePlanSource = fs.readFileSync(new URL("../components/practical/curriculum/guidedStagePlans.ts", import.meta.url), "utf8");
+if (/unitIndexes|instructionUnitIndexes/.test(stagePlanSource)) {
+  failures.push("guided stage plans still contain fragile numeric instruction-unit references");
+}
+const transpiledStagePlans = ts.transpileModule(stagePlanSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+}).outputText;
+const stagePlanModule = { exports: {} };
+new Function("module", "exports", transpiledStagePlans)(stagePlanModule, stagePlanModule.exports);
+const { guidedStagesForSection } = stagePlanModule.exports;
+const allGeneratedSections = [...foundations, ...operations];
+const sectionsById = new Map(allGeneratedSections.map((section) => [section.id, section]));
+let guidedStageCount = 0;
+const guidedStageCountByLesson = Object.fromEntries(allGeneratedSections.map((section) => [section.lesson, 0]));
+
+function validateGuidedReferences(section, stage, references, kind, coveredBlocks) {
+  if (kind === "observation" && references === undefined) return;
+  if (!references?.length) {
+    failures.push(`${section.id}/${stage.id} has no explicit ${kind} content references`);
+    return;
+  }
+  for (const reference of references || []) {
+    const referencedSection = sectionsById.get(reference.sectionId);
+    if (!referencedSection) {
+      failures.push(`${section.id}/${stage.id} references missing section ${reference.sectionId}`);
+      continue;
+    }
+    if (!reference.blockIds?.length) failures.push(`${section.id}/${stage.id} has an empty ${kind} block reference list for ${reference.sectionId}`);
+    for (const blockId of reference.blockIds || []) {
+      const block = referencedSection.contentBlocks?.find((item) => item.id === blockId);
+      if (!block) {
+        failures.push(`${section.id}/${stage.id} references missing content block ${reference.sectionId}:${blockId}`);
+      } else if (!block.markdown.trim()) {
+        failures.push(`${section.id}/${stage.id} references empty content block ${reference.sectionId}:${blockId}`);
+      } else if (reference.sectionId === section.id) {
+        coveredBlocks.add(blockId);
+      }
+    }
+  }
+}
+
+for (const section of allGeneratedSections) {
+  const stages = guidedStagesForSection(section.id);
+  if (!stages?.length) {
+    failures.push(`${section.id} has no guided stage plan`);
+    continue;
+  }
+  guidedStageCount += stages.length;
+  guidedStageCountByLesson[section.lesson] += stages.length;
+  const stageIds = stages.map((stage) => stage.id);
+  if (new Set(stageIds).size !== stageIds.length) failures.push(`${section.id} contains duplicate guided stage identifiers`);
+  const coveredBlocks = new Set();
+  for (const stage of stages) {
+    validateGuidedReferences(section, stage, stage.instructionReferences, "instruction", coveredBlocks);
+    validateGuidedReferences(section, stage, stage.observationReferences, "observation", coveredBlocks);
+  }
+  for (const block of section.contentBlocks || []) {
+    if (!coveredBlocks.has(block.id)) failures.push(`${section.id} authored content block ${block.id} is never bound to a guided stage`);
+  }
+}
+
+const listenerBlock = foundations.find((section) => section.id === "2.2")?.contentBlocks?.find((block) => block.id === "python-server-b-prepare-a");
+if (!listenerBlock?.markdown.includes("listener.listen(1)\n\n# Server A")) {
+  failures.push("Markdown integrity regression: fenced Python containing a blank line was split or altered");
+}
+if ((listenerBlock?.markdown.match(/```/g) || []).length !== 2) {
+  failures.push("Markdown integrity regression: listener fenced code block does not retain exactly its opening and closing fences");
+}
+if (/guided-block:/.test(listenerBlock?.markdown || "")) {
+  failures.push("guided block marker leaked into extracted authored content");
+}
+
+console.log(`Guided stage counts by lesson: ${Object.entries(guidedStageCountByLesson).map(([lesson, count]) => `${lesson}=${count}`).join(", ")}; total=${guidedStageCount}`);
 
 const anchors = JSON.parse(fs.readFileSync(new URL("../../../content/operations-v2/evidence-anchors.json", import.meta.url), "utf8"));
 for (const [file, expected] of [["../public/practical/rdma/reference-evidence.json", anchors.rdmaJsonSha256], ["../public/practical/rdma/tcp-foundations-evidence.json", anchors.tcpJsonSha256]]) {

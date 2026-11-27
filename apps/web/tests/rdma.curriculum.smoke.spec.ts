@@ -37,7 +37,10 @@ async function signature(page: Page) {
 async function clickNextAndWait(page: Page, before: string) {
   await expect(page.getByTestId("lesson-action")).toBeEnabled();
   await page.getByTestId("lesson-action").click();
-  await expect.poll(() => signature(page), { timeout: 5000 }).not.toBe(before);
+  await expect.poll(async () => {
+    const current = await signature(page);
+    return current === before || current === "no-lesson" ? before : current;
+  }, { timeout: 5000 }).not.toBe(before);
 }
 
 async function expectUsefulGuidedState(page: Page) {
@@ -94,7 +97,7 @@ test.describe("RDMA guided curriculum smoke", () => {
       "guided-lesson-send-receive": 35,
       "guided-lesson-write": 32,
       "guided-lesson-read": 29,
-      "guided-lesson-packets": 51,
+      "guided-lesson-packets": 47,
     });
     expectNoBrowserErrors(tracker);
   });

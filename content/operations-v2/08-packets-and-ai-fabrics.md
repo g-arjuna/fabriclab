@@ -6,13 +6,23 @@ The goal of this lesson is interpretation, not header memorization. All packet c
 
 ### Learner copy
 
+<!-- guided-block: we-have-followed-three-real -->
+
 We have followed three real operations. We know where the data starts, which application submits work and how the result is observed. Now we will look at the same experiments from the point of view of a network engineer who sees packets but may not have access to the application.
+
+<!-- guided-block: start-with-the-familiar-part -->
 
 Start with the familiar part of the captured SEND packet. An Ethernet header identifies the local link delivery. The IPv4 header identifies the network source and destination. Its protocol field says the payload is UDP. The UDP destination port is 4791, the registered port for RoCEv2. This tells us how the RDMA transport is encapsulated for IP networking.
 
+<!-- guided-block: udp-is-not-providing-the -->
+
 UDP is not providing the reliable connection semantics that TCP provides. In our experiment the Reliable Connected RDMA transport carries its own sequencing, acknowledgement and retry mechanisms inside the UDP payload. The data path is not a TCP stream. The TCP control socket we used for setup is a separate conversation.
 
+<!-- guided-block: a-network-device-that-forwards -->
+
 A network device that forwards this IP traffic need not interpret every RDMA header. The outer addresses and other forwarding information can be sufficient. At the destination, the RDMA transport interprets the inner header and directs the operation to the appropriate endpoint.
+
+<!-- guided-block: we-will-use-fabriclab-s -->
 
 We will use FabricLab's packet inspector, which displays fields decoded from genuine captured traffic. It is not a screenshot of Wireshark. You can download the original PCAP and open it in Wireshark to inspect the same frames yourself.
 
@@ -28,11 +38,19 @@ RoCEv1 uses a different Ethernet encapsulation; RoCEv2 adds IP and UDP so it can
 
 ### Learner copy
 
+<!-- guided-block: immediately-after-the-udp-header -->
+
 Immediately after the UDP header we encounter the Base Transport Header, or BTH. Think of it as the common part of the RDMA transport packet. It identifies the operation and contains information the transport needs to interpret and sequence that packet.
+
+<!-- guided-block: start-with-the-destination-qpn -->
 
 Start with the destination QPN. We learned in the resource lesson that a Queue Pair has an endpoint number. In the SEND capture, this field names B's QP. In the reverse acknowledgement it names A's QP. It is not the local WR ID or a TCP port. For RC, the endpoint has been prepared with peer information; a receiving provider knows which context to use for the arriving packet. There is no independent source-QPN field in the ordinary RC BTH of these packets. Use the endpoint metadata and operation context to identify the peer, not an imaginary field.
 
+<!-- guided-block: the-opcode-tells-the-transport -->
+
 The opcode tells the transport how to interpret what follows the BTH. The verbs opcode in a Work Request identifies the requested operation, while the packet opcode identifies a particular transport packet form. For example, a SEND Work Request can generate a SEND Only packet when its message fits in one packet, or a sequence of SEND First, Middle and Last packets for a longer message. The opcode also determines which extension headers are present.
+
+<!-- guided-block: the-psn-is-a-24 -->
 
 The PSN is a 24-bit packet sequence number. It helps the RC transport track packet progress. The applications configure an initial sequence value while preparing their endpoints; the provider uses transport sequencing during execution. A PSN is not an application byte offset and is not the application's WR ID.
 
@@ -48,11 +66,19 @@ The BTH also carries such information as a partition key, a request-for-acknowle
 
 ### Learner copy
 
+<!-- guided-block: compare-a-send-request-with -->
+
 Compare a SEND request with a WRITE request. They both carry application bytes from A to B. Their BTH opcodes differ, and the WRITE request includes an extra header, the RDMA Extended Transport Header (RETH).
+
+<!-- guided-block: a-write-needs-to-identify -->
 
 A WRITE needs to identify an authorized destination. RETH contains a 64-bit virtual address, a 32-bit RKEY and a 32-bit DMA length. These fields describe the remote-memory operation in the context of the receiving endpoint and registered memory. The address is not a network IP address. The key is not a UDP port, encryption key or proof of general host identity.
 
+<!-- guided-block: an-rdma-read-request-also -->
+
 An RDMA READ Request also contains RETH, but its remote address names the source rather than the destination. Its length describes how much data is requested, even though the request carries no application message bytes. In the READ response we do not need to repeat RETH; the reader already has the outstanding operation context and its local destination description.
+
+<!-- guided-block: a-send-request-does-not -->
 
 A SEND request does not contain RETH because B has already supplied its own destination through receive work. A transport ACK does not contain RETH either. The particular extensions are determined by the packet opcode, not by the assumption that every RoCEv2 packet carries all possible fields.
 
@@ -68,11 +94,66 @@ A packet can carry payload without RETH (SEND or READ response), and it can carr
 
 ### Learner copy
 
+<!-- guided-block: earlier-we-saw-a-4 -->
+
 Earlier we saw a 4,096-byte registered buffer used for a 50-byte SEND. That is one of several different lengths that appear while inspecting a transfer.
+
+<!-- guided-block: the-registered-length-bounds-memory -->
 
 The registered length bounds memory access. An SGE describes the portion involved in the operation. The receiving application's completion or verification establishes how many bytes it actually obtained in our SEND example. The frame on the wire contains not only application bytes but protocol headers and other transport fields.
 
+<!-- guided-block: not-every-packet-associated-with -->
+
+Not every packet associated with an RDMA operation carries application data.
+
+<!-- guided-block: our-send-and-ordinary-write -->
+
+Our SEND and ordinary WRITE request packets carry the application message from A to B. The WRITE additionally contains a Remote Extended Transport Header, or RETH, identifying the remotely named destination and transfer length.
+
+<!-- guided-block: the-read-request-also-contains -->
+
+The READ request also contains RETH, but it carries no application payload. It asks B to return the specified bytes. The corresponding READ response carries those bytes back to A.
+
+<!-- guided-block: the-reverse-acknowledgements-for-send -->
+
+The reverse acknowledgements for SEND and WRITE carry transport acknowledgement information rather than application message bytes.
+
+<!-- guided-block: recorded-packet-application-bytes-padding -->
+
+| Recorded packet | Application bytes | Padding | Recorded data portion | Frame length |
+|---|---:|---:|---:|---:|
+| SEND request | 50 | 2 | 52 | 110 |
+| SEND ACK | 0 | 0 | 0 | 62 |
+| WRITE request | 53 | 3 | 56 | 130 |
+| WRITE ACK | 0 | 0 | 0 | 62 |
+| READ request | 0 | 0 | 0 | 74 |
+| READ response | 46 | 2 | 48 | 110 |
+
+<!-- guided-block: all-lengths-are-in-bytes -->
+
+All lengths are in bytes.
+
+<!-- guided-block: these-values-are-reference-run -->
+
+These values are reference-run expectations. The runtime comparison must continue deriving the values from existing evidence.
+
+<!-- guided-block: the-recorded-acknowledgement-packets-and -->
+
+The recorded acknowledgement packets and single-packet READ response have an Acknowledgement Extended Transport Header, or AETH, in their protocol structure. The current reference export does not separately decode its individual fields.
+
+<!-- guided-block: transport-headers-integrity-fields-and -->
+
+Transport headers, integrity fields and padding contribute to packet or frame size but are not additional application message bytes.
+
+<!-- guided-block: registered-capacity-operation-transfer-length -->
+
+Registered capacity, operation transfer length, application payload in an individual packet and captured frame length answer different questions. A READ request can ask for 46 bytes while carrying zero application payload bytes. An ACK can acknowledge transport progress without containing the application message.
+
+<!-- guided-block: roce-transport-may-add-padding -->
+
 RoCE transport may add padding to align its data portion. Our SEND message contains 50 bytes, including a newline. The capture has two additional padding bytes in the data portion. The WRITE message is 53 bytes with three padding bytes. The READ response has 46 message bytes and two padding bytes. The padding is not part of the Python message, and it is not part of the registered memory write length. The READ request has no payload at all despite asking for 46 bytes.
+
+<!-- guided-block: when-you-compare-a-captured -->
 
 When you compare a captured frame with application memory, use the unpadded application payload. The last `0a` in these messages is a newline in the original bytes literal, not padding. A human-readable log may have stripped it from its text representation, so a comparison based only on the displayed string can give the wrong answer.
 
@@ -88,11 +169,19 @@ The common reference frames use Ethernet II, IPv4 and UDP; the standard RC ACK a
 
 ### Learner copy
 
+<!-- guided-block: our-actual-messages-are-deliberately -->
+
 Our actual messages are deliberately short. Each request containing data in this reference run fits in one transport packet. That makes it easy to follow the relationship between one Work Request and the packet we see. It does not mean a Work Request always maps to one packet.
+
+<!-- guided-block: the-transport-needs-to-respect -->
 
 The transport needs to respect a configured path MTU. When a message is larger than the usable transport packet payload, the provider can break the operation into a sequence of packets. In an illustrative SEND with 2,500 application bytes and a 1,024-byte path-MTU payload, the data can be carried in 1,024, 1,024 and 452-byte portions. The transport packet forms are First, Middle and Last. A sufficiently small message uses Only instead. The receiver associates the packets with the same operation and its prepared destination, rather than treating each packet as a new receive WR.
 
+<!-- guided-block: here-is-where-the-tcp -->
+
 Here is where the TCP example helps. TCP sequence numbers describe positions in a byte stream; RC packet sequence numbers track transport packet sequencing. Do not apply the TCP rule of adding the payload byte count to an RDMA PSN. For a simple multi-packet SEND, successive packets use successive PSNs. ACKs and READ responses have operation-specific sequence semantics, and PSNs wrap in their 24-bit space. We will not generalize the simple SEND pattern to every packet form.
+
+<!-- guided-block: our-small-reference-runs-do -->
 
 Our small reference runs do not record this larger transfer. The diagram is a conceptual example to explain why the opcode and PSN exist.
 
@@ -108,11 +197,19 @@ A WR describes an application operation; a packet is one transport unit used to 
 
 ### Learner copy
 
+<!-- guided-block: udp-encapsulation-does-not-make -->
+
 UDP encapsulation does not make a transport reliable by itself. Our QPs use Reliable Connected transport. The RDMA transport tracks packet sequence progress, recognises acknowledgement or negative-acknowledgement information and can retry when appropriate. The provider implements this machinery: software RXE in our lab, representative hardware in an RNIC.
+
+<!-- guided-block: imagine-that-one-packet-of -->
 
 Imagine that one packet of a multi-packet SEND is lost. The receiver cannot treat a later packet as if the missing part of the operation had already arrived. Reliable transport uses its sequence and acknowledgement rules to detect and recover from problems. The exact response, retry and ordering behaviour depends on the transport and implementation. If required progress cannot be made, the application can observe an unsuccessful Work Completion or reach a timeout in its own wait logic.
 
+<!-- guided-block: there-is-another-kind-of -->
+
 There is another kind of delay that does not require a congested network: the receiver may have no posted receive work when a SEND arrives. The RNR mechanism tells us that endpoint readiness and network packet delivery are separate issues. An application may also fail to complete because an MR key, address range or permission is invalid.
+
+<!-- guided-block: we-should-therefore-not-jump -->
 
 We should therefore not jump from "a completion did not arrive" to "the switch must be dropping packets." First identify the operation and the evidence available at each layer. In a real AI cluster, congestion and loss are very important, but they are not the only reasons an operation may fail to progress.
 
@@ -128,11 +225,78 @@ A reachable IP address and an up Ethernet link do not prove that the correct QP 
 
 ### Learner copy
 
+<!-- guided-block: let-us-put-everything-together -->
+
 Let us put everything together with the actual WRITE program. The application first fills a registered local buffer. It then describes that buffer with an SGE, constructs a SendWR with the WRITE opcode and supplies the remote address and key. The provider uses the prepared endpoint information and that instruction to carry out the operation.
+
+<!-- guided-block: look-at-the-corresponding-captured -->
 
 Look at the corresponding captured WRITE request. Its BTH opcode reflects the transport packet form for the requested WRITE. The destination QPN comes from the prepared peer endpoint. The remote address and RKEY appear in RETH. The requested transfer length appears in RETH. The source payload bytes are present in the packet, with padding kept separate.
 
+<!-- guided-block: some-packet-fields-come-from -->
+
+Some packet fields come from the Work Request. Others come from the prepared Queue Pair and its transport state.
+
+<!-- guided-block: when-the-program-prepares-its -->
+
+When the program prepares its RC endpoint, the helper configures the peer's QPN and the initial send and receive packet sequence numbers.
+
+<!-- guided-block: these-values-establish-communication-and -->
+
+These values establish communication and sequencing context before the application submits the WRITE instruction.
+
+<!-- guided-block: python-attr-dest-qp-num -->
+
+```python
+attr.dest_qp_num = peer["qpn"]
+attr.rq_psn = peer["psn"]
+attr.sq_psn = own_psn
+```
+
+<!-- guided-block: contrast-this-with -->
+
+Contrast this with:
+
+<!-- guided-block: python-log-emit-qp-ready -->
+
+```python
+log.emit("qp_ready", ...)
+```
+
+<!-- guided-block: the-helper-configures-endpoint-and -->
+
+The helper configures endpoint and sequencing attributes. The application's later logging statement records information about the prepared endpoint; logging does not configure it.
+
+<!-- guided-block: the-captured-write-packet-s -->
+
+The captured WRITE packet's destination QPN reflects the prepared peer endpoint. Its PSN comes from the transport's send-sequencing state.
+
+<!-- guided-block: in-this-particular-reference-exchange -->
+
+In this particular reference exchange, the captured initial request can be correlated with the configured initial send PSN. Subsequent packets need not retain that initial PSN.
+
+<!-- guided-block: text-work-request-operation-local -->
+
+```text
+Work Request
+    ├── Operation
+    ├── Local memory description
+    └── Remote memory description
+
+Prepared QP and transport state
+    ├── Destination endpoint
+    └── Packet sequencing context
+```
+
+<!-- guided-block: other-fields-are-local-a -->
+
 Other fields are local. A's source virtual address and LKEY are used by A's provider to access the registered local buffer. A's WR ID helps the local application recognise a completed request. None is a corresponding transmitted field in this ordinary WRITE request. The local QPN in the successful WC identifies A's local work context, whereas the destination QPN in the forward packet identifies B. The PSN is transport sequence information.
+
+<!-- guided-block: the-local-wr-id-is -->
+
+The local WR ID is application bookkeeping, not the transport PSN.
+
+<!-- guided-block: we-can-follow-the-request -->
 
 We can follow the request, the reverse ACK, A's observed completion, B's synchronization and B's verified memory. This is the entire causal story we have spent the practical building. The network capture tells us about transport packets, while the application log and verified bytes tell us about application-observed results.
 
@@ -148,7 +312,11 @@ The same value can appear in more than one artifact for different reasons. It is
 
 ### Learner copy
 
+<!-- guided-block: imagine-you-are-investigating-a -->
+
 Imagine you are investigating a captured packet from a running application. You see an ordinary SEND addressed to one of the RDMA endpoints. You want to know where the application data was placed. Start with the actual decoded packet; do not assume the application used WRITE just because it uses RDMA.
+
+<!-- guided-block: we-will-ask-you-to -->
 
 We will ask you to separate what the packet tells you from what the receiving application must tell you. You may inspect the original packet fields, then reveal the relevant local work and verification evidence. There is no score; the purpose is to practice reasoning.
 
@@ -164,7 +332,11 @@ BTH selects the endpoint, not a particular application buffer. UDP 4791 identifi
 
 ### Learner copy
 
+<!-- guided-block: a-network-engineer-may-see -->
+
 A network engineer may see a WRITE packet followed by an ACK and conclude that the receiver application has received and processed the data. Is that conclusion supported by the packet capture?
+
+<!-- guided-block: look-at-the-actual-write -->
 
 Look at the actual WRITE request and its reverse ACK. The target's registered address and RKEY are visible in the request, and the opcode identifies ordinary WRITE. The ACK is a transport response, not an application response. We need to work out which part of the communication story these packets establish and which part must be investigated elsewhere.
 
@@ -180,7 +352,11 @@ The recorded result is a successful initiator completion, a target poll returnin
 
 ### Learner copy
 
+<!-- guided-block: this-time-begin-with-a -->
+
 This time begin with a packet travelling from B to A. It carries application bytes. If you identify the sender only by the packet's source IP, you may think B initiated the data operation. But the opcode identifies a READ response. What request would explain this packet?
+
+<!-- guided-block: consider-the-four-roles-we -->
 
 Consider the four roles we learned earlier: operation initiator, request transmitter, payload source and local completion owner. In READ, the responder sends the data, but the original Work Request belongs to the reader. To establish this from real evidence, we must examine the related request and the application work context.
 
@@ -196,13 +372,23 @@ A reverse-direction response can be part of work initiated at the opposite endpo
 
 ### Learner copy
 
+<!-- guided-block: so-far-we-have-used -->
+
 So far we have used very small buffers so we could follow the bytes. The same mental model helps explain why high-performance computing and AI workloads care about communication efficiency. Imagine two training processes each holding part of a large tensor. At some point a communication library needs to exchange data with another process, perhaps as part of a collective operation such as an all-reduce.
+
+<!-- guided-block: the-application-may-use-a -->
 
 The application may use a library such as NCCL. That library can select communication paths based on the available hardware and topology. A network transport may use registered memory and RDMA communication resources, and submit work to an RNIC. The packets can cross a RoCEv2 Ethernet fabric through leaf and spine switches. The provider and software coordinate the result so the application can continue its computation.
 
+<!-- guided-block: in-a-hardware-supported-gpudirect -->
+
 In a hardware-supported GPUDirect RDMA path, the RNIC can access suitably registered GPU memory over an appropriate device interconnect instead of always staging data through host memory. This requires support from the GPU, NIC, drivers, platform and registration mechanisms; synchronization and ordering are particularly important. We cannot assume that a CPU or GPU can consume a buffer immediately merely because a packet was seen. Our host-memory RXE experiment neither runs NCCL nor transfers GPU memory. It is the foundation for understanding those mechanisms.
 
+<!-- guided-block: a-real-cluster-has-many -->
+
 A real cluster has many simultaneous transfers. Queuing, congestion and drops can affect transport progress and application completion. PFC is a link-level priority pause mechanism; ECN marks congestion in IP packets, and RoCE congestion notification can inform the sender to reduce injection rate. These mechanisms have different purposes and design tradeoffs. RoCE fabrics can use different congestion and loss-management configurations; do not equate the UDP encapsulation with a universal requirement for one specific switch policy.
+
+<!-- guided-block: when-someone-tells-you-an -->
 
 When someone tells you an AI job is stalled, you now have a more useful question than "is the link up?" Ask whether the applications prepared their endpoints, submitted the right work, whether the transport made progress, and whether the application observed and acted on the completion.
 
@@ -218,11 +404,19 @@ Use actual NCCL networking troubleshooting and CUDA GPUDirect RDMA documentation
 
 ### Learner copy
 
+<!-- guided-block: we-began-by-looking-at -->
+
 We began by looking at a single CPU and some memory. We learned how a process obtains a buffer, how the kernel and CPU participate in TCP, how DMA and RDMA change the data-transfer model, and why RDMA resources exist. We have now followed three real operations all the way to network packets and application-observed results.
+
+<!-- guided-block: you-do-not-need-to -->
 
 You do not need to memorise every acronym to make use of this knowledge. When investigating RDMA, work in the following order.
 
+<!-- guided-block: first-establish-the-application-objective -->
+
 First establish the application objective. Which process owns the source and destination, and which operation is supposed to occur? Then establish preparation: device and endpoint configuration, registered ranges, access permissions and any required receive work. Next look at submission: was the instruction constructed and accepted, and what did it request? Then look at the transport: which endpoint did the packet target, which opcode and sequence information does it carry, and did the expected responses appear? Finally examine local completion status, memory verification and any application synchronization.
+
+<!-- guided-block: a-missing-observation-is-not -->
 
 A missing observation is not the same as a failed observation. A packet capture cannot reveal every CPU instruction or memory write. A successful completion cannot prove that every downstream application task has happened. A test's verified memory comparison is evidence about the bytes it actually examined, not all of RAM. Keep these distinctions and you can reason about a complex communication path without guessing.
 
