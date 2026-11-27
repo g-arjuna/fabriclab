@@ -1,0 +1,26 @@
+[
+  {
+    "scenario": "mobile-320-lesson-1-1-stage-2",
+    "scrollWidth": 320,
+    "innerWidth": 320,
+    "position": "1.1 — What is actually inside a server? · Stage 2 of 4",
+    "nextVisible": true,
+    "horizontalOverflow": false
+  },
+  {
+    "scenario": "mobile-390-tcp-segmentation",
+    "scrollWidth": 390,
+    "innerWidth": 390,
+    "position": "2.6 — TCP processing: turn a stream into segments · Stage 2 of 6",
+    "nextVisible": true,
+    "horizontalOverflow": false
+  },
+  {
+    "scenario": "tablet-768-write-construction",
+    "scrollWidth": 768,
+    "innerWidth": 768,
+    "position": "6.3 — Build a WRITE instruction from two memory descriptions · Stage 4 of 6",
+    "nextVisible": true,
+    "horizontalOverflow": false
+  }
+]

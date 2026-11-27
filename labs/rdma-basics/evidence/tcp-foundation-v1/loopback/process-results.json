@@ -1,0 +1,9 @@
+{
+  "capture_command": "tcpdump -i lo -s 0 -U -nn -w loopback.pcap 'tcp port 5004'",
+  "capture_host": "hosta",
+  "capture_interface": "lo",
+  "receiver_command": "ssh -i /home/devbox/.cache/fabriclab/rdma-basics/id_ed25519 -p 2222 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/home/devbox/.cache/fabriclab/rdma-basics/known_hosts -o ConnectTimeout=5 fabriclab@127.0.0.1 'python3 /tmp/tcp_foundation.py receiver --host 127.0.0.1 --port 5004 --case small --chunk 2 --timeout 30'",
+  "receiver_exit": 0,
+  "sender_command": "ssh -i /home/devbox/.cache/fabriclab/rdma-basics/id_ed25519 -p 2222 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/home/devbox/.cache/fabriclab/rdma-basics/known_hosts -o ConnectTimeout=5 fabriclab@127.0.0.1 'python3 /tmp/tcp_foundation.py sender --host 127.0.0.1 --port 5004 --case small --chunk 2 --timeout 30'",
+  "sender_exit": 0
+}

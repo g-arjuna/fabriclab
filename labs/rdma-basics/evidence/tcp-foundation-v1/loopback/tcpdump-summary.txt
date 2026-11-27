@@ -1,0 +1,9 @@
+reading from file /home/devbox/src/fabriclab/labs/rdma-basics/evidence/tcp-foundation-v1/loopback/loopback.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+2026-11-26 13:42:25.010225 IP 127.0.0.1.48494 > 127.0.0.1.5004: Flags [S], seq 336079178, win 65495, options [mss 65495,sackOK,TS val 76375323 ecr 0,nop,wscale 7], length 0
+2026-11-26 13:42:25.010242 IP 127.0.0.1.5004 > 127.0.0.1.48494: Flags [S.], seq 1567032146, ack 336079179, win 65483, options [mss 65495,sackOK,TS val 2649358515 ecr 76375323,nop,wscale 7], length 0
+2026-11-26 13:42:25.010257 IP 127.0.0.1.48494 > 127.0.0.1.5004: Flags [.], ack 1, win 512, options [nop,nop,TS val 76375323 ecr 2649358515], length 0
+2026-11-26 13:42:25.010550 IP 127.0.0.1.48494 > 127.0.0.1.5004: Flags [P.], seq 1:6, ack 1, win 512, options [nop,nop,TS val 76375323 ecr 2649358515], length 5
+2026-11-26 13:42:25.010562 IP 127.0.0.1.5004 > 127.0.0.1.48494: Flags [.], ack 6, win 512, options [nop,nop,TS val 2649358515 ecr 76375323], length 0
+2026-11-26 13:42:25.010618 IP 127.0.0.1.48494 > 127.0.0.1.5004: Flags [F.], seq 6, ack 1, win 512, options [nop,nop,TS val 76375323 ecr 2649358515], length 0
+2026-11-26 13:42:25.010973 IP 127.0.0.1.5004 > 127.0.0.1.48494: Flags [F.], seq 1, ack 7, win 512, options [nop,nop,TS val 2649358515 ecr 76375323], length 0
+2026-11-26 13:42:25.011024 IP 127.0.0.1.48494 > 127.0.0.1.5004: Flags [.], ack 2, win 512, options [nop,nop,TS val 76375324 ecr 2649358515], length 0

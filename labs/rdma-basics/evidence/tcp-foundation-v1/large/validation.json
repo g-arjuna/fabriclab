@@ -1,0 +1,19 @@
+{
+  "case": "large",
+  "decoded_rows": 14,
+  "errors": [],
+  "event_counts": {
+    "receiver": 21,
+    "sender": 9
+  },
+  "forward_payload_rows": 3,
+  "ok": true,
+  "recv_return_counts": [
+    700,
+    700,
+    700,
+    700,
+    700,
+    596
+  ]
+}

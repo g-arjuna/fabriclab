@@ -1,0 +1,17 @@
+[
+  {
+    "event": "capture_started",
+    "host": "hosta",
+    "interface": "lo",
+    "monotonic_ns": 88869446183659,
+    "remote": "/tmp/tcp-foundation-captures/loopback.pcap"
+  },
+  {
+    "event": "receiver_listen",
+    "monotonic_ns": 88870048906921
+  },
+  {
+    "event": "capture_stopped",
+    "monotonic_ns": 88872800983695
+  }
+]

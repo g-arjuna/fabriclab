@@ -1,0 +1,11 @@
+{"case": "small", "chunk": 2, "event": "start", "monotonic_ns": 668848631240, "pid": 4753, "role": "sender"}
+{"address": "0x75ea86d26d90", "capacity": 16, "event": "source_buffer", "hex": "48454c4c4f", "monotonic_ns": 668848790386, "payload_length": 5, "pid": 4753, "sha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5"}
+{"event": "connect_enter", "monotonic_ns": 668848938359, "pid": 4753, "target": ["10.10.10.2", 5001]}
+{"event": "connect_return", "fd": 3, "local": ["10.10.10.1", 53082], "monotonic_ns": 668849696497, "peer": ["10.10.10.2", 5001], "pid": 4753}
+{"event": "sendall_enter", "length": 5, "monotonic_ns": 668849783585, "pid": 4753}
+{"event": "sendall_return", "length": 5, "monotonic_ns": 668849970665, "pid": 4753, "source_unchanged": true}
+{"event": "gate_wait", "gate": "after_send_before_shutdown", "monotonic_ns": 668850098947, "pid": 4753}
+{"event": "gate_release", "gate": "after_send_before_shutdown", "monotonic_ns": 669623010931, "pid": 4753}
+{"event": "shutdown_write", "monotonic_ns": 669624978903, "pid": 4753}
+{"count": 0, "event": "peer_eof", "hex": "", "monotonic_ns": 669641760148, "pid": 4753}
+{"event": "closed", "monotonic_ns": 669642879818, "pid": 4753}

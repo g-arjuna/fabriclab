@@ -1,0 +1,15 @@
+{"case": "small", "chunk": 2, "event": "start", "monotonic_ns": 674063055521, "pid": 3224, "role": "receiver"}
+{"event": "listen", "fd": 3, "local": ["10.10.10.2", 5002], "monotonic_ns": 674063217662, "pid": 3224}
+{"event": "accept_enter", "monotonic_ns": 674063254570, "pid": 3224}
+{"event": "accept_return", "fd": 4, "listener_fd": 3, "local": ["10.10.10.2", 5002], "monotonic_ns": 674869269587, "peer": ["10.10.10.1", 54206], "pid": 3224}
+{"address": "0x7af304b78800", "capacity": 5, "event": "buffer_before", "hex": "0000000000", "monotonic_ns": 674869464637, "pid": 3224, "sha256": "8855508aade16ec573d21e6a485dfd0a7624085c1a14b5ecdd6485de0c6839a4"}
+{"event": "recv_enter", "monotonic_ns": 674869527104, "offset": 0, "pid": 3224, "requested": 2}
+{"count": 2, "event": "recv_return", "hex": "4845", "monotonic_ns": 675265551100, "offset": 0, "pid": 3224, "requested": 2}
+{"event": "recv_enter", "monotonic_ns": 675265661950, "offset": 2, "pid": 3224, "requested": 2}
+{"count": 2, "event": "recv_return", "hex": "4c4c", "monotonic_ns": 675265702909, "offset": 2, "pid": 3224, "requested": 2}
+{"event": "recv_enter", "monotonic_ns": 675265728033, "offset": 4, "pid": 3224, "requested": 1}
+{"count": 1, "event": "recv_return", "hex": "4f", "monotonic_ns": 675265757430, "offset": 4, "pid": 3224, "requested": 1}
+{"event": "verify", "hex": "48454c4c4f", "monotonic_ns": 675265799620, "ok": true, "pid": 3224, "received": 5, "sha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5"}
+{"event": "eof_read_enter", "monotonic_ns": 675265823672, "pid": 3224}
+{"count": 0, "event": "eof_read_return", "hex": "", "monotonic_ns": 675265850510, "pid": 3224}
+{"event": "closed", "monotonic_ns": 675265924276, "pid": 3224}

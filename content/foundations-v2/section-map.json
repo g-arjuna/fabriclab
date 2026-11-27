@@ -1,0 +1,275 @@
+[
+  {
+    "id": "1.1",
+    "lesson": "moving-data",
+    "title": "What is actually inside a server?",
+    "sourceFile": "01-host-architecture.md",
+    "componentId": "foundation-1-1"
+  },
+  {
+    "id": "1.2",
+    "lesson": "moving-data",
+    "title": "From a program on disk to a running process",
+    "sourceFile": "01-host-architecture.md",
+    "componentId": "foundation-1-2"
+  },
+  {
+    "id": "1.3",
+    "lesson": "moving-data",
+    "title": "How the CPU finds a byte",
+    "sourceFile": "01-host-architecture.md",
+    "componentId": "foundation-1-3"
+  },
+  {
+    "id": "1.4",
+    "lesson": "moving-data",
+    "title": "Allocate a buffer, then put data into it",
+    "sourceFile": "01-host-architecture.md",
+    "componentId": "foundation-1-4"
+  },
+  {
+    "id": "1.5",
+    "lesson": "moving-data",
+    "title": "What does it mean to copy data?",
+    "sourceFile": "01-host-architecture.md",
+    "componentId": "foundation-1-5"
+  },
+  {
+    "id": "1.6",
+    "lesson": "moving-data",
+    "title": "Why does the kernel get involved at all?",
+    "sourceFile": "01-host-architecture.md",
+    "componentId": "foundation-1-6"
+  },
+  {
+    "id": "1.7",
+    "lesson": "moving-data",
+    "title": "Now introduce two hosts",
+    "sourceFile": "01-host-architecture.md",
+    "componentId": "foundation-1-7"
+  },
+  {
+    "id": "2.1",
+    "lesson": "moving-data",
+    "title": "Why use a socket instead of directly programming the NIC?",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-1"
+  },
+  {
+    "id": "2.2",
+    "lesson": "moving-data",
+    "title": "Create the endpoint and choose a peer",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-2"
+  },
+  {
+    "id": "2.3",
+    "lesson": "moving-data",
+    "title": "The TCP handshake and accept()",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-3"
+  },
+  {
+    "id": "2.4",
+    "lesson": "moving-data",
+    "title": "What is a byte stream?",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-4"
+  },
+  {
+    "id": "2.5",
+    "lesson": "moving-data",
+    "title": "What happens when Python calls sendall()?",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-5"
+  },
+  {
+    "id": "2.6",
+    "lesson": "moving-data",
+    "title": "TCP processing: turn a stream into segments",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-6"
+  },
+  {
+    "id": "2.7",
+    "lesson": "moving-data",
+    "title": "How does the NIC get the bytes?",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-7"
+  },
+  {
+    "id": "2.8",
+    "lesson": "moving-data",
+    "title": "Follow the frame through the receiving host",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-8"
+  },
+  {
+    "id": "2.9",
+    "lesson": "moving-data",
+    "title": "Where does recv() come from, and what does it do?",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-9"
+  },
+  {
+    "id": "2.10",
+    "lesson": "moving-data",
+    "title": "Does the receiver have to call recv() before the sender sends?",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-10"
+  },
+  {
+    "id": "2.11",
+    "lesson": "moving-data",
+    "title": "Local sender versus remote sender",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-11"
+  },
+  {
+    "id": "2.12",
+    "lesson": "moving-data",
+    "title": "Read the evidence, then ask why RDMA is needed",
+    "sourceFile": "02-tcp-from-application-to-wire.md",
+    "componentId": "foundation-2-12"
+  },
+  {
+    "id": "3.1",
+    "lesson": "why-rdma",
+    "title": "A local memory transfer without CPU copying every byte",
+    "sourceFile": "03-dma-rdma-soft-roce.md",
+    "componentId": "foundation-3-1"
+  },
+  {
+    "id": "3.2",
+    "lesson": "why-rdma",
+    "title": "Why the device needs an address it can use",
+    "sourceFile": "03-dma-rdma-soft-roce.md",
+    "componentId": "foundation-3-2"
+  },
+  {
+    "id": "3.3",
+    "lesson": "why-rdma",
+    "title": "Conventional NICs already use DMA — why RDMA?",
+    "sourceFile": "03-dma-rdma-soft-roce.md",
+    "componentId": "foundation-3-3"
+  },
+  {
+    "id": "3.4",
+    "lesson": "why-rdma",
+    "title": "What does Remote Direct Memory Access actually mean?",
+    "sourceFile": "03-dma-rdma-soft-roce.md",
+    "componentId": "foundation-3-4"
+  },
+  {
+    "id": "3.5",
+    "lesson": "why-rdma",
+    "title": "What is Soft-RoCE and why are we using it?",
+    "sourceFile": "03-dma-rdma-soft-roce.md",
+    "componentId": "foundation-3-5"
+  },
+  {
+    "id": "3.6",
+    "lesson": "why-rdma",
+    "title": "How does an application initiate RDMA work?",
+    "sourceFile": "03-dma-rdma-soft-roce.md",
+    "componentId": "foundation-3-6"
+  },
+  {
+    "id": "4.1",
+    "lesson": "memory",
+    "title": "A buffer is not yet an RDMA Memory Region",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-1"
+  },
+  {
+    "id": "4.2",
+    "lesson": "memory",
+    "title": "Who is involved in registration?",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-2"
+  },
+  {
+    "id": "4.3",
+    "lesson": "memory",
+    "title": "Addresses, offsets and lengths",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-3"
+  },
+  {
+    "id": "4.4",
+    "lesson": "memory",
+    "title": "What does local write mean? Who is local?",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-4"
+  },
+  {
+    "id": "4.5",
+    "lesson": "memory",
+    "title": "A local key identifies registered access",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-5"
+  },
+  {
+    "id": "4.6",
+    "lesson": "memory",
+    "title": "A remote key is for an authorized remote operation",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-6"
+  },
+  {
+    "id": "4.7",
+    "lesson": "memory",
+    "title": "How do keys and endpoint information get exchanged in this lab?",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-7"
+  },
+  {
+    "id": "4.8",
+    "lesson": "memory",
+    "title": "Test access requirements: one range, different operations",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-8"
+  },
+  {
+    "id": "4.9",
+    "lesson": "memory",
+    "title": "Look at the real registration record",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-9"
+  },
+  {
+    "id": "4.10",
+    "lesson": "queues",
+    "title": "Why create communication resources before transferring anything?",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-10"
+  },
+  {
+    "id": "4.11",
+    "lesson": "queues",
+    "title": "Work Requests: a description of work, not data",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-11"
+  },
+  {
+    "id": "4.12",
+    "lesson": "queues",
+    "title": "A queue, then a Queue Pair",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-12"
+  },
+  {
+    "id": "4.13",
+    "lesson": "queues",
+    "title": "What is the Queue Pair Number (QPN)?",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-13"
+  },
+  {
+    "id": "4.14",
+    "lesson": "queues",
+    "title": "Completion reporting and what the resource-only run proves",
+    "sourceFile": "04-rdma-resources-and-keys.md",
+    "componentId": "foundation-4-14"
+  }
+]

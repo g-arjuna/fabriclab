@@ -1,0 +1,15 @@
+{"case": "small", "chunk": 2, "event": "start", "monotonic_ns": 690801053778, "pid": 4878, "role": "receiver"}
+{"event": "listen", "fd": 3, "local": ["127.0.0.1", 5004], "monotonic_ns": 690801287660, "pid": 4878}
+{"event": "accept_enter", "monotonic_ns": 690801326724, "pid": 4878}
+{"event": "accept_return", "fd": 4, "listener_fd": 3, "local": ["127.0.0.1", 5004], "monotonic_ns": 691902482377, "peer": ["127.0.0.1", 48494], "pid": 4878}
+{"address": "0x7d6a386c4800", "capacity": 5, "event": "buffer_before", "hex": "0000000000", "monotonic_ns": 691902622342, "pid": 4878, "sha256": "8855508aade16ec573d21e6a485dfd0a7624085c1a14b5ecdd6485de0c6839a4"}
+{"event": "recv_enter", "monotonic_ns": 691902660562, "offset": 0, "pid": 4878, "requested": 2}
+{"count": 2, "event": "recv_return", "hex": "4845", "monotonic_ns": 691902700320, "offset": 0, "pid": 4878, "requested": 2}
+{"event": "recv_enter", "monotonic_ns": 691902726429, "offset": 2, "pid": 4878, "requested": 2}
+{"count": 2, "event": "recv_return", "hex": "4c4c", "monotonic_ns": 691902754707, "offset": 2, "pid": 4878, "requested": 2}
+{"event": "recv_enter", "monotonic_ns": 691902776654, "offset": 4, "pid": 4878, "requested": 1}
+{"count": 1, "event": "recv_return", "hex": "4f", "monotonic_ns": 691902804417, "offset": 4, "pid": 4878, "requested": 1}
+{"event": "verify", "hex": "48454c4c4f", "monotonic_ns": 691902860115, "ok": true, "pid": 4878, "received": 5, "sha256": "3733cd977ff8eb18b987357e22ced99f46097f31ecb239e878ae63760e83e4d5"}
+{"event": "eof_read_enter", "monotonic_ns": 691902896799, "pid": 4878}
+{"count": 0, "event": "eof_read_return", "hex": "", "monotonic_ns": 691902932688, "pid": 4878}
+{"event": "closed", "monotonic_ns": 691903092675, "pid": 4878}

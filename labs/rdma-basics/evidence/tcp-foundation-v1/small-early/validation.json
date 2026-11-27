@@ -1,0 +1,16 @@
+{
+  "case": "small-early",
+  "decoded_rows": 8,
+  "errors": [],
+  "event_counts": {
+    "receiver": 15,
+    "sender": 11
+  },
+  "forward_payload_rows": 1,
+  "ok": true,
+  "recv_return_counts": [
+    2,
+    2,
+    1
+  ]
+}

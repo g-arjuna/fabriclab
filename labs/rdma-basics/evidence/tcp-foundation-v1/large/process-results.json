@@ -1,0 +1,9 @@
+{
+  "capture_command": "tcpdump -i data0 -s 0 -U -nn -w large.pcap 'tcp port 5003'",
+  "capture_host": "hostb",
+  "capture_interface": "data0",
+  "receiver_command": "ssh -i /home/devbox/.cache/fabriclab/rdma-basics/id_ed25519 -p 2223 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/home/devbox/.cache/fabriclab/rdma-basics/known_hosts -o ConnectTimeout=5 fabriclab@127.0.0.1 'python3 /tmp/tcp_foundation.py receiver --host 10.10.10.2 --port 5003 --case large --chunk 700 --timeout 30'",
+  "receiver_exit": 0,
+  "sender_command": "ssh -i /home/devbox/.cache/fabriclab/rdma-basics/id_ed25519 -p 2222 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/home/devbox/.cache/fabriclab/rdma-basics/known_hosts -o ConnectTimeout=5 fabriclab@127.0.0.1 'python3 /tmp/tcp_foundation.py sender --host 10.10.10.2 --port 5003 --case large --chunk 700 --timeout 30'",
+  "sender_exit": 0
+}

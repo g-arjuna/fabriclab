@@ -1,0 +1,9 @@
+reading from file /home/devbox/src/fabriclab/labs/rdma-basics/evidence/tcp-foundation-v1/small-late/small-late.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+2026-11-26 13:42:01.864462 IP 10.10.10.1.53082 > 10.10.10.2.5001: Flags [S], seq 3478203933, win 64240, options [mss 1460,sackOK,TS val 1239997804 ecr 0,nop,wscale 7], length 0
+2026-11-26 13:42:01.864523 IP 10.10.10.2.5001 > 10.10.10.1.53082: Flags [S.], seq 1275697610, ack 3478203934, win 65160, options [mss 1460,sackOK,TS val 3248078870 ecr 1239997804,nop,wscale 7], length 0
+2026-11-26 13:42:01.864832 IP 10.10.10.1.53082 > 10.10.10.2.5001: Flags [.], ack 1, win 502, options [nop,nop,TS val 1239997804 ecr 3248078870], length 0
+2026-11-26 13:42:01.910505 IP 10.10.10.1.53082 > 10.10.10.2.5001: Flags [P.], seq 1:6, ack 1, win 502, options [nop,nop,TS val 1239997804 ecr 3248078870], length 5
+2026-11-26 13:42:01.910538 IP 10.10.10.2.5001 > 10.10.10.1.53082: Flags [.], ack 6, win 510, options [nop,nop,TS val 3248078916 ecr 1239997804], length 0
+2026-11-26 13:42:02.645704 IP 10.10.10.1.53082 > 10.10.10.2.5001: Flags [F.], seq 6, ack 1, win 502, options [nop,nop,TS val 1239998579 ecr 3248078916], length 0
+2026-11-26 13:42:02.650564 IP 10.10.10.2.5001 > 10.10.10.1.53082: Flags [F.], seq 1, ack 7, win 510, options [nop,nop,TS val 3248079656 ecr 1239998579], length 0
+2026-11-26 13:42:02.655967 IP 10.10.10.1.53082 > 10.10.10.2.5001: Flags [.], ack 2, win 502, options [nop,nop,TS val 1239998593 ecr 3248079656], length 0

@@ -1,0 +1,187 @@
+[
+  {
+    "file": "01-lesson-1-1-stage-1-physical-computer.png",
+    "position": "1.1 — What is actually inside a server? · Stage 1 of 4",
+    "label": "Meet the physical computer"
+  },
+  {
+    "file": "02-lesson-1-1-stage-2-software-layer.png",
+    "position": "1.1 — What is actually inside a server? · Stage 2 of 4",
+    "label": "Introduce the software running on the computer"
+  },
+  {
+    "file": "03-lesson-1-1-stage-3-application-instruction.png",
+    "position": "1.1 — What is actually inside a server? · Stage 3 of 4",
+    "label": "Follow an application instruction"
+  },
+  {
+    "file": "04-lesson-1-1-stage-4-kernel-instruction.png",
+    "position": "1.1 — What is actually inside a server? · Stage 4 of 4",
+    "label": "Follow a kernel instruction"
+  },
+  {
+    "file": "05-virtual-address-translation-first-process-read.png",
+    "position": "1.3 — How the CPU finds a byte · Stage 4 of 9",
+    "label": "Read the illustrative byte"
+  },
+  {
+    "file": "06-virtual-address-translation-rejected-store.png",
+    "position": "1.3 — How the CPU finds a byte · Stage 9 of 9",
+    "label": "Demonstrate a rejected store"
+  },
+  {
+    "file": "07-buffer-allocation-sixteen-cells.png",
+    "position": "1.4 — Allocate a buffer, then put data into it · Stage 3 of 5",
+    "label": "Display sixteen initialized byte cells"
+  },
+  {
+    "file": "08-buffer-allocation-hello-written.png",
+    "position": "1.4 — Allocate a buffer, then put data into it · Stage 4 of 5",
+    "label": "Write HELLO into the first five cells"
+  },
+  {
+    "file": "09-buffer-capacity-versus-payload-length.png",
+    "position": "1.4 — Allocate a buffer, then put data into it · Stage 5 of 5",
+    "label": "Highlight capacity versus meaningful data length"
+  },
+  {
+    "file": "10-copy-versus-reference-shared-bytes.png",
+    "position": "1.5 — What does it mean to copy data? · Stage 4 of 7",
+    "label": "Observe both references seeing the same bytes"
+  },
+  {
+    "file": "11-copy-versus-reference-independent-copy.png",
+    "position": "1.5 — What does it mean to copy data? · Stage 7 of 7",
+    "label": "Observe that the original remains unchanged"
+  },
+  {
+    "file": "12-tcp-segmentation-first-recorded-segment.png",
+    "position": "2.6 — TCP processing: turn a stream into segments · Stage 2 of 6",
+    "label": "Highlight the first recorded TCP segment"
+  },
+  {
+    "file": "13-tcp-segmentation-remaining-segment.png",
+    "position": "2.6 — TCP processing: turn a stream into segments · Stage 4 of 6",
+    "label": "Highlight the remaining recorded segment"
+  },
+  {
+    "file": "14-tcp-segmentation-receive-boundary-comparison.png",
+    "position": "2.6 — TCP processing: turn a stream into segments · Stage 6 of 6",
+    "label": "Compare segment and application-read boundaries"
+  },
+  {
+    "file": "15-dma-device-memory-access-result.png",
+    "position": "3.1 — A local memory transfer without CPU copying every byte · Stage 5 of 5",
+    "label": "CPU/software observes the result"
+  },
+  {
+    "file": "16-soft-roce-versus-hardware-rnic-path.png",
+    "position": "3.5 — What is Soft-RoCE and why are we using it? · Stage 3 of 3",
+    "label": "Distinguish software transport execution from hardware transport execution"
+  },
+  {
+    "file": "17-memory-registration-metadata-revealed.png",
+    "position": "4.1 — A buffer is not yet an RDMA Memory Region · Stage 6 of 6",
+    "label": "Permissions and keys are revealed"
+  },
+  {
+    "file": "18-remote-key-validated-access.png",
+    "position": "4.6 — A remote key is for an authorized remote operation · Stage 6 of 8",
+    "label": "Inspect an incorrect remote key"
+  },
+  {
+    "file": "19-remote-key-incorrect-key-rejected.png",
+    "position": "4.6 — A remote key is for an authorized remote operation · Stage 7 of 8",
+    "label": "Inspect an out-of-range remote request"
+  },
+  {
+    "file": "20-send-instruction-constructed.png",
+    "position": "5.5 — How does A construct and submit the actual SEND? · Stage 3 of 4",
+    "label": "Construct the SEND instruction"
+  },
+  {
+    "file": "21-send-instruction-submitted.png",
+    "position": "5.5 — How does A construct and submit the actual SEND? · Stage 4 of 4",
+    "label": "Submit to the Send Queue"
+  },
+  {
+    "file": "22-send-transport-ack-inspected.png",
+    "position": "5.7 — The transport acknowledgement is not the application completion · Stage 2 of 4",
+    "label": "Inspect the reverse ACK"
+  },
+  {
+    "file": "23-send-initiator-completion.png",
+    "position": "5.7 — The transport acknowledgement is not the application completion · Stage 3 of 4",
+    "label": "Observe A's completion"
+  },
+  {
+    "file": "24-send-receiver-completion.png",
+    "position": "5.7 — The transport acknowledgement is not the application completion · Stage 4 of 4",
+    "label": "Observe B's completion"
+  },
+  {
+    "file": "25-write-instruction-local-description.png",
+    "position": "6.3 — Build a WRITE instruction from two memory descriptions · Stage 4 of 6",
+    "label": "Construct the WRITE Work Request"
+  },
+  {
+    "file": "26-write-remote-fields-attached.png",
+    "position": "6.3 — Build a WRITE instruction from two memory descriptions · Stage 5 of 6",
+    "label": "Attach the remote destination"
+  },
+  {
+    "file": "27-write-instruction-submitted.png",
+    "position": "6.3 — Build a WRITE instruction from two memory descriptions · Stage 6 of 6",
+    "label": "Submit the completed Work Request"
+  },
+  {
+    "file": "28-write-target-zero-completion-observation.png",
+    "position": "6.6 — Does B receive a normal completion when its memory changes? · Stage 4 of 4",
+    "label": "Reveal the recorded target observation"
+  },
+  {
+    "file": "29-write-target-memory-before-after.png",
+    "position": "6.7 — Where did the data go if B's completion queue is empty? · Stage 2 of 3",
+    "label": "Inspect before and after"
+  },
+  {
+    "file": "30-read-request-zero-payload.png",
+    "position": "7.4 — Follow the request: A asks, but sends no message payload · Stage 2 of 3",
+    "label": "Inspect the captured READ request"
+  },
+  {
+    "file": "31-read-response-b-to-a.png",
+    "position": "7.5 — Follow the response: B supplies data to A · Stage 2 of 3",
+    "label": "Inspect the captured READ response"
+  },
+  {
+    "file": "32-packet-investigation-captured-packet.png",
+    "position": "8.1 — What exactly are we looking at in a packet capture? · Stage 1 of 9",
+    "label": "Show the captured packet"
+  },
+  {
+    "file": "33-packet-investigation-outer-headers.png",
+    "position": "8.1 — What exactly are we looking at in a packet capture? · Stage 2 of 9",
+    "label": "Identify outer network headers"
+  },
+  {
+    "file": "34-packet-investigation-destination-qpn.png",
+    "position": "8.1 — What exactly are we looking at in a packet capture? · Stage 3 of 9",
+    "label": "Identify destination QPN"
+  },
+  {
+    "file": "35-packet-investigation-length-accounting.png",
+    "position": "8.1 — What exactly are we looking at in a packet capture? · Stage 7 of 9",
+    "label": "Compare operation length and packet payload"
+  },
+  {
+    "file": "36-packet-investigation-evidence-boundary.png",
+    "position": "8.1 — What exactly are we looking at in a packet capture? · Stage 9 of 9",
+    "label": "Explain what can and cannot be concluded"
+  },
+  {
+    "file": "37-ack-target-notification-investigation.png",
+    "position": "8.9 — Investigation: does an ACK notify the target application? · Stage 4 of 4",
+    "label": "Reveal target memory evidence"
+  }
+]

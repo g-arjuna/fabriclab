@@ -1,0 +1,31 @@
+[
+  {
+    "event": "capture_started",
+    "host": "hostb",
+    "interface": "data0",
+    "monotonic_ns": 88846619205780,
+    "remote": "/tmp/tcp-foundation-captures/small-late.pcap"
+  },
+  {
+    "event": "receiver_listen",
+    "monotonic_ns": 88847121533024
+  },
+  {
+    "event": "observed_after_send_before_read",
+    "monotonic_ns": 88848389298077
+  },
+  {
+    "event": "gate_release",
+    "gate": "receiver_before_first_read",
+    "monotonic_ns": 88848389310432
+  },
+  {
+    "event": "gate_release",
+    "gate": "sender_after_send_before_shutdown",
+    "monotonic_ns": 88848795836581
+  },
+  {
+    "event": "capture_stopped",
+    "monotonic_ns": 88850893515908
+  }
+]

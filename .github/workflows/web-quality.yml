@@ -45,6 +45,7 @@ jobs:
       - run: npm audit --omit=dev --audit-level=moderate
       - run: npm audit --audit-level=moderate
       - run: npx tsc --noEmit --project tsconfig.json
+      - run: npm run validate:rdma-curriculum
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - name: Start production server
@@ -62,6 +63,15 @@ jobs:
       - env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
         run: npm run test:browser:ch16
+      - env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+        run: npx playwright test tests/rdma.curriculum.smoke.spec.ts --workers=1
+      - env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+        run: npm run test:browser:foundations -- --workers=1
+      - env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+        run: npx playwright test tests/operations.semantic.spec.ts --workers=1
       - env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
         run: npx playwright test tests/rdma.practical.smoke.spec.ts --workers=1

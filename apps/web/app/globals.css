@@ -142,3 +142,32 @@ pre,
   line-height: 1.45;
   letter-spacing: -0.01em;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="rdma-curriculum"] *,
+  [data-testid="rdma-curriculum"] *::before,
+  [data-testid="rdma-curriculum"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .guided-lesson-article {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+  }
+
+  .guided-mobile-footer {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 639px) {
+  [data-testid="experiment-focus-diagram"],
+  [data-testid="final-packet-investigation"],
+  [data-testid="write-completion-prediction"] {
+    scroll-margin-bottom: calc(8rem + env(safe-area-inset-bottom));
+  }
+}

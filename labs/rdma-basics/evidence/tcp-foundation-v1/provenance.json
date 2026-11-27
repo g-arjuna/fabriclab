@@ -1,0 +1,8 @@
+{
+  "captured_at_unix": 1795680748.518562,
+  "evidence_set": "tcp-foundation-v1",
+  "lab": "FabricLab isolated KVM/QEMU two-host laboratory",
+  "notes": "PCAP timestamps and kernel values are actual run-specific observations. Loopback evidence is a software-interface observation. Original RDMA reference evidence is not modified.",
+  "script_sha256": "8a43d2891c7547efff6aa5eccfdb031df48cd089af0c4ab0d8059ec7574675fa",
+  "script_source": "/home/devbox/src/fabriclab/content/foundations-v2/lab/tcp_foundation.py"
+}

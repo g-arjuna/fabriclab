@@ -286,6 +286,16 @@ export function bytesFromHex(hex: string | null | undefined): number[] {
   return bytes;
 }
 
+export function packetLengthBreakdown(packet: PacketRecord) {
+  return {
+    applicationPayloadBytes: bytesFromHex(packet.payloadHex).length,
+    transportPaddingBytes: packet.bth.padCount,
+    capturedDataBytes: packet.dataLength,
+    totalFrameBytes: packet.frameLength,
+    capturedFrameBytes: packet.capturedLength,
+  };
+}
+
 export function asciiFromBytes(bytes: number[]) {
   return bytes.map((byte) => byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : ".").join("");
 }

@@ -1,0 +1,259 @@
+{
+  "revision": "operations-v2",
+  "sourceBaseline": "46cd691bd72563f94d9565e21ef208b71d7b31f2",
+  "sectionCount": 36,
+  "sections": [
+    {
+      "id": "5.1",
+      "lesson": "send-receive",
+      "title": "Where are our programs actually running?",
+      "source": "05-send-receive.md",
+      "componentId": "operations-v2-5-1"
+    },
+    {
+      "id": "5.2",
+      "lesson": "send-receive",
+      "title": "What does a prepared connection actually contain?",
+      "source": "05-send-receive.md",
+      "componentId": "operations-v2-5-2"
+    },
+    {
+      "id": "5.3",
+      "lesson": "send-receive",
+      "title": "Who decides where the message will land?",
+      "source": "05-send-receive.md",
+      "componentId": "operations-v2-5-3"
+    },
+    {
+      "id": "5.4",
+      "lesson": "send-receive",
+      "title": "What if nobody has posted a receive?",
+      "source": "05-send-receive.md",
+      "componentId": "operations-v2-5-4"
+    },
+    {
+      "id": "5.5",
+      "lesson": "send-receive",
+      "title": "How does A construct and submit the actual SEND?",
+      "source": "05-send-receive.md",
+      "componentId": "operations-v2-5-5"
+    },
+    {
+      "id": "5.6",
+      "lesson": "send-receive",
+      "title": "From local memory to a RoCEv2 packet",
+      "source": "05-send-receive.md",
+      "componentId": "operations-v2-5-6"
+    },
+    {
+      "id": "5.7",
+      "lesson": "send-receive",
+      "title": "The transport acknowledgement is not the application completion",
+      "source": "05-send-receive.md",
+      "componentId": "operations-v2-5-7"
+    },
+    {
+      "id": "5.8",
+      "lesson": "send-receive",
+      "title": "Read the memory that B actually received",
+      "source": "05-send-receive.md",
+      "componentId": "operations-v2-5-8"
+    },
+    {
+      "id": "5.9",
+      "lesson": "send-receive",
+      "title": "Review: reconstruct the SEND experiment",
+      "source": "05-send-receive.md",
+      "componentId": "operations-v2-5-9"
+    },
+    {
+      "id": "6.1",
+      "lesson": "write",
+      "title": "The question that SEND leaves unanswered",
+      "source": "06-rdma-write.md",
+      "componentId": "operations-v2-6-1"
+    },
+    {
+      "id": "6.2",
+      "lesson": "write",
+      "title": "Prepare B's memory and advertise only what A needs",
+      "source": "06-rdma-write.md",
+      "componentId": "operations-v2-6-2"
+    },
+    {
+      "id": "6.3",
+      "lesson": "write",
+      "title": "Build a WRITE instruction from two memory descriptions",
+      "source": "06-rdma-write.md",
+      "componentId": "operations-v2-6-3"
+    },
+    {
+      "id": "6.4",
+      "lesson": "write",
+      "title": "What does the target provider do with the incoming request?",
+      "source": "06-rdma-write.md",
+      "componentId": "operations-v2-6-4"
+    },
+    {
+      "id": "6.5",
+      "lesson": "write",
+      "title": "What did the writer actually learn from completion?",
+      "source": "06-rdma-write.md",
+      "componentId": "operations-v2-6-5"
+    },
+    {
+      "id": "6.6",
+      "lesson": "write",
+      "title": "Does B receive a normal completion when its memory changes?",
+      "source": "06-rdma-write.md",
+      "componentId": "operations-v2-6-6"
+    },
+    {
+      "id": "6.7",
+      "lesson": "write",
+      "title": "Where did the data go if B's completion queue is empty?",
+      "source": "06-rdma-write.md",
+      "componentId": "operations-v2-6-7"
+    },
+    {
+      "id": "6.8",
+      "lesson": "write",
+      "title": "Compare SEND, WRITE and notification choices",
+      "source": "06-rdma-write.md",
+      "componentId": "operations-v2-6-8"
+    },
+    {
+      "id": "7.1",
+      "lesson": "read",
+      "title": "Change the question: who already has the data?",
+      "source": "07-rdma-read.md",
+      "componentId": "operations-v2-7-1"
+    },
+    {
+      "id": "7.2",
+      "lesson": "read",
+      "title": "Prepare a source and a destination",
+      "source": "07-rdma-read.md",
+      "componentId": "operations-v2-7-2"
+    },
+    {
+      "id": "7.3",
+      "lesson": "read",
+      "title": "Why does the reader use a Send Work Request?",
+      "source": "07-rdma-read.md",
+      "componentId": "operations-v2-7-3"
+    },
+    {
+      "id": "7.4",
+      "lesson": "read",
+      "title": "Follow the request: A asks, but sends no message payload",
+      "source": "07-rdma-read.md",
+      "componentId": "operations-v2-7-4"
+    },
+    {
+      "id": "7.5",
+      "lesson": "read",
+      "title": "Follow the response: B supplies data to A",
+      "source": "07-rdma-read.md",
+      "componentId": "operations-v2-7-5"
+    },
+    {
+      "id": "7.6",
+      "lesson": "read",
+      "title": "Observe completion and verify the actual local data",
+      "source": "07-rdma-read.md",
+      "componentId": "operations-v2-7-6"
+    },
+    {
+      "id": "7.7",
+      "lesson": "read",
+      "title": "Put the three operations side by side",
+      "source": "07-rdma-read.md",
+      "componentId": "operations-v2-7-7"
+    },
+    {
+      "id": "8.1",
+      "lesson": "packets",
+      "title": "What exactly are we looking at in a packet capture?",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-1"
+    },
+    {
+      "id": "8.2",
+      "lesson": "packets",
+      "title": "How does the receiving transport know what to do?",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-2"
+    },
+    {
+      "id": "8.3",
+      "lesson": "packets",
+      "title": "When does an RDMA packet contain a remote memory address?",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-3"
+    },
+    {
+      "id": "8.4",
+      "lesson": "packets",
+      "title": "Count the bytes: buffer capacity, transfer length, padding and frame size",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-4"
+    },
+    {
+      "id": "8.5",
+      "lesson": "packets",
+      "title": "One Work Request can produce more than one packet",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-5"
+    },
+    {
+      "id": "8.6",
+      "lesson": "packets",
+      "title": "Why is a reliable operation possible over UDP?",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-6"
+    },
+    {
+      "id": "8.7",
+      "lesson": "packets",
+      "title": "A complete correlation: Python → WR → packet → memory → completion",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-7"
+    },
+    {
+      "id": "8.8",
+      "lesson": "packets",
+      "title": "Investigation: where did the SEND land?",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-8"
+    },
+    {
+      "id": "8.9",
+      "lesson": "packets",
+      "title": "Investigation: does an ACK notify the target application?",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-9"
+    },
+    {
+      "id": "8.10",
+      "lesson": "packets",
+      "title": "Investigation: who initiated this response?",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-10"
+    },
+    {
+      "id": "8.11",
+      "lesson": "packets",
+      "title": "From this laboratory to an AI cluster",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-11"
+    },
+    {
+      "id": "8.12",
+      "lesson": "packets",
+      "title": "A final investigation checklist",
+      "source": "08-packets-and-ai-fabrics.md",
+      "componentId": "operations-v2-8-12"
+    }
+  ]
+}

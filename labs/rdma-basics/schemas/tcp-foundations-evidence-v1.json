@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fabriclab.local/schemas/tcp-foundations-evidence-v1.json",
+  "title": "FabricLab TCP foundations browser evidence v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "kind",
+    "sequenceNumberPolicy",
+    "capturePointPolicy",
+    "environment",
+    "provenance",
+    "cases",
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "tcp-foundations-browser-v1"
+    },
+    "kind": {
+      "const": "recorded TCP teaching evidence"
+    },
+    "sequenceNumberPolicy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capturePointPolicy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "environment": {
+      "type": "object"
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "smallClientPort",
+        "smallHandshakeFrames",
+        "smallReadCounts",
+        "largeSegmentLengths",
+        "largeSegmentRanges"
+      ],
+      "properties": {
+        "smallClientPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "smallHandshakeFrames": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "smallReadCounts": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "largeSegmentLengths": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "largeSegmentRanges": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    "cases": {
+      "type": "object",
+      "required": [
+        "small-late",
+        "small-early",
+        "large",
+        "loopback"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "small-late": {
+          "$ref": "#/$defs/case"
+        },
+        "small-early": {
+          "$ref": "#/$defs/case"
+        },
+        "large": {
+          "$ref": "#/$defs/case"
+        },
+        "loopback": {
+          "$ref": "#/$defs/case"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "packet": {
+      "type": "object",
+      "required": [
+        "frameNumber",
+        "frameLength",
+        "capturedLength",
+        "sourceIp",
+        "destinationIp",
+        "sourcePort",
+        "destinationPort",
+        "flags",
+        "relativeSequence",
+        "relativeAcknowledgement",
+        "tcpPayloadLength",
+        "payloadHex",
+        "payloadHexTruncated",
+        "payloadSha256",
+        "advertisedMss"
+      ],
+      "properties": {
+        "frameNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "capturedLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sourceIp": {
+          "type": "string"
+        },
+        "destinationIp": {
+          "type": "string"
+        },
+        "sourcePort": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "destinationPort": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "flags": {
+          "type": "string"
+        },
+        "relativeSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "relativeAcknowledgement": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tcpPayloadLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payloadHex": {
+          "type": "string"
+        },
+        "payloadHexTruncated": {
+          "type": "boolean"
+        },
+        "payloadSha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "advertisedMss": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "required": [
+        "id",
+        "port",
+        "capture",
+        "commands",
+        "endpoints",
+        "events",
+        "handshake",
+        "payloadSegments",
+        "acknowledgements",
+        "receiveEvents",
+        "ssSnapshots",
+        "validation",
+        "artifactSha256",
+        "operatorEvents",
+        "packets",
+        "browserValidation"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "small-late",
+            "small-early",
+            "large",
+            "loopback"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "capture": {
+          "type": "object",
+          "required": [
+            "file",
+            "downloadPath",
+            "sha256",
+            "host",
+            "interface",
+            "command"
+          ]
+        },
+        "commands": {
+          "type": "object",
+          "required": [
+            "sender",
+            "receiver"
+          ]
+        },
+        "endpoints": {
+          "type": "object",
+          "required": [
+            "senderLocal",
+            "senderPeer",
+            "receiverLocal",
+            "receiverPeer",
+            "senderFd",
+            "receiverFd",
+            "listenerFd"
+          ]
+        },
+        "events": {
+          "type": "object",
+          "required": [
+            "sender",
+            "receiver"
+          ]
+        },
+        "handshake": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packet"
+          }
+        },
+        "payloadSegments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "frameNumber",
+              "relativeSequenceStart",
+              "relativeSequenceEndExclusive",
+              "tcpPayloadLength",
+              "payloadSha256",
+              "payloadHex",
+              "payloadPreviewHex"
+            ]
+          }
+        },
+        "acknowledgements": {
+          "type": "array"
+        },
+        "receiveEvents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "offset",
+              "requested",
+              "count",
+              "monotonicNs"
+            ]
+          }
+        },
+        "ssSnapshots": {
+          "type": "object"
+        },
+        "validation": {
+          "type": "object",
+          "required": [
+            "ok",
+            "errors",
+            "recv_return_counts",
+            "forward_payload_rows"
+          ],
+          "properties": {
+            "ok": {
+              "const": true
+            }
+          }
+        },
+        "artifactSha256": {
+          "type": "object",
+          "required": [
+            "senderJsonl",
+            "receiverJsonl",
+            "tcpdumpSummary",
+            "tsharkFields"
+          ]
+        },
+        "operatorEvents": {
+          "type": "array"
+        },
+        "packets": {
+          "type": "array",
+          "minItems": 1
+        },
+        "browserValidation": {
+          "type": "object",
+          "required": [
+            "validated",
+            "errors",
+            "bytes",
+            "sha256",
+            "segments",
+            "baseSequence",
+            "applicationRanges"
+          ],
+          "properties": {
+            "validated": {
+              "const": true
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "applicationRanges": {
+              "type": "array",
+              "minItems": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}
