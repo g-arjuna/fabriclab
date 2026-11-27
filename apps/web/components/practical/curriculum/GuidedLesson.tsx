@@ -95,6 +95,7 @@ export function GuidedLesson({
   const persistedRevision = guidedPersistedRevisionForLesson(lessonId);
   const articleRef = useRef<HTMLElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const outlineRef = useRef<HTMLDetailsElement | null>(null);
   const step = steps[stepIndex];
   const isFinal = stepIndex === steps.length - 1;
   const allStepsVisited = steps.every((_, index) => visitedSteps.includes(index));
@@ -220,14 +221,17 @@ export function GuidedLesson({
             {stageCount > 1 ? ` · Stage ${stageIndex + 1} of ${stageCount}` : ""}
           </div>
         </div>
-        <details className="rounded-xl border border-white/10 bg-slate-950/35 px-2.5 py-1.5 text-xs text-slate-400 sm:px-3 sm:py-2 sm:text-sm" data-testid="lesson-outline">
+        <details ref={outlineRef} className="rounded-xl border border-white/10 bg-slate-950/35 px-2.5 py-1.5 text-xs text-slate-400 sm:px-3 sm:py-2 sm:text-sm" data-testid="lesson-outline">
           <summary className="cursor-pointer font-medium text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Lesson outline</summary>
           <ol className="mt-3 max-w-xl space-y-1.5">
             {subsections.map((item, index) => (
               <li key={item.key}>
                 <button
                   type="button"
-                  onClick={() => goTo(item.firstIndex)}
+                  onClick={() => {
+                    outlineRef.current?.removeAttribute("open");
+                    goTo(item.firstIndex);
+                  }}
                   className={cx(
                     "text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
                     item.active ? "font-semibold text-cyan-100" : item.visited ? "text-emerald-100/80 hover:text-emerald-50" : "text-slate-400 hover:text-slate-200",
@@ -243,7 +247,7 @@ export function GuidedLesson({
 
       <article ref={articleRef} className="scroll-mt-20 guided-lesson-article rounded-2xl border border-white/10 bg-slate-900/35 p-2 shadow-[0_20px_70px_rgba(2,6,23,0.22)] max-lg:pb-20 sm:p-6 lg:p-7" data-testid="guided-article" data-guided-step={step.id} data-stage-index={stageIndex}>
         <div className="border-b border-white/8 pb-3 sm:pb-4">
-          <h2 ref={headingRef} tabIndex={-1} className="max-w-4xl text-xl font-semibold tracking-tight text-white outline-none sm:text-3xl">{step.stageLabel || step.title}</h2>
+          <h2 ref={headingRef} tabIndex={-1} data-testid="guided-heading" className="max-w-4xl text-xl font-semibold tracking-tight text-white outline-none sm:text-3xl">{step.stageLabel || step.title}</h2>
         </div>
 
         <div className={inlineVisual ? "mt-3 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,0.78fr)_minmax(430px,1fr)] xl:items-center" : hasContextPanel ? "mt-3 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_330px]" : "mt-3 flex flex-col gap-4 sm:mt-5 sm:gap-5"}>

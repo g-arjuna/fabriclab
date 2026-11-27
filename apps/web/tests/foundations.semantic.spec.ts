@@ -42,12 +42,14 @@ test.describe("guided foundations semantics", () => {
     await expect(page.getByTestId("hardware-nic")).toBeVisible();
     await expect(page.getByTestId("software-responsibility-overlay")).toHaveCount(0);
     await expect(page.getByTestId("lesson-narrative")).toContainText("Before discussing networking");
+    await expect(page.getByTestId("guided-stage-explanation")).toHaveAttribute("data-copy-blocks", "1.1:meet-the-physical-computer-instruction");
     await expect(page.getByTestId("guided-observation")).toContainText("These are physical components");
     await expect(page.getByTestId("show-hardware")).toHaveCount(0);
     await expect(page.getByTestId("execute-application-instruction")).toHaveCount(0);
 
     await next(page);
     await expect(page.getByTestId("guided-position")).toContainText("Stage 2 of 4");
+    await expect(page.getByTestId("guided-stage-explanation")).toHaveAttribute("data-copy-blocks", "1.1:introduce-application-and-kernel-software-instruction");
     await expect(page.getByTestId("software-responsibility-overlay")).toBeVisible();
     await expect(page.getByTestId("application-software-box")).toContainText("User-level work");
     await expect(page.getByTestId("kernel-software-box")).toContainText("Resource management");
@@ -56,6 +58,7 @@ test.describe("guided foundations semantics", () => {
 
     await next(page);
     await expect(page.getByTestId("guided-position")).toContainText("Stage 3 of 4");
+    await expect(page.getByTestId("guided-stage-explanation")).toHaveAttribute("data-copy-blocks", "1.1:follow-an-application-instruction-explanation");
     await expect(page.getByTestId("application-memory-access")).toBeVisible();
     await expect(page.getByTestId("application-memory-access")).toContainText("memory contains 0x48");
     await expect(page.getByTestId("application-memory-access")).toContainText("0x48");
@@ -63,6 +66,7 @@ test.describe("guided foundations semantics", () => {
 
     await next(page);
     await expect(page.getByTestId("guided-position")).toContainText("Stage 4 of 4");
+    await expect(page.getByTestId("guided-stage-explanation")).toHaveAttribute("data-copy-blocks", "1.1:follow-a-kernel-instruction-explanation");
     await expect(page.getByTestId("kernel-service-flow")).toBeVisible();
     await expect(page.getByTestId("kernel-service-flow")).toContainText("CPU executes privileged kernel instructions");
     await expect(page.getByTestId("guided-observation")).toContainText("Application execution");
@@ -79,6 +83,47 @@ test.describe("guided foundations semantics", () => {
     await expect(page.locator("[data-testid^=guided-lesson-]")).toHaveAttribute("data-hydrated", "true", { timeout: 30000 });
     await expect(page.getByTestId("guided-position")).toContainText("Stage 4 of 4");
     await expect(page.getByTestId("kernel-service-flow")).toBeVisible();
+  });
+
+  test("lesson outline selection closes the outline, focuses the teaching heading and preserves guided navigation", async ({ page }) => {
+    await openRdma(page);
+    const outline = page.getByTestId("lesson-outline");
+    await expect(outline).not.toHaveAttribute("open", "");
+
+    await outline.locator("summary").press("Enter");
+    await expect(outline).toHaveAttribute("open", "");
+    await outline.getByRole("button", { name: /What does it mean to copy data/ }).click();
+
+    await expect(outline).not.toHaveAttribute("open", "");
+    await expect(page.getByTestId("guided-position")).toContainText("1.5");
+    await expect(page.getByTestId("guided-heading")).toContainText("Start with the original buffer");
+    await expect(page.getByTestId("guided-heading")).toBeFocused();
+    const articleBox = await page.getByTestId("guided-article").boundingBox();
+    expect(articleBox?.y).toBeGreaterThanOrEqual(64);
+
+    await next(page);
+    await expect(page.getByTestId("guided-position")).toContainText("Stage 2 of 5");
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.getByTestId("guided-position")).toContainText("Stage 1 of 5");
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByTestId("guided-position")).toContainText("Stage 2 of 5");
+  });
+
+  test("mobile outline selection closes instead of retaining an expanded navigation panel", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openRdma(page);
+    const outline = page.getByTestId("lesson-outline");
+    await outline.locator("summary").click();
+    await expect(outline).toHaveAttribute("open", "");
+    await outline.getByRole("button", { name: /From a program on disk to a running process/ }).click();
+
+    await expect(outline).not.toHaveAttribute("open", "");
+    await expect(page.getByTestId("guided-position")).toContainText("1.2");
+    await expect(page.getByTestId("guided-heading")).toBeFocused();
+    await expect(page.getByTestId("lesson-narrative")).toBeVisible();
+    await next(page);
+    await expect(page.getByTestId("guided-position")).toContainText("Stage 2 of 6");
   });
 
 
@@ -191,14 +236,28 @@ test.describe("guided foundations semantics", () => {
     await expect(page.getByTestId("copy-state-result")).toContainText("original first byte 0x58");
     await expect(page.getByTestId("copy-state-result")).toContainText("independent copy first byte 0x58");
     await expect(page.getByTestId("copy-state-result")).toContainText("current XELLO byte values");
+    await expect(page.getByTestId("copy-transfer-path")).toContainText("XELLO source bytes");
+    await expect(page.getByTestId("copy-read-link")).toHaveAttribute("data-active", "true");
+    await expect(page.getByTestId("copy-store-link")).toHaveAttribute("data-active", "true");
+    await expect(page.getByTestId("copy-byte-ascii-legend")).toContainText("0x58 = X");
     await expect(page.getByTestId("guided-stage-explanation")).toContainText("source currently contains XELLO");
     await expect(page.getByTestId("guided-stage-explanation")).toContainText("not restoring the earlier HELLO state");
     await next(page);
     await expect(page.getByTestId("copy-state-result")).toContainText("original first byte 0x58");
     await expect(page.getByTestId("copy-state-result")).toContainText("independent copy first byte 0x59");
     await expect(page.getByTestId("copy-state-result")).toContainText("original remains XELLO");
+    await expect(page.getByTestId("active-copy-operation")).toHaveCount(0);
+    await expect(page.getByTestId("independent-destination-store")).toContainText("Independent store");
+    await expect(page.getByTestId("independent-destination-store")).toContainText("0x59 (Y)");
+    await expect(page.getByTestId("copy-source-unchanged")).toContainText("XELLO");
+    await expect(page.getByTestId("completed-copy-read-link")).toHaveAttribute("data-active", "false");
+    await expect(page.getByTestId("completed-copy-store-link")).toHaveAttribute("data-active", "false");
+    await expect(page.getByTestId("copy-byte-ascii-legend")).toContainText("0x59 = Y");
     await page.getByTestId("lesson-previous").click();
     await expect(page.getByTestId("copy-state-result")).toContainText("independent copy first byte 0x58");
+    await expect(page.getByTestId("copy-transfer-path")).toBeVisible();
+    await expect(page.getByTestId("copy-read-link")).toHaveAttribute("data-active", "true");
+    await expect(page.getByTestId("independent-store-operation")).toHaveCount(0);
   });
 
   test("TCP segmentation stages synchronize ranges and the packet inspector without requiring packet selection", async ({ page }) => {

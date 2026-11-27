@@ -352,8 +352,8 @@ export function CopyReferenceVisual() {
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="copy-reference-visual" data-guided-stage={stage}>
       <div className="grid gap-3 xl:grid-cols-2">
-        <FoundationBox title="original buffer · 0x1000" tone="memory" active testId="copy-source-memory"><ByteCells compact bytes={source} /></FoundationBox>
-        {copyCreated ? <FoundationBox title="independent copy · 0x2000" tone="memory" testId="copy-destination-memory"><ByteCells compact bytes={destination} /></FoundationBox> : <FoundationBox title="independent copy" tone="neutral" dashed testId="copy-destination-memory">No independent copy exists yet.</FoundationBox>}
+        <FoundationBox title="original buffer · 0x1000" tone="memory" active testId="copy-source-memory"><ByteCells compact ascii bytes={source} /></FoundationBox>
+        {copyCreated ? <FoundationBox title="independent copy · 0x2000" tone="memory" testId="copy-destination-memory"><ByteCells compact ascii bytes={destination} /></FoundationBox> : <FoundationBox title="independent copy" tone="neutral" dashed testId="copy-destination-memory">No independent copy exists yet.</FoundationBox>}
       </div>
       {!copyCreated ? (
         <div className="space-y-2" data-testid="reference-mechanism">
@@ -367,9 +367,30 @@ export function CopyReferenceVisual() {
           </SmallNote>
         </div>
       ) : (
-        <div className="space-y-1" data-testid="copy-mechanism">
-          <LinkLine label="CPU reads the current source bytes into transient register/cache state" kind="instruction" direction="down" active />
-          <LinkLine label="CPU stores equivalent byte values into the separate destination" kind="payload" direction="down" active />
+        <div className="space-y-2" data-testid="copy-mechanism">
+          {!copyModified ? (
+            <div className="space-y-1" data-testid="active-copy-operation">
+              <div className="grid items-center gap-1 rounded-xl border border-sky-300/20 bg-sky-300/6 px-3 py-2 text-center text-[11px] sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:gap-2" data-testid="copy-transfer-path">
+                <div className="font-mono text-sky-100 sm:text-right">XELLO source bytes</div>
+                <div className="whitespace-nowrap font-semibold text-cyan-100">──── CPU copies byte values ───▶</div>
+                <div className="font-mono text-sky-100">XELLO independent destination</div>
+              </div>
+              <LinkLine label="CPU reads the current source bytes into transient register/cache state" kind="instruction" direction="right" active testId="copy-read-link" />
+              <LinkLine label="CPU stores equivalent byte values into the separate destination" kind="payload" direction="right" active testId="copy-store-link" />
+            </div>
+          ) : (
+            <div className="space-y-2" data-testid="independent-store-operation">
+              <div className="grid gap-2 xl:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-slate-950/45 px-3 py-2 text-center text-xs text-slate-400" data-testid="copy-source-unchanged">Original unchanged<br /><span className="font-mono text-sky-100">XELLO</span></div>
+                <div className="rounded-xl border border-amber-300/35 bg-amber-300/8 px-3 py-2 text-center text-xs text-amber-50" data-testid="independent-destination-store"><span className="block font-mono text-xl leading-none">↑</span>Independent store: CPU writes <span className="font-mono">0x59 (Y)</span> into destination offset 0</div>
+              </div>
+              <div data-testid="completed-copy-operation">
+                <LinkLine label="Completed copy: CPU previously read the source bytes" kind="instruction" direction="right" active={false} testId="completed-copy-read-link" />
+                <LinkLine label="Completed copy: CPU previously stored equivalent values in the destination" kind="payload" direction="right" active={false} testId="completed-copy-store-link" />
+              </div>
+            </div>
+          )}
+          <SmallNote testId="copy-byte-ascii-legend">ASCII interpretation: <span className="font-mono text-slate-200">0x58 = X</span> · <span className="font-mono text-slate-200">0x59 = Y</span>. The hexadecimal cell values are shown above their ASCII characters.</SmallNote>
           <SmallNote testId="copy-state-result">Copy state: original first byte 0x{sourceFirst}; independent copy first byte 0x{destinationFirst}. {copyModified ? "The copy was modified to YELLO and the original remains XELLO." : "The copy starts with the current XELLO byte values but is independently stored."}</SmallNote>
         </div>
       )}

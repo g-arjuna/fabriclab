@@ -324,10 +324,10 @@ function content(sectionId: string, ...blockIds: string[]): GuidedContentReferen
 
 const instructionReferencesBySection: Record<string, Record<string, GuidedContentReference[]>> = {
   "1.1": {
-    "meet-the-physical-computer": content("1.1", "before-we-connect-two-computers", "a-typical-server-contains-processors"),
-    "introduce-the-software-running-on-the-computer": content("1.1", "linux-is-software-running-on"),
-    "follow-an-application-instruction": content("1.1", "a-typical-server-contains-processors", "linux-is-software-running-on"),
-    "follow-a-kernel-instruction": content("1.1", "linux-is-software-running-on"),
+    "meet-the-physical-computer": content("1.1", "meet-the-physical-computer-instruction"),
+    "introduce-the-software-running-on-the-computer": content("1.1", "introduce-application-and-kernel-software-instruction"),
+    "follow-an-application-instruction": content("1.1", "follow-an-application-instruction-explanation"),
+    "follow-a-kernel-instruction": content("1.1", "follow-a-kernel-instruction-explanation"),
   },
   "1.2": {
     "show-program-stored-on-disk": content("1.2", "a-python-script-or-a"),
@@ -780,6 +780,12 @@ const instructionReferencesBySection: Record<string, Record<string, GuidedConten
 
 
 const observationReferencesBySection: Record<string, Record<string, GuidedContentReference[]>> = {
+  "1.1": {
+    "meet-the-physical-computer": content("1.1", "meet-the-physical-computer-observation"),
+    "introduce-the-software-running-on-the-computer": content("1.1", "introduce-application-and-kernel-software-observation"),
+    "follow-an-application-instruction": content("1.1", "follow-an-application-instruction-observation"),
+    "follow-a-kernel-instruction": content("1.1", "follow-a-kernel-instruction-observation"),
+  },
   "1.2": {
     "touch-demand-memory-and-interpret": content("1.2", "a-s-illustrated-mapping-is", "demand-allocation-is-associated-with"),
   },

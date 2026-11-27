@@ -1,6 +1,16 @@
 # RDMA From First Principles — Human Learner Review Checklist
 
-Use this checklist with real learners after the implementation is merged or preview-approved. Do not treat completion of the guided sequence as proof of comprehension. A developer walkthrough is not independent educational validation.
+Use this checklist with real learners on the approved feature preview. Do not treat completion of the guided sequence as proof of comprehension. A developer walkthrough is not independent educational validation.
+
+## Guided-navigation instructions
+
+1. Start the practical from the beginning with a clean browser profile or cleared local storage.
+2. Use **Next** as the only required forward control.
+3. Use **Previous** whenever a mechanism needs another look.
+4. Open optional technical inspection only when desired; it is not required for the primary path.
+5. Record difficulties against the exact subsection identifier and guided-stage identifier shown in the browser.
+
+Do not fabricate anticipated feedback. Record the learner's actual observation first, then classify it later as an instructional, visualization, navigation, redundancy or evidence-interpretation problem.
 
 ## Recommended maintainer review path
 

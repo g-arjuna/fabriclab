@@ -4,17 +4,48 @@
 
 ### Learner copy
 
-<!-- guided-block: before-we-connect-two-computers -->
+<!-- guided-block: meet-the-physical-computer-instruction -->
 
-Before we connect two computers, we need to understand one computer. When a network engineer says that a server sends data, which part of the server is doing the sending? Where did the data come from? Where does it go when the server receives a packet?
+Before discussing networking, we need to understand the computer that is sending or receiving data. A server contains a CPU that executes instructions, RAM that stores instructions and data, and a network interface that communicates with other computers.
 
-<!-- guided-block: a-typical-server-contains-processors -->
+<!-- guided-block: meet-the-physical-computer-observation -->
 
-A typical server contains processors (CPUs), system memory (RAM), and devices such as network interface cards (NICs). These are pieces of hardware. A CPU executes instructions. RAM holds bytes that software and suitably configured devices can access. A NIC exchanges network signals and frames with the network. An interconnect, often including PCI Express for the NIC, allows devices to communicate with the rest of the machine.
+**What this demonstrates:** These are physical components. They do not become an application or an operating system by themselves. Software tells the computer what work to perform.
 
-<!-- guided-block: linux-is-software-running-on -->
+<!-- guided-block: introduce-application-and-kernel-software-instruction -->
 
-Linux is software running on that hardware. The kernel is the privileged core of Linux: it manages memory, schedules execution, controls access to devices and provides services to programs. It is not another processor, and it is not a box that bytes physically travel through. When the kernel executes instructions, a CPU executes them, just as a CPU executes instructions belonging to a user application.
+The same computer runs different kinds of software. Applications perform tasks for users. The operating-system kernel manages shared resources and provides services that applications need, including memory management and access to devices.
+
+<!-- guided-block: introduce-application-and-kernel-software-observation -->
+
+**What changed:** We have added a view of the software running on the computer. The physical CPU, RAM and network interface are still the same.
+
+<!-- guided-block: follow-an-application-instruction-explanation -->
+
+Suppose an application wants to read a value from its memory. The CPU executes the application's instruction and accesses the appropriate memory through the computer's memory system.
+
+<!-- guided-block: follow-an-application-instruction-observation -->
+
+**What this demonstrates:** Application instructions execute on the CPU. The application does not have a separate processor inside its software box.
+
+This is a simplified logical memory-access illustration. A CPU load may be served by caches rather than directly accessing physical DRAM.
+
+<!-- guided-block: follow-a-kernel-instruction-explanation -->
+
+Applications sometimes need services they cannot perform directly. For example, an application may ask the operating system to establish a network connection. The CPU then executes kernel instructions that perform the privileged parts of that service.
+
+<!-- guided-block: follow-a-kernel-instruction-observation -->
+
+**What changed:** The CPU is now executing kernel code rather than application code. We have changed the software being executed, not the physical processor.
+
+| Application execution | Kernel execution |
+|---|---|
+| Executes application instructions | Executes operating-system instructions |
+| Normally runs with user-mode privileges | Performs privileged operating-system work |
+| Requests services when needed | Manages and protects shared resources |
+| Uses the computer's CPU and memory | Uses the same computer's CPU and memory |
+
+The kernel is software running on the CPU. It is not another physical device between the application and memory.
 
 ### Visual and interaction
 

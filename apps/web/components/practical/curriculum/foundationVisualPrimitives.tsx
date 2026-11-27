@@ -110,7 +110,7 @@ export function LinkLine({
   const arrow = direction === "both" ? "↔" : direction === "left" ? "←" : direction === "down" ? "↓" : "→";
   const borderKind = kind === "instruction" || kind === "metadata" ? "border-dashed" : kind === "translation" || kind === "reference" ? "border-dotted" : "border-solid";
   return (
-    <div className={cx("flex min-w-0 items-center justify-center gap-2 py-1 text-center text-[11px] leading-4", active ? colors[kind] : "border-white/10 text-slate-600")} data-testid={testId} data-kind={kind}>
+    <div className={cx("flex min-w-0 items-center justify-center gap-2 py-1 text-center text-[11px] leading-4", active ? colors[kind] : "border-white/10 text-slate-600")} data-testid={testId} data-kind={kind} data-active={active ? "true" : "false"}>
       {direction === "down" ? null : <span className={cx("min-w-8 flex-1 border-t", borderKind)} aria-hidden="true" />}
       <span className="font-mono text-sm leading-none" aria-hidden="true">{arrow}</span>
       <span className="max-w-full break-words">{label}</span>

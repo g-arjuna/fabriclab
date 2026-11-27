@@ -8,20 +8,6 @@ import { selectGuidedInstructionWithReferences, stripGuidedBlockMarkers, type Gu
 import { GuidedVisualStageProvider } from "./guidedVisualState";
 import { AuthoredCopy, FoundationEvidenceNote, FoundationVisual, foundationSections, sectionsForLesson, useFoundationBindings, type FoundationSourceSection } from "./foundationsShared";
 
-const lesson11Instruction = [
-  "Before discussing networking, we need to understand the computer that is sending or receiving data. A server contains a CPU that executes instructions, RAM that stores instructions and data, and a network interface that communicates with other computers.",
-  "The same computer runs different kinds of software. Applications perform tasks for users. The operating-system kernel manages shared resources and provides services that applications need, including memory management and access to devices.",
-  "Suppose an application wants to read a value from its memory. The CPU executes the application's instruction and accesses the appropriate memory through the computer's memory system.",
-  "Applications sometimes need services they cannot perform directly. For example, an application may ask the operating system to establish a network connection. The CPU then executes kernel instructions that perform the privileged parts of that service.",
-];
-
-const lesson11Observation = [
-  "**What this demonstrates:** These are physical components. They do not become an application or an operating system by themselves. Software tells the computer what work to perform.",
-  "**What changed:** We have added a view of the software running on the computer. The physical CPU, RAM and network interface are still the same.",
-  "**What this demonstrates:** Application instructions execute on the CPU. The application does not have a separate processor inside its software box.\n\nThis is a simplified logical memory-access illustration. A CPU load may be served by caches rather than directly accessing physical DRAM.",
-  "**What changed:** The CPU is now executing kernel code rather than application code. We have changed the software being executed, not the physical processor.\n\n| Application execution | Kernel execution |\n|---|---|\n| Executes application instructions | Executes operating-system instructions |\n| Normally runs with user-mode privileges | Performs privileged operating-system work |\n| Requests services when needed | Manages and protects shared resources |\n| Uses the computer's CPU and memory | Uses the same computer's CPU and memory |\n\nThe kernel is software running on the CPU. It is not another physical device between the application and memory.",
-];
-
 function StageExplanation({ selection, children, testId }: { selection: GuidedInstructionSelection; children: ReactNode; testId: string }) {
   return (
     <div
@@ -40,11 +26,10 @@ export function AuthoredFoundationsLesson({ lesson, onComplete, onPreviousLesson
   const steps: GuidedStep[] = sectionsForLesson(lesson).flatMap((section) => {
     const stages = guidedStagesForSection(section.id);
     return stages.map((stage, stageIndex): GuidedStep => {
-      const exactLesson11 = section.id === "1.1";
       const finalStage = stageIndex === stages.length - 1;
       const instructionSelection = selectGuidedInstructionWithReferences(foundationSections, section.id, stage.instructionReferences);
       const stageObservationSelection = stage.observationReferences ? selectGuidedInstructionWithReferences(foundationSections, section.id, stage.observationReferences) : undefined;
-      let body: ReactNode = (
+      const body: ReactNode = (
         <>
           <StageExplanation selection={instructionSelection} testId="guided-stage-explanation">
             <AuthoredCopy text={instructionSelection.text} bindings={bindings} testId={`learner-copy-${section.componentId}-stage-${stageIndex}`} />
@@ -56,19 +41,11 @@ export function AuthoredFoundationsLesson({ lesson, onComplete, onPreviousLesson
           {stageIndex === 0 ? <FoundationEvidenceNote section={section} /> : null}
         </>
       );
-      let observation: ReactNode | undefined = stageObservationSelection?.text
+      const observation: ReactNode | undefined = stageObservationSelection?.text
         ? <AuthoredCopy text={stageObservationSelection.text} bindings={bindings} testId={`guided-stage-observation-${section.componentId}-${stageIndex}`} />
         : finalStage && section.revealCopy
           ? <AuthoredCopy text={section.revealCopy} bindings={bindings} testId={`guided-reveal-${section.componentId}`} />
           : undefined;
-      if (exactLesson11) {
-        body = (
-          <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-3" data-testid="guided-stage-explanation">
-            <AuthoredCopy text={lesson11Instruction[stageIndex]} bindings={bindings} testId={`learner-copy-${section.componentId}-${stageIndex}`} />
-          </div>
-        );
-        observation = <AuthoredCopy text={lesson11Observation[stageIndex]} bindings={bindings} testId={`guided-observation-copy-${section.componentId}-${stageIndex}`} />;
-      }
       return {
         id: `${section.componentId}--${stage.id}`,
         title: section.title,
