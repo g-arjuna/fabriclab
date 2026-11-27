@@ -102,6 +102,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
   const [completed, setCompleted] = useState<string[]>([]);
   const [finished, setFinished] = useState(false);
   const [showCompletion, setShowCompletion] = useState(false);
+  const [migrationNotice, setMigrationNotice] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [resetVersion, setResetVersion] = useState(0);
   const lesson = LESSONS[lessonIndex];
@@ -119,6 +120,8 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
       }
       const operationsCompleted = window.localStorage.getItem(COMPLETED_V3_KEY);
       let migratedCompleted: string[] = [];
+      let droppedOperationProgress = false;
+      let droppedLegacyProgress = false;
       if (operationsCompleted) {
         migratedCompleted = validCompletedLessons(JSON.parse(operationsCompleted));
       } else {
@@ -126,13 +129,22 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
         // shorter pre-Operations lessons 5–8 to satisfy the expanded revision.
         const versionedCompleted = window.localStorage.getItem(COMPLETED_V2_KEY);
         if (versionedCompleted) {
-          migratedCompleted = validCompletedLessons(JSON.parse(versionedCompleted)).filter((id) => !REVISED_OPERATION_LESSON_IDS.has(id));
+          const stored = validCompletedLessons(JSON.parse(versionedCompleted));
+          migratedCompleted = stored.filter((id) => !REVISED_OPERATION_LESSON_IDS.has(id));
+          droppedOperationProgress = stored.some((id) => REVISED_OPERATION_LESSON_IDS.has(id));
         } else {
           const legacyCompleted = window.localStorage.getItem(COMPLETED_KEY);
           if (legacyCompleted) {
-            migratedCompleted = validCompletedLessons(JSON.parse(legacyCompleted)).filter((id) => !REVISED_FOUNDATION_LESSON_IDS.has(id) && !REVISED_OPERATION_LESSON_IDS.has(id));
+            const stored = validCompletedLessons(JSON.parse(legacyCompleted));
+            migratedCompleted = stored.filter((id) => !REVISED_FOUNDATION_LESSON_IDS.has(id) && !REVISED_OPERATION_LESSON_IDS.has(id));
+            droppedLegacyProgress = stored.length > migratedCompleted.length;
           }
         }
+      }
+      if (droppedLegacyProgress) {
+        setMigrationNotice("The guided-navigation redesign changed the internal visual stages of this course. Earlier unversioned lesson progress was not carried forward; restart those lessons from their first guided state.");
+      } else if (droppedOperationProgress) {
+        setMigrationNotice("The guided-navigation redesign changed the internal visual stages of this course. Earlier operation-lesson progress was not carried forward; restart those lessons from their first guided state. Foundations V2 completion is preserved where it has a meaningful correspondence.");
       }
       setCompleted(migratedCompleted);
       const storedFinished = window.localStorage.getItem(FINISHED_KEY) === "true" && LESSONS.every((item) => migratedCompleted.includes(item.id));
@@ -277,6 +289,7 @@ export function RdmaCurriculum({ initialLesson }: { initialLesson?: string }) {
               <div className="text-xs font-semibold text-cyan-300 sm:text-sm">Lesson {progressText}</div>
               {completed.includes(lesson.id) ? <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-300/80">Previously completed · review/reference access</div> : null}
             </div>
+            {migrationNotice ? <div className="mt-2 max-w-3xl rounded-xl border border-amber-300/20 bg-amber-300/8 px-3 py-2 text-xs leading-5 text-amber-100" data-testid="guided-progress-migration-notice">{migrationNotice}</div> : null}
             <h1 className="mt-1.5 max-w-4xl text-[1.55rem] font-semibold leading-8 tracking-tight text-white sm:mt-2 sm:text-4xl sm:leading-tight">{lesson.title}</h1>
             <p className="mt-3 hidden max-w-3xl text-base leading-7 text-slate-400 sm:block">{lesson.question}</p>
           </div>

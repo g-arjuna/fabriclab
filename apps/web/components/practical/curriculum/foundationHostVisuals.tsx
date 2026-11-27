@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-
 import { cx } from "./visuals";
+import { useGuidedVisualStage } from "./guidedVisualState";
 import { ActionRow, ByteCells, FoundationAction, FoundationBox, Legend, LinkLine, SmallNote } from "./foundationVisualPrimitives";
 
 const zero16 = Array.from({ length: 16 }, () => "00");
@@ -54,19 +53,101 @@ function HardwareMachine({
   );
 }
 
-export function HostHardwareSoftwareVisual() {
-  const [view, setView] = useState<"hardware" | "software">("hardware");
-  const [execution, setExecution] = useState<"none" | "application" | "kernel">("none");
+function GuidedHardwareComponent({ title, responsibility, active = false, testId }: { title: string; responsibility: string; active?: boolean; testId: string }) {
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="foundation-host-architecture">
-      <ActionRow>
-        <FoundationAction testId="show-hardware-toggle" active={view === "hardware"} onClick={() => setView("hardware")}>Show hardware</FoundationAction>
-        <FoundationAction testId="show-software-toggle" active={view === "software"} onClick={() => setView("software")}>Show software responsibilities</FoundationAction>
-        <FoundationAction testId="run-application-instruction" active={execution === "application"} onClick={() => setExecution("application")}>Execute application instruction</FoundationAction>
-        <FoundationAction testId="run-kernel-instruction" active={execution === "kernel"} onClick={() => setExecution("kernel")}>Execute kernel instruction</FoundationAction>
-      </ActionRow>
-      <HardwareMachine cpuActive={execution !== "none"} cpuLabel={execution === "kernel" ? "same physical CPU · privileged kernel instructions" : execution === "application" ? "same physical CPU · application instructions" : "CPU cores + caches"} softwareOverlay={view === "software"} />
-      <SmallNote testId="cpu-execution-result">{execution === "none" ? "Select application or kernel execution: in both cases the highlighted hardware is the same physical CPU, not an extra kernel device." : execution === "application" ? "The CPU is executing user application instructions." : "The same physical CPU is executing privileged Linux kernel instructions."}</SmallNote>
+    <div className={cx("mx-auto w-full max-w-xl rounded-2xl border px-4 py-3 text-center transition", active ? "border-cyan-300/55 bg-cyan-300/14 text-cyan-50 shadow-[0_0_28px_rgba(103,232,249,0.10)]" : "border-white/12 bg-slate-950/55 text-slate-300")} data-testid={testId}>
+      <div className="text-sm font-semibold">{title}</div>
+      <div className="mt-1 text-xs text-slate-400">{responsibility}</div>
+    </div>
+  );
+}
+
+function VerticalLink({ label, active = false }: { label: string; active?: boolean }) {
+  return (
+    <div className="flex flex-col items-center py-0.5" aria-label={label}>
+      <div className={cx("h-5 w-px", active ? "bg-cyan-300" : "bg-slate-600")} />
+      <div className={cx("rounded-full border px-2 py-0.5 text-[10px]", active ? "border-cyan-300/40 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/4 text-slate-500")}>{label}</div>
+      <div className={cx("h-5 w-px", active ? "bg-cyan-300" : "bg-slate-600")} />
+      <div className={cx("h-2 w-2 rotate-45 border-b border-r", active ? "border-cyan-300" : "border-slate-600")} />
+    </div>
+  );
+}
+
+export function HostHardwareSoftwareVisual() {
+  const stage = useGuidedVisualStage();
+  const softwareVisible = stage >= 1;
+  const applicationActive = stage === 2;
+  const kernelActive = stage === 3;
+  const cpuActive = stage >= 2;
+  const memoryActive = stage === 2;
+  return (
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="foundation-host-architecture" data-guided-stage={stage}>
+      {softwareVisible ? (
+        <div className="rounded-2xl border border-violet-300/25 bg-violet-300/7 p-3" data-testid="software-responsibility-overlay">
+          <div className="mb-3 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-200">Software · executable instructions, not additional hardware</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className={cx("rounded-xl border border-dashed p-3", applicationActive ? "border-cyan-300/60 bg-cyan-300/14 text-cyan-50" : "border-violet-300/25 bg-slate-950/35 text-slate-200")} data-testid="application-software-box">
+              <div className="font-semibold">Application</div>
+              <div className="mt-1 text-xs opacity-80">User-level work</div>
+            </div>
+            <div className={cx("rounded-xl border border-dashed p-3", kernelActive ? "border-amber-300/60 bg-amber-300/14 text-amber-50" : "border-violet-300/25 bg-slate-950/35 text-slate-200")} data-testid="kernel-software-box">
+              <div className="font-semibold">Linux kernel</div>
+              <div className="mt-1 text-xs opacity-80">Resource management · privileged services</div>
+            </div>
+          </div>
+          <div className="mx-auto mt-2 max-w-md" data-testid="software-to-same-cpu-connectors">
+            <div className="relative h-8" aria-hidden="true">
+              <div className="absolute left-[25%] top-0 h-3 w-px bg-violet-300/55" />
+              <div className="absolute right-[25%] top-0 h-3 w-px bg-violet-300/55" />
+              <div className="absolute left-[25%] right-[25%] top-3 border-t border-violet-300/55" />
+              <div className="absolute left-1/2 top-3 h-4 w-px bg-violet-300/70" />
+              <div className="absolute left-1/2 top-7 h-2 w-2 -translate-x-1/2 rotate-45 border-b border-r border-violet-300/70" />
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-center text-[11px] text-violet-100/80">
+              <div>application instructions run on the CPU below</div>
+              <div>kernel instructions run on the same CPU below</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="space-y-0" data-testid="physical-host-model">
+        <GuidedHardwareComponent
+          title={kernelActive ? "Same physical CPU and caches · executing kernel instructions" : applicationActive ? "Same physical CPU and caches · executing application instructions" : "CPU and caches"}
+          responsibility="CPU: executes instructions"
+          active={cpuActive || stage === 0}
+          testId="hardware-cpu"
+        />
+        <VerticalLink label="memory system" active={memoryActive} />
+        <GuidedHardwareComponent title="RAM" responsibility="RAM: stores instructions and data" active={memoryActive || stage === 0} testId="hardware-ram" />
+        <VerticalLink label="system/device interconnect" active={stage === 0} />
+        <GuidedHardwareComponent title="Network interface" responsibility="NIC: transmits and receives network traffic" active={stage === 0} testId="hardware-nic" />
+        <VerticalLink label="network" active={stage === 0} />
+        <div className="mx-auto w-full max-w-xl rounded-xl border border-white/10 bg-white/4 px-4 py-2 text-center text-xs text-slate-400" data-testid="network-cable">Network</div>
+      </div>
+
+      {stage === 2 ? (
+        <div className="grid gap-3 rounded-2xl border border-cyan-300/25 bg-cyan-300/7 p-3 lg:grid-cols-4" data-testid="application-memory-access">
+          <div className="rounded-xl border border-cyan-300/25 bg-slate-950/40 p-3"><div className="text-xs font-semibold text-cyan-100">Application instruction</div><div className="mt-1 font-mono text-xs">Read a byte from memory</div></div>
+          <div className="rounded-xl border border-cyan-300/25 bg-slate-950/40 p-3"><div className="text-xs font-semibold text-cyan-100">CPU</div><div className="mt-1 text-xs">executes the instruction</div></div>
+          <div className="rounded-xl border border-cyan-300/25 bg-slate-950/40 p-3"><div className="text-xs font-semibold text-cyan-100">Memory access</div><div className="mt-1 font-mono text-xs">memory contains 0x48</div></div>
+          <div className="rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-3"><div className="text-xs font-semibold text-emerald-100">Value returned</div><div className="mt-1 font-mono text-lg">0x48</div></div>
+        </div>
+      ) : null}
+
+      {stage === 3 ? (
+        <div className="rounded-2xl border border-amber-300/25 bg-amber-300/7 p-3" data-testid="kernel-service-flow">
+          <div className="grid gap-2 md:grid-cols-4">
+            {["Application requests a service", "CPU executes privileged kernel instructions", "Kernel performs the relevant service", "Application continues when appropriate"].map((item, index) => (
+              <div key={item} className="rounded-xl border border-amber-300/25 bg-slate-950/40 px-3 py-2 text-center text-xs text-amber-50"><span className="mr-1 font-mono text-amber-200">{index + 1}</span>{item}</div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <SmallNote testId="cpu-execution-result">
+        {stage === 0 ? "Physical CPU, RAM and network interface are shown before any software responsibilities are introduced." : stage === 1 ? "The software overlay is logical. The physical CPU, RAM and network interface underneath are unchanged." : stage === 2 ? "The highlighted application instructions execute on the same physical CPU; the application box is not a processor." : "The highlighted kernel instructions execute on the same physical CPU with different privileges and responsibilities."}
+      </SmallNote>
     </div>
   );
 }
@@ -95,64 +176,55 @@ function ProcessMap({ name, active, frame, shared = false, demandTouched = false
 }
 
 export function ProcessCreationVisual() {
-  const [startedA, setStartedA] = useState(false);
-  const [startedC, setStartedC] = useState(false);
-  const [active, setActive] = useState<"A" | "C">("A");
-  const [touched, setTouched] = useState(false);
+  const stage = useGuidedVisualStage();
+  const startedA = stage >= 1;
+  const startedC = stage >= 3;
+  const touched = stage >= 6;
+  const compare = stage >= 4;
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="process-creation-visual">
-      <ActionRow>
-        <FoundationAction testId="start-program" active={startedA} onClick={() => { setStartedA(true); setActive("A"); }}>Start a program</FoundationAction>
-        <FoundationAction testId="start-another-program" active={startedC} onClick={() => { setStartedA(true); setStartedC(true); setActive("C"); }}>Start another program</FoundationAction>
-        <FoundationAction testId="select-process-a" active={active === "A"} disabled={!startedA} onClick={() => setActive("A")}>Select process A</FoundationAction>
-        <FoundationAction testId="select-process-c" active={active === "C"} disabled={!startedC} onClick={() => setActive("C")}>Select process C</FoundationAction>
-        <FoundationAction testId="touch-demand-page" active={touched} disabled={!startedA} onClick={() => setTouched(true)}>Touch demand-allocated byte</FoundationAction>
-      </ActionRow>
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="process-creation-visual" data-guided-stage={stage}>
       <div className="grid gap-3 xl:grid-cols-[15rem_minmax(0,1fr)_15rem]">
-        <FoundationBox title="storage" tone="neutral" testId="program-storage"><div className="font-mono text-xs">sender.py<br />python3 interpreter</div></FoundationBox>
+        <FoundationBox title="storage" tone="neutral" active={stage === 0} testId="program-storage"><div className="font-mono text-xs">sender.py<br />python3 interpreter</div><div className="mt-1 text-[11px] text-slate-400">program stored on disk</div></FoundationBox>
         <div className="grid gap-3 lg:grid-cols-2">
-          {startedA ? <ProcessMap name="A" active={active === "A"} frame="P7" demandTouched={touched} /> : <FoundationBox title="process A" dashed tone="neutral">not started</FoundationBox>}
-          {startedC ? <ProcessMap name="C" active={active === "C"} frame="P9" demandTouched={touched} /> : <FoundationBox title="process C" dashed tone="neutral">not started</FoundationBox>}
+          {startedA ? <ProcessMap name="A" active={stage === 1 || stage === 2 || compare} frame="P7" shared={stage >= 5} demandTouched={touched} /> : <FoundationBox title="process A" dashed tone="neutral">not started</FoundationBox>}
+          {startedC ? <ProcessMap name="C" active={stage === 3 || compare} frame="P9" shared={stage >= 5} demandTouched={touched} /> : <FoundationBox title="process C" dashed tone="neutral">not started</FoundationBox>}
         </div>
-        <FoundationBox title="one physical RAM" tone="memory" testId="shared-physical-ram"><div className="flex flex-wrap gap-1 font-mono text-[11px]">{["P3", "P5", "P7", "P8", "P9", "P11", "P12 RO", "P13", "P14"].map((page) => <span key={page} className={cx("rounded border px-1.5 py-1", page.includes("12") ? "border-violet-300/30 bg-violet-300/10" : "border-sky-300/30 bg-sky-300/10")}>{page}</span>)}</div><div className="mt-2 text-[11px]">One shared read-only library page may be mapped into both processes; writable process memory remains independent.</div></FoundationBox>
+        <FoundationBox title="one physical RAM" tone="memory" active={compare} testId="shared-physical-ram"><div className="flex flex-wrap gap-1 font-mono text-[11px]">{["P3", "P5", "P7", "P8", "P9", "P11", "P12 RO", "P13", "P14"].map((page) => <span key={page} className={cx("rounded border px-1.5 py-1", page.includes("12") ? stage >= 5 ? "border-violet-300/60 bg-violet-300/18" : "border-violet-300/30 bg-violet-300/10" : "border-sky-300/30 bg-sky-300/10")}>{page}</span>)}</div><div className="mt-2 text-[11px]">One shared read-only library page may be mapped into both processes; writable process memory remains independent.</div></FoundationBox>
       </div>
-      <SmallNote testId="same-va-different-frame">The same numerical virtual address <span className="font-mono">0x1000</span> maps to frame P7 in process A and frame P9 in process C. These are illustrative mappings in different address-space contexts.</SmallNote>
+      <SmallNote testId="same-va-different-frame">The same numerical virtual address <span className="font-mono">0x1000</span> maps to frame P7 in process A and frame P9 in process C. These are illustrative mappings in different address-space contexts.{touched ? " The demand-allocation rows are now populated because the memory was touched." : stage >= 2 ? " Demand-allocation rows remain dotted until touched." : ""}</SmallNote>
     </div>
   );
 }
 
 export function AddressTranslationVisual() {
-  const [process, setProcess] = useState<"A" | "C">("A");
-  const [readOnly, setReadOnly] = useState(false);
-  const [values, setValues] = useState({ A: "48", C: "99" });
-  const [result, setResult] = useState("No memory request yet.");
+  const stage = useGuidedVisualStage();
+  const process = stage >= 4 ? "C" : "A";
+  const readOnly = stage >= 7;
   const frame = process === "A" ? "P7" : "P9";
-  function load() {
-    setResult(`load byte [0x1002] returned 0x${values[process]} through ${frame}+2`);
-  }
-  function store() {
-    if (readOnly) {
-      setResult(`store byte [0x1002] = 0x4c rejected: protection fault in process ${process}; memory remains 0x${values[process]}`);
-      return;
-    }
-    setValues((current) => ({ ...current, [process]: "4c" }));
-    setResult(`store byte [0x1002] = 0x4c completed in process ${process}; byte is now 0x4c`);
-  }
+  const initialValues = { A: "48", C: "99" } as const;
+  const storedC = stage >= 6;
+  const value = process === "C" && storedC ? "4c" : initialValues[process];
+  const result = stage === 0
+    ? "A virtual address is introduced before any memory request is performed."
+    : stage < 3
+      ? `process ${process} context is active; VA 0x1002 translates through ${frame}+2`
+      : stage === 3
+        ? `load byte [0x1002] returned 0x${value} through ${frame}+2`
+        : stage < 6
+          ? `the same numerical VA 0x1002 is now interpreted in process C and translates through P9+2`
+          : stage === 6
+            ? "store byte [0x1002] = 0x4c completed in process C; byte is now 0x4c"
+            : stage === 7
+              ? "the mapping has been changed to read-only; no store has been attempted yet"
+              : `store byte [0x1002] = 0x4c rejected: protection fault in process ${process}; memory remains 0x${value}`;
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="address-translation-visual">
-      <ActionRow>
-        <FoundationAction testId="translation-select-a" active={process === "A"} onClick={() => setProcess("A")}>Process A context</FoundationAction>
-        <FoundationAction testId="translation-select-c" active={process === "C"} onClick={() => setProcess("C")}>Process C context</FoundationAction>
-        <FoundationAction testId="request-memory-load" onClick={load}>Request a memory load</FoundationAction>
-        <FoundationAction testId="request-memory-store" onClick={store}>Request a memory store</FoundationAction>
-        <FoundationAction testId="toggle-readonly-mapping" active={readOnly} onClick={() => setReadOnly((value) => !value)}>{readOnly ? "Make page writable" : "Change mapping to read-only"}</FoundationAction>
-      </ActionRow>
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="address-translation-visual" data-guided-stage={stage}>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_11rem_minmax(0,1fr)_11rem_minmax(0,1fr)] xl:items-center">
         <FoundationBox title="CPU execution" tone="cpu" active testId="translation-cpu"><div className="font-mono text-xs">process {process}<br />load byte [0x1002]<br />store byte [0x1002] = 0x4c</div></FoundationBox>
-        <LinkLine label="instruction uses a virtual address" kind="instruction" />
-        <FoundationBox title="MMU translation + permission check" tone="success" active testId="mmu-translation"><div className="font-mono text-xs">VA 0x1002<br />process {process} → {frame}+2<br />{readOnly ? "write permission absent" : "write permission present"}</div></FoundationBox>
-        <LinkLine label="translation is metadata, not payload movement" kind="translation" />
-        <FoundationBox title="cache / memory system" tone="memory" active testId="translated-memory"><div className="font-mono text-xs">frame {frame}<br />offset 2 = 0x{values[process]}<br />process {process} context</div></FoundationBox>
+        <LinkLine label="instruction uses a virtual address" kind="instruction" active={stage >= 1} />
+        <FoundationBox title="MMU translation + permission check" tone="success" active={stage >= 2} testId="mmu-translation"><div className="font-mono text-xs">VA 0x1002<br />process {process} → {frame}+2<br />{readOnly ? "write permission absent" : "write permission present"}</div></FoundationBox>
+        <LinkLine label="translation is metadata, not payload movement" kind="translation" active={stage >= 2} />
+        <FoundationBox title="cache / memory system" tone="memory" active={stage >= 2} testId="translated-memory"><div className="font-mono text-xs">frame {frame}<br />offset 2 = 0x{value}<br />process {process} context</div></FoundationBox>
       </div>
       <Legend items={[["instruction", "CPU instruction execution"], ["translation", "address translation metadata"], ["memory", "resulting byte value"]]} />
       <SmallNote testId="translation-result">{result}</SmallNote>
@@ -162,26 +234,25 @@ export function AddressTranslationVisual() {
 }
 
 export function BufferAllocationVisual() {
-  const [allocated, setAllocated] = useState(false);
-  const [written, setWritten] = useState(false);
+  const stage = useGuidedVisualStage();
+  const allocated = stage >= 1;
+  const cellsVisible = stage >= 2;
+  const written = stage >= 3;
   const bytes = written ? helloBuffer : zero16;
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="buffer-allocation-visual">
-      <ActionRow>
-        <FoundationAction testId="allocate-16-bytes" active={allocated} onClick={() => setAllocated(true)}>Allocate 16 bytes</FoundationAction>
-        <FoundationAction testId="write-hello" active={written} disabled={!allocated} onClick={() => setWritten(true)}>Write HELLO</FoundationAction>
-      </ActionRow>
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="buffer-allocation-visual" data-guided-stage={stage}>
       {!allocated ? <FoundationBox title="application memory" tone="neutral" testId="no-allocated-buffer">No allocated buffer.</FoundationBox> : (
         <div className="space-y-3">
           <div className="grid gap-3 xl:grid-cols-[12rem_minmax(0,1fr)]">
-            <FoundationBox title="process address map" tone="metadata"><div className="font-mono text-xs">buf mapping<br />0x1000–0x100f<br />capacity 16 bytes</div></FoundationBox>
-            <FoundationBox title="CPU executes the store/copy operation" tone="cpu" active={written} testId="buffer-cpu-write">{written ? "buf[:5] = b\"HELLO\" completed; source bytes remain visible below" : "waiting for Write HELLO"}</FoundationBox>
+            <FoundationBox title="process address map" tone="metadata" active={stage >= 1}><div className="font-mono text-xs">buf mapping<br />0x1000–0x100f<br />capacity 16 bytes</div></FoundationBox>
+            <FoundationBox title="CPU executes the store/copy operation" tone="cpu" active={written} testId="buffer-cpu-write">{written ? "buf[:5] = b\"HELLO\" completed; source bytes remain visible below" : "sixteen bytes are allocated and initialized"}</FoundationBox>
           </div>
-          <ByteCells testId="sixteen-byte-buffer" bytes={bytes} offsets={bufferOffsets} addresses={bufferAddresses} ascii highlight={written ? [0, 1, 2, 3, 4] : []} />
+          {cellsVisible ? <ByteCells testId="sixteen-byte-buffer" bytes={bytes} offsets={bufferOffsets} addresses={bufferAddresses} ascii highlight={written ? [0, 1, 2, 3, 4] : []} /> : <FoundationBox title="allocated byte cells" tone="memory" dashed>allocation exists; byte cells are revealed next</FoundationBox>}
           <div className="grid gap-2 sm:grid-cols-2">
             <SmallNote testId="payload-length-observation">Meaningful payload length: <span className="font-mono text-slate-200">{written ? 5 : 0} bytes</span>. Allocated capacity remains <span className="font-mono text-slate-200">16 bytes</span>.</SmallNote>
             <SmallNote>Addresses <span className="font-mono">0x1000–0x100f</span> are illustrative virtual addresses. Offsets 0–15 are positions within the buffer.</SmallNote>
           </div>
+          {stage >= 4 ? <SmallNote testId="capacity-length-comparison">Capacity: 16 bytes. Meaningful payload: 5 bytes. The remaining eleven initialized cells are still allocated and unchanged.</SmallNote> : null}
         </div>
       )}
     </div>
@@ -189,39 +260,33 @@ export function BufferAllocationVisual() {
 }
 
 export function CopyReferenceVisual() {
-  const [mode, setMode] = useState<"copy" | "reference">("copy");
-  const [copied, setCopied] = useState(false);
-  const [referencePassed, setReferencePassed] = useState(false);
-  const [sourceFirst, setSourceFirst] = useState("48");
-  const [destFirst, setDestFirst] = useState("00");
+  const stage = useGuidedVisualStage();
+  const referenceCreated = stage >= 1 && stage < 4;
+  const referenceModified = stage >= 2 && stage < 4;
+  const copyCreated = stage >= 4;
+  const copyModified = stage >= 5;
+  const sourceFirst = referenceModified ? "58" : "48";
+  const destinationFirst = copyModified ? "58" : copyCreated ? "48" : "00";
   const source = [sourceFirst, ...helloHex.slice(1), ...Array.from({ length: 11 }, () => "00")];
-  const destination = copied ? [destFirst, ...helloHex.slice(1), ...Array.from({ length: 11 }, () => "00")] : zero16;
-  function reset(nextMode: "copy" | "reference") {
-    setMode(nextMode); setCopied(false); setReferencePassed(false); setSourceFirst("48"); setDestFirst("00");
-  }
+  const destination = copyCreated ? [destinationFirst, ...helloHex.slice(1), ...Array.from({ length: 11 }, () => "00")] : zero16;
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="copy-reference-visual">
-      <ActionRow>
-        <FoundationAction testId="select-copy-demo" active={mode === "copy"} onClick={() => reset("copy")}>Copy demonstration</FoundationAction>
-        <FoundationAction testId="select-reference-demo" active={mode === "reference"} onClick={() => reset("reference")}>Reference demonstration</FoundationAction>
-        {mode === "copy" ? <FoundationAction testId="copy-five-bytes" active={copied} onClick={() => { setCopied(true); setDestFirst("48"); }}>Copy five bytes</FoundationAction> : <FoundationAction testId="pass-reference" active={referencePassed} onClick={() => setReferencePassed(true)}>Pass a reference instead</FoundationAction>}
-        {mode === "copy" ? <FoundationAction testId="modify-copy-destination" disabled={!copied} onClick={() => setDestFirst("58")}>Write X in destination copy</FoundationAction> : <FoundationAction testId="modify-through-reference" disabled={!referencePassed} onClick={() => setSourceFirst("58")}>Write X through reference beta</FoundationAction>}
-      </ActionRow>
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="copy-reference-visual" data-guided-stage={stage}>
       <div className="grid gap-3 xl:grid-cols-2">
-        <FoundationBox title="source range · 0x1000" tone="memory" testId="copy-source-memory"><ByteCells compact bytes={source} /></FoundationBox>
-        <FoundationBox title={mode === "copy" ? "independent destination range · 0x2000" : "no destination copy in reference case"} tone={mode === "copy" ? "memory" : "neutral"} dashed={mode === "reference"} testId="copy-destination-memory"><ByteCells compact bytes={mode === "copy" ? destination : zero16} /></FoundationBox>
+        <FoundationBox title="original buffer · 0x1000" tone="memory" active testId="copy-source-memory"><ByteCells compact bytes={source} /></FoundationBox>
+        <FoundationBox title={copyCreated ? "independent copy · 0x2000" : "no independent copy yet"} tone={copyCreated ? "memory" : "neutral"} dashed={!copyCreated} testId="copy-destination-memory"><ByteCells compact bytes={destination} /></FoundationBox>
       </div>
-      {mode === "copy" ? (
-        <div className="space-y-1" data-testid="copy-mechanism"><LinkLine label="CPU reads source bytes into transient register/cache state" kind="instruction" direction="down" active={copied} /><LinkLine label="CPU stores byte values into the separate destination" kind="payload" direction="down" active={copied} /><SmallNote testId="copy-state-result">Copy state: source first byte 0x{sourceFirst}; independent destination first byte 0x{copied ? destFirst : "00"}. A later destination modification does not modify the original.</SmallNote></div>
+      {stage < 4 ? (
+        <div className="space-y-2" data-testid="reference-mechanism"><div className="grid gap-2 sm:grid-cols-2"><FoundationBox title="reference alpha" tone="metadata" active>points to 0x1000</FoundationBox><FoundationBox title="reference beta" tone="metadata" active={referenceCreated}>{referenceCreated ? "points to the same 0x1000 bytes" : "not created yet"}</FoundationBox></div><LinkLine label="both logical handles reference one illustrated buffer" kind="reference" direction="both" active={referenceCreated} /><SmallNote testId="reference-state-result">Observed through alpha: 0x{sourceFirst}; observed through beta: 0x{sourceFirst}. {referenceModified ? "A write through beta changed the same underlying byte visible through alpha." : "No write through beta has occurred yet."}</SmallNote></div>
       ) : (
-        <div className="space-y-2" data-testid="reference-mechanism"><div className="grid gap-2 sm:grid-cols-2"><FoundationBox title="reference alpha" tone="metadata" active={referencePassed}>points to 0x1000</FoundationBox><FoundationBox title="reference beta" tone="metadata" active={referencePassed}>points to the same 0x1000 bytes</FoundationBox></div><LinkLine label="both logical handles reference one illustrated buffer" kind="reference" direction="both" active={referencePassed} /><SmallNote testId="reference-state-result">Observed through alpha: 0x{sourceFirst}; observed through beta: 0x{sourceFirst}. A write through either reference changes the same underlying byte.</SmallNote></div>
+        <div className="space-y-1" data-testid="copy-mechanism"><LinkLine label="CPU reads source bytes into transient register/cache state" kind="instruction" direction="down" active /><LinkLine label="CPU stores byte values into the separate destination" kind="payload" direction="down" active /><SmallNote testId="copy-state-result">Copy state: original first byte 0x48; independent copy first byte 0x{destinationFirst}. {copyModified ? "The copy was modified and the original remains unchanged." : "The copy currently contains the same byte values but is independently stored."}</SmallNote></div>
       )}
     </div>
   );
 }
 
 export function KernelServiceVisual() {
-  const [state, setState] = useState<"user" | "kernel" | "sleeping" | "wakeup">("user");
+  const stage = useGuidedVisualStage();
+  const state = stage === 0 || stage >= 4 ? "user" : stage === 3 ? "sleeping" : "kernel";
   const lane = [
     ["user", "CPU executing user code"],
     ["syscall", "system-call entry"],
@@ -229,19 +294,13 @@ export function KernelServiceVisual() {
     ["return", "return to user code"],
   ] as const;
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="kernel-service-visual">
-      <ActionRow>
-        <FoundationAction testId="ask-linux-service" active={state === "kernel"} onClick={() => setState("kernel")}>Ask Linux for a service</FoundationAction>
-        <FoundationAction testId="wait-for-device" active={state === "sleeping"} onClick={() => setState("sleeping")}>Wait for device</FoundationAction>
-        <FoundationAction testId="device-wakeup" active={state === "wakeup"} disabled={state !== "sleeping"} onClick={() => setState("wakeup")}>Device notification arrives</FoundationAction>
-        <FoundationAction testId="return-user-mode" active={state === "user"} onClick={() => setState("user")}>Return to user execution</FoundationAction>
-      </ActionRow>
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="kernel-service-visual" data-guided-stage={stage}>
       <div className="grid gap-2 sm:grid-cols-4" data-testid="cpu-mode-time-lane">
-        {lane.map(([key, label]) => <div key={key} className={cx("rounded-xl border px-3 py-2 text-center text-xs", (state === "kernel" && ["syscall", "kernel"].includes(key)) || (state === "user" && ["user", "return"].includes(key)) ? "border-amber-300/40 bg-amber-300/10 text-amber-50" : "border-white/10 bg-white/4 text-slate-500")}>{label}</div>)}
+        {lane.map(([key, label]) => <div key={key} className={cx("rounded-xl border px-3 py-2 text-center text-xs", (stage >= 1 && stage <= 2 && ["syscall", "kernel"].includes(key)) || ((stage === 0 || stage >= 4) && ["user", "return"].includes(key)) ? "border-amber-300/40 bg-amber-300/10 text-amber-50" : "border-white/10 bg-white/4 text-slate-500")}>{label}</div>)}
       </div>
-      <HardwareMachine cpuActive cpuLabel={state === "kernel" || state === "wakeup" ? "one hardware CPU · kernel mode" : "one hardware CPU · user mode"} ramChildren={<div className="font-mono text-xs">same RAM before, during and after the service request</div>} />
-      {state === "sleeping" || state === "wakeup" ? <div className="grid gap-2 sm:grid-cols-3" data-testid="thread-wait-state"><FoundationBox title="calling thread" tone="kernel">{state === "sleeping" ? "sleeping while waiting" : "made runnable by wakeup"}</FoundationBox><FoundationBox title="another runnable thread" tone="cpu" active={state === "sleeping"}>can use the CPU meanwhile</FoundationBox><FoundationBox title="device notification" tone="device" active={state === "wakeup"}>asynchronous event; separate from the synchronous call</FoundationBox></div> : null}
-      <SmallNote testId="kernel-service-result">Current observation: {state === "kernel" ? "the same CPU is executing privileged kernel code after controlled entry" : state === "sleeping" ? "the waiting thread is suspended; another runnable thread can execute" : state === "wakeup" ? "a device notification caused kernel processing and wakeup" : "the CPU is executing user code"}. No process switch or fixed timing is implied.</SmallNote>
+      <HardwareMachine cpuActive cpuLabel={stage >= 1 && stage <= 3 ? "one hardware CPU · kernel mode" : "one hardware CPU · user mode"} ramChildren={<div className="font-mono text-xs">same RAM before, during and after the service request</div>} />
+      {stage === 3 ? <div className="grid gap-2 sm:grid-cols-3" data-testid="thread-wait-state"><FoundationBox title="calling thread" tone="kernel">sleeping while waiting</FoundationBox><FoundationBox title="another runnable thread" tone="cpu" active>can use the CPU meanwhile</FoundationBox><FoundationBox title="device notification" tone="device">asynchronous event; separate from the synchronous call</FoundationBox></div> : null}
+      <SmallNote testId="kernel-service-result">Current observation: {stage === 0 ? "the CPU is executing user code" : stage === 1 ? "a controlled system-call entry transfers execution to kernel code" : stage === 2 ? "the same CPU is executing privileged kernel code" : stage === 3 ? "the waiting thread is suspended; another runnable thread can execute" : "control has returned to user execution"}. No process switch or fixed timing is implied.</SmallNote>
     </div>
   );
 }

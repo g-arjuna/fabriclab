@@ -7,6 +7,8 @@ import remarkGfm from "remark-gfm";
 import rawSections from "@/lib/practical/operationsContent.generated.json";
 
 import { GuidedLesson, type GuidedStep } from "./GuidedLesson";
+import { guidedStagesForSection } from "./guidedStagePlans";
+import { GuidedVisualStageProvider } from "./guidedVisualState";
 import { OperationsVisual } from "./operationsVisuals";
 import { cx } from "./visuals";
 
@@ -142,20 +144,38 @@ function actionFor(section: OperationSourceSection) {
 }
 
 export function AuthoredOperationsLesson({ lesson, onComplete }: { lesson: OperationSourceSection["lesson"]; onComplete: () => void }) {
-  const steps: GuidedStep[] = operationsSectionsForLesson(lesson).map((section) => ({
-    id: section.componentId,
-    title: section.title,
-    actionLabel: actionFor(section),
-    body: (
-      <>
-        <ProvenanceLegend />
-        <OperationsCopy text={section.learnerCopy} references={section.references} testId={`learner-copy-${section.componentId}`} />
-      </>
-    ),
-    visual: <OperationsVisual key={section.componentId} sectionId={section.id} />,
-    mobileVisualFirst: true,
-    inspect: section.inspectCopy ? <OperationsCopy text={section.inspectCopy} references={section.references} testId={`inspect-copy-${section.componentId}`} /> : undefined,
-    interaction: <OperationsReveal section={section} />,
-  }));
+  const steps: GuidedStep[] = operationsSectionsForLesson(lesson).flatMap((section) => {
+    const stages = guidedStagesForSection(section.id);
+    return stages.map((stage, stageIndex): GuidedStep => ({
+      id: `${section.componentId}--${stage.id}`,
+      title: section.title,
+      subsectionId: section.id,
+      stageIndex,
+      stageCount: stages.length,
+      stageLabel: stage.label,
+      nextPreview: stage.nextPreview,
+      body: stageIndex === 0 ? (
+        <>
+          <ProvenanceLegend />
+          <OperationsCopy text={section.learnerCopy} references={section.references} testId={`learner-copy-${section.componentId}`} />
+        </>
+      ) : (
+        <>
+          <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 px-3 py-2 text-sm text-cyan-50" data-testid="guided-stage-explanation">Current demonstration: <span className="font-semibold">{stage.label}</span></div>
+          <details className="rounded-xl border border-white/10 bg-white/4 px-3 py-2 text-sm" data-testid="full-authored-explanation">
+            <summary className="cursor-pointer font-medium text-slate-300">Review the complete subsection explanation</summary>
+            <div className="mt-3"><OperationsCopy text={section.learnerCopy} references={section.references} testId={`learner-copy-${section.componentId}-reference`} /></div>
+          </details>
+        </>
+      ),
+      observation: stageIndex === stages.length - 1 && section.revealCopy ? <OperationsCopy text={section.revealCopy} references={section.references} testId={`guided-reveal-${section.componentId}`} /> : undefined,
+      visual: (
+        <GuidedVisualStageProvider sectionId={section.id} stage={stageIndex} stageId={stage.id}>
+          <OperationsVisual key={`${section.componentId}-${stage.id}`} sectionId={section.id} />
+        </GuidedVisualStageProvider>
+      ),
+      inspect: section.inspectCopy ? <OperationsCopy text={section.inspectCopy} references={section.references} testId={`inspect-copy-${section.componentId}`} /> : undefined,
+    }));
+  });
   return <GuidedLesson lessonId={lesson} steps={steps} onComplete={onComplete} finalActionLabel="Complete lesson" />;
 }

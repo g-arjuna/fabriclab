@@ -57,6 +57,9 @@ function markdownish(text: string, bindings: Record<string, string>, keyPrefix: 
         ol: ({ children }) => <ol className="list-decimal space-y-2 pl-5">{children}</ol>,
         p: ({ children }) => <p>{children}</p>,
         a: ({ children, href }) => <a href={href} className="text-cyan-200 underline underline-offset-4">{children}</a>,
+        table: ({ children }) => <div className="overflow-x-auto rounded-xl border border-white/10"><table className="w-full min-w-[36rem] border-collapse text-left text-sm">{children}</table></div>,
+        th: ({ children }) => <th className="border-b border-white/10 bg-slate-900/80 px-3 py-2 font-semibold text-slate-200">{children}</th>,
+        td: ({ children }) => <td className="border-b border-white/8 px-3 py-2 align-top leading-6 text-slate-300">{children}</td>,
       }}
     >{resolved}</ReactMarkdown>
   );
@@ -414,7 +417,13 @@ function FoundationVisualControls({ activity, setActivity, max }: { activity: nu
 
 export function FoundationVisual({ sectionId }: { sectionId: string }) {
   const teachingVisual = sectionId.startsWith("1.") ? <HostFoundationVisual sectionId={sectionId} /> : sectionId.startsWith("2.") ? <TcpFoundationVisual sectionId={sectionId} /> : <TeachingRdmaFoundationVisual sectionId={sectionId} />;
-  return <div className="space-y-4" data-testid={`teaching-visual-${sectionId.replace(".", "-")}`}>{teachingVisual}<TcpEvidencePanel sectionId={sectionId} /></div>;
+  const tcpEvidencePanel = sectionId.startsWith("2.") ? (
+    <details className="rounded-2xl border border-white/10 bg-slate-950/35 px-3 py-2" data-testid="tcp-recorded-evidence-details">
+      <summary className="cursor-pointer text-xs font-semibold text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Inspect recorded TCP evidence details</summary>
+      <div className="mt-3"><TcpEvidencePanel sectionId={sectionId} /></div>
+    </details>
+  ) : null;
+  return <div className="space-y-4" data-testid={`teaching-visual-${sectionId.replace(".", "-")}`}>{teachingVisual}{tcpEvidencePanel}</div>;
 }
 
 export function FoundationInteraction({ section, bindings }: { section: FoundationSourceSection; bindings: Record<string, string> }) {

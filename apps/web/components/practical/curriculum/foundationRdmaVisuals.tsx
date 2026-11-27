@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { exact, rdmaEvidence } from "@/lib/practical/rdmaEvidence";
 
 import { cx } from "./visuals";
+import { guidedEnum, useGuidedVisualStage } from "./guidedVisualState";
 import { ActionRow, ByteCells, FoundationAction, FoundationBox, LinkLine, SmallNote } from "./foundationVisualPrimitives";
 
 const zeros16 = Array.from({ length: 16 }, () => "00");
@@ -30,16 +31,12 @@ function StepLanes({ steps, active }: { steps: string[]; active: number }) {
 }
 
 export function DmaCopyVisual() {
-  const [state,setState]=useState<"idle"|"configured"|"completed"|"reported">("idle");
-  const configured=state!=="idle";
-  const copied=state==="completed"||state==="reported";
-  const reported=state==="reported";
+  const stage = useGuidedVisualStage();
+  const configured=stage>=1;
+  const deviceActive=stage>=2;
+  const copied=stage>=3;
+  const reported=stage>=4;
   return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="foundation-dma-copy">
-    <ActionRow>
-      <FoundationAction testId="configure-dma-copy" active={configured} onClick={()=>setState("configured")}>Configure device copy</FoundationAction>
-      <FoundationAction testId="start-dma-copy" active={copied} disabled={!configured} onClick={()=>setState("completed")}>Let device copy</FoundationAction>
-      <FoundationAction testId="report-dma-completion" active={reported} disabled={!copied} onClick={()=>setState("reported")}>Report done to CPU</FoundationAction>
-    </ActionRow>
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_11rem_minmax(0,1fr)] xl:items-center">
       <MemoryObject bytes={hello16} title="RAM source"/>
       <div>
@@ -48,7 +45,7 @@ export function DmaCopyVisual() {
         {reported?<LinkLine label="completion/report path to CPU or software" kind="metadata" active testId="dma-completion-report-path"/>:null}
       </div>
       <MemoryObject bytes={copied?hello16:zeros16} title="RAM destination / device receive buffer"/>
-      <FoundationBox title="DMA-capable device engine" tone="device" active={copied}>{!configured?"waiting for source/destination description":copied?"copy completed; CPU did not copy each payload byte":"configured with device-visible source and destination"}</FoundationBox>
+      <FoundationBox title="DMA-capable device engine" tone="device" active={deviceActive}>{!configured?"waiting for source/destination description":copied?"copy completed; CPU did not copy each payload byte":deviceActive?"accessing memory through the device-visible addresses":"configured with device-visible source and destination"}</FoundationBox>
     </div>
     <div className="grid gap-3 xl:grid-cols-3">
       <FoundationBox title="1 · configured" tone="metadata" active={configured}>CPU/software supplies source, destination and length metadata.</FoundationBox>
@@ -60,12 +57,14 @@ export function DmaCopyVisual() {
 }
 
 export function DmaAddressContextsVisual() {
-  const [deviceView,setDeviceView]=useState(false);
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="dma-address-contexts"><ActionRow><FoundationAction testId="show-device-address-view" active={deviceView} onClick={()=>setDeviceView(v=>!v)}>Show the device-visible address view</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-4"><FoundationBox title="application virtual address" tone="metadata"><span className="font-mono">0x1000</span></FoundationBox><FoundationBox title="CPU/MMU translation" tone="success">VA 0x1000 → physical frame P7+0</FoundationBox><FoundationBox title="illustrative physical memory" tone="memory"><span className="font-mono">P7+0 · HELLO bytes</span></FoundationBox><FoundationBox title={deviceView?"device-visible DMA address":"device address view hidden"} tone="device" active={deviceView}><span className="font-mono">{deviceView?"DMA 0x4000 → P7+0":"select action"}</span></FoundationBox></div><div className="grid gap-2 lg:grid-cols-2"><LinkLine label="CPU/MMU translation metadata" kind="translation" active/><LinkLine label="device mapping metadata; IOMMU only when present/enabled" kind="translation" active={deviceView}/></div><SmallNote>Same underlying memory, separate address contexts. DMA addresses are platform/device dependent; do not assume an enabled IOMMU or a fixed identity mapping.</SmallNote></div>;
+  const stage = useGuidedVisualStage();
+  const deviceView=stage>=2;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="dma-address-contexts"><div className="grid gap-3 xl:grid-cols-4"><FoundationBox title="application virtual address" tone="metadata"><span className="font-mono">0x1000</span></FoundationBox><FoundationBox title="CPU/MMU translation" tone="success" active={stage>=1}>{stage>=1?"VA 0x1000 → physical frame P7+0":"CPU translation not yet followed"}</FoundationBox><FoundationBox title="illustrative physical memory" tone="memory"><span className="font-mono">P7+0 · HELLO bytes</span></FoundationBox><FoundationBox title={deviceView?"device-visible DMA address":"device address view hidden"} tone="device" active={deviceView}><span className="font-mono">{deviceView?"DMA 0x4000 → P7+0":"device mapping not yet revealed"}</span></FoundationBox></div><div className="grid gap-2 lg:grid-cols-2"><LinkLine label="CPU/MMU translation metadata" kind="translation" active/><LinkLine label="device mapping metadata; IOMMU only when present/enabled" kind="translation" active={deviceView}/></div><SmallNote>Same underlying memory, separate address contexts. DMA addresses are platform/device dependent; do not assume an enabled IOMMU or a fixed identity mapping.</SmallNote></div>;
 }
 
 export function TransferModelComparisonVisual() {
-  const [model,setModel]=useState<"tcp"|"rdma">("tcp");
+  const stage = useGuidedVisualStage();
+  const model = stage === 0 ? "tcp" as const : "rdma" as const;
   type LaneRow = readonly [readonly [string,string,string], readonly [string,string,string], readonly [string,string,string]];
   const tcpRows: LaneRow[] = [
     [["A application buffer","0x1000 · HELLO source","memory"],["same network objective","payload has not left A yet","neutral"],["B application buffer","0x2000 · intended destination position","memory"]],
@@ -81,10 +80,6 @@ export function TransferModelComparisonVisual() {
   ];
   const rows=model==="tcp"?tcpRows:rdmaRows;
   return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="tcp-rdma-model-comparison">
-    <ActionRow>
-      <FoundationAction testId="show-tcp-model" active={model==="tcp"} onClick={()=>setModel("tcp")}>Representative TCP path</FoundationAction>
-      <FoundationAction testId="show-rdma-model" active={model==="rdma"} onClick={()=>setModel("rdma")}>Representative hardware RDMA path</FoundationAction>
-    </ActionRow>
     <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-3 text-xs text-cyan-50" data-testid="same-memory-objective">Same objective in both views: source memory position <span className="font-mono">A 0x1000</span> → destination memory position <span className="font-mono">B 0x2000</span>. Positions do not change when the model changes.</div>
     <div className="overflow-x-auto pb-1" data-testid={model==="tcp"?"representative-tcp-memory-path":"representative-rdma-memory-path"}>
       <div className="min-w-[56rem] space-y-2">
@@ -109,6 +104,9 @@ export function TransferModelComparisonVisual() {
 }
 
 export function SoftRoceStackVisual() {
+  const stage = useGuidedVisualStage();
+  const hardwareVisible = stage >= 1;
+  const comparisonActive = stage >= 2;
   const hostA=rdmaEvidence.hosts.hosta;
   const hostB=rdmaEvidence.hosts.hostb;
   const rxeStack=[
@@ -147,30 +145,35 @@ export function SoftRoceStackVisual() {
     <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/7 p-3 font-mono text-xs text-cyan-50" data-testid="soft-roce-lab-identities">actual RXE laboratory: hosta ({hostA.label}) data {hostA.dataIp} · hostb ({hostB.label}) data {hostB.dataIp} · isolated data0 Ethernet interfaces</div>
     <div className="grid gap-3 xl:grid-cols-2">
       <Stack title="actual RXE software transport" tone="cpu" rows={rxeStack} footer="logical RXE RDMA device rxe0 is associated with data0; CPUs execute the software transport. This experiment does not measure hardware offload or CPU bypass." testId="rxe-software-transport-column"/>
-      <Stack title="representative hardware RNIC transport" tone="device" rows={hardwareStack} footer="control/setup still involves software; the representative RNIC performs transport execution and device memory access in hardware. This column is explanatory, not evidence from the Soft-RoCE run." testId="hardware-rnic-transport-column"/>
+      {hardwareVisible ? <Stack title="representative hardware RNIC transport" tone="device" rows={hardwareStack} footer="control/setup still involves software; the representative RNIC performs transport execution and device memory access in hardware. This column is explanatory, not evidence from the Soft-RoCE run." testId="hardware-rnic-transport-column"/> : <FoundationBox title="representative hardware RNIC comparison" tone="neutral" dashed testId="hardware-rnic-comparison-pending">The hardware comparison is intentionally withheld until the actual RXE software path is established.</FoundationBox>}
     </div>
     <div className="grid gap-2 xl:grid-cols-2" data-testid="soft-roce-control-setup-paths"><LinkLine label="RXE control/setup: userspace verbs → kernel RDMA/RXE control path; WR submission is not claimed to be one synchronous syscall" kind="metadata" active/><LinkLine label="hardware control/setup: kernel/driver resource setup remains present even when data-path queues are userspace accessible" kind="metadata" active/></div><div className="grid gap-3 xl:grid-cols-2"><FoundationBox title="logical RXE RDMA device" tone="metadata" active>rxe0 · created/configured logical device, not an extra physical NIC</FoundationBox><FoundationBox title="physical or virtual Ethernet interface" tone="device" active>data0 · ordinary underlying network interface</FoundationBox></div>
-    <SmallNote>Python → Pyverbs → libibverbs/provider. RXE then uses Linux software transport and the Ethernet stack; it does not demonstrate hardware bypass. A hardware RNIC instead implements transport and memory access in device hardware. Kernel/setup involvement is not the same thing as claiming every work request is a synchronous syscall.</SmallNote>
+    {comparisonActive ? <SmallNote testId="soft-roce-comparison-conclusion">Python → Pyverbs → libibverbs/provider. RXE then uses Linux software transport and the Ethernet stack; it does not demonstrate hardware bypass. A hardware RNIC instead implements transport and memory access in device hardware. Kernel/setup involvement is not the same thing as claiming every work request is a synchronous syscall.</SmallNote> : <SmallNote>First establish the actual RXE software path; the representative hardware comparison follows in the next guided stage.</SmallNote>}
   </div>;
 }
 
 export function RdmaInitiationVisual({ conceptOnly=false }: { conceptOnly?: boolean }) {
-  const [step,setStep]=useState(0);
+  const step=useGuidedVisualStage();
   const steps=["prepare memory/resources","describe work","submit work to endpoint","observe result"];
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="rdma-initiation-sequence"><ActionRow><FoundationAction testId="rdma-next-stage" onClick={()=>setStep(v=>(v+1)%4)}>{step===0?"Start preparation":"Advance to next meaningful stage"}</FoundationAction></ActionRow><StepLanes steps={steps} active={step}/><div className="grid gap-3 xl:grid-cols-4"><FoundationBox title="memory resources" tone="memory" active={step>=0}>{step>=0?"MR/PD/CQ/QP objects exist":"not prepared"}</FoundationBox><FoundationBox title="work request description" tone="metadata" active={step>=1}>{step>=1?"operation + memory references":"not described"}</FoundationBox><FoundationBox title="send queue endpoint" tone="device" active={step>=2}>{step>=2?"posted to QP":"not submitted"}</FoundationBox><FoundationBox title="completion / remote observation" tone="success" active={step>=3}>{step>=3?"observed after execution":"no result yet"}</FoundationBox></div>{conceptOnly?<SmallNote>Conceptual sequence only; actual object relationships and evidence appear in the resource lessons.</SmallNote>:<SmallNote>No data operation packet is produced merely by creating resources. Submission and transport execution are separate steps.</SmallNote>}</div>;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="rdma-initiation-sequence"><StepLanes steps={steps} active={step}/><div className="grid gap-3 xl:grid-cols-4"><FoundationBox title="memory resources" tone="memory" active={step>=0}>{step>=0?"MR/PD/CQ/QP objects exist":"not prepared"}</FoundationBox><FoundationBox title="work request description" tone="metadata" active={step>=1}>{step>=1?"operation + memory references":"not described"}</FoundationBox><FoundationBox title="send queue endpoint" tone="device" active={step>=2}>{step>=2?"posted to QP":"not submitted"}</FoundationBox><FoundationBox title="completion / remote observation" tone="success" active={step>=3}>{step>=3?"observed after execution":"no result yet"}</FoundationBox></div>{conceptOnly?<SmallNote>Conceptual sequence only; actual object relationships and evidence appear in the resource lessons.</SmallNote>:<SmallNote>No data operation packet is produced merely by creating resources. Submission and transport execution are separate steps.</SmallNote>}</div>;
 }
 
 export function RegistrationVisual() {
-  const [registered,setRegistered]=useState(false);
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registration-illustration"><ActionRow><FoundationAction testId="prepare-region-for-rdma" active={registered} onClick={()=>setRegistered(true)}>Prepare this region for RDMA</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_10rem_minmax(0,0.8fr)] xl:items-center"><MemoryObject/><div>{registered?<LinkLine label="logical registration object references the same existing bytes" kind="reference" direction="both" testId="mr-reference-link"/>:null}</div><FoundationBox title={registered?"memory registration object":"no MR or keys yet"} tone={registered?"metadata":"neutral"} dashed={!registered} testId="logical-memory-registration">{registered?<div className="font-mono text-xs">base 0x1000<br />length 16<br />access permissions<br />LKEY/RKEY references</div>:"CPU has already written HELLO; no packet or copy occurred"}</FoundationBox></div><SmallNote>Registration adds metadata/permission associated with the existing buffer. It does not create another copy of the data and does not move HELLO.</SmallNote></div>;
+  const stage = useGuidedVisualStage();
+  const registered=stage>=3;
+  const addressExplained=stage>=4;
+  const keysRevealed=stage>=5;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registration-illustration"><div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_10rem_minmax(0,0.8fr)] xl:items-center"><MemoryObject/><div>{registered?<LinkLine label="logical registration object references the same existing bytes" kind="reference" direction="both" testId="mr-reference-link"/>:null}</div><FoundationBox title={registered?"memory registration object":"no MR or keys yet"} tone={registered?"metadata":"neutral"} dashed={!registered} testId="logical-memory-registration">{registered?<div className="font-mono text-xs">{addressExplained?"base 0x1000":"base address revealed next"}<br />{addressExplained?"length 16":"length revealed next"}<br />{keysRevealed?"access permissions":"permissions revealed next"}<br />{keysRevealed?"LKEY/RKEY references":"keys revealed next"}</div>:"CPU has already written HELLO; no packet or copy occurred"}</FoundationBox></div><SmallNote>Registration adds metadata/permission associated with the existing buffer. It does not create another copy of the data and does not move HELLO.</SmallNote></div>;
 }
 
 export function RegistrationOwnershipVisual() {
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registration-ownership"><div className="grid gap-3 xl:grid-cols-4"><FoundationBox title="application process" tone="cpu">asks Pyverbs</FoundationBox><FoundationBox title="Pyverbs / libibverbs" tone="metadata">invokes provider operation</FoundationBox><FoundationBox title="device context" tone="device">rxe0 context</FoundationBox><FoundationBox title="protection domain" tone="kernel">PD associates the returned MR</FoundationBox></div><div className="grid gap-2 lg:grid-cols-3"><LinkLine label="application asks" kind="instruction" active/><LinkLine label="provider establishes registered access" kind="metadata" active/><LinkLine label="MR returned to application" kind="reference" direction="left" active/></div><SourceExcerpt path="python/exp_a_resources.py" start={74} end={82} label="actual resource creation excerpt"/><SourceExcerpt path="python/rdma_common.py" start={131} end={134} label="actual registration helper"/><SmallNote>The application asks, but provider/kernel implementation establishes registered access. At this beginner stage the diagram intentionally introduces only the context, protection domain and memory registration; communication queues are introduced later.</SmallNote></div>;
+  const stage = useGuidedVisualStage();
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registration-ownership" data-guided-stage={stage}><div className="grid gap-3 xl:grid-cols-4"><FoundationBox title="application process" tone="cpu" active={stage===0}>asks Pyverbs</FoundationBox><FoundationBox title="Pyverbs / libibverbs" tone="metadata" active={stage>=1} dashed={stage<1}>invokes provider operation</FoundationBox><FoundationBox title="device context" tone="device" active={stage>=1} dashed={stage<1}>rxe0 context</FoundationBox><FoundationBox title="protection domain" tone="kernel" active={stage>=1} dashed={stage<1}>PD associates the returned MR</FoundationBox></div><div className="grid gap-2 lg:grid-cols-3"><LinkLine label="application asks" kind="instruction" active={stage>=0}/><LinkLine label="provider establishes registered access" kind="metadata" active={stage>=1}/><LinkLine label="MR returned to application" kind="reference" direction="left" active={stage>=2}/></div>{stage>=2?<FoundationBox title="returned Memory Region handle" tone="success" testId="returned-memory-region-handle">MR associated with the protection domain is now available to the application; the original buffer remains the registered memory.</FoundationBox>:<FoundationBox title="Memory Region handle" tone="neutral" dashed testId="returned-memory-region-handle">not returned to the application yet</FoundationBox>}<SourceExcerpt path="python/exp_a_resources.py" start={74} end={82} label="actual resource creation excerpt"/><SourceExcerpt path="python/rdma_common.py" start={131} end={134} label="actual registration helper"/><SmallNote>The application asks, but provider/kernel implementation establishes registered access. At this beginner stage the diagram intentionally introduces only the context, protection domain and memory registration; communication queues are introduced later.</SmallNote></div>;
 }
 
 export function RangeSelectionVisual() {
-  const [choice,setChoice]=useState<"valid"|"invalid"|null>(null);
+  const stage = useGuidedVisualStage();
+  const choice = stage === 0 ? null : stage === 1 ? "valid" as const : "invalid" as const;
   const valid=choice==="valid";
   const offset=valid?4:12;
   const first=0x1000+offset;
@@ -179,36 +182,36 @@ export function RangeSelectionVisual() {
   const cells=hello16.concat(Array.from({length:8},()=>"--"));
   const offsets=Array.from({length:24},(_,index)=>index);
   const addresses=offsets.map((index)=>`0x${(0x1000+index).toString(16)}`);
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registered-range-selection"><ActionRow><FoundationAction testId="select-eight-at-offset-four" active={choice==="valid"} onClick={()=>setChoice("valid")}>Inspect 8 bytes at offset 4</FoundationAction><FoundationAction testId="select-eight-at-offset-twelve" active={choice==="invalid"} onClick={()=>setChoice("invalid")}>Inspect 8 bytes at offset 12</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]"><FoundationBox title="24 illustrative memory cells · registered region base 0x1000 · offsets 0–15 registered" tone="memory" testId="twenty-four-cell-range"><ByteCells compact bytes={cells} offsets={offsets} addresses={addresses} highlight={choice?Array.from({length:8},(_,index)=>offset+index):[]} outOfRange={[16,17,18,19,20,21,22,23]}/><div className="mt-2 font-mono text-[11px]">registered bytes: 0x1000–0x100f inclusive · end-exclusive 0x1010</div></FoundationBox><FoundationBox title="selected memory description" tone={choice?(valid?"success":"warning"):"metadata"} testId="range-check-result">{choice?<div className="font-mono text-xs">base address 0x1000<br />selected offset {offset}<br />requested length 8<br />first byte 0x{first.toString(16)}<br />last requested byte 0x{last.toString(16)}<br />end-exclusive 0x{endExclusive.toString(16)}<br />{valid?"in range: inside registered 0–15; end-exclusive is not beyond 0x1010":"boundary-crossing: crosses boundary; request continues beyond 0x100f"}</div>:"select a range"}</FoundationBox></div><SmallNote>Base address, offset and length are distinct. Offset + length ≤ 16 is the bounded nonnegative in-range test used here; the invalid illustration visibly crosses the registered boundary.</SmallNote></div>;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="registered-range-selection"><div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]"><FoundationBox title="24 illustrative memory cells · registered region base 0x1000 · offsets 0–15 registered" tone="memory" testId="twenty-four-cell-range"><ByteCells compact bytes={cells} offsets={offsets} addresses={addresses} highlight={choice?Array.from({length:8},(_,index)=>offset+index):[]} outOfRange={[16,17,18,19,20,21,22,23]}/><div className="mt-2 font-mono text-[11px]">registered bytes: 0x1000–0x100f inclusive · end-exclusive 0x1010</div></FoundationBox><FoundationBox title="selected memory description" tone={choice?(valid?"success":"warning"):"metadata"} testId="range-check-result">{choice?<div className="font-mono text-xs">base address 0x1000<br />selected offset {offset}<br />requested length 8<br />first byte 0x{first.toString(16)}<br />last requested byte 0x{last.toString(16)}<br />end-exclusive 0x{endExclusive.toString(16)}<br />{valid?"in range: inside registered 0–15; end-exclusive is not beyond 0x1010":"boundary-crossing: crosses boundary; request continues beyond 0x100f"}</div>:"select a range"}</FoundationBox></div><SmallNote>Base address, offset and length are distinct. Offset + length ≤ 16 is the bounded nonnegative in-range test used here; the invalid illustration visibly crosses the registered boundary.</SmallNote></div>;
 }
 
 export function AccessPathsVisual() {
-  const [path,setPath]=useState<"cpu"|"local"|"write"|"read">("cpu");
+  const stage = useGuidedVisualStage();
+  const path = guidedEnum(stage, ["cpu", "local", "write", "read", "read"] as const);
   const labels={cpu:"Local CPU writes ordinary application memory",local:"Local provider writes with local-write permission",write:"Remote WRITE accesses destination memory",read:"Remote READ obtains data from source memory"} as const;
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="rdma-access-paths"><ActionRow>{(Object.keys(labels) as Array<keyof typeof labels>).map((key)=><FoundationAction key={key} testId={`access-path-${key}`} active={path===key} onClick={()=>setPath(key)}>{labels[key]}</FoundationAction>)}</ActionRow><div className="grid gap-3 xl:grid-cols-4"><FoundationBox title="host CPU" tone="cpu" active={path==="cpu"}>ordinary instruction access</FoundationBox><FoundationBox title="local RDMA provider" tone="device" active={path==="local"}>LKEY + local-write permission</FoundationBox><FoundationBox title="remote initiator" tone="network" active={path==="write"||path==="read"}>{path==="write"?"WRITE opcode":"READ opcode"}</FoundationBox><FoundationBox title="registered buffer B" tone="memory" active><ByteCells compact bytes={hello16}/></FoundationBox></div><SmallNote testId="access-path-distinction">Local CPU memory access is not RDMA local-write permission. Local-write permission authorizes provider writes; WRITE and READ are remotely initiated operation types.</SmallNote></div>;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="rdma-access-paths"><div className="grid gap-3 xl:grid-cols-4"><FoundationBox title="host CPU" tone="cpu" active={path==="cpu"}>ordinary instruction access</FoundationBox><FoundationBox title="local RDMA provider" tone="device" active={path==="local"}>LKEY + local-write permission</FoundationBox><FoundationBox title="remote initiator" tone="network" active={path==="write"||path==="read"}>{path==="write"?"WRITE opcode":"READ opcode"}</FoundationBox><FoundationBox title="registered buffer B" tone="memory" active><ByteCells compact bytes={hello16}/></FoundationBox></div><SmallNote testId="access-path-distinction">Local CPU memory access is not RDMA local-write permission. Local-write permission authorizes provider writes; WRITE and READ are remotely initiated operation types.</SmallNote></div>;
 }
 
 export function KeyExerciseVisual({ remote=false }: { remote?: boolean }) {
   const correct=remote?"0x99":"0x11";
-  const [key,setKey]=useState<string|null>(null);
-  const [operation,setOperation]=useState<"write"|"read">("write");
+  const stage = useGuidedVisualStage();
+  const key=stage===1?"0x22":correct;
+  const operation="write" as const;
+  const invalidRange=stage===2;
+  const requestedLength=invalidRange?24:5;
   const ok=key===correct;
   const operationCheck=ok?(operation==="write"?"local-write permission present for provider write in this stated model":"local read access is available for provider read in this stated model"):"operation access is not evaluated because the key association is invalid";
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid={remote?"remote-key-exercise":"local-key-exercise"}><div className="grid gap-2 sm:grid-cols-2"><FoundationBox title="MR A" tone="metadata">addr 0x1000 · len 16 · {remote?"RKEY 0x99":"LKEY 0x11"}<br />local-write permission present in this stated model</FoundationBox><FoundationBox title="MR B" tone="metadata">addr 0x2000 · len 16 · {remote?"RKEY 0xaa":"LKEY 0x22"}</FoundationBox></div><ActionRow>{(remote?["0x99","0xaa"]:["0x11","0x22"]).map((value)=><FoundationAction key={value} testId={`choose-key-${value}`} active={key===value} onClick={()=>setKey(value)}>Use key {value}</FoundationAction>)}<FoundationAction testId="local-write-operation" active={operation==="write"} onClick={()=>setOperation("write")}>Provider local write</FoundationAction><FoundationAction testId="local-read-operation" active={operation==="read"} onClick={()=>setOperation("read")}>Provider local read</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-2"><FoundationBox title={remote?"remote-memory operation description":"constructed local SGE"} tone={key?(ok?"success":"warning"):"neutral"} testId="key-check-result"><div className="font-mono text-xs">{remote?"remote_addr 0x1000 · rkey":"addr 0x1000 · len 5 · lkey"} {key??"not selected"}<br />operation {operation}</div><div className="mt-1 text-xs">{key?ok?"key association matches MR A":"key does not match the intended registration":"select a key"}</div></FoundationBox><FoundationBox title="separate access-requirement check" tone={key&&ok?"success":"warning"} testId="local-access-operation-check"><div className="text-xs">{key?operationCheck:"select a key before checking operation access"}</div><div className="mt-2 text-[11px] text-slate-400">A valid LKEY association is not the same question as whether the requested provider operation is permitted.</div></FoundationBox></div><div className="rounded-xl border border-sky-300/20 bg-sky-300/7 p-2" data-testid="local-key-range-highlight"><ByteCells compact bytes={hello16} highlight={ok?[0,1,2,3,4]:[]} /><div className="mt-1 font-mono text-[11px]">MR A range 0x1000–0x100f · SGE bytes 0x1000–0x1004 highlighted when associated</div></div><SmallNote>No fabricated hardware error code or packet: this is only a simplified conceptual association/permission model. Ordinary CPU writes to a writable process mapping do not require an RDMA local-write flag; that flag applies to provider access to registered memory.</SmallNote></div>;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid={remote?"remote-key-exercise":"local-key-exercise"}><div className="grid gap-2 sm:grid-cols-2"><FoundationBox title="MR A" tone="metadata">addr 0x1000 · len 16 · {remote?"RKEY 0x99":"LKEY 0x11"}<br />local-write permission present in this stated model</FoundationBox><FoundationBox title="MR B" tone="metadata">addr 0x2000 · len 16 · {remote?"RKEY 0xaa":"LKEY 0x22"}</FoundationBox></div><div className="grid gap-3 xl:grid-cols-2"><FoundationBox title={remote?"remote-memory operation description":"constructed local SGE"} tone={key?(ok?"success":"warning"):"neutral"} testId="key-check-result"><div className="font-mono text-xs">{remote?"remote_addr 0x1000 · rkey":"addr 0x1000 · len {requestedLength} · lkey"} {key??"not selected"}<br />operation {operation}</div><div className="mt-1 text-xs">{key?ok?"key association matches MR A":"key does not match the intended registration":"select a key"}</div></FoundationBox><FoundationBox title="separate access-requirement check" tone={key&&ok?"success":"warning"} testId="local-access-operation-check"><div className="text-xs">{key?(invalidRange?"requested range crosses the registered boundary":operationCheck):"select a key before checking operation access"}</div><div className="mt-2 text-[11px] text-slate-400">A valid LKEY association is not the same question as whether the requested provider operation is permitted.</div></FoundationBox></div><div className="rounded-xl border border-sky-300/20 bg-sky-300/7 p-2" data-testid="local-key-range-highlight"><ByteCells compact bytes={hello16} highlight={ok?Array.from({length:Math.min(16,requestedLength)},(_,index)=>index):[]} /><div className="mt-1 font-mono text-[11px]">MR A range 0x1000–0x100f · requested byte range highlighted when associated</div></div><SmallNote>No fabricated hardware error code or packet: this is only a simplified conceptual association/permission model. Ordinary CPU writes to a writable process mapping do not require an RDMA local-write flag; that flag applies to provider access to registered memory.</SmallNote></div>;
 }
 
 export function MetadataExchangeVisual() {
-  const [mode,setMode]=useState<"send"|"write">("send");
-  const [sent,setSent]=useState(false);
+  const stage = useGuidedVisualStage();
+  const mode = stage >= 1 ? "write" as const : "send" as const;
+  const sent=stage>=2;
   const hostA=rdmaEvidence.hosts.hosta;
   const hostB=rdmaEvidence.hosts.hostb;
   const writeMr=writeExperiment.endpoints.responder.memoryRegion;
   return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="rdma-metadata-exchange">
-    <ActionRow>
-      <FoundationAction testId="select-send-setup" active={mode==="send"} onClick={()=>{setMode("send");setSent(false)}}>SEND setup</FoundationAction>
-      <FoundationAction testId="select-write-setup-preview" active={mode==="write"} onClick={()=>{setMode("write");setSent(false)}}>WRITE setup preview</FoundationAction>
-      <FoundationAction testId="share-remote-metadata" active={sent} onClick={()=>setSent(true)}>Exchange control metadata</FoundationAction>
-    </ActionRow>
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_13rem_minmax(0,1fr)] xl:items-center">
       <FoundationBox title="Host A initiator" tone="metadata" active={sent}>
         <div className="font-mono text-xs">data {hostA.dataIp}<br />control {hostA.controlIp}</div>
@@ -235,7 +238,7 @@ export function AccessDecisionExerciseVisual() {
     {id:"read-crossing",label:"Read 8 bytes at 0x100c",key:"correct",range:"crosses boundary",permission:"remote read present",result:false,offset:12,length:8},
     {id:"read-wrong-key",label:"Read 8 bytes at 0x1004",key:"incorrect",range:"fits",permission:"remote read present",result:false,offset:4,length:8},
   ] as const;
-  const [index,setIndex]=useState(0);
+  const index=Math.min(3,useGuidedVisualStage());
   const item=cases[index];
   const selected=Array.from({length:item.length},(_,i)=>item.offset+i);
   const cells=hello16.concat(Array.from({length:8},()=>"--"));
@@ -243,10 +246,6 @@ export function AccessDecisionExerciseVisual() {
     return <div className={cx("rounded-lg border px-2 py-1.5 text-xs",ok?"border-emerald-300/30 bg-emerald-300/8 text-emerald-50":"border-red-300/35 bg-red-300/10 text-red-50")}>{label}: {ok?"present/valid":"fails under stated model"}</div>;
   }
   return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="access-decision-exercise">
-    <ActionRow>
-      {cases.map((entry,entryIndex)=><FoundationAction key={entry.id} testId={`access-case-${entry.id}`} active={index===entryIndex} onClick={()=>setIndex(entryIndex)}>{entry.label} · {entry.key} key</FoundationAction>)}
-      <FoundationAction testId="skip-access-case" onClick={()=>setIndex((index+1)%cases.length)}>Skip case</FoundationAction>
-    </ActionRow>
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]">
       <FoundationBox title="same registered range as 4.3 · offsets 0–15 registered, 16–23 outside" tone="memory" testId="access-exercise-range-grid">
         <ByteCells compact bytes={cells} offsets={Array.from({length:24},(_,i)=>i)} highlight={selected} outOfRange={[16,17,18,19,20,21,22,23]}/>
@@ -262,33 +261,35 @@ export function AccessDecisionExerciseVisual() {
         <div className="mt-3 text-sm font-semibold">{item.result?"Permitted under the stated model":"Rejected under the stated model"}</div>
       </FoundationBox>
     </div>
-    <SmallNote>Select or retry any case. This is a conceptual access-requirement exercise using the authored assumptions; it is not a simulated completion status or observed failure capture.</SmallNote>
+    <SmallNote>The guided sequence changes one access condition at a time. This is a conceptual access-requirement exercise using the authored assumptions; it is not a simulated completion status or observed failure capture.</SmallNote>
   </div>;
 }
 
 export function ActualRegistrationInspectionVisual() {
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="actual-registration-inspection"><div className="rounded-xl border border-emerald-300/25 bg-emerald-300/8 p-3 text-xs text-emerald-50">Transition: the illustrations above use 16 bytes for visibility. The recorded resource experiment used a 4,096-byte host memory region.</div><div className="grid gap-3 xl:grid-cols-2"><FoundationBox title="hosta recorded MR" tone="memory"><div className="font-mono text-xs">addr {exact(mr.address)}<br />length {mr.length}<br />LKEY {exact(mr.lkey)} · RKEY {exact(mr.rkey)}<br />QPN {exact(resources.endpoints.initiator.qpn)}</div></FoundationBox><FoundationBox title="hostb recorded MR" tone="memory"><div className="font-mono text-xs">addr {exact(responderMr.address)}<br />length {responderMr.length}<br />LKEY {exact(responderMr.lkey)} · RKEY {exact(responderMr.rkey)}<br />QPN {exact(resources.endpoints.responder.qpn)}</div></FoundationBox></div><div className="grid gap-3 xl:grid-cols-3"><SourceExcerpt path="python/exp_a_resources.py" start={74} end={82} label="actual resource experiment"/><SourceExcerpt path="python/rdma_common.py" start={40} end={42} label="actual access flags"/><SourceExcerpt path="python/rdma_common.py" start={131} end={134} label="actual registration helper"/></div><SmallNote>These are recorded registration metadata values. An MR does not contain copied bytes; recorded keys are not reusable live keys.</SmallNote></div>;
+  const stage = useGuidedVisualStage();
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="actual-registration-inspection" data-guided-stage={stage}><div className="rounded-xl border border-emerald-300/25 bg-emerald-300/8 p-3 text-xs text-emerald-50">Transition: the illustrations above use 16 bytes for visibility. The recorded resource experiment used a 4,096-byte host memory region.</div>{stage>=1?<div className="grid gap-3 xl:grid-cols-2"><FoundationBox title="hosta recorded MR" tone="memory"><div className="font-mono text-xs">addr {exact(mr.address)}<br />length {mr.length}<br />LKEY {exact(mr.lkey)} · RKEY {exact(mr.rkey)}<br />QPN {exact(resources.endpoints.initiator.qpn)}</div></FoundationBox><FoundationBox title="hostb recorded MR" tone="memory"><div className="font-mono text-xs">addr {exact(responderMr.address)}<br />length {responderMr.length}<br />LKEY {exact(responderMr.lkey)} · RKEY {exact(responderMr.rkey)}<br />QPN {exact(resources.endpoints.responder.qpn)}</div></FoundationBox></div>:<FoundationBox title="recorded host memory-region metadata" tone="neutral" dashed>recorded registration metadata appears in the next guided stage</FoundationBox>}{stage>=2?<div className="grid gap-3 xl:grid-cols-3"><SourceExcerpt path="python/exp_a_resources.py" start={74} end={82} label="actual resource experiment"/><SourceExcerpt path="python/rdma_common.py" start={40} end={42} label="actual access flags"/><SourceExcerpt path="python/rdma_common.py" start={131} end={134} label="actual registration helper"/></div>:null}<SmallNote>These are recorded registration metadata values. An MR does not contain copied bytes; recorded keys are not reusable live keys.</SmallNote></div>;
 }
 
 export function QueueResourcesVisual() {
-  const [created,setCreated]=useState<string[]>([]);
+  const stage = useGuidedVisualStage();
+  const created=["device context","protection domain","completion queue","queue pair"].slice(0, stage);
   const objects=["device context","protection domain","completion queue","queue pair"];
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="queue-resource-creation"><ActionRow>{objects.map((object)=><FoundationAction key={object} testId={`create-${object.replaceAll(" ","-")}`} active={created.includes(object)} onClick={()=>setCreated(v=>v.includes(object)?v:[...v,object])}>Create {object}</FoundationAction>)}</ActionRow><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{objects.map((object)=><FoundationBox key={object} title={object} tone={created.includes(object)?"metadata":"neutral"} dashed={!created.includes(object)}>{created.includes(object)?object==="queue pair"?"contains separate SQ and RQ":"created · no data packet":"not created"}</FoundationBox>)}</div><SmallNote>Resource creation prepares structures. It does not itself produce RDMA data-operation packets.</SmallNote></div>;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="queue-resource-creation"><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{objects.map((object)=><FoundationBox key={object} title={object} tone={created.includes(object)?"metadata":"neutral"} dashed={!created.includes(object)}>{created.includes(object)?object==="queue pair"?"contains separate SQ and RQ":"created · no data packet":"not created"}</FoundationBox>)}</div><SmallNote>Resource creation prepares structures. It does not itself produce RDMA data-operation packets.</SmallNote></div>;
 }
 
 export function WorkRequestVisual() {
-  const [posted,setPosted]=useState(false);
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="illustrative-work-request"><ActionRow><FoundationAction testId="post-illustrative-wr" active={posted} onClick={()=>setPosted(true)}>Post WR to Send Queue</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"><FoundationBox title="unposted illustrative Work Request" tone="metadata" dashed={!posted}><div className="font-mono text-xs">operation SEND · WR ID 7 · signalled<br />SGE addr 0x1000 · length 5 · lkey 0x11</div></FoundationBox><MemoryObject title="separate memory cells · payload not inside queue"/></div>{posted?<LinkLine label="WR submitted to endpoint; it references memory through addr/len/lkey" kind="metadata" direction="right" testId="wr-posted-link"/>:null}<SmallNote>The queue stores descriptions/references, not the HELLO payload cells themselves.</SmallNote></div>;
+  const posted = useGuidedVisualStage() >= 2;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="illustrative-work-request"><div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"><FoundationBox title="unposted illustrative Work Request" tone="metadata" dashed={!posted}><div className="font-mono text-xs">operation SEND · WR ID 7 · signalled<br />SGE addr 0x1000 · length 5 · lkey 0x11</div></FoundationBox><MemoryObject title="separate memory cells · payload not inside queue"/></div>{posted?<LinkLine label="WR submitted to endpoint; it references memory through addr/len/lkey" kind="metadata" direction="right" testId="wr-posted-link"/>:null}<SmallNote>The queue stores descriptions/references, not the HELLO payload cells themselves.</SmallNote></div>;
 }
 
 export function QueuePairVisual() {
-  const [connected,setConnected]=useState(false);
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="queue-pair-relationship"><ActionRow><FoundationAction testId="configure-destination-qpn" active={connected} onClick={()=>setConnected(true)}>Configure destination QPN and start PSN</FoundationAction></ActionRow><div className="grid gap-3 xl:grid-cols-2">{[["hosta","17","18"],["hostb","18","17"]].map(([host,qpn,peer])=><FoundationBox key={host} title={`${host} QP ${qpn}`} tone="device" active={connected}><div className="grid gap-2 sm:grid-cols-2"><span className="rounded border border-white/10 p-2 text-xs">Send Queue</span><span className="rounded border border-white/10 p-2 text-xs">Receive Queue</span></div><div className="mt-2 font-mono text-xs">{connected?`dest_qpn ${peer} · initial PSN 0x100`:"destination not configured"}</div></FoundationBox>)}</div><LinkLine label="each RC QP names its peer destination QPN; actual recorded resource-run QPNs" kind="metadata" direction="both" active={connected}/></div>;
+  const connected = useGuidedVisualStage() >= 1;
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="queue-pair-relationship"><div className="grid gap-3 xl:grid-cols-2">{[["hosta","17","18"],["hostb","18","17"]].map(([host,qpn,peer])=><FoundationBox key={host} title={`${host} QP ${qpn}`} tone="device" active={connected}><div className="grid gap-2 sm:grid-cols-2"><span className="rounded border border-white/10 p-2 text-xs">Send Queue</span><span className="rounded border border-white/10 p-2 text-xs">Receive Queue</span></div><div className="mt-2 font-mono text-xs">{connected?`dest_qpn ${peer} · initial PSN 0x100`:"destination not configured"}</div></FoundationBox>)}</div><LinkLine label="each RC QP names its peer destination QPN; actual recorded resource-run QPNs" kind="metadata" direction="both" active={connected}/></div>;
 }
 
 export function CompletionLifecycleVisual() {
-  const [stage,setStage]=useState(0);
-  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="completion-polling-lifecycle"><ActionRow><FoundationAction testId="advance-completion-lifecycle" onClick={()=>setStage(v=>(v+1)%4)}>Advance completion lifecycle</FoundationAction></ActionRow><StepLanes steps={["post signalled WR","transport executes","completion entry written to CQ","application polls CQ and observes WC"]} active={stage}/><div className="grid gap-3 xl:grid-cols-3"><FoundationBox title="Send Queue" tone="device" active={stage===0}>WR ID 7 {stage>0?"consumed/executed":"posted"}</FoundationBox><FoundationBox title="separate Completion Queue" tone="metadata" active={stage>=2}>{stage>=2?"CQE wr_id 7 · SUCCESS":"no completion yet"}</FoundationBox><FoundationBox title="application poll loop" tone="cpu" active={stage===3}>{stage===3?"poll observed WC; reusable resources freed conceptually":"waiting/polling"}</FoundationBox></div><SmallNote>Completion reports the result of posted work. The completion queue is separate from send and receive queues.</SmallNote></div>;
+  const stage = useGuidedVisualStage();
+  return <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="completion-polling-lifecycle"><StepLanes steps={["post signalled WR","transport executes","completion entry written to CQ","application polls CQ and observes WC"]} active={stage}/><div className="grid gap-3 xl:grid-cols-3"><FoundationBox title="Send Queue" tone="device" active={stage===0}>WR ID 7 {stage>0?"consumed/executed":"posted"}</FoundationBox><FoundationBox title="separate Completion Queue" tone="metadata" active={stage>=2}>{stage>=2?"CQE wr_id 7 · SUCCESS":"no completion yet"}</FoundationBox><FoundationBox title="application poll loop" tone="cpu" active={stage===3}>{stage===3?"poll observed WC; reusable resources freed conceptually":"waiting/polling"}</FoundationBox></div><SmallNote>Completion reports the result of posted work. The completion queue is separate from send and receive queues.</SmallNote></div>;
 }
 
 export function ResourceBoundaryVisual() {
@@ -298,7 +299,8 @@ export function ResourceBoundaryVisual() {
 
 export function OperationPreviewVisual() {
   type Operation = "send" | "write" | "read";
-  const [operation, setOperation] = useState<Operation>("send");
+  const stage = useGuidedVisualStage();
+  const operation = guidedEnum(stage, ["send", "send", "write", "read"] as const);
   const descriptions: Record<Operation, { title: string; first: string; second: string; result: string }> = {
     send: {
       title: "SEND · upcoming mechanism",
@@ -322,11 +324,6 @@ export function OperationPreviewVisual() {
   const item = descriptions[operation];
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="rdma-operation-preview">
-      <ActionRow>
-        <FoundationAction testId="preview-operation-send" active={operation === "send"} onClick={() => setOperation("send")}>SEND preview</FoundationAction>
-        <FoundationAction testId="preview-operation-write" active={operation === "write"} onClick={() => setOperation("write")}>WRITE preview</FoundationAction>
-        <FoundationAction testId="preview-operation-read" active={operation === "read"} onClick={() => setOperation("read")}>READ preview</FoundationAction>
-      </ActionRow>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_11rem_minmax(0,1fr)] xl:items-center">
         <FoundationBox title="Server A · fixed illustrative memory location" tone="memory" active={operation !== "read"}>
           <ByteCells compact bytes={operation === "read" ? zeros16 : hello16} />
@@ -353,7 +350,8 @@ export function OperationPreviewVisual() {
 
 export function RemoteKeyOwnershipVisual() {
   type Stage = "initial" | "shared" | "constructed" | "valid" | "wrong-key" | "out-of-range" | "no-permission";
-  const [stage, setStage] = useState<Stage>("initial");
+  const guidedStage = useGuidedVisualStage();
+  const stage = guidedEnum(guidedStage, ["initial", "shared", "shared", "constructed", "valid", "wrong-key", "out-of-range", "no-permission"] as const);
   const shared = stage !== "initial";
   const constructed = ["constructed", "valid", "wrong-key", "out-of-range", "no-permission"].includes(stage);
   const preview = ["valid", "wrong-key", "out-of-range", "no-permission"].includes(stage);
@@ -371,14 +369,6 @@ export function RemoteKeyOwnershipVisual() {
   }
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="remote-key-ownership-visual">
-      <ActionRow>
-        <FoundationAction testId="share-remote-memory-information" active={shared} onClick={() => setStage("shared")}>Share remote memory information</FoundationAction>
-        <FoundationAction testId="construct-remote-operation" active={constructed} disabled={!shared} onClick={() => setStage("constructed")}>Construct the operation</FoundationAction>
-        <FoundationAction testId="preview-valid-remote-request" active={stage === "valid"} disabled={!constructed} onClick={() => setStage("valid")}>Inspect valid request</FoundationAction>
-        <FoundationAction testId="preview-wrong-remote-key" active={stage === "wrong-key"} disabled={!constructed} onClick={() => setStage("wrong-key")}>Inspect incorrect key</FoundationAction>
-        <FoundationAction testId="preview-out-of-range" active={stage === "out-of-range"} disabled={!constructed} onClick={() => setStage("out-of-range")}>Inspect out-of-range remote range</FoundationAction>
-        <FoundationAction testId="preview-missing-permission" active={stage === "no-permission"} disabled={!constructed} onClick={() => setStage("no-permission")}>Inspect missing permission</FoundationAction>
-      </ActionRow>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_12rem_minmax(0,1fr)] xl:items-center">
         <FoundationBox title="Server A · independent host · local source" tone="memory" testId="server-a-local-source">
           <ByteCells compact bytes={hello16} />
@@ -425,12 +415,9 @@ export function RemoteKeyOwnershipVisual() {
 }
 
 export function ResourcesQuestionVisual() {
-  const [described, setDescribed] = useState(false);
+  const described = useGuidedVisualStage() >= 1;
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="resource-questions-visual">
-      <ActionRow>
-        <FoundationAction testId="describe-a-task" active={described} onClick={() => setDescribed(true)}>Describe a task</FoundationAction>
-      </ActionRow>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <FoundationBox title="Server A application · registered memory already exists" tone="memory" testId="registered-hello-before-operation">
           <ByteCells compact bytes={hello16} />
@@ -448,12 +435,9 @@ export function ResourcesQuestionVisual() {
 }
 
 export function ConstructedWorkRequestVisual() {
-  const [source, setSource] = useState(false);
+  const source = useGuidedVisualStage() >= 2;
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="illustrative-work-request">
-      <ActionRow>
-        <FoundationAction testId="inspect-actual-send-wr-source" active={source} onClick={() => setSource((value) => !value)}>Inspect actual SEND source</FoundationAction>
-      </ActionRow>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_10rem_minmax(0,1.1fr)] xl:items-center">
         <FoundationBox title="constructed instruction · unposted Work Request" tone="metadata" active testId="unposted-work-request">
           <div className="font-mono text-xs">operation SEND<br />WR ID 7<br />SGE addr 0x1000 · length 5 · lkey 0x11<br />request successful send completion · signalled</div>
@@ -469,15 +453,10 @@ export function ConstructedWorkRequestVisual() {
 }
 
 export function QueueFormationVisual() {
-  const [stage, setStage] = useState(0);
+  const stage = useGuidedVisualStage();
   const qp = stage >= 2;
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="queue-formation-visual">
-      <ActionRow>
-        <FoundationAction testId="reveal-send-queue" active={stage >= 0} onClick={() => setStage(0)}>Start with one Send Queue</FoundationAction>
-        <FoundationAction testId="reveal-receive-queue" active={stage >= 1} onClick={() => setStage(1)}>Reveal Receive Queue</FoundationAction>
-        <FoundationAction testId="form-queue-pair" active={qp} disabled={stage < 1} onClick={() => setStage(2)}>Form a Queue Pair</FoundationAction>
-      </ActionRow>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
         <FoundationBox title="constructed WR remains outside pending queues" tone="metadata" testId="wr-outside-queue">
           <div className="font-mono text-xs">SEND · WR ID 7 · SGE 0x1000/5/0x11</div>
@@ -506,19 +485,15 @@ export function QueueFormationVisual() {
 }
 
 export function QpnEndpointVisual() {
-  const [direction, setDirection] = useState<"a-to-b" | "b-to-a">("a-to-b");
-  const [inspect, setInspect] = useState(false);
+  const stage = useGuidedVisualStage();
+  const direction = stage >= 2 ? "b-to-a" as const : "a-to-b" as const;
+  const inspect = stage >= 3;
   const a = resources.endpoints.initiator;
   const b = resources.endpoints.responder;
   const destination = direction === "a-to-b" ? 18 : 17;
   const destinationIp = direction === "a-to-b" ? "10.10.10.2" : "10.10.10.1";
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="qpn-endpoint-visual">
-      <ActionRow>
-        <FoundationAction testId="direction-a-to-b" active={direction === "a-to-b"} onClick={() => setDirection("a-to-b")}>A → B</FoundationAction>
-        <FoundationAction testId="direction-b-to-a" active={direction === "b-to-a"} onClick={() => setDirection("b-to-a")}>B → A</FoundationAction>
-        <FoundationAction testId="inspect-recorded-endpoint-setup" active={inspect} onClick={() => setInspect((value) => !value)}>Inspect recorded endpoint setup</FoundationAction>
-      </ActionRow>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_12rem_minmax(0,1fr)] xl:items-center">
         <FoundationBox title="Server A · QP endpoint" tone="device" active={direction === "b-to-a"}>
           <div className="font-mono text-sm">resource-run local QPN {exact(a.qpn, "decimal")}</div>
@@ -557,15 +532,10 @@ export function QpnEndpointVisual() {
 }
 
 export function CompletionAndResourceEvidenceVisual() {
-  const [stage, setStage] = useState(0);
+  const stage = useGuidedVisualStage();
   const resourceEvents = resources.events.filter((event) => event.host === "hosta").slice(0, 6);
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/55 p-3" data-testid="completion-and-resource-evidence">
-      <ActionRow>
-        <FoundationAction testId="provider-produces-completion" active={stage >= 1} onClick={() => setStage(1)}>Provider produces completion</FoundationAction>
-        <FoundationAction testId="application-polls-cq" active={stage >= 2} disabled={stage < 1} onClick={() => setStage(2)}>Application polls CQ</FoundationAction>
-        <FoundationAction testId="reset-conceptual-completion" onClick={() => setStage(0)}>Reset conceptual lifecycle</FoundationAction>
-      </ActionRow>
       <div className="grid gap-2 lg:grid-cols-4" data-testid="conceptual-completion-lifecycle">
         <FoundationBox title="provider" tone="device" active={stage >= 1}>produces completion for signalled successful send-side work</FoundationBox>
         <FoundationBox title="Completion Queue" tone="metadata" active={stage === 1} testId="conceptual-cq">{stage === 1 ? "one conceptual entry pending" : stage >= 2 ? "polled entry no longer pending in CQ" : "empty conceptual CQ"}</FoundationBox>
