@@ -5,9 +5,9 @@ import { useState } from "react"
 type Id = "mi300x" | "mi325x" | "mi350x" | "mi355x"
 
 const rows = [
-  { id: "mi300x" as Id, label: "MI300X", year: "2023", color: "#f59e0b", memory: "192 GB HBM3", memBw: "5.3 TB/s", p2p: 896, totalIo: "1,024 GB/s", power: "750 W", note: "CDNA 3 baseline. Seven scale-up links per GPU connect to the other seven GPUs in the 8-OAM platform; a separate PCIe Gen5 x16 connection faces the host/I/O domain." },
-  { id: "mi325x" as Id, label: "MI325X", year: "2024", color: "#f97316", memory: "256 GB HBM3E", memBw: "6.0 TB/s", p2p: 896, totalIo: "1,024 GB/s", power: "1,000 W", note: "Same documented P2P ring aggregate bandwidth as MI300X, with larger and faster HBM3E. Do not replace the 896 GB/s peak metric with an undocumented measured collective number." },
-  { id: "mi350x" as Id, label: "MI350X", year: "2025", color: "#ef4444", memory: "288 GB HBM3E", memBw: "8.0 TB/s", p2p: 1075.2, totalIo: "1,203.2 GB/s", power: "1,000 W", note: "CDNA 4 increases documented P2P ring aggregate bandwidth by approximately 20% under this metric: 1,075.2 / 896 = 1.2." },
+  { id: "mi300x" as Id, label: "MI300X", year: "2023", color: "#f59e0b", memory: "192 GB HBM3", memBw: "5.3 TB/s", p2p: 896, totalIo: "1,024 GB/s", power: "750 W", note: "CDNA 3 baseline. Seven scale-up peer links per GPU connect to the other seven GPUs in the fully connected 8-OAM platform. The ROCm metric is 7 × 128 GB/s = 896 GB/s; a separate PCIe Gen5 x16 connection faces the host/I/O domain." },
+  { id: "mi325x" as Id, label: "MI325X", year: "2024", color: "#f97316", memory: "256 GB HBM3E", memBw: "6.0 TB/s", p2p: 896, totalIo: "1,024 GB/s", power: "1,000 W", note: "Same documented P2P aggregate bandwidth as MI300X: 7 peer links × 128 GB/s = 896 GB/s. This is a peak architectural metric, not a measured collective result." },
+  { id: "mi350x" as Id, label: "MI350X", year: "2025", color: "#ef4444", memory: "288 GB HBM3E", memBw: "8.0 TB/s", p2p: 1075.2, totalIo: "1,203.2 GB/s", power: "1,000 W", note: "CDNA 4 increases the documented peer-link metric to 7 × 153.6 GB/s = 1,075.2 GB/s, approximately 20% under the same scope: 1,075.2 / 896 = 1.2." },
   { id: "mi355x" as Id, label: "MI355X", year: "2025", color: "#dc2626", memory: "288 GB HBM3E", memBw: "8.0 TB/s", p2p: 1075.2, totalIo: "1,203.2 GB/s", power: "1,400 W", note: "Liquid-cooled variant with higher power envelope; interconnect metric is the same in the ROCm comparison table." },
 ]
 
@@ -47,7 +47,7 @@ export function AMDGenerationCompareViz() {
             </div>
           ))}
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            AMD product pages may also report broader “total aggregate I/O” or per-link numbers. Those figures describe different scopes. Mixing them in one comparison is a units error.
+            AMD also documents larger total peak aggregate I/O figures because those include additional host/external I/O scope. Those figures describe different scopes. Mixing them in one comparison is a units error.
           </p>
         </div>
 

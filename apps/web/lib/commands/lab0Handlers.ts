@@ -1,26 +1,31 @@
 import { useLabStore } from "@/store/labStore";
+import { findFailedLab0Rail, normalizeRails } from "@/lib/lab0State";
 import type { CommandResult } from "@/types";
 
 function getLab0LeafContext() {
   const store = useLabStore.getState();
   const activeDeviceId = store.activeDeviceId ?? "leaf-rail3";
   const railId = Number.parseInt(activeDeviceId.replace("leaf-rail", ""), 10);
-  const swpId = Number.isFinite(railId) ? railId + 2 : 5;
-  const rail = (store.topology.rails ?? []).find((item) => item.id === railId);
+  const rail = normalizeRails(store.topology.rails).find((item) => item.id === railId);
+  const failedRail = findFailedLab0Rail(store.topology.rails);
 
   return {
     store,
     railId,
-    swpName: `swp${swpId}`,
+    swpName: rail?.leafInterface ?? "swp5",
     rail,
-    isFailedRail: rail?.switchPort === "error-disabled",
+    failedRail,
+    isFailedLeaf: Boolean(failedRail && rail && failedRail.leafId === rail.leafId),
+    isFailedRailPort: Boolean(failedRail && rail && failedRail.leafId === rail.leafId && failedRail.leafInterface === (rail.leafInterface ?? "swp5")),
   };
 }
 
 export function showUfmTopologyLab0(): CommandResult {
   const { topology, setCondition, markVerified } = useLabStore.getState();
-  const rails = topology.rails ?? [];
-  const failedRail = rails.find((rail) => rail.switchPort === "error-disabled");
+  const rails = normalizeRails(topology.rails);
+  const failedRail = rails.find((rail) =>
+    rail.switchPort !== "up" || rail.nicState !== "up" || rail.carrierState !== "up" || rail.rdmaPortState !== "active",
+  );
 
   if (rails.length === 0) {
     return {
@@ -36,79 +41,103 @@ export function showUfmTopologyLab0(): CommandResult {
 
   const rows = rails
     .map((rail) => {
-      const switchPortState =
-        rail.switchPort === "error-disabled" ? "protodown/linkflap" : "up";
-      return `${String(rail.id).padEnd(5)} leaf-rail${rail.id}.swp${String(rail.id + 2).padEnd(3)} ${rail.nicName.padEnd(8)} eth${String(rail.id).padEnd(4)} ${switchPortState}`;
+      const hostState = `${rail.rdmaPortState}/${rail.carrierState}`;
+      const switchState = rail.protodownReason ? `protodown/${rail.protodownReason}` : "up";
+      return `${String(rail.id).padEnd(5)} ${`${rail.leafId}.${rail.leafInterface}`.padEnd(20)} ${rail.nicName.padEnd(8)} ${rail.netdevName.padEnd(9)} ${hostState.padEnd(11)} ${switchState}`;
     })
     .join("\n");
 
   return {
-    output: `Rail  Leaf Port        DGX HCA   DGX Netdev  Switch Port State
-----  ---------------  --------  ---------  ------------------
+    output: `[SIMULATED FABRIC INVENTORY — tutorial scaffold, not literal NetQ/UFM output]
+Rail  Leaf attachment      DGX HCA   DGX netdev  Host state  Switch state
+----  -------------------  --------  ----------  ----------  ------------------
 ${rows}
 
 Summary:
-  Failed rail: Rail ${failedRail?.id ?? "none"}
-  Mapping: Rail 3 -> leaf-rail3 swp5 -> mlx5_3 / eth3
+  Failed rail: ${failedRail ? `Rail ${failedRail.id}` : "none"}
+  Mapping: ${failedRail ? `Rail ${failedRail.id} -> ${failedRail.leafId} ${failedRail.leafInterface} -> ${failedRail.nicName} / ${failedRail.netdevName}` : "no failed rail detected"}
 
-[SIM ONLY] The mapping summary and next-step hint below are tutorial scaffolding.
-They are not literal NetQ, UFM, or switch CLI output you should expect on a production system. This RoCE/Cumulus lab uses the inventory server only as a topology-mapping scaffold.
-Next checks: run 'rdma link show' and 'ethtool -S eth3' on the DGX host,
-then inspect 'nv show interface swp5 link' on leaf-rail3.`,
+Interpretation: this inventory reports layer state collected from the simulated fabric. Host state is RDMA-port/carrier state; switch state is operational forwarding state. It does not by itself prove application health.`,
     conceptId: "rocev2",
     type: "success",
   };
 }
 
 export function nvShowInterfaceStatusLab0(): CommandResult {
-  const { store, railId, swpName, isFailedRail } = getLab0LeafContext();
-
-  if (isFailedRail) {
-    store.setCondition("errDisabledConfirmed", true);
-    store.markVerified("errDisabledConfirmed");
-  }
+  const { rail, swpName, isFailedRailPort } = getLab0LeafContext();
+  const oper = isFailedRailPort ? "down" : "up";
+  const protodown = isFailedRailPort ? "enabled" : "disabled";
+  const reason = isFailedRailPort ? rail?.protodownReason ?? "linkflap" : "";
 
   return {
-    output: `Interface  Admin Status  Oper Status  Protodown  Protodown Reason  Speed  Description
+    output: `[SIMULATED NVUE OUTPUT — abridged]
+Interface  Admin Status  Oper Status  Protodown  Protodown Reason  Speed  Description
 ---------  ------------  -----------  ---------  ----------------  -----  -----------
-${swpName.padEnd(9)} up            ${isFailedRail ? "down" : "up"}         ${isFailedRail ? "enabled" : "disabled"}   ${isFailedRail ? "linkflap" : ""}${isFailedRail ? " ".repeat(8) : " ".repeat(16)} 400G   dgx-node-a-rail${railId}`,
-    type: isFailedRail ? "error" : "success",
+${swpName.padEnd(9)} up            ${oper.padEnd(11)} ${protodown.padEnd(9)} ${reason.padEnd(16)} ${rail?.speedGbps ?? 400}G   dgx-node-a-rail${rail?.id ?? "?"}
+
+[SIMULATION INTERPRETATION — not NVUE output]
+Administrative state, carrier state, operational forwarding state, and protodown protection are separate layers.`,
+    type: isFailedRailPort ? "error" : "success",
     conceptId: "rocev2",
   };
 }
 
 export function nvShowInterfaceLinkLab0(expectedPort: string): CommandResult {
-  const { store, railId, swpName, isFailedRail } = getLab0LeafContext();
+  const { store, rail, swpName, isFailedLeaf, isFailedRailPort } = getLab0LeafContext();
 
-  if (swpName !== expectedPort) {
+  if (!rail) {
     return {
-      output: `nv show interface ${expectedPort} link
-
-No fault on ${expectedPort} from this leaf tab.
-[SIM ONLY] Use the rail mapping from 'show rail topology' to pick the swp port on this leaf.`,
+      output: `nv show interface ${expectedPort} link\n\nNo interface state is available for this device context.`,
       type: "info",
     };
   }
 
-  if (isFailedRail && store.lab.conditions.linkConfirmed === true) {
+  if (swpName !== expectedPort) {
+    return {
+      output: `[SIMULATED NVUE OUTPUT — abridged]
+nv show interface ${expectedPort} link
+
+No Node A rail attachment is mapped to ${expectedPort} in this lab. Use the fabric-inventory mapping rather than guessing interface numbers.`,
+      type: "info",
+    };
+  }
+
+  if (isFailedRailPort && store.lab.conditions.railIdentified === true) {
     store.setCondition("faultIsolated", true);
     store.markVerified("faultIsolated");
   }
 
+  const oper = isFailedRailPort ? "down" : "up";
+  const protodown = isFailedRailPort ? "enabled" : "disabled";
+  const reason = isFailedRailPort ? rail.protodownReason ?? "linkflap" : "";
+  const carrierTransitions = isFailedRailPort ? "6" : "0";
+  const carrierUp = isFailedRailPort ? "3" : "1";
+  const carrierDown = isFailedRailPort ? "3" : "0";
+
   return {
-    output: `                         operational              applied
+    output: `[SIMULATED NVUE OUTPUT — abridged]
+                         operational              applied
 -----------------------  -----------------------  -------
 admin-status             up                       up
-oper-status              ${isFailedRail ? "down" : "up"}                     up
-protodown                ${isFailedRail ? "enabled" : "disabled"}                  disabled
-protodown-reason         ${isFailedRail ? "linkflap" : ""}
+oper-status              ${oper.padEnd(23)} up
+protodown                ${protodown.padEnd(23)} disabled
+protodown-reason         ${reason}
 auto-negotiate           off                      off
 duplex                   full                     full
-speed                    400G                     400G
-carrier-transitions      ${isFailedRail ? "6" : "0"}
-oper-status-last-change  ${isFailedRail ? "2026/04/03 10:07:43.219" : "2026/04/03 09:52:18.004"}
-state                    ${isFailedRail ? "down" : "up"}                      up`,
-    type: isFailedRail ? "error" : "success",
+speed                    ${rail.speedGbps}G                     ${rail.speedGbps}G
+state                    ${oper.padEnd(23)} up
+stats
+  carrier-transitions    ${carrierTransitions}
+  carrier-up-count       ${carrierUp}
+  carrier-down-count     ${carrierDown}
+
+[SIMULATION INTERPRETATION — not NVUE output]
+${isFailedRailPort
+  ? "This is the switch-side fault: link-flap protection placed the interface into protodown. Administrative state remains up, but operational forwarding and carrier state are down. Clearing protodown or restoring service is a separate recovery exercise."
+  : isFailedLeaf
+    ? "This leaf is involved in the failure, but the displayed interface state does not identify the mapped failed attachment."
+    : "This interface is healthy. Inspecting a healthy rail does not isolate the failed rail."}`,
+    type: isFailedRailPort ? "error" : "success",
     conceptId: "rocev2",
   };
 }
@@ -116,22 +145,24 @@ state                    ${isFailedRail ? "down" : "up"}                      up
 export function nvShowInterfaceLinkFlapProtectionLab0(
   expectedPort: string,
 ): CommandResult {
-  const { swpName, isFailedRail } = getLab0LeafContext();
+  const { swpName, isFailedRailPort } = getLab0LeafContext();
 
   if (swpName !== expectedPort) {
     return {
-      output: `nv show interface ${expectedPort} link flap-protection
-
-No flap-protection event on ${expectedPort} from this leaf tab.`,
+      output: `nv show interface ${expectedPort} link flap-protection\n\nNo flap-protection evidence is available for ${expectedPort} in this lab mapping.`,
       type: "info",
     };
   }
 
   return {
-    output: `           operational  applied
+    output: `[SIMULATED NVUE OUTPUT — abridged]
+           operational  applied
 ---------  -----------  -------
-state                   enabled`,
-    type: isFailedRail ? "error" : "success",
+state      enabled     enabled
+
+[SIMULATION INTERPRETATION — not NVUE output]
+${isFailedRailPort ? "Flap protection is enabled and the interface is currently protodown with reason linkflap." : "Flap protection is enabled; this interface has no active linkflap protodown event."}`,
+    type: isFailedRailPort ? "error" : "success",
     conceptId: "rocev2",
   };
 }

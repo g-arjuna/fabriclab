@@ -1,5 +1,13 @@
 import type { LabConfig, LabDevice } from "@/types";
 
+const leafCommands = [
+  "nv show interface swp5 link",
+  "nv show interface swp5 link flap-protection",
+  "nv show interface status",
+  "help",
+  "hint",
+];
+
 export const lab0Devices: LabDevice[] = [
   {
     id: "ufm-server",
@@ -36,42 +44,61 @@ export const lab0Devices: LabDevice[] = [
     label: `Leaf Switch Rail ${index}`,
     sublabel: `SN5600 | Rail ${index}`,
     prompt: `cumulus@leaf-rail${index}:~$`,
-    osLabel: "Cumulus Linux",
-    allowedCommands: [
-      `nv show interface swp${index + 2} link`,
-      "nv show interface status",
-      "help",
-      "hint",
-    ],
+    osLabel: "Cumulus Linux 5.x",
+    allowedCommands: leafCommands,
     position: { x: 30 + index * 68, y: 220 },
     status: index === 3 ? ("error-disabled" as const) : ("up" as const),
     railId: index,
   })),
 ];
 
+function rail(id: number, failed = false) {
+  const suffix = id.toString(16).padStart(2, "0");
+  return {
+    id,
+    nicName: `mlx5_${id}`,
+    netdevName: `eth${id}`,
+    leafId: `leaf-rail${id}`,
+    // Node A occupies server-port position five on every rail leaf. The rail
+    // changes the leaf identity; it must not change the node's downlink number.
+    leafInterface: "swp5",
+    adminState: "up" as const,
+    nicState: failed ? ("down" as const) : ("up" as const),
+    carrierState: failed ? ("down" as const) : ("up" as const),
+    rdmaPortState: failed ? ("down" as const) : ("active" as const),
+    switchPort: failed ? ("error-disabled" as const) : ("up" as const),
+    switchAdminState: "up" as const,
+    switchCarrierState: failed ? ("down" as const) : ("up" as const),
+    protodownReason: failed ? ("linkflap" as const) : null,
+    speedGbps: 400,
+    guid: `0x506b4b0300a1b2${suffix}`,
+    portGuid: `0x506b4b0300a1c2${suffix}`,
+  };
+}
+
 export const lab0: LabConfig = {
   id: "lab0-failed-rail",
   title: "Identify the failed rail",
   difficulty: "beginner",
   expectedMinutes: 12,
-  scenario: `A 16-node DGX H100 cluster is running distributed
-training across all 128 GPUs. Throughput has dropped
-to 87.5% of baseline - exactly 7/8 of expected.
+  scenario: `A 16-node DGX H100 cluster is running distributed training across all 128 GPUs. The synthetic training workload has stalled and its launcher reports a communication-group timeout. That application symptom is the starting observation; it is not mathematically derived from a link-count percentage.
 
-Rail 3 (mlx5_3 / eth3) on DGX Node A no longer has usable RDMA connectivity. The effect on the training job depends on NCCL communication topology and error handling; do not assume the GPU is universally removed from every collective. The other 15 nodes are unaffected.
+Fabric inventory reports that one 400G compute-rail attachment on DGX Node A has lost connectivity. Before the fault, that node had eight nominal 400G compute attachments (3.2 Tb/s of installed one-direction endpoint link capacity). With seven available it has 2.8 Tb/s, a 12.5% reduction in that node's installed compute-link capacity. Across all 128 node-facing compute attachments in the cluster, one failed attachment is 1/128 of installed endpoint link capacity. Neither percentage predicts collective throughput or application completion by itself.
+
+The other nodes can have healthy physical links while still being affected if they participate in the same stalled communication group. NCCL topology, algorithm selection, timeout handling, and the launcher determine the application-wide consequence.
 
 Cluster topology:
   16 DGX nodes x 8 GPUs = 128 GPUs
   8 leaf switches (one per GPU rail, Rail 0-7)
-  Each leaf (SN5600 64-port): 16 active DGX downlinks
-    + 16 active spine uplinks (32 ports unused -
-    cluster is sized for 16 nodes today)
+  Lab switch assumption: each SN5600 uses 32 non-breakout cages configured as 400G interfaces:
+  16 active DGX downlinks + 16 active spine uplinks; the remaining 32 physical cages are unpopulated expansion capacity.
+  swp names are a consistent lab abstraction. Node A is wired to server-port position swp5 on every rail leaf.
 
 Your task:
-  1. Identify which rail failed and map Rail 3 to the switch port in the fabric inventory
-  2. Confirm DGX-side RDMA and NIC state with native host commands
-  3. Determine NIC side vs switch side fault
-  4. Find the exact fault type on the Cumulus leaf interface`,
+  1. Identify which rail failed and map it to the switch port in the fabric inventory
+  2. Inspect the DGX-side RDMA port state and the corresponding NIC statistics
+  3. Inspect the corresponding Cumulus leaf interface
+  4. Identify the switch-side protection mechanism and distinguish administrative, carrier, RDMA, forwarding, and application state`,
   initialTopology: {
     nic: { name: "eth0", speed: 400, state: "up" },
     pfcEnabled: true,
@@ -79,38 +106,29 @@ Your task:
     congestionDetected: false,
     bufferUtilPct: 15,
     rails: [
-      { id: 0, nicName: "mlx5_0", nicState: "up", switchPort: "up", guid: "0x506b4b0300a1b200" },
-      { id: 1, nicName: "mlx5_1", nicState: "up", switchPort: "up", guid: "0x506b4b0300a1b201" },
-      { id: 2, nicName: "mlx5_2", nicState: "up", switchPort: "up", guid: "0x506b4b0300a1b202" },
-      { id: 3, nicName: "mlx5_3", nicState: "up", switchPort: "error-disabled", guid: "0x506b4b0300a1b203" },
-      { id: 4, nicName: "mlx5_4", nicState: "up", switchPort: "up", guid: "0x506b4b0300a1b204" },
-      { id: 5, nicName: "mlx5_5", nicState: "up", switchPort: "up", guid: "0x506b4b0300a1b205" },
-      { id: 6, nicName: "mlx5_6", nicState: "up", switchPort: "up", guid: "0x506b4b0300a1b206" },
-      { id: 7, nicName: "mlx5_7", nicState: "up", switchPort: "up", guid: "0x506b4b0300a1b207" },
+      rail(0), rail(1), rail(2), rail(3, true),
+      rail(4), rail(5), rail(6), rail(7),
     ],
   },
-  requiredConditions: ["railIdentified", "linkConfirmed", "faultIsolated"],
+  requiredConditions: ["railIdentified", "rdmaEvidence", "nicEvidence", "faultIsolated"],
   hints: [
     {
       level: 1,
       triggerAfterMistakes: 3,
       triggerAfterSeconds: 120,
-      text:
-        "Start on the fabric inventory server. Run 'show rail topology' to identify the failed rail and map Rail 3 to the leaf-side swp interface and the DGX-side mlx5/eth interface.",
+      text: "Start on the fabric inventory server. Run 'show rail topology' to identify the failed rail and map Node A's rail attachment to the correct leaf and swp interface.",
     },
     {
       level: 2,
       triggerAfterMistakes: 6,
       triggerAfterSeconds: 240,
-      text:
-        "After fabric inventory identifies Rail 3, run 'rdma link show' and 'ethtool -S eth3' on the DGX host. Then open the leaf-rail3 terminal and inspect swp5 with NVUE.",
+      text: "After the inventory identifies Rail 3, inspect both host-side evidence categories on the DGX: 'rdma link show' for RDMA port state and 'ethtool -S eth3' for NIC driver evidence. Then open leaf-rail3 and inspect swp5 with NVUE.",
     },
     {
       level: 3,
       triggerAfterMistakes: 10,
       triggerAfterSeconds: 360,
-      text:
-        "Sequence: fabric inventory 'show rail topology' (Rail 3 -> leaf-rail3 swp5 -> mlx5_3/eth3), DGX 'rdma link show' and 'ethtool -S eth3' (NIC still reports active), then leaf-rail3 'nv show interface status' and 'nv show interface swp5 link'. The host administrative/link view and switch forwarding state differ in this simulation: the NIC still reports active/link-up while the switch-side interface is operationally down in protodown due to linkflap. These are different state layers, not a contradiction.",
+      text: "Solution sequence: fabric inventory 'show rail topology' (Rail 3 -> leaf-rail3 swp5 -> mlx5_3/eth3), DGX 'rdma link show' and 'ethtool -S eth3', then leaf-rail3 'nv show interface swp5 link'. In this documented protodown/linkflap scenario, administrative state remains up while carrier and operational forwarding state are down. The host administrative flag can remain up even though carrier is lost.",
     },
   ],
 };

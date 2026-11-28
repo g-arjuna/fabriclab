@@ -7,6 +7,7 @@ type View = "nvlink" | "pcie" | "compare"
 export function NVLinkViz() {
   const [view, setView] = useState<View>("nvlink")
   const [hoveredGpu, setHoveredGpu] = useState<number | null>(null)
+  const [directionMode, setDirectionMode] = useState<"direction" | "bidirectional">("direction")
 
   const gpus = [0, 1, 2, 3, 4, 5, 6, 7]
   const gpuPositions = [
@@ -19,7 +20,7 @@ export function NVLinkViz() {
   ]
 
   return (
-    <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
+    <div data-testid="nvlink-viz" className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">
         NVLink — GPU-to-GPU fabric inside a DGX node
       </p>
@@ -28,6 +29,8 @@ export function NVLinkViz() {
         {(["nvlink", "pcie", "compare"] as View[]).map(v => (
           <button
             key={v}
+            type="button"
+            aria-pressed={view === v}
             onClick={() => setView(v)}
             className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
             style={{
@@ -129,7 +132,7 @@ export function NVLinkViz() {
                 <span className="w-24 flex-shrink-0 text-[10px] leading-4 text-slate-400 sm:w-44 sm:text-xs">{row.label}</span>
                 <div className="flex-1 h-5 rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full rounded-full flex items-center pl-2"
-                    style={{ width: `${row.pct}%`, backgroundColor: row.color, minWidth: 40 }}>
+                    style={{ width: `${row.pct}%`, backgroundColor: row.color }}>
                     <span className="text-white font-semibold text-[10px]">{row.bw}</span>
                   </div>
                 </div>
@@ -141,28 +144,41 @@ export function NVLinkViz() {
 
       {view === "compare" && (
         <div className="space-y-3">
-          <p className="text-sm text-slate-400">Direction-normalized bandwidth comparison — why scale-up and scale-out are different resources:</p>
-          {[
-            { label: "NVLink gen4 full-duplex capacity", bw: 900, unit: "GB/s", color: "#15803d", note: "450 GB/s per direction" },
-            { label: "400G external full-duplex capacity", bw: 100, unit: "GB/s", color: "#1d4ed8", note: "50 GB/s per direction" },
-            { label: "400G nominal one-direction rate", bw: 50, unit: "GB/s", color: "#0369a1", note: "Line-rate conversion, not payload guarantee" },
-            { label: "PCIe Gen5 x16 full-duplex capacity", bw: 126, unit: "GB/s", color: "#374151", note: "~63 GB/s per direction before overhead" },
-          ].map(row => (
-            <div key={row.label}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-400">Bandwidth comparison using one direction convention at a time:</p>
+            <div className="flex gap-2" role="group" aria-label="Bandwidth comparison convention">
+              {(["direction", "bidirectional"] as const).map((mode) => (
+                <button key={mode} type="button" aria-pressed={directionMode === mode} onClick={() => setDirectionMode(mode)}
+                  className="rounded-lg px-3 py-1.5 text-xs"
+                  style={{ backgroundColor: directionMode === mode ? "#082f49" : "#0f172a", border: `1px solid ${directionMode === mode ? "#38bdf8" : "#1e293b"}`, color: directionMode === mode ? "#bae6fd" : "#94a3b8" }}>
+                  {mode === "direction" ? "Per direction" : "Aggregate bidirectional"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {(directionMode === "direction" ? [
+          { label: "NVLink gen4 per direction", bw: 450, unit: "GB/s", color: "#15803d", note: "900 GB/s aggregate bidirectional endpoint bandwidth" },
+            { label: "400G external per direction", bw: 50, unit: "GB/s", color: "#1d4ed8", note: "400 Gb/s ÷ 8 = 50 GB/s line-rate conversion" },
+            { label: "PCIe Gen5 x16 per direction", bw: 63, unit: "GB/s", color: "#374151", note: "approximate payload-rate figure before transaction-level overhead" },
+          ] : [
+          { label: "NVLink gen4 aggregate bidirectional", bw: 900, unit: "GB/s", color: "#15803d", note: "450 GB/s per direction" },
+            { label: "400G external aggregate bidirectional", bw: 100, unit: "GB/s", color: "#1d4ed8", note: "50 GB/s per direction" },
+            { label: "PCIe Gen5 x16 aggregate bidirectional", bw: 126, unit: "GB/s", color: "#374151", note: "approximately 63 GB/s per direction before overhead" },
+          ]).map(row => (
+            <div key={row.label} data-testid={`bandwidth-row-${row.bw}`}>
               <div className="flex flex-wrap justify-between gap-x-3 text-xs mb-1">
                 <span className="text-slate-300">{row.label}</span>
                 <span className="text-slate-400">{row.note}</span>
               </div>
-              <div className="h-6 rounded-full bg-slate-800 overflow-hidden">
-                <div className="h-full rounded-full flex items-center px-3"
-                  style={{ width: `${(row.bw / 900) * 100}%`, backgroundColor: row.color, minWidth: 60 }}>
-                  <span className="text-white text-xs font-bold">{row.bw} {row.unit}</span>
-                </div>
+              <div className="relative h-6 rounded-full bg-slate-800 overflow-hidden">
+                <div className="h-full rounded-full" data-testid={`bandwidth-bar-${row.bw}`}
+                  style={{ width: `${(row.bw / (directionMode === "direction" ? 450 : 900)) * 100}%`, backgroundColor: row.color }} />
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-white text-xs font-bold drop-shadow">{row.bw} {row.unit}</span>
               </div>
             </div>
           ))}
           <p className="text-xs text-slate-500 mt-2">
-            Compared consistently as aggregate bidirectional capacity, 900 GB/s NVLink versus 100 GB/s for a full-duplex 400G link is a nominal 9:1 ratio. The per-direction comparison is also 450:50 = 9:1. Tensor parallelism is commonly placed in the scale-up domain because of bandwidth and latency, but large NVLink Switch System domains can extend beyond one chassis.
+            The comparison convention is explicit and homogeneous. Per direction, 450 GB/s NVLink versus 50 GB/s for 400G is 9:1. Aggregating both directions gives 900 GB/s versus 100 GB/s, also 9:1. Bar widths are proportional to the displayed numerical values; labels are overlaid rather than inflating small bars.
           </p>
         </div>
       )}

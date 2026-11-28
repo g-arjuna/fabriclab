@@ -60,12 +60,13 @@ function gpuCard(label: string, sublabel: string, color: string, wide = false) {
 export function TrainingParallelismViz() {
   const [mode, setMode] = useState<Mode>("memory")
   const [example, setExample] = useState(0)
+  const [ringStep, setRingStep] = useState(0)
   const selected = modeText[mode]
   const ring = ringExamples[example]
   const sent = ringAllReduceSentGBPerRank(ring.n, ring.s)
 
   return (
-    <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
+    <div data-testid="training-parallelism-viz" className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-2 text-xs uppercase tracking-widest text-slate-500">Training memory, parallelism, and collective communication</p>
       <p className="mb-4 text-xs leading-5 text-slate-500">
         Parallelism choices are architectural tools, not fixed traffic-volume rankings. Actual traffic depends on model, placement, collective algorithm, batching, and implementation.
@@ -75,7 +76,7 @@ export function TrainingParallelismViz() {
         {modes.map((item) => {
           const isActive = item.id === mode
           return (
-            <button key={item.id} type="button" onClick={() => setMode(item.id)}
+            <button key={item.id} type="button" aria-pressed={isActive} onClick={() => setMode(item.id)}
               className="rounded-xl px-3 py-2 text-left text-xs transition"
               style={{
                 backgroundColor: isActive ? "#1e3a5f" : "#0f172a",
@@ -118,7 +119,31 @@ export function TrainingParallelismViz() {
               <div className="px-2 text-xl text-cyan-300">⟲</div>
               {gpuCard("All ranks", "same reduced result", "#0e7490", true)}
             </div>
-            <p className="mt-3 text-xs leading-5 text-slate-400">AllReduce semantic example: inputs 1, 2, 3, and 4 produce the sum 10 at every participant. The implementation determines how bytes move.</p>
+            <p className="mt-3 text-xs leading-5 text-slate-400">This card illustrates replicated data parallelism. Inputs 1, 2, 3, and 4 produce the sum 10 at every participant. FSDP/ZeRO sharded variants can instead use parameter all-gathers, gradient reduce-scatters, and related operations depending on configuration.</p>
+            <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3" data-testid="ring-worked-example">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-cyan-200">Worked four-rank ring example — four-element vectors</div>
+                <div className="flex gap-1">
+                  {["partition", "reduce-scatter", "all-gather", "final"].map((label, index) => (
+                    <button key={label} type="button" aria-pressed={ringStep === index} onClick={() => setRingStep(index)} className="rounded-md px-2 py-1 text-[10px]" style={{ backgroundColor: ringStep === index ? "#155e75" : "#0f172a", border: `1px solid ${ringStep === index ? "#22d3ee" : "#1e293b"}`, color: ringStep === index ? "#cffafe" : "#94a3b8" }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-2 md:grid-cols-4 font-mono text-[10px]">
+                {([
+                  ["Rank 0", ["[1,2,3,4]", "reduce-scatter end: owns c1=32", "c1=32; gathering c0,c2,c3", "[28,32,36,40]"]],
+                  ["Rank 1", ["[5,6,7,8]", "reduce-scatter end: owns c2=36", "c2=36; gathering c0,c1,c3", "[28,32,36,40]"]],
+                  ["Rank 2", ["[9,10,11,12]", "reduce-scatter end: owns c3=40", "c3=40; gathering c0,c1,c2", "[28,32,36,40]"]],
+                  ["Rank 3", ["[13,14,15,16]", "reduce-scatter end: owns c0=28", "c0=28; gathering c1,c2,c3", "[28,32,36,40]"]],
+                ] as [string, string[]][]).map(([rank, states]) => (
+                  <div key={rank} className="rounded-lg bg-slate-950/70 p-2" data-testid={`ring-${rank.toString().toLowerCase().replace(" ", "-")}`} data-stage={["partition", "reduce-scatter", "all-gather", "final"][ringStep]}>
+                    <div className="mb-1 font-sans font-semibold text-slate-300">{rank}</div>
+                    <div className="text-cyan-100">{states[ringStep]}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] leading-5 text-slate-400">Each rank partitions its vector into four chunks. Ring reduce-scatter circulates partial sums for multiple steps until each rank owns one fully reduced chunk; the reduce-scatter stage shown here is that endpoint, not a one-hop total. Ring all-gather then circulates those reduced chunks until every rank has the complete reduced vector. No central aggregation GPU is required.</p>
+            </div>
           </div>
         )}
 
@@ -134,14 +159,17 @@ export function TrainingParallelismViz() {
         )}
 
         {mode === "pipeline" && (
-          <div className="flex flex-wrap items-center gap-2">
-            {gpuCard("Stage 1", "layers 1–8", "#0f766e")}
-            <div className="text-xl text-amber-300">→</div>
-            {gpuCard("Stage 2", "layers 9–16", "#0f766e")}
-            <div className="text-xl text-amber-300">→</div>
-            {gpuCard("Stage 3", "layers 17–24", "#0f766e")}
-            <div className="text-xl text-amber-300">→</div>
-            {gpuCard("Stage 4", "layers 25–32", "#0f766e")}
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              {gpuCard("Stage 1", "layers 1–8", "#0f766e")}
+              <div className="text-center text-amber-300"><div>→ activations</div><div className="text-cyan-300">← gradients</div></div>
+              {gpuCard("Stage 2", "layers 9–16", "#0f766e")}
+              <div className="text-center text-amber-300"><div>→ activations</div><div className="text-cyan-300">← gradients</div></div>
+              {gpuCard("Stage 3", "layers 17–24", "#0f766e")}
+              <div className="text-center text-amber-300"><div>→ activations</div><div className="text-cyan-300">← gradients</div></div>
+              {gpuCard("Stage 4", "layers 25–32", "#0f766e")}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-slate-400">Training dependencies are bidirectional: forward activations move downstream, while backward activation gradients move upstream between stage boundaries.</p>
           </div>
         )}
 

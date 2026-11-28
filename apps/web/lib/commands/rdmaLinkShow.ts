@@ -1,46 +1,50 @@
 import type { CommandResult } from '@/types'
 import { useLabStore } from '@/store/labStore'
+import { findFailedLab0Rail, normalizeRails } from '@/lib/lab0State'
 
 export function rdmaLinkShow(): CommandResult {
   const { topology, setCondition, markVerified } = useLabStore.getState()
-  const rails = topology.rails ?? []
+  const rails = normalizeRails(topology.rails)
   const hasNcclContext = topology.ncclTransport !== undefined
     || topology.ncclIbHca !== undefined
     || topology.ncclSocketIfname !== undefined
 
-  // Multi-rail mode: Lab 0 with 8-rail topology
+  // Multi-rail mode: rail-based labs. Output derives from each rail fixture.
   if (rails.length > 0) {
-    const degradedRail = rails.find(
-      (rail) => rail.switchPort !== "up" || rail.nicState !== "up",
-    );
+    const degradedRail = findFailedLab0Rail(topology.rails)
     const railAlreadyIdentified =
-      useLabStore.getState().lab.conditions.railIdentified === true;
+      useLabStore.getState().lab.conditions.railIdentified === true
 
     if (degradedRail && railAlreadyIdentified) {
-      setCondition("linkConfirmed", true);
-      markVerified("linkConfirmed");
+      setCondition('linkConfirmed', true)
+      markVerified('linkConfirmed')
+    }
+    if (degradedRail && useLabStore.getState().lab.labId === 'lab0-failed-rail') {
+      setCondition('rdmaEvidence', true)
+      markVerified('rdmaEvidence')
     }
 
     const lines = rails.map(rail => {
+      const state = rail.rdmaPortState === 'active' ? 'ACTIVE' : 'DOWN'
+      const physical = rail.carrierState === 'up' ? 'LINK_UP' : 'DISABLED'
       const pfcWarning = !topology.pfcEnabled
         ? '\n  WARNING: PFC disabled -- lossless operation not guaranteed'
         : ''
       return (
-        `link ${rail.nicName}/1 state ACTIVE physical_state LINK_UP\n`
+        `link ${rail.nicName}/1 state ${state} physical_state ${physical}\n`
         + `  type RoCE\n`
-        + `  netdev eth${rail.id}\n`
+        + `  netdev ${rail.netdevName}\n`
         + `  roce_mode: RoCEv2`
         + pfcWarning
       )
     })
 
-    const failedRail = rails.find((rail) => rail.switchPort === 'error-disabled')
-    const interpretation = failedRail
-      ? `\n\n[SIMULATION INTERPRETATION — not rdma output] Rail ${failedRail.id} remains host-link ACTIVE in this fixture while its peer leaf interface is operationally down/protodown. rdma link state is not QP state and does not prove end-to-end forwarding.`
+    const interpretation = degradedRail
+      ? `\n\n[SIMULATION INTERPRETATION — not rdma output] Rail ${degradedRail.id} reports ${degradedRail.rdmaPortState}/${degradedRail.carrierState === 'up' ? 'LINK_UP' : 'DISABLED'} from the host's RDMA port and carrier state. This evidence does not diagnose QP state or application health. ${degradedRail.carrierState === 'up' ? 'A host can retain carrier in a separate switch-side forwarding/protodown scenario, so host output alone cannot prove end-to-end connectivity.' : 'Loss of carrier makes the affected RDMA port unavailable.'}`
       : ''
 
     return {
-      output: lines.join('\n\n') + interpretation,
+      output: `[SIMULATED rdma output — abridged]\n${lines.join('\n\n')}${interpretation}`,
       conceptId: 'rocev2',
       type: 'success',
     }

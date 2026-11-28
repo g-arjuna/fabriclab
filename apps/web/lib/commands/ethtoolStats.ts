@@ -1,5 +1,6 @@
 import type { CommandResult } from "@/types";
 import { useLabStore } from "@/store/labStore";
+import { normalizeRails } from "@/lib/lab0State";
 
 export function ethtoolStats(): CommandResult {
   const {
@@ -45,8 +46,8 @@ export function ethtoolStats(): CommandResult {
 }
 
 export function ethtoolStatsEth3(): CommandResult {
-  const { topology } = useLabStore.getState()
-  const rails = topology.rails ?? []
+  const { topology, setCondition, markVerified } = useLabStore.getState()
+  const rails = normalizeRails(topology.rails)
   const rail3 = rails.find(r => r.id === 3)
 
   if (!rail3) {
@@ -56,21 +57,29 @@ export function ethtoolStatsEth3(): CommandResult {
     }
   }
 
-  const isPortFailed = rail3.switchPort === 'error-disabled'
+  const isPortFailed = rail3.switchPort !== 'up' || rail3.carrierState !== 'up' || rail3.rdmaPortState !== 'active'
+  if (isPortFailed) {
+    setCondition('nicEvidence', true)
+    markVerified('nicEvidence')
+  }
 
   return {
-    output: `NIC statistics (ConnectX-7 · eth3 / mlx5_3 — Rail 3):
-  rx_prio3_pause:       0
-  tx_prio3_pause:       0
-  rx_ecn_marked_pkts:   0
-  tx_discards_phy:      0
-  link_speed:           400Gb/s
-  link_state:           up
+    output: `[SIMULATED ABRIDGED DRIVER STATISTICS — ethtool -S style]
+NIC statistics for ${rail3.netdevName} (${rail3.nicName}, Rail 3):
+  rx_packets:             ${isPortFailed ? '1842104' : '1842388'}
+  tx_packets:             ${isPortFailed ? '1931129' : '1934820'}
+  rx_bytes:               ${isPortFailed ? '274887364608' : '274903420928'}
+  tx_bytes:               ${isPortFailed ? '287220105216' : '287511347200'}
+  rx_prio3_pause:         0
+  tx_prio3_pause:         0
+  rx_ecn_marked_pkts:     0
+  tx_discards_phy:        0
+  link_down_events:       ${isPortFailed ? '3' : '0'}
 
 [SIMULATION INTERPRETATION — not ethtool output]
-${isPortFailed
-  ? `The host interface still reports link-up in this fixture. That does not prove frames are being forwarded through the peer leaf. Cumulus protodown is a switch forwarding/operational state; exact carrier behavior is platform- and fault-dependent. These state layers must not be conflated. Inspect leaf-rail3 with NVUE.`
-  : `Rail 3 host interface is healthy in this fixture. Application-level RDMA health still requires separate validation.`}`,
+ethtool -S is a driver-statistics interface; it is not the authoritative command for negotiated link state. In this fixture the counter set is deliberately abridged. ${isPortFailed
+  ? `The link-down events agree with the carrier loss reported by rdma link show. Zero physical discards do not prove connectivity; use the RDMA port state and the switch-side NVUE evidence together.`
+  : `No abnormal carrier or discard evidence is present for Rail 3 in this fixture.`}`,
     conceptId: 'rocev2',
     type: 'info',
   }

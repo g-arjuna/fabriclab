@@ -59,6 +59,11 @@ export function LabResult({
       <div className={`mt-4 text-7xl font-semibold ${bandClasses[band.color]}`}>{score}</div>
       <p className="mt-2 text-lg text-slate-200">{band.label}</p>
       <p className="mt-3 text-sm text-slate-400">Score: {score}/100</p>
+      {labId === "lab0-failed-rail" ? (
+        <p className="mt-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm leading-6 text-cyan-100">
+          Fault identified and isolated. Recovery and application restart are separate operational steps.
+        </p>
+      ) : null}
 
       {perfectRun ? (
         <div className="mt-8 rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-5 text-sm text-emerald-100">

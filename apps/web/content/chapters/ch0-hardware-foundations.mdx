@@ -2,7 +2,7 @@
 title: "Chapter 0: How We Got Here -- The Hardware Story"
 module: "RoCEv2 + Lossless Ethernet"
 level: "Beginner"
-estimatedMinutes: 40
+estimatedMinutes: 60
 labLink: "/lab?lab=lab0-failed-rail"
 ---
 
@@ -35,9 +35,9 @@ This is about to stop being true at AI-training scale.
 Before splitting work across servers, keep five resources distinct:
 
 - **CPU and system RAM** run the operating system, application orchestration, data loaders, preprocessing, storage services, and communication setup.
-- **GPU and HBM** execute compute kernels and provide very high-bandwidth accelerator memory. A kernel is a parallel program launched on the GPU.
+- **GPU and HBM** execute compute kernels and provide very high-bandwidth accelerator memory. HBM means high-bandwidth memory physically attached to the accelerator package. A kernel is a parallel program launched on the GPU.
 - **PCIe** connects adapters and accelerators to the host. PCIe Gen5 x16 provides approximately 63 GB/s per direction before transaction-level overhead; this is not the same resource as GPU HBM bandwidth or external network bandwidth.
-- **NIC DMA** allows a NIC to move data directly between the wire and registered memory without the CPU copying each byte. CPU software still configures queues, memory registrations, applications, and completion handling.
+- **NIC DMA** allows a NIC to move data directly between the wire and suitable host memory without the CPU copying each byte. DMA means direct memory access. CPU software still configures queues, buffers, applications, and completion handling; ordinary driver-managed DMA buffers should not be confused with application-level RDMA memory registration.
 - **GPUDirect RDMA** is a supported path by which a compatible RDMA NIC can access GPU memory directly for eligible operations, avoiding an intermediate host-memory staging copy on the data path. Setup and orchestration still involve host software.
 
 The simplified path is:
@@ -63,11 +63,11 @@ A neural network is a mathematical function with billions of parameters -- numbe
 5. Nudge every parameter slightly in the direction that reduces the error
 6. Repeat millions of times
 
-The problem is memory plus arithmetic intensity, under precisely stated assumptions. A 70-billion-parameter model stored in BF16 uses:
+The problem is memory plus arithmetic intensity, under precisely stated assumptions. A 70-billion-parameter model stored in BF16 (brain floating-point 16, a 16-bit floating-point format) uses:
 
 `70 × 10^9 parameters × 2 bytes = 140 GB`
 
-That is **weights only**. Training can additionally require gradients, optimizer state, master weights depending on the precision strategy, activations, temporary buffers, and framework overhead. The total depends on optimizer, activation checkpointing, sharding, batch shape, sequence length, and implementation. Inference memory is different from training memory, and replicated state is different from sharded state. So it is wrong to say that a 70B model is impossible on one GPU under all circumstances; it is correct to say that conventional replicated BF16 training state exceeds a single 80 GB H100 in typical configurations.
+That is **weights only**. Training can additionally require gradients, optimizer state, master weights depending on the precision strategy, activations, temporary buffers, and framework overhead. The total depends on optimizer, activation checkpointing, sharding, batch shape, sequence length, and implementation. Inference memory is different from training memory, and replicated state is different from sharded state. Precision, sharding, inference-versus-training state, and implementation all matter; the portable conclusion is that conventional replicated BF16 training state exceeds a single 80 GB H100 in typical configurations.
 
 <TrainingParallelismViz />
 
@@ -93,11 +93,11 @@ Buffer depth, ECN threshold placement, and PFC headroom are all sized around thi
 
 Training is accelerated by splitting the work across GPUs. There are several complementary approaches, and each one produces a different pattern of inter-GPU communication. As a network engineer, understanding which type dominates a given training run tells you what traffic pattern to expect on the fabric.
 
-**Data parallelism** -- All GPUs run the same complete model but on different batches of data. After each training step, participating replicas combine gradients using collectives such as AllReduce. The collective semantic is all-participating-ranks-receive-the-result, but the wire traffic depends on the ring/tree/hierarchical algorithm and group placement. Sharded alternatives such as FSDP and ZeRO change what is replicated and what communication is required. It is not automatically the highest-demand pattern in every workload. A data-parallel collective can create synchronized many-to-many logical communication, even when the physical implementation uses ring or tree forwarding rather than direct pairwise exchanges. Rail-optimized topology and appropriate fabric capacity are designed partly around these demanding collective phases.
+**Data parallelism** -- In conventional replicated data parallelism, all participating GPUs run the same complete model but on different batches of data. After each training step, participating replicas combine gradients using collectives such as AllReduce. The collective semantic is all-participating-ranks-receive-the-result, but the wire traffic depends on the ring/tree/hierarchical algorithm and group placement. FSDP (Fully Sharded Data Parallel) and ZeRO-family sharded approaches change what is replicated and can use parameter all-gathers, gradient reduce-scatters, and other operations depending on configuration. It is not automatically the highest-demand pattern in every workload. A data-parallel collective can create synchronized many-to-many logical communication, even when the physical implementation uses ring or tree forwarding rather than direct pairwise exchanges. Rail-optimized topology and appropriate fabric capacity are designed partly around these demanding collective phases.
 
-**Tensor parallelism** -- A single model layer (for example, a large matrix multiplication) is split across multiple GPUs within a single node. Each GPU handles a shard of the computation and they exchange partial results continuously. Because this communication can be frequent and large, tensor parallelism is often placed inside a high-bandwidth scale-up domain such as the 900 GB/s NVLink domain of the reference node. It can span nodes when the architecture and workload support it, but then external bandwidth and latency become first-order design constraints.
+**Tensor parallelism** -- A single model layer or operator (for example, a large matrix multiplication) is partitioned across multiple GPUs. Each GPU handles a shard of the computation and the participants exchange partial results. The concept is independent of physical placement. Because this communication can be frequent and latency-sensitive, tensor parallelism is often placed inside a high-bandwidth scale-up domain such as the 900 GB/s NVLink domain of the reference node. It can span nodes when the architecture and workload support it, but then external bandwidth and latency become first-order design constraints.
 
-**Pipeline parallelism** -- A model is split by layers. GPU 1 handles layers 1-10, GPU 2 handles layers 11-20, and so on. Data flows sequentially through the pipeline -- GPU 1 sends its output to GPU 2, which processes it and sends its output to GPU 3. The external network traffic is sequential point-to-point rather than all-to-all. Its volume is not universally lower or higher than data-parallel collective traffic; it depends on activation sizes, microbatching, model partitioning, and schedule. Latency and stalls on a stage boundary can still be important because downstream stages depend on upstream output.
+**Pipeline parallelism** -- A model is split by layers. GPU 1 handles layers 1-10, GPU 2 handles layers 11-20, and so on. During the forward pass, one stage sends activations downstream to the next stage. During backward propagation, activation-gradient communication moves in the opposite direction, upstream from later stages toward earlier stages. Training therefore has a bidirectional stage-boundary dependency even though each individual transfer is point-to-point. The external network traffic is sequential point-to-point rather than all-to-all. Its volume is not universally lower or higher than data-parallel collective traffic; it depends on activation sizes, microbatching, model partitioning, and schedule. Latency and stalls on a stage boundary can still be important because downstream stages depend on upstream output.
 
 **Model parallelism** is an umbrella concept that includes tensor and pipeline partitioning; it is not a fourth independent category. Large-scale training jobs can combine multiple approaches: tensor parallelism within a scale-up domain, data parallelism across nodes, pipeline parallelism across stages, and—when mixture-of-experts models are used—expert parallelism. Exact combinations are model- and implementation-specific. The fabric may need to handle several of these patterns simultaneously. **Expert parallelism**, used in mixture-of-experts models, dispatches tokens to expert shards and combines their outputs, often using All-to-All communication. Traffic volume is architecture- and implementation-specific.
 
@@ -123,7 +123,7 @@ The 3rd-generation NVSwitch in the DGX H100 is not just a high-speed crossbar sw
 
 This is the NVSwitch equivalent of what SHARP does on InfiniBand switches -- in-network compute that reduces communication volume by doing part of the mathematical work inside the switch fabric itself. The difference: NVSwitch hardware multicast/reduction applies within the intra-node scale-up domain (the 900 GB/s NVLink domain). IB SHARP applies to inter-node AllReduce (the external fabric). Chapter 0 Act 6 covers IB SHARP. Chapter 12 covers the NVLink Switch System, which extends this capability across nodes.
 
-Bandwidth metrics must not be interchanged. DGX/HGX H100 has eight GPU endpoints at 900 GB/s aggregate bidirectional each, giving 7.2 TB/s of system endpoint bandwidth. NVIDIA separately documents 3.6 TB/s of system bisection bandwidth and 13.6 Tb/s total throughput per third-generation NVSwitch chip. Those are different metrics; do not compare them as if they were interchangeable.
+Bandwidth metrics must not be interchanged. DGX/HGX H100 has eight GPU endpoints at 900 GB/s aggregate bidirectional each, giving 7.2 TB/s when the endpoint figures are summed. That endpoint sum counts both ends of communication relationships and must not be interpreted as an independent measure of achievable application data transfer. NVIDIA separately documents 3.6 TB/s of system bisection bandwidth and reduction-specific bandwidth. NVIDIA publications have used more than one chip-level NVSwitch throughput convention, including figures that do not share the same measurement scope. This beginner chapter therefore uses the clearly scoped per-GPU endpoint and system bisection figures rather than presenting incompatible chip-level totals side by side.
 
 This bandwidth and latency advantage is one reason **tensor parallelism** is commonly placed within a scale-up domain such as one DGX node. It is a common placement decision, not a universal protocol constraint.
 
@@ -148,7 +148,7 @@ AMD ROCm comparison documentation uses a metric called **P2P ring aggregate band
 | MI300X/MI325X generation | 192 GB HBM3 / 256 GB HBM3E | 5.3 / 6.0 TB/s | 896 GB/s |
 | MI350X/MI355X generation | 288 GB HBM3E | 8.0 TB/s | 1,075.2 GB/s |
 
-These are peak aggregate-bidirectional architectural figures. They are not measured RCCL algorithm bandwidth or bus bandwidth. AMD product pages may also report total aggregate I/O or per-link values; those are different scopes and must not be substituted arbitrarily.
+These are peak aggregate architectural figures. The documented peer connectivity model is seven scale-up peer links per GPU in an eight-GPU fully connected platform: MI300X/MI325X use 7 × 128 GB/s = 896 GB/s, while MI350X/MI355X use 7 × 153.6 GB/s = 1,075.2 GB/s for this metric. AMD also documents larger total peak aggregate I/O values because those include additional host/external I/O scope. These figures are not measured RCCL algorithm bandwidth or bus bandwidth, and the word “ring” in the ROCm metric name does not mean the physical eight-GPU topology is a simple ring; AMD describes fully connected peer links.
 
 <AMDGenerationCompareViz />
 
@@ -160,7 +160,7 @@ AMD platforms do not require one mandatory AMD NIC model. Platform vendors can s
 
 **RoCEv2 and Ultra Ethernet are not synonyms.** RoCEv2 is the UDP/IP encapsulation of RDMA transport used today. The Ultra Ethernet Consortium is a scale-out networking initiative. **UALink is different again**: it is a scale-up accelerator interconnect specification.
 
-UALink Consortium documentation for the 200G 1.0 specification describes 200 Gb/s per lane. Four lanes therefore provide 800 Gb/s per direction, which is 100 GB/s per direction, with architectures described for up to 1,024 accelerators in a pod. It is incorrect to call this 800 GB/s. Specification availability, shipping hardware, and production adoption are distinct milestones; roadmap statements must be date-stamped rather than treated as existing deployment facts.
+UALink Consortium documentation for the 200G 1.0 specification describes 200 Gb/s per lane. Four lanes therefore provide 800 Gb/s per direction, which is 100 GB/s per direction, with architectures described for up to 1,024 accelerators in a pod. The correct byte-rate conversion is 100 GB/s per direction, not 800 GB/s. Specification availability, shipping hardware, and production adoption are distinct milestones; roadmap statements must be date-stamped rather than treated as existing deployment facts.
 
 ### Diagnostic work on AMD nodes
 
@@ -188,7 +188,7 @@ TCP can detect loss through acknowledgment behavior, duplicate acknowledgments, 
 
 ### Reliable Connected RDMA loss recovery
 
-Reliable Connected RDMA uses packet sequence numbers. A missing or discontinuous packet sequence can trigger transport recovery. Implementations commonly use Go-Back-N-style retransmission of outstanding data from the missing sequence point, but exact behavior depends on transport implementation and configured retry limits. Two outcomes must be distinguished:
+Reliable Connected RDMA uses packet sequence numbers (PSNs). The endpoint state machine is associated with a queue pair (QP), introduced in more detail later in this chapter; for now, treat it as one reliable transport endpoint. A missing or discontinuous packet sequence can trigger transport recovery. Implementations commonly use Go-Back-N-style retransmission of outstanding data from the missing sequence point, but exact behavior depends on transport implementation and configured retry limits. Two outcomes must be distinguished:
 
 1. **Recoverable loss** -- retransmission succeeds, the transfer completes, and the QP remains operational.
 2. **Unrecoverable loss or exhausted retries** -- the work request completes in error and the QP may transition to an error state, forcing the communication library or application to rebuild state.
@@ -203,9 +203,9 @@ AI fabrics are engineered to avoid congestion-induced loss because repeated reco
 
 Conventional ECMP normally selects a path per flow by hashing packet-header fields such as source/destination IP addresses, protocol, and source/destination ports. Distinct five-tuples can still collide into the same hash bucket because a large input space is compressed into a small number of paths.
 
-RoCEv2 uses UDP destination port 4791. UDP source ports can provide entropy, but a QP is not guaranteed a globally unique source port, and a multi-rail node can have multiple interfaces and IP addresses. AI training also tends to create a small number of very large elephant flows rather than millions of short mouse flows. When two large distinct flows hash to one member, their combined offered load can exceed link capacity even while other paths remain underused. Carried utilization cannot exceed physical line rate; excess traffic queues or drops.
+RoCEv2 uses UDP destination port 4791. UDP source ports can provide entropy, but a transport QP is not guaranteed a globally unique source port, and a multi-rail node can have multiple interfaces and IP addresses. AI training also tends to create a small number of very large elephant flows rather than millions of short mouse flows. When two large distinct flows hash to one member, their combined offered load can exceed link capacity even while other paths remain underused. Carried utilization cannot exceed physical line rate; excess traffic queues or drops.
 
-A **flowlet** is not an indistinguishable flow. It is a burst or segment of packets within a flow, separated from the next burst by a sufficiently large inter-packet gap. A flowlet-aware implementation may choose a different path at a flowlet boundary while controlling reordering risk. Flow hashing, hash entropy, hash collision, elephant flows, flowlets, per-flow routing, flowlet routing, packet spraying, and packet reordering are distinct concepts.
+A **flowlet** is a burst segment of one flow, not a separate five-tuple flow. It is a burst or segment of packets within a flow, separated from the next burst by a sufficiently large inter-packet gap. A flowlet-aware implementation may choose a different path at a flowlet boundary while controlling reordering risk. Flow hashing, hash entropy, hash collision, elephant flows, flowlets, per-flow routing, flowlet routing, packet spraying, and packet reordering are distinct concepts.
 
 <LowEntropyFlowletsViz />
 
@@ -250,7 +250,7 @@ RoCEv2 Ethernet designs commonly combine QoS classification, PFC, ECN, congestio
 
 **2. SHARP and collective acceleration**
 
-SHARP can perform supported reduction operations in the network for supported InfiniBand configurations, reducing data movement for applicable collectives. Benefit depends on operation type, hierarchy, scale, message sizes, software support, and configuration. It is not a universal fixed percentage improvement, and switch/NVSwitch/software capabilities must be distinguished. NVSwitch reduction/multicast support and InfiniBand SHARP operate in different architectural domains.
+SHARP (Scalable Hierarchical Aggregation and Reduction Protocol) can perform supported reduction operations in the network for supported InfiniBand configurations, reducing data movement for applicable collectives. Benefit depends on operation type, hierarchy, scale, message sizes, software support, and configuration. It is not a universal fixed percentage improvement, and switch/NVSwitch/software capabilities must be distinguished. NVSwitch reduction/multicast support and InfiniBand SHARP operate in different architectural domains.
 
 **3. Fabric behavior and adaptive routing**
 
@@ -266,7 +266,7 @@ PFC is priority-specific hop-by-hop pause. It can protect selected traffic class
 
 <ECMPViz />
 
-Spectrum-X is NVIDIA's Ethernet architecture combining supported Spectrum switches, BlueField-3 SuperNIC functionality, adaptive packet spraying, receiver-side reordering/direct placement, telemetry-based congestion control, and lossless networking behavior. Do not expand “RSHP” as a product feature unless the exact NVIDIA documentation for the relevant generation does so. Capabilities depend on switch/NIC generation and software. A ConnectX-7 Ethernet deployment does not automatically provide every Spectrum-X capability.
+Spectrum-X is NVIDIA's Ethernet architecture combining supported Spectrum switches, BlueField-3 SuperNIC functionality, adaptive packet spraying, receiver-side reordering/direct placement, telemetry-based congestion control, and lossless networking behavior. Capabilities depend on switch/NIC generation and software. A ConnectX-7 Ethernet deployment does not automatically provide every Spectrum-X capability.
 
 ## Act 7 -- The NIC that stopped being a NIC
 
@@ -317,7 +317,7 @@ The BlueField series goes further. A DPU is a fully programmable SmartNIC with a
 
 *Figure: Official NVIDIA BlueField-3 DPU image. This gives a concrete physical anchor for the exact DPU generation referenced in this section.*
 
-In a DGX H100 or H200, there are 10 ConnectX-7 adapters per node: 8 single-port HCAs for the compute fabric, and 2 dual-port CX7 cards (Slot1 and Slot2) for the storage and in-band management fabric. All 10 are ConnectX-7. BlueField hardware appears in platforms such as DGX B200 rather than standard DGX H100/H200. Hardware presence alone does not imply DPU-mode operation or automatic storage offload. The distinction matters operationally. If an H100/H200 deployment uses NVMe-oF through those adapters, the host networking/storage software participates in the initiator path unless a separately supported offload configuration is explicitly deployed; do not treat NVMe-oF as universal. DGX B200 documentation includes BlueField-3 adapters and documents NIC-mode behavior; do not assume the Arm cores automatically run an independent NVMe-oF initiator without explicit configuration and software support.
+In a DGX H100 or H200, there are 10 ConnectX-7 adapters per node: 8 single-port HCAs for the compute fabric, and 2 dual-port CX7 cards (Slot1 and Slot2) for the storage and in-band management fabric. All 10 are ConnectX-7. BlueField hardware appears in platforms such as DGX B200 rather than standard DGX H100/H200. Hardware presence alone does not imply DPU-mode operation or automatic storage offload. The distinction matters operationally. If an H100/H200 deployment uses NVMe-oF through those adapters, the host networking/storage software participates in the initiator path unless a separately supported offload configuration is explicitly deployed; do not treat NVMe-oF as universal. DGX B200 uses BlueField-3 adapters for storage and in-band management, and the DGX B200 user guide states that the factory-default mode for those BlueField-3 devices in DGX systems is NIC mode. Do not assume the Arm cores automatically run an independent NVMe-oF initiator without explicit configuration and software support.
 
 ---
 
@@ -344,8 +344,10 @@ Every choice in the DGX design is an answer to a specific constraint:
 | 4 third-generation NVSwitch chips | Scale-up connectivity among eight GPUs; endpoint, chip, and bisection bandwidth are distinct metrics |
 | 8 compute ConnectX-7 adapters | Reference compute-fabric arrangement with rail affinity; four twin-port OSFP cages provide the physical compute connectors |
 | Compute connections distributed across rails | Matches the reference rail topology and enables rail-local paths inside a scalable unit |
+| 2 additional dual-port ConnectX-7 adapters in Slot1/Slot2 | Four ports total for storage and in-band management functions; the documented reference allocation uses P1 for InfiniBand storage and P2 for Ethernet in-band management |
+| Dual-port 100GbE Slot3 adapter, separate 10GbE host-management interface, and dedicated 1GbE BMC port | System-management capability is layered; the BMC is the out-of-band management interface and must not be conflated with in-band host networking |
 | 2 Intel Xeon 8480C CPUs and 2 TB RAM | Application orchestration, data loading, preprocessing, framework operations, storage management, kernel services, and communication setup |
-| Separate OS drives plus 8x 3.84 TB data-cache NVMe U.2 drives | OS and data-cache roles are distinct; use depends on configuration |
+| 2 × 1.92 TB NVMe M.2 OS drives in RAID 1 plus 8 × 3.84 TB NVMe U.2 data-cache drives in RAID 0 | RAID 1 mirrors the OS devices for redundancy; RAID 0 stripes the data-cache devices without redundancy. Raw device capacity is not the same as usable filesystem capacity |
 
 ## Checkpointing and the cost of failure
 
@@ -392,7 +394,7 @@ If ideal checkpoint blocking time falls from 11.2 seconds to 1.4 seconds, the sa
 
 <CheckpointCostViz />
 
-The earlier 3.1 GPU-hour figure was wrong. Financial impact requires an explicit cost input. For example, using a purely hypothetical $500/GPU-hour solely as arithmetic, 16,000 GPU-hours is $8,000,000 and 87.1111 GPU-hours is approximately $43,555.56. That rate is not a claimed market price, and no payback period can be inferred without platform cost and operational data.
+Multiplying elapsed seconds by every affected GPU is the essential unit conversion: one second of a fully blocked 32,000-GPU job consumes 32,000 GPU-seconds, or about 8.89 GPU-hours. Financial impact requires an explicit cost input. For example, using a purely illustrative $5/GPU-hour, 16,000 GPU-hours corresponds to $80,000 and 87.1111 GPU-hours corresponds to approximately $435.56. That rate is not a claimed market price, and no payback period can be inferred without platform cost and operational data.
 
 **Why DGX and not something else?**
 
@@ -426,7 +428,7 @@ Rail-optimized topology is physical wiring plus routing design. In the documente
 Three cases must be distinguished:
 
 1. **Same rail, same scalable unit** -- the path can remain local to that rail leaf.
-2. **Different rail, same scalable unit** -- endpoints use different compute adapters and leaves; the path depends on fabric routing and may use spine/higher tiers.
+2. **Different rail, same scalable unit** -- endpoints use different compute adapters and leaves; inter-rail traffic traverses the spine layer in the H100 SuperPOD reference topology.
 3. **Same rail, different scalable units** -- spine or higher fabric tiers are needed to cross scalable-unit boundaries.
 
 <RailTopologyViz />
@@ -452,13 +454,13 @@ NVIDIA's DGX H100 SuperPOD reference architecture distinguishes four functional 
 3. **In-band management** -- host OS access, provisioning, fabric-management connectivity, telemetry, and operational control using production-network infrastructure.
 4. **Out-of-band management** -- BMC/IPMI access through dedicated management infrastructure, intended to remain reachable when production networking fails.
 
-Storage services can include parallel filesystems, shared filesystem services, or NVMe-oF block access. GPUDirect Storage is not synonymous with NVMe-oF. Supported GDS configurations can avoid intermediate CPU-memory staging on the data path, while setup and orchestration still involve host software.
+Storage services can include parallel filesystems, shared filesystem services, or NVMe-oF block access. GPUDirect Storage (GDS) is not synonymous with NVMe-oF. Supported GDS configurations can avoid intermediate CPU-memory staging on the data path, while setup and orchestration still involve host software.
 
 ---
 
 ## Act 10 -- One card, two worlds
 
-The external fabric question is not abstract. Many ConnectX-7 adapters are **VPI-capable**: supported hardware and firmware can present native InfiniBand or Ethernet personalities. This does not mean every ConnectX-7 SKU supports identical mode switching, identical speeds, or identical transceiver compatibility.
+The external fabric question is not abstract. Many ConnectX-7 adapters are **VPI-capable** (Virtual Protocol Interconnect): supported hardware and firmware can present native InfiniBand or Ethernet personalities. This does not mean every ConnectX-7 SKU supports identical mode switching, identical speeds, or identical transceiver compatibility.
 
 <ConnectX7ModesViz />
 
@@ -524,7 +526,7 @@ Native InfiniBand adapters connect to InfiniBand fabrics. RoCEv2 adapters connec
 
 The DGX node GPUs, NVLink domain, CPUs, memory, and local storage do not change personality with the external adapter mode, but host networking configuration, drivers, fabric management, QoS, troubleshooting, cabling validation, and switch architecture do. The storage fabric is not universally Ethernet or universally separate in every deployment; use the selected reference architecture.
 
-Neither fabric choice is universally better. InfiniBand can fit tightly coupled dedicated training clusters that benefit from its ecosystem and fabric features. RoCEv2 can fit organizations prioritizing Ethernet operations, interoperability, tenancy, cost, or existing expertise. Claims such as a universal 5-10% performance gap are unsupported without a specified benchmark, workload, topology, hardware, measurement metric, software versions, and configuration.
+Neither fabric choice is universally better. InfiniBand can fit tightly coupled dedicated training clusters that benefit from its ecosystem and fabric features. RoCEv2 can fit organizations prioritizing Ethernet operations, interoperability, tenancy, cost, or existing expertise. Comparative performance claims require a specified benchmark, workload, topology, hardware, measurement metric, software versions, and configuration.
 
 ---
 
