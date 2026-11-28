@@ -63,19 +63,14 @@ export function ethtoolStatsEth3(): CommandResult {
   rx_prio3_pause:       0
   tx_prio3_pause:       0
   rx_ecn_marked_pkts:   0
-  tx_discards_phy:      ${isPortFailed ? '0' : '0'}
+  tx_discards_phy:      0
   link_speed:           400Gb/s
-  link_state:           ${isPortFailed ? 'up' : 'up'}
+  link_state:           up
 
+[SIMULATION INTERPRETATION — not ethtool output]
 ${isPortFailed
-  ? `NOTE: NIC reports link UP — physical signal is present on the cable.
-  tx_discards_phy: 0 — the NIC is not dropping; it is not receiving traffic.
-  This is consistent with the switch port being Err-Disabled:
-  the cable carries signal but the switch is not forwarding frames.
-  
-  The NIC cannot detect the switch-side fault. Check the switch:
-  → Switch to leaf-rail3 terminal and run: show switch port rail3`
-  : `Rail 3 NIC healthy. No errors. Link active and forwarding.`}`,
+  ? `The host interface still reports link-up in this fixture. That does not prove frames are being forwarded through the peer leaf. Cumulus protodown is a switch forwarding/operational state; exact carrier behavior is platform- and fault-dependent. These state layers must not be conflated. Inspect leaf-rail3 with NVUE.`
+  : `Rail 3 host interface is healthy in this fixture. Application-level RDMA health still requires separate validation.`}`,
     conceptId: 'rocev2',
     type: 'info',
   }

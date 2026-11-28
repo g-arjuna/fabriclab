@@ -1,138 +1,208 @@
 "use client"
 
 import { useState } from "react"
+import { ringAllReduceSentGBPerRank } from "@/lib/ch0Math"
 
-type Mode = "single" | "data" | "tensor" | "pipeline"
+type Mode = "memory" | "data" | "tensor" | "pipeline" | "expert"
 
 const modes: { id: Mode; label: string; subtitle: string }[] = [
-  { id: "single", label: "Single GPU", subtitle: "Model fits in one GPU" },
-  { id: "data", label: "Data parallel", subtitle: "Same model, different data" },
-  { id: "tensor", label: "Tensor parallel", subtitle: "One layer split across GPUs" },
-  { id: "pipeline", label: "Pipeline parallel", subtitle: "Different layers on different GPUs" },
+  { id: "memory", label: "Memory first", subtitle: "Why one GPU may not be enough" },
+  { id: "data", label: "Data parallelism", subtitle: "Replicated or sharded model, different batches" },
+  { id: "tensor", label: "Tensor parallelism", subtitle: "Operations partitioned across GPUs" },
+  { id: "pipeline", label: "Pipeline parallelism", subtitle: "Layer stages and microbatches" },
+  { id: "expert", label: "Expert parallelism", subtitle: "MoE token routing" },
 ]
 
-const descriptions: Record<Mode, { problem: string; communication: string; networkNeed: string }> = {
-  single: {
-    problem: "The entire model fits in one GPU's memory. No inter-GPU communication needed. Training is simple. This was possible for smaller models — GPT-2 (1.5B parameters) fit on one GPU. GPT-3 (175B parameters) requires roughly 700 GB of GPU memory at full precision. That does not fit on one GPU.",
-    communication: "None required.",
-    networkNeed: "No network needed for training. A single GPU just needs PCIe bandwidth to load data from system RAM.",
+const modeText: Record<Mode, { what: string; communication: string; placement: string }> = {
+  memory: {
+    what: "A model is a collection of numerical parameters. At BF16 precision, 70 billion parameters require 70 × 10^9 × 2 bytes = 140 GB for weights alone. That exceeds an 80 GB H100 at BF16, but it is not a universal statement about every precision or every GPU. Lower-precision inference weights can be smaller, while training can require substantially more memory than weights alone.",
+    communication: "Training may additionally need gradients, optimizer state, master weights depending on the precision strategy, activations, temporary buffers, and framework overhead. The exact total depends on the optimizer, activation checkpointing, sharding, batch size, sequence length, and implementation.",
+    placement: "A replicated training scheme keeps a full copy of model state on each participating GPU. Sharded schemes such as FSDP or ZeRO partition some or all of that state. Inference memory and training memory are different questions.",
   },
   data: {
-    problem: "The full model is replicated on every GPU. Each GPU processes a different batch of training data simultaneously. After each step, all GPUs must exchange gradient updates — every GPU needs to know what every other GPU learned. This is the AllReduce operation. Note: this strategy requires the full model to fit on a single GPU — a 7B parameter model at BF16 needs ~14 GB, which fits. A 70B model needs ~140 GB for weights alone plus ~840 GB for optimizer states during training — it cannot use standard data parallelism and requires FSDP or tensor parallelism instead.",
-    communication: "AllReduce: every GPU sends its gradients to every other GPU, they are summed, and the result goes back to all. Modern AllReduce uses Ring-AllReduce, which keeps per-GPU network load roughly constant at 2 × model_size regardless of cluster size — this is why training scales to thousands of GPUs. For a 7B model at BF16: each GPU moves approximately 28 GB of gradient data per step. For a 70B model with sharding, the per-GPU load depends on the sharding strategy.",
-    networkNeed: "HIGH bandwidth, zero loss. The AllReduce must complete before the next step can begin. If any GPU is waiting on the network, every GPU is waiting. A single dropped packet causes RDMA queue pair error and full retransmission — potentially hundreds of milliseconds of stall across the entire cluster. This is why lossless networking is non-negotiable.",
+    what: "In conventional data parallelism, each GPU holds a replica of the model and processes a different batch. After backward computation, gradients must be reduced across the data-parallel group so the replicas remain consistent. FSDP and ZeRO are sharded variants that reduce memory replication while still using collectives.",
+    communication: "The semantic result of a sum AllReduce is that every participating rank receives the reduced result. Implementations may use ring, tree, hierarchical, or hardware-assisted algorithms. AllReduce is not literally every rank blindly transmitting the full tensor to every other rank.",
+    placement: "Data-parallel groups often span nodes because replicas are independent during forward/backward computation. Communication can overlap backward computation through gradient bucketing. A collective applies to its defined communication group, not automatically to every GPU in a job.",
   },
   tensor: {
-    problem: "A single model layer (e.g. a transformer attention head) is split across multiple GPUs. Each GPU holds a shard of the weight matrix. Every forward pass requires communication between the GPUs holding different shards. This runs at the speed of NVLink — within a single DGX chassis. You would not tensor-parallelise across nodes via InfiniBand.",
-    communication: "All-to-all within a small group (typically 4 or 8 GPUs). Very frequent — happens every forward and backward pass for every layer. Must be low latency, not just high bandwidth. This is why NVLink at 900 GB/s exists — the latency of InfiniBand would make tensor parallelism across nodes impractical.",
-    networkNeed: "Extremely low latency, very high bandwidth. Solved by NVLink within a chassis. Not solved by any external network.",
+    what: "Tensor parallelism partitions individual operators or tensors. For example, different GPUs may hold different slices of a large matrix multiplication and must combine partial results. “Model parallelism” is an umbrella term that includes tensor and pipeline parallelism, not a fourth independent category.",
+    communication: "Tensor-parallel implementations use collectives such as AllReduce, all-gather, and reduce-scatter. Because communication can be frequent and latency-sensitive, it is commonly placed inside a high-bandwidth scale-up domain such as NVLink.",
+    placement: "It is not impossible for tensor parallelism to span nodes; feasibility depends on interconnect bandwidth, latency, model architecture, and implementation. It is simply common to keep it inside the fastest scale-up domain.",
   },
   pipeline: {
-    problem: "The model is split into stages. GPUs holding early layers process the first micro-batch, then pass activations to the next stage while processing the second micro-batch. This creates a pipeline. It requires less communication volume than data parallelism, but introduces 'pipeline bubbles' — periods where GPUs are idle waiting for the pipeline to fill.",
-    communication: "Point-to-point: each GPU sends activations to the next stage in the pipeline. Communication volume equals activation size × micro-batch size — much less than AllReduce. But it requires low latency for the pipeline to stay efficient.",
-    networkNeed: "MODERATE. Lower bandwidth than data parallelism but still requires lossless delivery. Pipeline bubbles grow when the network is slow.",
+    what: "Pipeline parallelism assigns different layers to different stages. Microbatches move through the stages so multiple stages can work on different microbatches. Startup and drain periods create pipeline bubbles.",
+    communication: "Stages exchange forward activations and backward gradients point-to-point. Traffic volume and criticality depend on tensor sizes, microbatch count, stage placement, and schedule. It is not universally lower or higher than data-parallel traffic.",
+    placement: "Pipeline stages can reside within one node or span nodes. Cross-node stages use the external fabric for stage-to-stage transfers.",
+  },
+  expert: {
+    what: "Mixture-of-experts models route tokens to selected expert subnetworks. Expert parallelism places different experts on different GPUs.",
+    communication: "Token dispatch sends tokens to the GPUs hosting their selected experts; token combine returns the expert outputs. These operations commonly use All-to-All or related irregular collectives, which are distinct from AllReduce.",
+    placement: "Expert parallelism may be combined with data, tensor, and pipeline parallelism. Its external-network demand depends heavily on routing topology, expert placement, token counts, and implementation.",
   },
 }
 
+const ringExamples = [
+  { n: 4, s: 8, label: "N=4, S=8 GB" },
+  { n: 8, s: 14, label: "N=8, S=14 GB" },
+  { n: 256, s: 14, label: "N=256, S=14 GB" },
+]
+
+function gpuCard(label: string, sublabel: string, color: string, wide = false) {
+  return (
+    <div className={`rounded-xl px-3 py-2 text-center ${wide ? "min-w-28" : "min-w-20"}`}
+      style={{ backgroundColor: color, border: "1px solid rgba(255,255,255,0.12)" }}>
+      <div className="text-[10px] font-bold text-white">{label}</div>
+      <div className="text-[9px] leading-4 text-white/75">{sublabel}</div>
+    </div>
+  )
+}
+
 export function TrainingParallelismViz() {
-  const [mode, setMode] = useState<Mode>("single")
-  const desc = descriptions[mode]
-
-  const gpuCount = mode === "single" ? 1 : mode === "tensor" ? 4 : 8
-  const gpuColors: Record<Mode, string[]> = {
-    single: ["#166534"],
-    data: ["#166534", "#166534", "#166534", "#166534", "#166534", "#166534", "#166534", "#166534"],
-    tensor: ["#1e40af", "#1e40af", "#7c3aed", "#7c3aed"],
-    pipeline: ["#1e40af", "#065f46", "#92400e", "#7c2d12"],
-  }
-  const gpuLabels: Record<Mode, string[]> = {
-    single: ["Full model"],
-    data: ["7B model copy", "7B model copy", "7B model copy", "7B model copy", "7B model copy", "7B model copy", "7B model copy", "7B model copy"],
-    tensor: ["Layer shard A", "Layer shard B", "Layer shard C", "Layer shard D"],
-    pipeline: ["Stage 1\nLayers 1–8", "Stage 2\nLayers 9–16", "Stage 3\nLayers 17–24", "Stage 4\nLayers 25–32"],
-  }
-
-  const showArrow = mode !== "single"
-  const arrowColor = mode === "data" ? "#22c55e" : mode === "tensor" ? "#818cf8" : "#f59e0b"
+  const [mode, setMode] = useState<Mode>("memory")
+  const [example, setExample] = useState(0)
+  const selected = modeText[mode]
+  const ring = ringExamples[example]
+  const sent = ringAllReduceSentGBPerRank(ring.n, ring.s)
 
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
-      <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">
-        Why GPUs must communicate — parallelism strategies
+      <p className="mb-2 text-xs uppercase tracking-widest text-slate-500">Training memory, parallelism, and collective communication</p>
+      <p className="mb-4 text-xs leading-5 text-slate-500">
+        Parallelism choices are architectural tools, not fixed traffic-volume rankings. Actual traffic depends on model, placement, collective algorithm, batching, and implementation.
       </p>
 
-      {/* Mode selector */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        {modes.map(m => (
-          <button
-            key={m.id}
-            onClick={() => setMode(m.id)}
-            className="rounded-xl px-3 py-2 text-xs transition-all"
-            style={{
-              backgroundColor: mode === m.id ? "#1e3a5f" : "#0f172a",
-              border: `1px solid ${mode === m.id ? "#60a5fa" : "#1e293b"}`,
-              color: mode === m.id ? "#bfdbfe" : "#64748b",
-            }}
-          >
-            <div className="font-semibold">{m.label}</div>
-            <div className="text-[10px] opacity-70 mt-0.5">{m.subtitle}</div>
-          </button>
-        ))}
+      <div className="mb-5 flex flex-wrap gap-2">
+        {modes.map((item) => {
+          const isActive = item.id === mode
+          return (
+            <button key={item.id} type="button" onClick={() => setMode(item.id)}
+              className="rounded-xl px-3 py-2 text-left text-xs transition"
+              style={{
+                backgroundColor: isActive ? "#1e3a5f" : "#0f172a",
+                border: `1px solid ${isActive ? "#60a5fa" : "#1e293b"}`,
+                color: isActive ? "#bfdbfe" : "#94a3b8",
+              }}>
+              <div className="font-semibold">{item.label}</div>
+              <div className="mt-0.5 max-w-44 text-[10px] opacity-75">{item.subtitle}</div>
+            </button>
+          )
+        })}
       </div>
 
-      {/* GPU grid */}
-      <div className="mb-5 flex flex-wrap gap-2">
-        {gpuLabels[mode].map((label, i) => (
-          <div
-            key={i}
-            className="flex flex-col items-center justify-center rounded-xl px-3 py-2 text-center"
-            style={{
-              backgroundColor: gpuColors[mode][i] ?? "#166534",
-              border: "1px solid rgba(255,255,255,0.1)",
-              minWidth: 68,
-              height: 60,
-            }}
-          >
-            <div className="text-[9px] font-bold text-white">GPU {i}</div>
-            {label.split("\n").map((l, j) => (
-              <div key={j} className="text-[8px] text-white/70">{l}</div>
-            ))}
+      <div className="mb-5 rounded-2xl border border-white/8 bg-slate-950/70 p-4">
+        {mode === "memory" && (
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+              <div className="text-xs font-semibold text-red-300">BF16 weights only</div>
+              <div className="mt-2 font-mono text-lg text-white">70B × 2 B = 140 GB</div>
+              <p className="mt-2 text-xs leading-5 text-slate-400">Weights alone. This does not include gradients, optimizer state, activations, or framework overhead.</p>
+            </div>
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+              <div className="text-xs font-semibold text-amber-300">Inference ≠ training</div>
+              <p className="mt-2 text-xs leading-5 text-slate-300">Inference memory is dominated by weights plus runtime buffers/kv-cache depending on serving. Training adds backward and optimizer state. Precision changes both.</p>
+            </div>
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <div className="text-xs font-semibold text-emerald-300">Replicated ≠ sharded</div>
+              <p className="mt-2 text-xs leading-5 text-slate-300">Data parallelism conventionally replicates state. FSDP/ZeRO shard model state across GPUs, trading memory capacity for additional collective communication.</p>
+            </div>
           </div>
-        ))}
+        )}
 
-        {showArrow && (
-          <div className="flex w-full justify-center pt-1 sm:w-auto sm:justify-start sm:pt-0">
-            <div className="flex flex-col items-center gap-1">
-              <svg width="40" height="40" viewBox="0 0 40 40">
-                <defs>
-                  <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                    <polygon points="0 0, 6 3, 0 6" fill={arrowColor} />
-                  </marker>
-                </defs>
-                <path d="M5,20 C15,5 25,35 35,20" stroke={arrowColor} strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-                <path d="M35,20 C25,35 15,5 5,20" stroke={arrowColor} strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-              </svg>
-              <span className="text-[8px]" style={{ color: arrowColor }}>
-                {mode === "data" ? "AllReduce" : mode === "tensor" ? "All-to-all" : "Activations →"}
-              </span>
+        {mode === "data" && (
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              {gpuCard("GPU 0", "replica / shard\nbatch A", "#166534")}
+              {gpuCard("GPU 1", "replica / shard\nbatch B", "#166534")}
+              {gpuCard("GPU 2", "replica / shard\nbatch C", "#166534")}
+              {gpuCard("GPU 3", "replica / shard\nbatch D", "#166534")}
+              <div className="px-2 text-xl text-cyan-300">⟲</div>
+              {gpuCard("All ranks", "same reduced result", "#0e7490", true)}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-slate-400">AllReduce semantic example: inputs 1, 2, 3, and 4 produce the sum 10 at every participant. The implementation determines how bytes move.</p>
+          </div>
+        )}
+
+        {mode === "tensor" && (
+          <div className="flex flex-wrap items-center gap-2">
+            {gpuCard("GPU 0", "matrix slice A", "#1d4ed8")}
+            {gpuCard("GPU 1", "matrix slice B", "#1d4ed8")}
+            {gpuCard("GPU 2", "matrix slice C", "#1d4ed8")}
+            {gpuCard("GPU 3", "matrix slice D", "#1d4ed8")}
+            <div className="px-2 text-xl text-indigo-300">⇄</div>
+            {gpuCard("partial results", "all-gather / reduce-scatter", "#4c1d95", true)}
+          </div>
+        )}
+
+        {mode === "pipeline" && (
+          <div className="flex flex-wrap items-center gap-2">
+            {gpuCard("Stage 1", "layers 1–8", "#0f766e")}
+            <div className="text-xl text-amber-300">→</div>
+            {gpuCard("Stage 2", "layers 9–16", "#0f766e")}
+            <div className="text-xl text-amber-300">→</div>
+            {gpuCard("Stage 3", "layers 17–24", "#0f766e")}
+            <div className="text-xl text-amber-300">→</div>
+            {gpuCard("Stage 4", "layers 25–32", "#0f766e")}
+          </div>
+        )}
+
+        {mode === "expert" && (
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+            <div className="flex flex-wrap gap-2">
+              {gpuCard("tokens", "router selects experts", "#92400e", true)}
+            </div>
+            <div className="text-center text-xl text-cyan-300">⇄</div>
+            <div className="flex flex-wrap gap-2">
+              {gpuCard("GPU 0", "experts 0–1", "#7c3aed")}
+              {gpuCard("GPU 1", "experts 2–3", "#7c3aed")}
+              {gpuCard("GPU 2", "experts 4–5", "#7c3aed")}
+              {gpuCard("GPU 3", "experts 6–7", "#7c3aed")}
             </div>
           </div>
         )}
       </div>
 
-      {/* Description */}
-      <div className="space-y-3 rounded-xl bg-slate-800/50 p-4">
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">What happens</div>
-          <p className="text-sm leading-7 text-slate-300">{desc.problem}</p>
+      <div className="grid gap-3 lg:grid-cols-[1fr_0.95fr]">
+        <div className="space-y-3">
+          {[
+            ["What happens", selected.what],
+            ["Communication", selected.communication],
+            ["Placement and limitation", selected.placement],
+          ].map(([title, body]) => (
+            <div key={title} className="rounded-xl bg-slate-800/50 p-4">
+              <div className="mb-1 text-[10px] uppercase tracking-widest text-slate-500">{title}</div>
+              <p className="text-sm leading-7 text-slate-300">{body}</p>
+            </div>
+          ))}
         </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">Communication pattern</div>
-          <p className="text-sm leading-7 text-slate-300">{desc.communication}</p>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">Network requirement</div>
-          <p className="text-sm leading-7 text-slate-300">{desc.networkNeed}</p>
+
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-widest text-cyan-300">Ring AllReduce traffic — sent bytes, not send+receive</div>
+          <p className="text-sm leading-6 text-slate-300">
+            For N participants and input size S per participant, a conventional ring implemented as reduce-scatter plus all-gather sends:
+          </p>
+          <div className="my-3 rounded-lg bg-slate-950/80 p-3 text-center font-mono text-sm text-cyan-100">
+            bytes sent per rank = 2 × (N − 1) / N × S
+          </div>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {ringExamples.map((item, index) => (
+              <button key={item.label} type="button" onClick={() => setExample(index)}
+                className="rounded-lg px-2 py-1 text-[11px]"
+                style={{
+                  backgroundColor: example === index ? "#155e75" : "#0f172a",
+                  border: `1px solid ${example === index ? "#22d3ee" : "#1e293b"}`,
+                  color: example === index ? "#cffafe" : "#94a3b8",
+                }}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="rounded-lg bg-slate-950/70 p-3">
+            <div className="font-mono text-lg text-white">{sent} GB sent per rank</div>
+            <div className="mt-1 text-xs text-slate-400">The same {sent} GB is received per rank. Do not add sent and received bytes together when comparing against one-direction link rate.</div>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-slate-400">
+            Ring is one implementation example. Tree, hierarchical, and hardware-assisted algorithms have different byte movement and latency behavior. Computation and communication can overlap through gradient bucketing.
+          </p>
         </div>
       </div>
     </div>

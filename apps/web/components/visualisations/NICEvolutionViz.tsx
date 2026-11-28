@@ -22,19 +22,19 @@ const stageDetail: Record<Stage, {
 }> = {
   nic: {
     fullName: "Network Interface Card",
-    definition: "A commodity component that connects a server to the network. Its job is to move Ethernet frames between the wire and the kernel's network stack. The CPU processes every packet — TCP/IP, checksums, buffer management — all CPU work.",
+    definition: "A commodity component that connects a server to the network. Its job is to move Ethernet frames between the wire and host memory using DMA. Modern NICs also provide checksum and segmentation offload, receive-side scaling, interrupt moderation, and other acceleration; TCP/IP processing still normally involves host software.",
     dataPath: ["Wire", "NIC ASIC (DMA)", "System RAM (kernel buffer)", "Kernel network stack (CPU)", "User space application"],
     offloads: ["Checksum offload (basic)", "Large segment offload (LSO)", "Receive side scaling (RSS)"],
-    limitation: "Cannot bypass the kernel. Every packet touches the CPU. At 100GbE+, the CPU becomes the bottleneck. Latency is measured in microseconds because of kernel overhead.",
-    cpu: "None (dumb ASIC)",
+    limitation: "Cannot implement kernel-bypass RDMA semantics by itself. CPU involvement does not disappear entirely: the host configures queues, manages memory, schedules work, and handles application logic. High-speed TCP/IP can perform well with suitable hardware, software, and tuning.",
+    cpu: "No general-purpose host-independent CPU complex",
     memory: "Small internal buffers only",
     useCase: "Enterprise servers, web infrastructure, databases — any workload where CPU packet processing is acceptable",
   },
   hca: {
     fullName: "Host Channel Adapter",
-    definition: "An RDMA-capable NIC. The key innovation: the HCA implements the transport protocol entirely in hardware. Applications post Work Requests directly to the HCA via a memory-mapped queue — no syscalls, no kernel involvement. The HCA DMA's data directly to/from GPU or CPU memory.",
+    definition: "An RDMA-capable NIC. The key innovation: the HCA implements the transport protocol entirely in hardware. Applications register memory, create protection domains, queue pairs, and completion queues, then post Work Requests to the HCA. Hardware performs transport processing and can DMA registered host memory or supported GPU memory, but software still performs setup, resource management, orchestration, and completion processing.",
     dataPath: ["Wire", "HCA ASIC (transport in hardware)", "DMA directly to GPU/CPU memory", "Application reads completion queue"],
-    offloads: ["Full RDMA transport (RC, UD, UC)", "Send/Receive, RDMA Write, RDMA Read", "Atomic operations", "GPUDirect RDMA", "SHARP in-network compute"],
+    offloads: ["Full RDMA transport (RC, UD, UC)", "Send/Receive, RDMA Write, RDMA Read", "Atomic operations", "GPUDirect RDMA", "SHARP-aware collective traffic (reduction occurs in supported fabric hardware)"],
     limitation: "Still primarily a 'smart NIC' — the host CPU runs the OS, security, and storage stack. Cannot independently manage tenant isolation or run complex security policy without host CPU involvement.",
     cpu: "Embedded processor (limited)",
     memory: "Dedicated HCA SRAM (~128 MB)",
@@ -42,13 +42,13 @@ const stageDetail: Record<Stage, {
   },
   dpu: {
     fullName: "Data Processing Unit",
-    definition: "A fully programmable SmartNIC with an embedded multi-core Arm CPU complex running a complete OS independently from the host. A DPU can run infrastructure services — virtual switching, storage offload, security policy, encryption — entirely independently of the host CPU, freeing host CPUs to run workloads exclusively.",
-    dataPath: ["Wire", "DPU ASIC", "Embedded Arm CPUs (16 cores on BlueField-3)", "Services: OVS, NVMe-oF, TLS, firewall", "Host CPU only sees processed traffic"],
+    definition: "A fully programmable SmartNIC with an embedded multi-core Arm CPU complex running a complete OS independently from the host. A DPU can run infrastructure services — virtual switching, storage offload, security policy, encryption — with a degree of independence from the host CPU when provisioned in DPU mode. This reduces host infrastructure work; it does not make host software irrelevant.",
+    dataPath: ["Wire", "DPU ASIC", "Embedded Arm CPUs (16 cores on BlueField-3)", "Services: OVS, NVMe-oF, TLS, firewall", "Host sees configured data paths"],
     offloads: ["OVS (Open vSwitch) offload", "NVMe-oF initiator/target", "TLS 1.3 / IPsec termination", "Full RDMA (same as HCA)", "Firewall / microsegmentation", "DOCA SDK programmable pipeline"],
     limitation: "More expensive than an HCA. The embedded CPU complex adds cost and power. Not needed for pure AI training workloads where the host manages everything — DPUs shine in multi-tenant cloud environments.",
     cpu: "16× Arm Cortex-A78 cores",
     memory: "32 GB LPDDR5 (independent of host)",
-    useCase: "Cloud provider bare-metal infrastructure, multi-tenant GPU clusters, storage disaggregation, zero-trust security enforcement at line rate",
+    useCase: "Cloud provider bare-metal infrastructure, multi-tenant GPU clusters, storage disaggregation, infrastructure-service offload and policy enforcement where configured",
   },
 }
 
@@ -61,8 +61,9 @@ export function NICEvolutionViz() {
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">
-        The NIC evolution: NIC → HCA → DPU
+        NIC, HCA, and DPU capabilities — overlapping categories, not perfectly separate eras
       </p>
+      <p className="mb-4 text-xs leading-5 text-slate-500">These labels describe capability centers of gravity. A modern conventional NIC can have substantial offload, an RDMA-capable adapter can operate in Ethernet or InfiniBand personalities depending on product, and a DPU may be provisioned in NIC-like or DPU operating modes.</p>
 
       {/* Stage selector */}
       <div className="flex gap-3 mb-5">

@@ -4,11 +4,11 @@ export const lab0Devices: LabDevice[] = [
   {
     id: "ufm-server",
     type: "ufm-server",
-    label: "UFM Server",
-    sublabel: "Fabric topology and rail mapping",
-    prompt: "ufm-server $",
-    osLabel: "UFM Enterprise",
-    allowedCommands: ["show ufm topology", "help", "hint"],
+    label: "[SIM ONLY] Fabric inventory server",
+    sublabel: "RoCE rail topology and rail mapping",
+    prompt: "fabric-inventory $",
+    osLabel: "NetQ-style inventory (simulated)",
+    allowedCommands: ["show rail topology", "help", "hint"],
     position: { x: 570, y: 50 },
     status: "up",
   },
@@ -39,6 +39,7 @@ export const lab0Devices: LabDevice[] = [
     osLabel: "Cumulus Linux",
     allowedCommands: [
       `nv show interface swp${index + 2} link`,
+      "nv show interface status",
       "help",
       "hint",
     ],
@@ -57,8 +58,7 @@ export const lab0: LabConfig = {
 training across all 128 GPUs. Throughput has dropped
 to 87.5% of baseline - exactly 7/8 of expected.
 
-GPU 3 (mlx5_3 / eth3) on DGX Node A is no longer contributing
-to AllReduce. The other 15 nodes are unaffected.
+Rail 3 (mlx5_3 / eth3) on DGX Node A no longer has usable RDMA connectivity. The effect on the training job depends on NCCL communication topology and error handling; do not assume the GPU is universally removed from every collective. The other 15 nodes are unaffected.
 
 Cluster topology:
   16 DGX nodes x 8 GPUs = 128 GPUs
@@ -68,7 +68,7 @@ Cluster topology:
     cluster is sized for 16 nodes today)
 
 Your task:
-  1. Identify which rail failed and map Rail 3 to the switch port in UFM
+  1. Identify which rail failed and map Rail 3 to the switch port in the fabric inventory
   2. Confirm DGX-side RDMA and NIC state with native host commands
   3. Determine NIC side vs switch side fault
   4. Find the exact fault type on the Cumulus leaf interface`,
@@ -96,21 +96,21 @@ Your task:
       triggerAfterMistakes: 3,
       triggerAfterSeconds: 120,
       text:
-        "Start on the UFM server. Run 'show ufm topology' to identify the failed rail and map Rail 3 to the leaf-side swp interface and the DGX-side mlx5/eth interface.",
+        "Start on the fabric inventory server. Run 'show rail topology' to identify the failed rail and map Rail 3 to the leaf-side swp interface and the DGX-side mlx5/eth interface.",
     },
     {
       level: 2,
       triggerAfterMistakes: 6,
       triggerAfterSeconds: 240,
       text:
-        "After UFM identifies Rail 3, run 'rdma link show' and 'ethtool -S eth3' on the DGX host. Then open the leaf-rail3 terminal and inspect swp5 with NVUE.",
+        "After fabric inventory identifies Rail 3, run 'rdma link show' and 'ethtool -S eth3' on the DGX host. Then open the leaf-rail3 terminal and inspect swp5 with NVUE.",
     },
     {
       level: 3,
       triggerAfterMistakes: 10,
       triggerAfterSeconds: 360,
       text:
-        "Sequence: UFM 'show ufm topology' (Rail 3 -> leaf-rail3 swp5 -> mlx5_3/eth3), DGX 'rdma link show' and 'ethtool -S eth3' (NIC still reports active), then leaf-rail3 'nv show interface status' and 'nv show interface swp5 link'. The NIC and switch disagree; the switch-side interface is in protodown due to linkflap.",
+        "Sequence: fabric inventory 'show rail topology' (Rail 3 -> leaf-rail3 swp5 -> mlx5_3/eth3), DGX 'rdma link show' and 'ethtool -S eth3' (NIC still reports active), then leaf-rail3 'nv show interface status' and 'nv show interface swp5 link'. The host administrative/link view and switch forwarding state differ in this simulation: the NIC still reports active/link-up while the switch-side interface is operationally down in protodown due to linkflap. These are different state layers, not a contradiction.",
     },
   ],
 };

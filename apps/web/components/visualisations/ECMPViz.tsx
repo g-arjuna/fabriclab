@@ -7,7 +7,7 @@ type Scenario = "ecmp_collision" | "adaptive_routing" | "spectrum_x"
 const scenarios: { id: Scenario; label: string; subtitle: string }[] = [
   { id: "ecmp_collision",    label: "ECMP (traditional Ethernet)", subtitle: "The original problem" },
   { id: "adaptive_routing",  label: "InfiniBand adaptive routing", subtitle: "Per-packet load balancing" },
-  { id: "spectrum_x",        label: "Spectrum-X RSHP",             subtitle: "Ethernet catching up" },
+  { id: "spectrum_x",        label: "Spectrum-X adaptive routing", subtitle: "Ethernet implementation example" },
 ]
 
 const explanations: Record<Scenario, {
@@ -18,20 +18,20 @@ const explanations: Record<Scenario, {
 }> = {
   ecmp_collision: {
     what: "ECMP (Equal-Cost Multi-Path) routes entire flows — all packets in a TCP or RDMA flow — down the same path, chosen by hashing the 5-tuple (src IP, dst IP, src port, dst port, protocol). Once a flow is assigned to a path, it stays on that path for the entire duration.",
-    problem: "When two massive 400G AllReduce flows hash to the same spine link, that link is instantly saturated at 800G while trying to handle 400G capacity. Meanwhile other spine links sit completely idle. The cluster has plenty of total bandwidth — it is just distributed wrong. You cannot rebalance without dropping and re-establishing flows, which causes retransmissions.",
-    result: "Result: hot spots, packet drops, retransmissions, stalled AllReduce operations. This was one of the primary reasons vanilla Ethernet was inadequate for large-scale AI training before Spectrum-X.",
+    problem: "When two large flows with distinct five-tuples hash to the same ECMP member, their combined offered load can exceed 400G. The link itself cannot carry more than line rate, so excess traffic queues and may eventually drop. Meanwhile other spine links can remain underutilized. Rehashing or moving flows without disrupting transport state is difficult.",
+    result: "Result: persistent unequal utilization, queue growth, possible drops, and collective slowdown. Uneven utilization is a symptom rather than proof by itself; verify traffic placement and offered load.",
     linkUtilisation: [100, 100, 10, 5, 8, 3],
   },
   adaptive_routing: {
-    what: "InfiniBand adaptive routing makes path decisions per-packet, not per-flow. The switch measures congestion on each output port in real time — monitoring credit counts and queue depths — and forwards each packet on whichever path is least loaded at that instant.",
-    problem: "No persistent hot spots. No flow collisions. If two large gradient tensors are both in flight simultaneously, their packets interleave across all available paths. Each path carries its fair share of load. The fabric self-balances continuously without any control-plane intervention.",
-    result: "Result: near-perfect link utilisation across all paths. AllReduce operations complete at close to line rate regardless of how many simultaneous flows are active. This is one of the core reasons InfiniBand is preferred for large-scale training clusters.",
+    what: "InfiniBand adaptive routing, when supported and enabled, can select among alternative output paths using local congestion information rather than pinning every packet of a flow to one path. Behavior depends on switch generation, fabric configuration, and transport ordering requirements.",
+    problem: "Adaptive routing reduces persistent flow-collision hot spots, but it does not make congestion impossible. Incast, endpoint limits, topology oversubscription, and synchronized traffic can still overload queues. Packet reordering must be handled by the transport and receiver design.",
+    result: "Result: typically improved distribution across eligible paths, not perfect balance or guaranteed line-rate collectives. This is one architectural reason InfiniBand can be attractive for large-scale training.",
     linkUtilisation: [87, 91, 84, 89, 86, 93],
   },
   spectrum_x: {
-    what: "NVIDIA Spectrum-X uses RSHP (Resilient Hashing and Per-packet reordering) to bring per-packet adaptive routing to Ethernet. When a flow is detected as large (an 'elephant flow'), the switch can dynamically reroute it mid-flight across multiple paths, with packet reordering handled at the receiver by the ConnectX-7 NIC.",
-    problem: "Pure per-packet routing on standard Ethernet causes packet reordering, which RDMA historically could not tolerate. Spectrum-X solves this by adding reorder buffering in the NIC — packets arrive out of order but are held and resequenced before being delivered to the application. This makes per-packet routing safe for RDMA over Ethernet.",
-    result: "Result: Spectrum-X brings InfiniBand-style adaptive routing to Ethernet. This is why NVIDIA could credibly claim RoCEv2 over Spectrum-X approaches InfiniBand performance — the load balancing gap was closed. Traditional Ethernet switches (without RSHP) still have the ECMP problem.",
+    what: "NVIDIA Spectrum-X documentation describes adaptive routing that sprays packets across available paths and receiver-side reordering/placement performed by the BlueField-3 SuperNIC. This is a specific hardware and software architecture; it is not a generic property of every Ethernet network or every ConnectX-7 deployment.",
+    problem: "Packet spraying causes out-of-order arrival, so the Spectrum-X design uses the SuperNIC to reorder and directly place packets for the host/GPU data path, together with telemetry-based congestion control. Capabilities depend on the specific switch, NIC generation, firmware, and software stack.",
+    result: "Result: Spectrum-X is an Ethernet implementation designed to reduce ECMP collision effects using adaptive routing, reordering, telemetry-based congestion control, and lossless behavior. Performance comparisons require workload- and topology-specific measurements; do not treat them as universal percentages.",
     linkUtilisation: [85, 88, 90, 83, 87, 92],
   },
 }
@@ -76,7 +76,7 @@ export function ECMPViz() {
       {/* Link utilisation visualisation */}
       <div className="mb-5 rounded-xl bg-slate-800/50 p-4">
         <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-3">
-          Spine link utilisation during simultaneous AllReduce operations
+          Illustrative spine-link carried utilization (simulated, not measured)
         </p>
         <div className="space-y-2">
           {exp.linkUtilisation.map((pct, i) => (
@@ -105,14 +105,12 @@ export function ECMPViz() {
         </div>
         {scenario === "ecmp_collision" && (
           <p className="mt-3 text-[10px] text-red-400">
-            Two flows hashed to the same path → 200% load on 2 links, near-zero on others.
-            Total available bandwidth unused: ~60%.
+            Illustrative offered load from colliding elephant flows exceeds capacity on two paths while other paths are underused. Carried utilization is capped at line rate; the excess is queued or dropped.
           </p>
         )}
         {scenario !== "ecmp_collision" && (
           <p className="mt-3 text-[10px] text-green-400">
-            Load balanced across all paths. All links operating at similar utilisation.
-            Total available bandwidth utilised: ~88%.
+            Illustrative balanced state. Values are simulated teaching examples, not measured results.
           </p>
         )}
       </div>

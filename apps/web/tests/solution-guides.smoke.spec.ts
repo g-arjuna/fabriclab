@@ -147,19 +147,19 @@ test.describe("Solution guide walkthroughs", () => {
     await expect(terminalInput).toBeAttached({ timeout: 20_000 });
 
     await page.getByRole("button", { name: "Show Solution" }).click();
-    const copyButton = page.getByRole("button", { name: "Copy command: show ufm topology" });
+    const copyButton = page.getByRole("button", { name: "Copy command: show rail topology" });
     await expect(copyButton).toBeVisible();
     await copyButton.click();
     await page.getByRole("button", { name: /Close/i }).click();
 
-    await page.evaluate(() => navigator.clipboard.writeText("show ufm topology"));
+    await page.evaluate(() => navigator.clipboard.writeText("show rail topology"));
     await terminalInput.click();
     await page.keyboard.press("Control+V");
     await expect
       .poll(() => getVisibleTerminalText(page))
-      .toMatch(/ufm-server\s+\$\s+show ufm topology\s*$/);
+      .toMatch(/fabric-inventory\s+\$\s+show rail topology\s*$/);
     expect(await getVisibleTerminalText(page)).not.toContain(
-      "show ufm topologyshow ufm topology",
+      "show rail topologyshow rail topology",
     );
     await page.keyboard.press("Enter");
     await expect
@@ -167,17 +167,17 @@ test.describe("Solution guide walkthroughs", () => {
       .toContain("Mapping: Rail 3 -> leaf-rail3 swp5 -> mlx5_3 / eth3");
 
     await terminalInput.click();
-    await page.keyboard.type("show u");
+    await page.keyboard.type("show r");
     await page.keyboard.press("Tab");
     await expect
       .poll(() => getVisibleTerminalText(page))
-      .toMatch(/ufm-server\s+\$\s+show ufm topology\s*$/);
+      .toMatch(/fabric-inventory\s+\$\s+show rail topology\s*$/);
 
     await page.keyboard.press("Enter");
     await page.keyboard.press("ArrowUp");
     await expect
       .poll(() => getVisibleTerminalText(page))
-      .toMatch(/ufm-server\s+\$\s+show ufm topology\s*$/);
+      .toMatch(/fabric-inventory\s+\$\s+show rail topology\s*$/);
 
     await page.keyboard.press("Enter");
     await terminalInput.click({ button: "right" });
@@ -185,9 +185,9 @@ test.describe("Solution guide walkthroughs", () => {
     await page.getByRole("button", { name: "Paste" }).click();
     await expect
       .poll(() => getVisibleTerminalText(page))
-      .toMatch(/ufm-server\s+\$\s+show ufm topology\s*$/);
+      .toMatch(/fabric-inventory\s+\$\s+show rail topology\s*$/);
     expect(await getVisibleTerminalText(page)).not.toContain(
-      "show ufm topologyshow ufm topology",
+      "show rail topologyshow rail topology",
     );
 
     assertNoBrowserErrors(tracker);

@@ -1,159 +1,85 @@
 "use client"
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import { gbpsToGBps, transferDurationSeconds, gpuHoursLost } from "@/lib/ch0Math"
 
-// ── CheckpointCostViz ─────────────────────────────────────────────────────────
-// Interactive checkpoint cost calculator.
-// Inputs: model parameters (B), GPU count, cost/GPU-hour, checkpoint frequency,
-//         per-node storage BW, optimizer type.
-// Outputs: checkpoint size, write time, overhead cost/hr, recovery cost/failure,
-//          MTBF estimate, optimal frequency.
+function money(n: number) {
+  if (!Number.isFinite(n)) return "—"
+  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
+  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
+  return `$${n.toFixed(2)}`
+}
 
 export function CheckpointCostViz() {
-  const [params, setParams] = useState(70)       // B parameters
-  const [gpus, setGpus]     = useState(32000)
-  const [costPerHr, setCost] = useState(500)     // $ per GPU-hour
-  const [freqMin, setFreq]   = useState(15)      // checkpoint every N minutes
-  const [storageBW, setBW]   = useState(800)     // Gbps per node
-  const [optimizer, setOpt]  = useState<"adam" | "sgd">("adam")
-  const [nodes, setNodes]    = useState(4000)    // compute nodes
+  const [paramsB, setParamsB] = useState(70)
+  const [precisionBytes, setPrecisionBytes] = useState(2)
+  const [stateMultiplier, setStateMultiplier] = useState(1)
+  const [bandwidthGbps, setBandwidthGbps] = useState(800)
+  const [gpus, setGpus] = useState(32000)
+  const [intervalMin, setIntervalMin] = useState(30)
+  const [gpuHourCost, setGpuHourCost] = useState(500)
 
-  // Derived values
-  const paramBytes = params * 1e9
-  const bytesPerParam = optimizer === "adam" ? 8 : 2  // adam: params+grads+opt states, sgd: params only
-  const checkpointGB = (paramBytes * bytesPerParam) / 1e9
-  const storageBWGBs = storageBW / 8  // Gbps → GB/s
-  const writeTimeSec = checkpointGB / storageBWGBs
-  const writeTimeMin = writeTimeSec / 60
+  const out = useMemo(() => {
+    const weightsGB = paramsB * precisionBytes
+    const checkpointGB = weightsGB * stateMultiplier
+    const writeSec = transferDurationSeconds(checkpointGB, gbpsToGBps(bandwidthGbps))
+    const worstGpuHours = gpuHoursLost(gpus, intervalMin * 60)
+    const expectedGpuHours = gpuHoursLost(gpus, (intervalMin * 60) / 2)
+    const blockingGpuHours = gpuHoursLost(gpus, writeSec)
+    return { weightsGB, checkpointGB, writeSec, worstGpuHours, expectedGpuHours, blockingGpuHours,
+      worstCost: worstGpuHours * gpuHourCost, blockingCost: blockingGpuHours * gpuHourCost }
+  }, [paramsB, precisionBytes, stateMultiplier, bandwidthGbps, gpus, intervalMin, gpuHourCost])
 
-  const gpuPerNode = 8
-  const gpuMTBF_hr = 10000
-  const clusterMTBF_hr = gpuMTBF_hr / gpus
-  const clusterMTBF_min = clusterMTBF_hr * 60
-
-  const costPerGpuMin = costPerHr / 60
-  const totalCostPerMin = costPerGpuMin * gpus
-
-  // Checkpoint overhead per checkpoint (GPUs idle during write)
-  const checkpointCostPerEvent = totalCostPerMin * writeTimeMin
-  const checkpointsPerHr = 60 / freqMin
-  const overheadCostPerHr = checkpointCostPerEvent * checkpointsPerHr
-
-  // Recovery cost: expected wasted compute when failure occurs
-  // Expected time since last checkpoint at failure = freqMin / 2
-  const expectedLossMin = freqMin / 2
-  const recoveryCostPerFailure = totalCostPerMin * expectedLossMin
-
-  // Failures per day
-  const failuresPerDay = 24 / clusterMTBF_hr
-
-  // Optimal freq: minimise (overhead + expected recovery) — approx sqrt(2 × write_time × MTBF)
-  const optFreqMin = Math.sqrt(2 * writeTimeMin * clusterMTBF_min)
-
-  const fmt = (n: number, decimals = 1) => n.toFixed(decimals)
-  const fmtMoney = (n: number) =>
-    n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`
-
-  const sliders = [
-    { label: "Model size", unit: "B params", value: params, set: setParams, min: 7, max: 400, step: 7, fmt: (v: number) => `${v}B` },
-    { label: "GPU count", unit: "GPUs", value: gpus, set: setGpus, min: 256, max: 65536, step: 256, fmt: (v: number) => v.toLocaleString() },
-    { label: "Cost per GPU-hour", unit: "$/GPU-hr", value: costPerHr, set: setCost, min: 100, max: 2000, step: 50, fmt: (v: number) => `$${v}` },
-    { label: "Checkpoint every", unit: "min", value: freqMin, set: setFreq, min: 1, max: 60, step: 1, fmt: (v: number) => `${v} min` },
-    { label: "Storage BW per node", unit: "Gbps", value: storageBW, set: setBW, min: 200, max: 1600, step: 200, fmt: (v: number) => `${v}G` },
+  const controls = [
+    { label: "Model parameters", value: paramsB, set: setParamsB, min: 7, max: 400, step: 1, unit: "billion" },
+    { label: "Checkpoint state multiplier", value: stateMultiplier, set: setStateMultiplier, min: 1, max: 8, step: 0.5, unit: "× weights" },
+    { label: "Effective write bandwidth", value: bandwidthGbps, set: setBandwidthGbps, min: 100, max: 1600, step: 100, unit: "Gb/s" },
+    { label: "GPUs in job", value: gpus, set: setGpus, min: 256, max: 65536, step: 256, unit: "GPUs" },
+    { label: "Checkpoint interval", value: intervalMin, set: setIntervalMin, min: 5, max: 120, step: 5, unit: "minutes" },
+    { label: "Hypothetical cost", value: gpuHourCost, set: setGpuHourCost, min: 1, max: 2000, step: 1, unit: "$/GPU-hour" },
   ]
-
-  const results = [
-    { label: "Checkpoint size", value: `${fmt(checkpointGB, 0)} GB`, sub: `${params}B params × ${bytesPerParam} bytes/param (${optimizer === "adam" ? "Adam: params+grad+opt" : "SGD: params only"})`, color: "#60a5fa" },
-    { label: "Write time per checkpoint", value: `${fmt(writeTimeSec, 1)} sec`, sub: `at ${fmt(storageBWGBs, 0)} GB/s effective storage BW`, color: "#a78bfa" },
-    { label: "Checkpoint overhead", value: fmtMoney(overheadCostPerHr) + "/hr", sub: `${checkpointsPerHr.toFixed(1)} checkpoints/hr × ${fmtMoney(checkpointCostPerEvent)}/checkpoint`, color: "#f59e0b" },
-    { label: "Recovery cost per failure", value: fmtMoney(recoveryCostPerFailure), sub: `avg ${fmt(expectedLossMin, 0)} min lost × ${fmtMoney(totalCostPerMin)}/min cluster`, color: "#ef4444" },
-    { label: "Cluster MTBF", value: `${fmt(clusterMTBF_min, 0)} min`, sub: `${gpus.toLocaleString()} GPUs × ${gpuMTBF_hr.toLocaleString()}hr/GPU MTBF`, color: "#22c55e" },
-    { label: "Optimal checkpoint frequency", value: `~${fmt(optFreqMin, 0)} min`, sub: `minimises overhead + expected recovery cost`, color: "#10b981" },
-  ]
-
-  const freqWarning = freqMin < optFreqMin * 0.5
-    ? "Checkpointing too frequently — overhead dominates"
-    : freqMin > optFreqMin * 2
-    ? "Checkpointing too infrequently — recovery cost dominates"
-    : null
 
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
-      <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">
-        Checkpoint cost calculator
+      <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">Checkpoint calculator — explicit assumptions, visible units</p>
+      <p className="mb-4 text-xs leading-5 text-slate-500">
+        Illustrative arithmetic only. Effective bandwidth means measured end-to-end checkpoint write throughput, not nominal compute-fabric capacity. The cost input is hypothetical and configurable.
       </p>
-      <p className="mb-5 text-xs text-slate-600">
-        Adjust parameters to see checkpoint size, write time, overhead cost, and optimal frequency
-      </p>
-
-      {/* Optimizer selector */}
       <div className="mb-4 flex flex-wrap gap-2">
-        <span className="text-[10px] text-slate-500 self-center">Optimizer:</span>
-        {(["adam", "sgd"] as const).map(o => (
-          <button key={o} onClick={() => setOpt(o)}
-            className="px-3 py-1 rounded-lg text-[10px] font-bold transition-all"
-            style={{
-              backgroundColor: optimizer === o ? "#1e3a5f" : "#0f172a",
-              border: `1px solid ${optimizer === o ? "#60a5fa" : "#1e293b"}`,
-              color: optimizer === o ? "#93c5fd" : "#475569",
-            }}
-          >
-            {o === "adam" ? "Adam (P × 8 bytes)" : "SGD (P × 2 bytes)"}
+        {[2, 4].map((bytes) => (
+          <button key={bytes} type="button" onClick={() => setPrecisionBytes(bytes)}
+            className="rounded-lg px-3 py-2 text-xs"
+            style={{ border: `1px solid ${precisionBytes === bytes ? "#38bdf8" : "#1e293b"}`, backgroundColor: precisionBytes === bytes ? "#082f49" : "#0f172a", color: precisionBytes === bytes ? "#bae6fd" : "#94a3b8" }}>
+            {bytes === 2 ? "BF16/FP16 · 2 bytes/param" : "FP32 · 4 bytes/param"}
           </button>
         ))}
       </div>
-
-      {/* Sliders */}
-      <div className="space-y-3 mb-5">
-        {sliders.map(s => (
-          <div key={s.label} className="rounded-xl bg-slate-800/50 p-3">
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="text-slate-400">{s.label}</span>
-              <span className="text-white font-bold font-mono">{s.fmt(s.value)}</span>
-            </div>
-            <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
-              onChange={e => s.set(Number(e.target.value))}
-              className="w-full accent-cyan-400" />
+      <div className="grid gap-3 lg:grid-cols-2">
+        {controls.map((c) => (
+          <label key={c.label} className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-xs">
+            <span className="mb-1 flex justify-between gap-3"><span className="text-slate-400">{c.label}</span><strong className="font-mono text-slate-100">{c.value} {c.unit}</strong></span>
+            <input className="w-full accent-cyan-400" type="range" min={c.min} max={c.max} step={c.step} value={c.value} onChange={(e) => c.set(Number(e.target.value))} />
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {[
+          ["Weights only", `${out.weightsGB.toFixed(1)} GB`, `${paramsB}B × ${precisionBytes} bytes`],
+          ["Checkpoint size", `${out.checkpointGB.toFixed(1)} GB`, "weights × state multiplier"],
+          ["Ideal write time", `${out.writeSec.toFixed(2)} seconds`, `at ${(bandwidthGbps / 8).toFixed(1)} GB/s`],
+          ["Worst lost work", `${out.worstGpuHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} GPU-hours`, `${gpus} GPUs × ${intervalMin} min`],
+          ["Approx. expected lost work", `${out.expectedGpuHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} GPU-hours`, "uniform-failure approximation"],
+          ["Blocking cost per checkpoint", money(out.blockingCost), `${out.blockingGpuHours.toFixed(3)} GPU-hours if all GPUs block`],
+        ].map(([label, value, sub]) => (
+          <div key={label} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+            <div className="text-[10px] uppercase tracking-widest text-slate-500">{label}</div>
+            <div className="mt-1 font-mono text-lg font-bold text-cyan-200">{value}</div>
+            <div className="mt-1 text-xs text-slate-500">{sub}</div>
           </div>
         ))}
       </div>
-
-      {/* Frequency warning */}
-      {freqWarning && (
-        <div className="mb-4 rounded-xl bg-amber-950/30 border border-amber-500/20 p-3">
-          <div className="text-[10px] text-amber-400">⚠ {freqWarning}</div>
-          <div className="text-[9px] text-slate-500 mt-0.5">Optimal: ~{fmt(optFreqMin, 0)} min based on MTBF and write time</div>
-        </div>
-      )}
-
-      {/* Results grid */}
-      <div className="grid gap-2 sm:grid-cols-2">
-        {results.map(r => (
-          <div key={r.label} className="rounded-xl bg-slate-800/40 p-3">
-            <div className="text-[9px] text-slate-500 mb-0.5">{r.label}</div>
-            <div className="text-sm font-bold font-mono" style={{ color: r.color }}>{r.value}</div>
-            <div className="text-[8px] text-slate-600 mt-0.5 leading-3">{r.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Daily impact */}
-      <div className="mt-3 rounded-xl bg-slate-800/60 border border-white/5 p-3">
-        <div className="text-[9px] uppercase tracking-widest text-slate-600 mb-2">Daily cluster impact</div>
-        <div className="grid gap-2 text-center text-xs sm:grid-cols-3">
-          <div>
-            <div className="text-slate-500 text-[9px]">Failures/day</div>
-            <div className="font-bold text-red-400">{fmt(failuresPerDay, 1)}</div>
-          </div>
-          <div>
-            <div className="text-slate-500 text-[9px]">Recovery cost/day</div>
-            <div className="font-bold text-orange-400">{fmtMoney(recoveryCostPerFailure * failuresPerDay)}</div>
-          </div>
-          <div>
-            <div className="text-slate-500 text-[9px]">Overhead cost/day</div>
-            <div className="font-bold text-yellow-400">{fmtMoney(overheadCostPerHr * 24)}</div>
-          </div>
-        </div>
-      </div>
+      <p className="mt-4 text-xs leading-6 text-slate-400">
+        Formulas: ideal seconds = checkpoint GB / effective GB/s. Lost GPU-hours = GPUs × blocked-or-lost seconds / 3600. The “expected lost work” output assumes failures uniformly distributed within the checkpoint interval; production failure modes can invalidate that approximation.
+      </p>
     </div>
   )
 }

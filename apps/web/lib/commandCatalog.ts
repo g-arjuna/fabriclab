@@ -57,6 +57,7 @@ export const KNOWN_COMMANDS = [
   "show ufm events",
   "show ufm port leaf-rail5 swp7",
   "show ufm topology",
+  "show rail topology",
   "show dcgm gpu5",
   "show dcgm all",
   "dcgmi dmon -i 5 -c 1",

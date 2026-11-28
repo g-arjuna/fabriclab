@@ -10,9 +10,9 @@ const alternatives = [
     vendor: "NVIDIA",
     gpu: "8× H100 SXM5 80GB",
     interconnect: "NVLink gen4 + ConnectX-7 400G × 8",
-    network: "InfiniBand NDR or RoCEv2",
-    strength: "Fully integrated stack — GPU + NIC + switch + software from one vendor. Widest adoption, best documentation, largest ecosystem.",
-    limitation: "Expensive (~$300K). NVIDIA vendor lock-in.",
+    network: "DGX H100 reference compute fabric: InfiniBand NDR; adapter personality is platform/configuration-dependent",
+    strength: "Fully integrated stack — GPU + NIC + switch + software from one vendor. Broad adoption, extensive documentation, and a large ecosystem.",
+    limitation: "High acquisition cost and vendor ecosystem dependency; exact pricing is configuration- and time-dependent.",
     color: "#14532d",
     border: "#22c55e",
   },
@@ -20,10 +20,10 @@ const alternatives = [
     name: "AMD Instinct MI300X",
     vendor: "AMD",
     gpu: "8× MI300X 192GB HBM3",
-    interconnect: "Infinity Fabric + ConnectX-7 or Pensando",
-    network: "RoCEv2 (Ethernet only)",
-    strength: "192 GB HBM3 per GPU — 2.4× more memory than H100. Attractive for inference and models too large for H100 memory. Lower cost.",
-    limitation: "ROCm software ecosystem less mature than CUDA. No InfiniBand native. Smaller adoption means fewer reference architectures.",
+    interconnect: "Infinity Fabric + platform-dependent NIC choices",
+    network: "Platform-dependent Ethernet/RoCE scale-out designs",
+    strength: "192 GB HBM3 per GPU — 2.4× more memory than H100. Attractive where memory capacity is a primary constraint. Cost and total value are procurement- and workload-dependent.",
+    limitation: "The ROCm ecosystem and operational tooling differ from CUDA; maturity is workload- and version-dependent. NIC, transport, and scale-out design support is platform-specific. Public deployment and reference-design material may be less extensive than NVIDIA material.",
     color: "#1e3a5f",
     border: "#60a5fa",
   },
@@ -32,8 +32,8 @@ const alternatives = [
     vendor: "HPE",
     gpu: "8× H100 SXM5 (NVIDIA GPU)",
     interconnect: "NVLink gen4 + ConnectX-7 × 8",
-    network: "InfiniBand NDR or Ethernet",
-    strength: "HPE's enterprise support, HPC heritage, integration with Cray software stack (PBS Pro, Slingshot). Used in national labs.",
+    network: "Platform-dependent InfiniBand or Ethernet configurations",
+    strength: "HPE enterprise support and HPC system-integration heritage. Exact accelerator, interconnect, and management capabilities depend on the selected configuration.",
     limitation: "Same GPUs as DGX, so no GPU advantage. Higher operational complexity than DGX in pure AI training contexts.",
     color: "#1e3a5f",
     border: "#38bdf8",
@@ -43,22 +43,22 @@ const alternatives = [
     vendor: "Google",
     gpu: "TPU v5p (custom ASIC)",
     interconnect: "ICI (Inter-Chip Interconnect) — proprietary",
-    network: "Google proprietary fabric",
-    strength: "Purpose-built for transformer training. Extreme scale — pods of 8960 chips. Best price/performance for Google's own workloads.",
-    limitation: "Only available in Google Cloud. Cannot run arbitrary workloads — optimised for TPU-compatible models only.",
+    network: "Google-managed proprietary/inter-chip networking",
+    strength: "Purpose-built accelerator architecture available at large scale in Google Cloud. Suitability and cost-effectiveness depend on model, framework, software support, and workload.",
+    limitation: "Only available through Google Cloud rather than as on-premises server hardware. Software/model compatibility and migration effort must be evaluated per workload.",
     color: "#1e3a5f",
     border: "#818cf8",
   },
 ]
 
 const anatomyComponents = [
-  { label: "H100 SXM5 × 8", role: "Primary compute", detail: "8 H100 GPUs, each with 80 GB HBM3 memory. Each GPU runs at 989 TFLOPS BF16. Connected to each other via 4 NVSwitch chips at 900 GB/s per GPU.", color: "#166534" },
-  { label: "NVSwitch gen3 × 4", role: "Intra-node fabric", detail: "Creates non-blocking all-to-all between all 8 GPUs. 7.2 TB/s total fabric bandwidth. This is what enables tensor parallelism within a single DGX chassis.", color: "#1e40af" },
-  { label: "ConnectX-7 × 8", role: "External fabric (rail 0–7)", detail: "One 400G NIC per GPU. Each NIC connects to a different leaf switch (rail-optimised topology). 8 independent 400G paths = 3.2 Tb/s total external bandwidth.", color: "#1d4ed8" },
-  { label: "ConnectX-7 dual-port × 2", role: "Storage + in-band management", detail: "2 dual-port ConnectX-7 cards in Slot1 and Slot2 for the storage fabric and in-band management. Completely separate from the compute NICs. GPUDirect Storage path.", color: "#6d28d9" },
-  { label: "Intel Xeon × 2", role: "Host management", detail: "2× Xeon Platinum 8480C (56 cores each). Manages OS, NCCL, job scheduling. CPU utilisation during training: 5–15%. Secondary role.", color: "#374151" },
-  { label: "DDR5 2 TB", role: "System memory", detail: "2 TB of DDR5 system RAM. Framework overhead, data loading pipelines, CPU-side operations. Training data moves GPU→GPU via RDMA bypassing this.", color: "#92400e" },
-  { label: "NVMe U.2 × 8 (~30 TB)", role: "Local storage", detail: "8× 3.84 TB NVMe U.2 SSDs (~30 TB usable). Local OS, framework installation, checkpoint storage. Training datasets live on shared parallel storage (Lustre, WEKA, BeeGFS). GPUDirect Storage (GDS) can read directly from NVMe to GPU memory without involving the host CPU.", color: "#1e293b" },
+  { label: "H100 SXM5 × 8", role: "Primary compute", detail: "8 H100 GPUs, each with 80 GB HBM3 memory. Each GPU has 900 GB/s aggregate bidirectional NVLink endpoint bandwidth in the DGX H100 reference design. Four NVSwitch chips provide the intra-node scale-up fabric.", color: "#166534" },
+  { label: "NVSwitch gen3 × 4", role: "Intra-node fabric", detail: "Provides the scale-up fabric among eight GPUs. The 7.2 TB/s figure is system endpoint bandwidth (8 × 900 GB/s), not switch-chip bandwidth or bisection bandwidth.", color: "#1e40af" },
+  { label: "ConnectX-7 × 8", role: "External fabric (rail 0–7)", detail: "Eight 400G ConnectX-7 compute adapters in the reference DGX H100 design. The wiring uses GPU/NIC rail affinity; it does not mean a GPU physically contains a NIC. Connector and logical-port counts must be distinguished.", color: "#1d4ed8" },
+  { label: "ConnectX-7 dual-port × 2", role: "Storage + in-band management", detail: "Two additional dual-port ConnectX-7 cards in Slot1/Slot2 support storage and in-band-management functions in the documented platform. Their use is configuration-dependent.", color: "#6d28d9" },
+  { label: "Intel Xeon × 2", role: "Host management", detail: "2× Xeon Platinum 8480C (56 cores each). Runs application orchestration, data loading, preprocessing, framework operations, storage management, kernel services, and communication setup. Utilization is workload-dependent.", color: "#374151" },
+  { label: "DDR5 2 TB", role: "System memory", detail: "2 TB of DDR5 system RAM. Framework overhead, data loading pipelines, CPU-side operations. Some training traffic can bypass system RAM on supported RDMA data paths, but host memory remains important for application and framework operation.", color: "#92400e" },
+  { label: "NVMe U.2 × 8 (~30 TB)", role: "Local storage", detail: "8× 3.84 TB NVMe U.2 SSDs (~30 TB usable). Data-cache storage; the operating system resides on separate OS drives. They may also support local caching/checkpoint workflows depending on configuration. Training datasets live on shared parallel storage (Lustre, WEKA, BeeGFS). Supported GPUDirect Storage configurations can avoid intermediate host-memory staging on the data path, while setup and orchestration still involve host software.", color: "#1e293b" },
 ]
 
 export function DGXAnatomyViz() {
@@ -72,7 +72,7 @@ export function DGXAnatomyViz() {
         DGX H100 — anatomy and alternatives
       </p>
 
-      <div className="flex gap-2 mb-5">
+      <div className="flex flex-wrap gap-2 mb-5">
         {(["anatomy", "alternatives", "whynvidia"] as View[]).map(v => (
           <button
             key={v}
@@ -84,7 +84,7 @@ export function DGXAnatomyViz() {
               color: view === v ? "#bbf7d0" : "#64748b",
             }}
           >
-            {v === "anatomy" ? "Internal anatomy" : v === "alternatives" ? "Alternatives" : "Why NVIDIA won"}
+            {v === "anatomy" ? "Internal anatomy" : v === "alternatives" ? "Alternatives" : "Why NVIDIA became the reference"}
           </button>
         ))}
       </div>
@@ -165,14 +165,14 @@ export function DGXAnatomyViz() {
       {view === "whynvidia" && (
         <div className="space-y-3">
           <p className="text-sm leading-7 text-slate-300">
-            This course uses DGX and InfiniBand as the reference platform. It is worth being explicit about why NVIDIA dominates, rather than pretending it is the only option.
+            This course uses DGX and InfiniBand as the reference platform. It is worth being explicit about why NVIDIA is commonly used as the reference platform, without treating that position as permanent, universal, or proof of superiority in every workload.
           </p>
           {[
-            { title: "CUDA ecosystem lock-in", desc: "Most AI frameworks (PyTorch, TensorFlow, JAX) are primarily optimised for CUDA. The gap between CUDA and ROCm/OneAPI is narrowing but real. Most AI researchers write CUDA code. Most pre-trained models were trained on CUDA.", color: "#166534" },
+            { title: "CUDA ecosystem momentum", desc: "Major AI frameworks and many production training pipelines have deep CUDA support. ROCm and other software stacks are viable in suitable workloads, but ecosystem maturity and operational familiarity differ by organization and software version.", color: "#166534" },
             { title: "Vertical integration", desc: "NVIDIA sells the GPU, the NIC (ConnectX-7), the switch (Quantum/Spectrum), and the software (NCCL, UFM, CUDA). When something breaks, one vendor owns the full stack. No finger-pointing between GPU and NIC vendors.", color: "#1e40af" },
-            { title: "Reference architectures", desc: "DGX BasePOD and SuperPOD are documented, validated, and deployed at scale. Any hyperscaler with an NVIDIA cluster uses variants of these designs. The community knowledge base is enormous.", color: "#6d28d9" },
-            { title: "SHARP in-network compute", desc: "NVIDIA's InfiniBand switches can perform AllReduce summations as data flows through the fabric — reducing AllReduce communication time by up to 50% at large scale. No Ethernet switch offers this.", color: "#92400e" },
-            { title: "But this is not permanent", desc: "AMD MI300X's memory advantage is real. Custom silicon (TPUs, Trainium, Gaudi) will continue to grow. The networking concepts you learn here — lossless fabric, RDMA, congestion control — apply regardless of which GPU wins.", color: "#374151" },
+            { title: "Reference architectures", desc: "DGX BasePOD and SuperPOD are documented reference architectures with extensive public implementation detail. Other vendors also provide validated designs; do not treat one public reference architecture as universal industry practice.", color: "#6d28d9" },
+            { title: "SHARP in-network compute", desc: "SHARP can accelerate supported collectives in supported InfiniBand configurations by performing reductions in the network. Benefits are workload- and scale-dependent; do not use a universal percentage or assume no other hardware can implement collective acceleration.", color: "#92400e" },
+            { title: "This is not permanent or universal", desc: "AMD memory capacity, custom accelerators, Ethernet operational models, and workload-specific economics can change the platform decision. The networking concepts in this course — congestion control, RDMA behavior, telemetry, and topology design — remain relevant across accelerator vendors.", color: "#374151" },
           ].map(item => (
             <div key={item.title} className="rounded-xl p-4" style={{ backgroundColor: item.color + "33", border: `1px solid ${item.color}66` }}>
               <h4 className="text-sm font-semibold text-white mb-1">{item.title}</h4>

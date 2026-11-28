@@ -24,7 +24,7 @@ export function showUfmTopologyLab0(): CommandResult {
 
   if (rails.length === 0) {
     return {
-      output: "No UFM topology snapshot is available for this lab.",
+      output: "No fabric-inventory topology snapshot is available for this lab.",
       type: "info",
     };
   }
@@ -52,7 +52,7 @@ Summary:
   Mapping: Rail 3 -> leaf-rail3 swp5 -> mlx5_3 / eth3
 
 [SIM ONLY] The mapping summary and next-step hint below are tutorial scaffolding.
-They are not literal UFM CLI output you should expect on a production system.
+They are not literal NetQ, UFM, or switch CLI output you should expect on a production system. This RoCE/Cumulus lab uses the inventory server only as a topology-mapping scaffold.
 Next checks: run 'rdma link show' and 'ethtool -S eth3' on the DGX host,
 then inspect 'nv show interface swp5 link' on leaf-rail3.`,
     conceptId: "rocev2",
@@ -85,7 +85,7 @@ export function nvShowInterfaceLinkLab0(expectedPort: string): CommandResult {
       output: `nv show interface ${expectedPort} link
 
 No fault on ${expectedPort} from this leaf tab.
-[SIM ONLY] Use the rail mapping from 'show ufm topology' to pick the swp port on this leaf.`,
+[SIM ONLY] Use the rail mapping from 'show rail topology' to pick the swp port on this leaf.`,
       type: "info",
     };
   }

@@ -8,7 +8,7 @@ const scenarios = [
   {
     id: "high_entropy" as const,
     label: "High entropy (normal web traffic)",
-    caption: "Many different 5-tuples -> different hash outputs -> even distribution",
+    caption: "Many different five-tuples usually spread hash outputs, but even distribution is not guaranteed",
     spineUtil: [25, 24, 27, 24],
     spineColors: ["#22c55e", "#22c55e", "#22c55e", "#22c55e"],
     tupleLines: [
@@ -23,34 +23,38 @@ const scenarios = [
   {
     id: "low_entropy" as const,
     label: "Low entropy (RoCEv2 AllReduce)",
-    caption: "Similar 5-tuples -> same hash output -> hot links + idle links",
+    caption: "Distinct large flows can still hash to the same path -> concentrated load + idle capacity",
     spineUtil: [92, 88, 8, 4],
     spineColors: ["#ef4444", "#ef4444", "#334155", "#334155"],
     tupleLines: [
       "DGX 10.1.0.x <-> DGX 10.1.0.y",
       "protocol: UDP",
       "dst port: 4791 always",
-      "src port: small QP-derived range",
+      "src port: often entropy-bearing; not globally unique per QP",
     ],
     leftNodes: ["DGX A", "DGX B", "DGX C", "DGX D"],
     rightNodes: ["DGX E", "DGX F", "DGX G", "DGX H"],
   },
 ]
 
-const flowletPanels = [
+const conceptPanels = [
   {
-    title: "Simultaneous flowlets",
-    summary: "GPU A->B and GPU C->B can look identical to the switch at the IP/UDP header level.",
-    detail:
-      "The switch cannot distinguish the flows well enough to spread them. Both get pinned to the same path, one spine link saturates, and neighbouring links remain underused.",
+    title: "Hash collision",
+    summary: "Distinct five-tuples can produce the same ECMP bucket because hashing compresses many inputs into few paths.",
+    detail: "GPU traffic often uses a small number of very large, long-lived flows. Even when source addresses and UDP source ports differ, two elephant flows can be assigned to the same member. Offered load can exceed a link's capacity; carried utilization cannot exceed line rate.",
+    accent: "#ef4444",
+  },
+  {
+    title: "Flowlet",
+    summary: "A flowlet is a burst or segment of packets within one flow, separated from the next burst by a sufficiently large inter-packet gap.",
+    detail: "At a flowlet boundary, a flowlet-aware implementation may select another path because the gap makes reordering less likely. A flowlet is not a separate network flow and does not require identical five-tuples.",
     accent: "#60a5fa",
   },
   {
-    title: "Sequential flowlets",
-    summary: "Job 1 ends on A->B. Job 2 starts on the same pair with the same headers.",
-    detail:
-      "The switch keeps the new traffic pinned to the old path because it never sees a meaningfully new flow. Congestion persists even after the workload has changed.",
-    accent: "#f59e0b",
+    title: "Adaptive packet spraying",
+    summary: "Packet-level adaptive routing distributes individual packets or controlled groups across paths and must manage reordering.",
+    detail: "Hardware support and transport behavior matter. This is different from conventional static per-flow ECMP and different from merely choosing a new path at a flowlet boundary.",
+    accent: "#22c55e",
   },
 ]
 
@@ -89,7 +93,7 @@ export function LowEntropyFlowletsViz() {
       <div className="grid gap-4 lg:grid-cols-[1.4fr_0.9fr]">
         <div className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
           <p className="mb-3 text-[10px] uppercase tracking-[0.28em] text-slate-500">
-            ECMP distribution view
+            Illustrative carried utilization view (not a measurement)
           </p>
 
           <div className="flex flex-col gap-4 md:grid md:grid-cols-[1fr_auto_1fr] md:items-center">
@@ -151,12 +155,12 @@ export function LowEntropyFlowletsViz() {
 
         <div className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
           <p className="mb-3 text-[10px] uppercase tracking-[0.28em] text-slate-500">
-            Why the hash behaves this way
+            Collision, flowlet, and routing definitions
           </p>
-          <p className="text-sm leading-7 text-slate-300">{scenario.caption}</p>
+          <p className="text-sm leading-7 text-slate-300">{scenario.caption} Uneven utilization is a symptom, not definitive proof of an ECMP or flowlet problem; verify offered load, queueing, drops, and endpoint behavior.</p>
 
           <div className="mt-4 space-y-3">
-            {flowletPanels.map((panel) => (
+            {conceptPanels.map((panel) => (
               <div
                 key={panel.title}
                 className="rounded-xl border bg-slate-900/70 p-3"

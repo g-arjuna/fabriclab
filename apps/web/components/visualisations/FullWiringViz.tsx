@@ -23,36 +23,36 @@ const networks: Record<Exclude<Network, null>, NetworkInfo> = {
     sublabel: "GPU training network",
     color: "#1e3a5f",
     borderColor: "#60a5fa",
-    description: "The network that carries GPU-to-GPU AllReduce traffic during training. Every DGX node has 8 ConnectX-7 NICs, each on a different rail. Leaf switches aggregate to spine switches in a fat-tree topology. This network must be completely lossless — a single dropped packet stalls every GPU in the training job.",
-    switches: "QM9700 NDR leaf switches + Q3400 spine switches (InfiniBand) or SN4600C leaf + SN5600 spine (Spectrum-X Ethernet)",
+    description: "The network that carries GPU-to-GPU AllReduce traffic during training. In the DGX H100 reference arrangement, the node has 8 compute ConnectX-7 adapters, each associated with a different rail. Leaf switches aggregate to spine switches in a fat-tree topology. The fabric is engineered to avoid congestion-induced loss, but lossless forwarding is not immunity from corruption, hardware faults, misconfiguration, or retry exhaustion. A recoverable transport loss does not automatically stall or kill an entire job.",
+    switches: "DGX H100 SuperPOD reference: QM9700 NDR InfiniBand switches for leaf and spine roles; Ethernet/Spectrum-X designs use generation-specific Spectrum platforms",
     nic: "ConnectX-7 HCA × 8 per DGX node",
     bandwidth: "400 Gb/s per NIC × 8 NICs = 3.2 Tb/s total per node",
-    protocol: "InfiniBand NDR (lossless by design) or RoCEv2 over Ethernet (lossless via PFC + ECN)",
-    why: "Physically separate from storage and management so that storage I/O bursts cannot cause congestion on the training fabric. Any cross-contamination destroys training throughput.",
+    protocol: "InfiniBand NDR (credit-based congestion-loss avoidance) or RoCEv2 over Ethernet (commonly engineered with PFC/ECN in the course reference design)",
+    why: "The reference architecture separates compute from storage and management to reduce cross-traffic congestion and simplify failure/performance isolation. Consolidation is possible in other architectures; cross-traffic impact depends on topology, QoS, offered load, and configuration.",
   },
   storage: {
     label: "Storage fabric",
     sublabel: "GPU→storage network",
     color: "#064e3b",
     borderColor: "#34d399",
-    description: "A separate Ethernet network connecting DGX nodes to parallel storage systems (Lustre, BeeGFS, WEKA). Training datasets are too large for local NVMe — a 10 TB dataset is read repeatedly across hundreds of training epochs. GPUDirect Storage (GDS) allows GPUs to read training data directly from NVMe-oF targets, bypassing host CPU and system RAM entirely.",
-    switches: "NVIDIA Spectrum SN4600 or SN5600 (400GbE Ethernet)",
+    description: "A storage network connecting nodes to filesystem or block-storage services. NVIDIA reference architectures can use InfiniBand for storage; other deployments use Ethernet. Do not treat Ethernet storage as universal. Large shared datasets may exceed practical local capacity or need consistent multi-node access; local NVMe can still act as cache or checkpoint scratch depending on design. Supported GPUDirect Storage configurations can avoid intermediate CPU-memory staging on the data path; setup and orchestration still involve host software. GDS is not synonymous with NVMe-oF.",
+    switches: "Reference-dependent: InfiniBand storage fabric in the NVIDIA H100 SuperPOD RA, or Ethernet storage switches in other designs",
     nic: "Dual-port ConnectX-7 × 2 per DGX H100/H200 node (Slot1 / Slot2)",
-    bandwidth: "2× 400 GbE per node = 800 Gb/s storage bandwidth",
-    protocol: "NVMe-oF over RoCEv2 (storage) + Ethernet (management)",
-    why: "Storage traffic patterns (large sequential reads) are completely different from training traffic patterns (many small AllReduce messages). Mixing them causes priority inversion and unpredictable latency.",
+    bandwidth: "Adapter capability is up to 400G per port, but usable storage bandwidth is bond-, protocol-, and architecture-dependent",
+    protocol: "Deployment-dependent storage protocol and fabric; management functions may be separate",
+    why: "Storage traffic often has different burst, parallelism, and throughput characteristics from tightly synchronized collective traffic. Sharing infrastructure can create capacity and queueing interactions; physical or logical separation is a design decision rather than a universal requirement.",
   },
   management: {
     label: "Management network",
     sublabel: "Out-of-band control plane",
     color: "#1e293b",
     borderColor: "#94a3b8",
-    description: "A completely separate, low-bandwidth out-of-band network for infrastructure management. BMC access (iDRAC, iLO), OS provisioning, NVIDIA UFM (Unified Fabric Manager for InfiniBand), Base Command Manager for job scheduling, IPMI, PXE boot. This network is your lifeline when the compute and storage fabrics are misbehaving.",
-    switches: "Out-of-band BMC: 1GbE dedicated switch. In-band management (UFM, Base Command Manager, OS traffic): 10GbE or 25GbE Ethernet switches",
-    nic: "Dedicated BMC port (iDRAC, 1GbE) + 10GbE or 25GbE in-band management NIC per node",
-    bandwidth: "BMC: 1 GbE out-of-band. In-band management: 10–25 GbE",
-    protocol: "Standard Ethernet — no RDMA, no special requirements",
-    why: "If the compute fabric has a subnet manager failure or the storage fabric is congested, you still need to reach the nodes to diagnose and fix the problem. The management network must be completely independent — never share switches with compute or storage.",
+    description: "Out-of-band management provides BMC/IPMI/Redfish-style access independently of production networking. In-band management is a separate logical function for host OS access, provisioning, telemetry, and fabric management. The illustration combines them only for visual simplicity; they must not be treated as the same network.",
+    switches: "DGX H100 SuperPOD reference: SN2201 1GbE out-of-band switches; SN4600C 100GbE in-band-management Ethernet switches",
+    nic: "Dedicated 1GbE BMC port plus architecture-dependent in-band management interfaces (DGX documentation also identifies Slot3 100GbE management interfaces)",
+    bandwidth: "BMC: 1 GbE out-of-band. In-band management: reference SN4600C fabric at 100GbE; DGX systems also expose dual-port 100GbE slot-3 and 10GbE RJ45 system-management interfaces",
+    protocol: "Out-of-band uses ordinary Ethernet management; in-band management may share production Ethernet and has separate requirements",
+    why: "If the compute fabric has a subnet manager failure or the storage fabric is congested, you still need to reach the nodes to diagnose and fix the problem. Out-of-band management is commonly independent, while in-band management and storage can be separated or consolidated according to the architecture.",
   },
 }
 
@@ -68,7 +68,7 @@ export function FullWiringViz() {
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">
-        Three-network architecture — click each network
+        Reference fabric functions — click each illustrated network
       </p>
 
       {/* Diagram */}
@@ -114,7 +114,7 @@ export function FullWiringViz() {
             stroke={selected === "management" ? "#94a3b8" : "#334155"}
             strokeWidth={selected === "management" ? 1.5 : 1}
           />
-          <text x="98" y="263" textAnchor="middle" fill="#64748b" fontSize="6">BMC (iDRAC)</text>
+          <text x="98" y="263" textAnchor="middle" fill="#64748b" fontSize="6">BMC</text>
 
           {/* === COMPUTE FABRIC === */}
           {/* Lines from ConnectX-7s to leaf switches */}
@@ -181,8 +181,8 @@ export function FullWiringViz() {
             onClick={() => setSelected(selected === "storage" ? null : "storage")}
           />
           <text x="430" y="215" textAnchor="middle" fill="#34d399" fontSize="8" fontWeight="600">STORAGE</text>
-          <text x="430" y="227" textAnchor="middle" fill="#10b981" fontSize="7">SN5600</text>
-          <text x="430" y="239" textAnchor="middle" fill="#10b981" fontSize="6">400GbE Ethernet</text>
+          <text x="430" y="227" textAnchor="middle" fill="#10b981" fontSize="7">storage switches</text>
+          <text x="430" y="239" textAnchor="middle" fill="#10b981" fontSize="6">storage fabric (RA-dependent)</text>
 
           <rect x="246" y="268" width="88" height="16" rx="4"
             fill={selected === "storage" ? "#064e3b" : "#0a0f1a"}

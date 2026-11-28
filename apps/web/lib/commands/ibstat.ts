@@ -35,10 +35,7 @@ export function ibstat(): CommandResult {
   const entries = rails.map(rail => {
     const isActive = rail.nicState === 'up'
     const switchNote = rail.switchPort === 'error-disabled'
-      ? '\n                  ← NIC reports Active: physical signal present on cable'
-        + '\n                  ← Switch port on leaf-rail' + rail.id + ' is Err-Disabled'
-        + '\n                  ← Traffic not flowing despite Active NIC state'
-        + '\n                  ← Verify: switch to leaf-rail' + rail.id + ' tab and run: show switch port rail' + rail.id
+      ? '\n                  [simulation note follows output]'
       : ''
     const portGuid = rail.guid.slice(0, -2) + '01'
 
@@ -66,7 +63,7 @@ export function ibstat(): CommandResult {
   }
 
   return {
-    output: entries.join('\n\n'),
+    output: entries.join('\n\n') + (hasErrDisabled ? '\n\nSimulation interpretation (not ibstat output): ibstat reports RDMA device/port state only. It does not report QP state or application health. In this lab the NIC port remains administratively/link-up while the peer switch interface is operationally down in protodown; those state layers can differ. Inspect the leaf and use QP/application diagnostics separately.' : ''),
     conceptId: 'rocev2',
     type: 'success',
   }

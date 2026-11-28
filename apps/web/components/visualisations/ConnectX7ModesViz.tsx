@@ -17,12 +17,12 @@ const modeConfig = {
     smLid: "1",
     addressing: "LID assigned by Subnet Manager",
     flowControl: "Credit-based (built-in to protocol)",
-    lossless: "Guaranteed — cannot be misconfigured away",
+    lossless: "Congestion-loss avoidance under correct operation — not failure immunity",
     switches: "QM9700 (leaf), Q3400 (spine)",
     switchOS: "NVIDIA ONYX",
-    management: "Centralised — UFM manages entire fabric",
+    management: "Subnet Manager required for IB subnet; UFM is an optional broader management platform",
     multitenancy: "Complex — requires IB partitioning",
-    perfGap: "Baseline (maximum performance)",
+    perfGap: "Deployment- and workload-dependent",
   },
   eth: {
     label: "Ethernet / RoCEv2 mode",
@@ -34,26 +34,26 @@ const modeConfig = {
     baseLid: "0",
     smLid: "0",
     addressing: "MAC + IP address",
-    flowControl: "PFC + ECN (must be configured)",
-    lossless: "Requires correct PFC + ECN on every port",
+    flowControl: "PFC + ECN are common reference mechanisms; exact requirements are implementation/deployment-dependent",
+    lossless: "Design-dependent; the course reference uses correctly configured PFC/ECN",
     switches: "SN5600 (leaf), standard Ethernet (spine)",
     switchOS: "Cumulus Linux / SONiC",
     management: "Distributed — each switch configured independently",
     multitenancy: "Straightforward — standard Ethernet segmentation",
-    perfGap: "5–10% below IB at typical cluster scale",
+    perfGap: "Deployment- and workload-dependent; no universal 5–10% figure",
   },
 }
 
 const deepDiveRows = [
   { label: "Protocol", ib: "Native InfiniBand", eth: "RoCEv2 (RDMA over UDP/IP)" },
   { label: "Address type", ib: "LID (Local Identifier)", eth: "MAC + IP address" },
-  { label: "Flow control", ib: "Credit-based (link layer)", eth: "PFC + ECN (configured)" },
-  { label: "Packet loss", ib: "Impossible at link layer", eth: "Possible if PFC/ECN misconfigured" },
+  { label: "Flow control", ib: "Credit-based (link layer)", eth: "PFC/ECN in the course reference; not universal protocol requirements" },
+  { label: "Packet loss", ib: "Congestion-induced loss is engineered away, but corruption/faults can still occur", eth: "Loss behavior depends on QoS design, transport recovery, congestion, and faults" },
   { label: "Switch family", ib: "QM9700 / Q3400", eth: "SN5600 / standard Ethernet" },
   { label: "Switch OS", ib: "NVIDIA ONYX", eth: "Cumulus Linux / SONiC" },
-  { label: "Fabric manager", ib: "UFM (centralised)", eth: "None required" },
-  { label: "ibstat LIDs", ib: "Non-zero (SM assigned)", eth: "Zero (no SM)" },
-  { label: "Physical cables", ib: "QSFP56 / OSFP", eth: "QSFP56 / OSFP (same)" },
+  { label: "Fabric management", ib: "Subnet Manager required; UFM optional", eth: "Switch/controller configuration" },
+  { label: "ibstat LIDs", ib: "Normally non-zero after subnet initialization/assignment", eth: "Normally zero in RoCEv2 because Ethernet does not use IB LID addressing" },
+  { label: "Physical connectivity", ib: "OSFP/QSFP variants — validate protocol, speed, lanes, firmware, and transceiver support", eth: "OSFP/QSFP variants — form factor alone does not guarantee interoperability" },
   { label: "NVLink affected", ib: "No", eth: "No" },
 ]
 
@@ -64,12 +64,12 @@ function MlxconfigBlock({ mode }: { mode: Mode }) {
     : "mlxconfig -d /dev/mst/mt4129_pciconf0 set LINK_TYPE_P1=2"
   return (
     <div className="rounded-xl bg-[#0a0f1a] border border-white/10 p-3 font-mono text-xs leading-6 text-slate-300">
-      <div className="text-slate-500 mb-1"># Set NIC to {cfg.label}</div>
+      <div className="text-slate-500 mb-1"># Illustrative administrative example for {cfg.label}. Verify exact device, SKU, firmware, and syntax before use. Changing link type can interrupt connectivity.</div>
       <div className="text-amber-300">{cmd}</div>
       <div className="mt-2 text-slate-500"># After reboot, ibstat shows:</div>
       <div className="pl-4 text-slate-400">Link layer: <span style={{ color: cfg.color }}>{cfg.linkLayer}</span></div>
-      <div className="pl-4 text-slate-400">Base lid:   <span style={{ color: cfg.baseLid === "0" ? "#ef4444" : "#22c55e" }}>{cfg.baseLid}{cfg.baseLid === "0" ? "  ← no SM, no LID" : "  ← SM assigned"}</span></div>
-      <div className="pl-4 text-slate-400">SM lid:     <span style={{ color: cfg.smLid === "0" ? "#ef4444" : "#22c55e" }}>{cfg.smLid}{cfg.smLid === "0" ? "     ← no Subnet Manager" : "     ← SM at LID 1"}</span></div>
+      <div className="pl-4 text-slate-400">Base lid:   <span style={{ color: cfg.baseLid === "0" ? "#ef4444" : "#22c55e" }}>{cfg.baseLid}{cfg.baseLid === "0" ? "  ← normally zero in RoCE mode; zero alone is not mode proof" : "  ← SM assigned"}</span></div>
+      <div className="pl-4 text-slate-400">SM lid:     <span style={{ color: cfg.smLid === "0" ? "#ef4444" : "#22c55e" }}>{cfg.smLid}{cfg.smLid === "0" ? "     ← normally zero in RoCE mode; in native IB zero can also occur before assignment" : "     ← illustrative SM at LID 1"}</span></div>
       <div className="pl-4 text-slate-400">LINK_TYPE:  <span className="text-slate-200">{cfg.linkType}</span></div>
     </div>
   )
@@ -81,8 +81,8 @@ export function ConnectX7ModesViz() {
 
   return (
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
-      <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">ConnectX-7 — one card, two operating modes</p>
-      <p className="mb-4 text-xs text-slate-500">The same silicon. The same cable. Completely different protocol personality.</p>
+      <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">ConnectX-7 — VPI-capable adapter, InfiniBand/Ethernet personalities (SKU- and firmware-dependent)</p>
+      <p className="mb-4 text-xs text-slate-500">Similar adapter family. Different protocol personality. Cable, firmware, SKU, speed, lane, and transceiver compatibility must be validated independently.</p>
 
       {/* Tab selector */}
       <div className="flex gap-2 mb-5">
@@ -166,7 +166,7 @@ export function ConnectX7ModesViz() {
             </div>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            The DGX node hardware — GPUs, NVLink, NVSwitch, CPUs — is identical in both modes. Only the external fabric changes.
+            The DGX node hardware — GPUs, NVLink, NVSwitch, CPUs — is identical in both modes. The external fabric, configuration, drivers, management model, and operational diagnostics change; exact mode support depends on SKU and firmware.
           </p>
         </div>
       )}

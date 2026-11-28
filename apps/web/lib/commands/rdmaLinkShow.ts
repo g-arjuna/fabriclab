@@ -25,22 +25,22 @@ export function rdmaLinkShow(): CommandResult {
       const pfcWarning = !topology.pfcEnabled
         ? '\n  WARNING: PFC disabled -- lossless operation not guaranteed'
         : ''
-      const switchWarning = rail.switchPort === 'error-disabled'
-        ? '\n  WARNING: NIC reports ACTIVE but switch port is error-disabled -- traffic not flowing on this rail'
-        : ''
-
       return (
         `link ${rail.nicName}/1 state ACTIVE physical_state LINK_UP\n`
         + `  type RoCE\n`
         + `  netdev eth${rail.id}\n`
         + `  roce_mode: RoCEv2`
         + pfcWarning
-        + switchWarning
       )
     })
 
+    const failedRail = rails.find((rail) => rail.switchPort === 'error-disabled')
+    const interpretation = failedRail
+      ? `\n\n[SIMULATION INTERPRETATION — not rdma output] Rail ${failedRail.id} remains host-link ACTIVE in this fixture while its peer leaf interface is operationally down/protodown. rdma link state is not QP state and does not prove end-to-end forwarding.`
+      : ''
+
     return {
-      output: lines.join('\n\n'),
+      output: lines.join('\n\n') + interpretation,
       conceptId: 'rocev2',
       type: 'success',
     }

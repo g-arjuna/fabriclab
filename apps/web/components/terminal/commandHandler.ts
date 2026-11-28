@@ -1640,6 +1640,7 @@ For per-port counters on this switch, use:
   "curl -ks 'https://ufm-server/ufmRest/resources/ports?system=leaf-rail5&active=true'":
     handleLab6UfmLeafRail5Ports,
   "show ufm topology": showUfmTopologyByLab,
+  "show rail topology": showUfmTopologyByLab,
   "show dcgm gpu5": showDcgmGpu5,
   "dcgmi dmon -i 5 -c 1": handleLab6DcgmDmonGpu5,
   "dcgmi dmon -i 5 -c 1 -e 1001,1004,1005": handleLab6DcgmDmonGpu5,
