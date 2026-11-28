@@ -3,6 +3,7 @@ import { Image } from "@/components/chapter/MdxImage"
 
 // === Active components (used in current chapters) ===
 import { EnterpriseBaselineViz } from "@/components/visualisations/EnterpriseBaselineViz"
+import { HostHardwarePathViz } from "@/components/visualisations/HostHardwarePathViz"
 import { TrainingParallelismViz } from "@/components/visualisations/TrainingParallelismViz"
 import { NVLinkViz } from "@/components/visualisations/NVLinkViz"
 import { AMDvsNVIDIAInterconnectViz } from "@/components/visualisations/AMDvsNVIDIAInterconnectViz"
@@ -231,6 +232,7 @@ import VNIAllocationViz from "@/components/visualisations/ch27/VNIAllocationViz"
 export const mdxComponents: Record<string, React.ComponentType<any>> = {
   Image: Image as unknown as React.ComponentType<any>,
   EnterpriseBaselineViz,
+  HostHardwarePathViz,
   TrainingParallelismViz,
   NVLinkViz,
   AMDvsNVIDIAInterconnectViz,

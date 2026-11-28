@@ -23,8 +23,8 @@ const COMPONENTS: Component[] = [
     color: "#1e293b",
     borderColor: "#475569",
     description: "The brain of a normal server",
-    detail: "Two CPUs handle everything — compute, network packet processing, storage I/O. In enterprise servers the CPU is the bottleneck. Every network packet passes through the kernel, which the CPU processes. At 25GbE this is manageable. At 400GbE it becomes impossible — CPUs simply cannot process packets fast enough.",
-    specs: ["28 cores each", "56 total cores", "~200W TDP", "Handles all packet processing"],
+    detail: "Two CPUs run applications, the operating system, storage software, data preprocessing, and network protocol processing. Whether the CPU is the bottleneck depends on the workload. A conventional server can be CPU-bound, memory-bound, storage-bound, or network-bound. Modern NICs already help the CPU with DMA and packet-processing offloads; AI networking changes the degree and type of offload required, not whether the NIC has any intelligence at all.",
+    specs: ["28 cores each", "56 total cores", "~200W TDP", "Runs applications and protocol stacks"],
   },
   {
     id: "ram",
@@ -33,7 +33,7 @@ const COMPONENTS: Component[] = [
     color: "#1e293b",
     borderColor: "#475569",
     description: "Working memory for applications",
-    detail: "Standard DDR4 system memory. All network packets pass through system RAM on their way in and out — the kernel buffers them here. This copy operation (kernel space → user space) is one of the things RDMA eliminates entirely in HPC networking.",
+    detail: "System memory is the CPU's working memory. Conventional NICs use DMA to move packet data between the NIC and RAM without the CPU copying each byte. Software may still copy data between kernel and application buffers depending on the API and protocol stack. RDMA registered-memory semantics reduce some of those copies, but setup, orchestration, and application processing still involve host software.",
     specs: ["256–512 GB DDR4", "8-channel", "~200 GB/s bandwidth", "Packets buffered here"],
   },
   {
@@ -43,8 +43,8 @@ const COMPONENTS: Component[] = [
     color: "#1e293b",
     borderColor: "#475569",
     description: "Moves packets to/from the kernel",
-    detail: "A commodity NIC at 25GbE. Its entire job is to hand packets to the kernel and receive packets from the kernel. The CPU processes every packet. The NIC has no intelligence — it is a dumb pipe. This is fine for enterprise workloads. It will not work for GPU training.",
-    specs: ["2× 25 GbE", "50 Gb/s total", "Kernel-mediated", "CPU processes all packets"],
+    detail: "A modern enterprise NIC is not a dumb pipe. It DMAs packet data to and from host memory and commonly supports checksum offload, segmentation offload, receive-side scaling, interrupt moderation, multiple queues, and sometimes additional acceleration. The important distinction is not “no intelligence” versus “all intelligence”; it is which transport and placement operations are implemented in hardware, how memory is registered and protected, and how much host software orchestration remains.",
+    specs: ["2× 25 GbE", "50 Gb/s total", "DMA-capable", "Checksum/RSS/segmentation offload"],
   },
   {
     id: "storage",
@@ -53,8 +53,8 @@ const COMPONENTS: Component[] = [
     color: "#1e293b",
     borderColor: "#475569",
     description: "Application and OS data",
-    detail: "Standard SAS or SATA drives for OS and application data. Nothing exotic. In HPC storage, this gets replaced by NVMe U.2 SSDs with PCIe Gen4 bandwidth — and then further by GPUDirect Storage which bypasses system RAM entirely.",
-    specs: ["8–24 drives", "SAS/SATA", "Sequential read ~1 GB/s", "CPU mediates all I/O"],
+    detail: "Standard SAS or SATA drives for OS and application data. Nothing exotic. In AI infrastructure, local media is often NVMe. Some supported GPUDirect Storage paths can avoid staging data through host CPU memory on the data path, although setup and orchestration still involve host software.",
+    specs: ["8–24 drives", "SAS/SATA", "Exact throughput depends on media", "Host software still orchestrates I/O"],
   },
   {
     id: "switch",
@@ -156,7 +156,7 @@ export function EnterpriseBaselineViz() {
           ) : (
             <div className="flex h-full min-h-[160px] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-slate-600 p-6 text-center gap-3">
               <span>Click any component to understand its role</span>
-              <span className="text-xs text-slate-700">This is the baseline we are about to leave behind</span>
+              <span className="text-xs text-slate-700">A familiar baseline — not a universally non-network-bound one</span>
             </div>
           )}
         </div>

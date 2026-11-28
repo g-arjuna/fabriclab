@@ -609,6 +609,9 @@ export function LabExperience({ labId }: { labId: string }) {
     setPhysicalInfraOutput(null);
   }, [activeLab.id]);
 
+  const hasRealUfmServer = activeDevices.some(
+    (device) => device.type === "ufm-server" && !device.label.startsWith("[SIM ONLY]"),
+  );
   const activeRunbook = PHYSICAL_INFRA_RUNBOOKS[activeLab.id as LabId];
   const physicalInfraDone = activeRunbook
     ? labState.conditions[activeRunbook.completionKey] === true
@@ -801,6 +804,7 @@ export function LabExperience({ labId }: { labId: string }) {
                   </svg>
                   Zoom
                 </button>
+                {hasRealUfmServer ? (
                 <button
                   type="button"
                   onClick={() => setUfmMapOpen(true)}
@@ -826,6 +830,7 @@ export function LabExperience({ labId }: { labId: string }) {
                   </svg>
                   UFM Map
                 </button>
+                ) : null}
               </div>
 
               <div className="h-full">
@@ -890,7 +895,7 @@ export function LabExperience({ labId }: { labId: string }) {
         />
       ) : null}
 
-      {ufmMapOpen ? (
+      {ufmMapOpen && hasRealUfmServer ? (
         <UfmTopologyModal
           activeDevices={activeDevices}
           activeLabTitle={activeLab.title}

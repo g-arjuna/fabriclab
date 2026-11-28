@@ -7,24 +7,24 @@ type Filter = "all" | "changes" | "same"
 const rows = [
   { layer: "NIC firmware mode", ib: "LINK_TYPE = IB(1)", eth: "LINK_TYPE = ETH(2)", changes: true },
   { layer: "NIC addressing", ib: "LID assigned by SM", eth: "MAC + IP address", changes: true },
-  { layer: "Flow control", ib: "Credit-based (protocol)", eth: "PFC + ECN (configured)", changes: true },
-  { layer: "Leaf switches", ib: "QM9700 (IB NDR)", eth: "SN5600 (Ethernet)", changes: true },
-  { layer: "Spine switches", ib: "Q3400 (IB)", eth: "Standard Ethernet", changes: true },
+  { layer: "Congestion/loss design", ib: "Credit-based loss avoidance under correct operation", eth: "Design-dependent; course reference commonly uses PFC/ECN", changes: true },
+  { layer: "Leaf switches", ib: "Example: NVIDIA Quantum-generation IB switches", eth: "Example: Spectrum-generation or other suitable Ethernet switches", changes: true },
+  { layer: "Spine switches", ib: "InfiniBand spine models", eth: "Ethernet spine models", changes: true },
   { layer: "Switch OS", ib: "NVIDIA ONYX", eth: "Cumulus Linux / SONiC", changes: true },
-  { layer: "Fabric management", ib: "UFM — centralised SM", eth: "Distributed, per-switch config", changes: true },
-  { layer: "Lossless mechanism", ib: "Built into protocol", eth: "PFC + ECN on every port", changes: true },
+  { layer: "Fabric management", ib: "Subnet Manager required; UFM optional management platform", eth: "Distributed, per-switch config", changes: true },
+  { layer: "Congestion-loss avoidance", ib: "Credit-based mechanism; failures still possible", eth: "QoS/congestion-control design-dependent; transport recovery remains relevant", changes: true },
   { layer: "Multi-tenancy", ib: "IB partitions (pkeys)", eth: "Standard VLANs / VXLANs", changes: true },
   { layer: "Diagnostic tooling", ib: "ibdiagnet, UFM console", eth: "show dcb pfc, ethtool", changes: true },
-  { layer: "Physical cables", ib: "QSFP56 / OSFP", eth: "QSFP56 / OSFP (same)", changes: false },
-  { layer: "Rail topology", ib: "1 NIC per GPU, per switch", eth: "1 NIC per GPU, per switch (same)", changes: false },
+  { layer: "Physical connectivity", ib: "OSFP/QSFP variants — validate exact support", eth: "OSFP/QSFP variants — form factor alone does not prove interoperability", changes: true },
+  { layer: "Rail topology", ib: "Rail-affinity reference wiring", eth: "Rail-affinity reference wiring can be similar", changes: false },
   { layer: "DGX node hardware", ib: "Unchanged", eth: "Unchanged", changes: false },
   { layer: "NVLink / NVSwitch", ib: "Unchanged", eth: "Unchanged", changes: false },
   { layer: "DGX OS", ib: "Unchanged", eth: "Unchanged", changes: false },
   { layer: "CUDA / framework", ib: "Unchanged", eth: "Unchanged", changes: false },
-  { layer: "Storage fabric", ib: "Always Ethernet (separate)", eth: "Always Ethernet (separate)", changes: false },
-  { layer: "Management network", ib: "Always 1GbE / 10GbE", eth: "Always 1GbE / 10GbE", changes: false },
+  { layer: "Storage fabric", ib: "Deployment-dependent (IB or Ethernet in reference designs)", eth: "Deployment-dependent (IB or Ethernet in reference designs)", changes: false },
+  { layer: "Management network", ib: "Architecture-dependent in-band/out-of-band design", eth: "Architecture-dependent in-band/out-of-band design", changes: false },
   { layer: "ibstat tool", ib: "Works (shows IB layer)", eth: "Works (shows RDMA layer)", changes: false },
-  { layer: "NCCL / training job", ib: "Unchanged", eth: "Unchanged", changes: false },
+  { layer: "NCCL / training job", ib: "Same collective semantics", eth: "Same collective semantics; tuning and transport configuration can differ", changes: false },
 ]
 
 const ibColor = "#818cf8"
@@ -51,7 +51,7 @@ export function IBvsRoCEInfraViz() {
     <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">InfiniBand vs RoCEv2 — infrastructure impact</p>
       <p className="mb-4 text-xs text-slate-500">
-        The ConnectX-7 mode selection propagates through every external layer. The DGX node itself is untouched.
+        Adapter personality and fabric selection affect multiple external layers. Exact ConnectX-7 mode support is SKU- and firmware-dependent.
       </p>
 
       {/* Filter buttons */}

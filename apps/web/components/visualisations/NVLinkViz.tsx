@@ -7,6 +7,7 @@ type View = "nvlink" | "pcie" | "compare"
 export function NVLinkViz() {
   const [view, setView] = useState<View>("nvlink")
   const [hoveredGpu, setHoveredGpu] = useState<number | null>(null)
+  const [directionMode, setDirectionMode] = useState<"direction" | "bidirectional">("direction")
 
   const gpus = [0, 1, 2, 3, 4, 5, 6, 7]
   const gpuPositions = [
@@ -19,15 +20,17 @@ export function NVLinkViz() {
   ]
 
   return (
-    <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
+    <div data-testid="nvlink-viz" className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5">
       <p className="mb-4 text-xs uppercase tracking-widest text-slate-500">
         NVLink — GPU-to-GPU fabric inside a DGX node
       </p>
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-4">
         {(["nvlink", "pcie", "compare"] as View[]).map(v => (
           <button
             key={v}
+            type="button"
+            aria-pressed={view === v}
             onClick={() => setView(v)}
             className="rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
             style={{
@@ -56,7 +59,7 @@ export function NVLinkViz() {
 
             {/* Lines from GPUs to NVSwitches (simplified as spokes) */}
             {gpuPositions.map((gpos, gi) => (
-              nvSwitchPositions.slice(0, 3).map((spos, si) => (
+              nvSwitchPositions.map((spos, si) => (
                 <line key={`${gi}-${si}`}
                   x1={gpos.x} y1={gpos.y}
                   x2={spos.x} y2={spos.y}
@@ -87,20 +90,20 @@ export function NVLinkViz() {
 
             {/* Legend */}
             <text x={10} y={268} fill="#475569" fontSize={8}>
-              Each GPU connects to all 4 NVSwitch chips → 900 GB/s total per GPU → hover to highlight
+              Each GPU connects to all 4 NVSwitch chips · 900 GB/s aggregate bidirectional endpoint bandwidth per GPU
             </text>
           </svg>
 
           <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
             <div className="rounded-xl bg-slate-800 p-3">
-              <div className="text-slate-400 mb-1">Per GPU bandwidth</div>
+              <div className="text-slate-400 mb-1">Per-GPU endpoint bandwidth</div>
               <div className="text-green-300 font-bold text-base">900 GB/s</div>
-              <div className="text-slate-500">to all other GPUs simultaneously</div>
+              <div className="text-slate-500">aggregate bidirectional · 450 GB/s nominal per direction</div>
             </div>
             <div className="rounded-xl bg-slate-800 p-3">
-              <div className="text-slate-400 mb-1">Total fabric bandwidth</div>
+              <div className="text-slate-400 mb-1">System endpoint bandwidth</div>
               <div className="text-green-300 font-bold text-base">7.2 TB/s</div>
-              <div className="text-slate-500">non-blocking, all-to-all</div>
+              <div className="text-slate-500">8 GPUs × 900 GB/s bidirectional endpoints</div>
             </div>
           </div>
         </div>
@@ -110,26 +113,26 @@ export function NVLinkViz() {
         <div>
           <div className="rounded-xl bg-slate-800/50 p-4 mb-4">
             <p className="text-sm leading-7 text-slate-300">
-              Before NVSwitch, multi-GPU systems used PCIe. GPUs were connected to a PCIe root complex (the CPU), and GPU-to-GPU communication went through the CPU's PCIe bus. This meant two GPUs sharing one PCIe link had about 32 GB/s in each direction — roughly 35× slower than NVLink.
+              Before NVSwitch, multi-GPU systems commonly relied on PCIe for GPU-to-GPU communication. PCIe peer-to-peer traffic does not inherently require the CPU to copy data, but the PCIe topology, root-complex placement, and NUMA boundaries constrain bandwidth and latency. PCIe Gen4 x16 provides approximately 31.5 GB/s per direction before transaction-level overhead, far below NVLink 4 at 450 GB/s nominal per direction.
             </p>
             <p className="mt-2 text-sm leading-7 text-slate-300">
-              The first NVLink (2016, used in P100) gave 160 GB/s per GPU. NVLink gen2 (V100): 300 GB/s. NVLink gen3 (A100): 600 GB/s. NVLink gen4 (H100): 900 GB/s. Each generation doubled or nearly doubled the bandwidth.
+              NVLink is commonly quoted as aggregate bidirectional endpoint bandwidth per GPU: gen1 160 GB/s, gen2 300 GB/s, gen3 600 GB/s, and gen4 900 GB/s. The chart below normalizes every row to nominal bandwidth in one direction so PCIe and NVLink can be compared consistently.
             </p>
           </div>
           <div className="space-y-2">
             {[
-              { label: "PCIe Gen 3 x16 (2016)", bw: "32 GB/s", pct: 3.5, color: "#374151" },
-              { label: "PCIe Gen 4 x16 (2019)", bw: "64 GB/s", pct: 7, color: "#374151" },
-              { label: "NVLink gen1 — P100 (2016)", bw: "160 GB/s", pct: 17.7, color: "#065f46" },
-              { label: "NVLink gen2 — V100 (2017)", bw: "300 GB/s", pct: 33.3, color: "#065f46" },
-              { label: "NVLink gen3 — A100 (2020)", bw: "600 GB/s", pct: 66.6, color: "#166534" },
-              { label: "NVLink gen4 — H100 (2022)", bw: "900 GB/s", pct: 100, color: "#15803d" },
+              { label: "PCIe Gen3 x16 / direction", bw: "15.75 GB/s", pct: 3.5, color: "#374151" },
+              { label: "PCIe Gen4 x16 / direction", bw: "31.5 GB/s", pct: 7, color: "#374151" },
+              { label: "NVLink gen1 / direction", bw: "80 GB/s", pct: 17.7, color: "#065f46" },
+              { label: "NVLink gen2 / direction", bw: "150 GB/s", pct: 33.3, color: "#065f46" },
+              { label: "NVLink gen3 / direction", bw: "300 GB/s", pct: 66.6, color: "#166534" },
+              { label: "NVLink gen4 / direction", bw: "450 GB/s", pct: 100, color: "#15803d" },
             ].map(row => (
               <div key={row.label} className="flex items-center gap-3 text-xs">
-                <span className="w-32 flex-shrink-0 text-slate-400 sm:w-44">{row.label}</span>
+                <span className="w-24 flex-shrink-0 text-[10px] leading-4 text-slate-400 sm:w-44 sm:text-xs">{row.label}</span>
                 <div className="flex-1 h-5 rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full rounded-full flex items-center pl-2"
-                    style={{ width: `${row.pct}%`, backgroundColor: row.color, minWidth: 40 }}>
+                    style={{ width: `${row.pct}%`, backgroundColor: row.color }}>
                     <span className="text-white font-semibold text-[10px]">{row.bw}</span>
                   </div>
                 </div>
@@ -141,28 +144,41 @@ export function NVLinkViz() {
 
       {view === "compare" && (
         <div className="space-y-3">
-          <p className="text-sm text-slate-400">Why tensor parallelism stays within a single node:</p>
-          {[
-            { label: "NVLink gen4 (H100 intra-node)", bw: 900, unit: "GB/s", color: "#15803d", note: "Intra-node — NVSwitch" },
-            { label: "InfiniBand NDR 400G (inter-node)", bw: 50, unit: "GB/s", color: "#1d4ed8", note: "Inter-node — external fabric" },
-            { label: "RoCEv2 400GbE (inter-node)", bw: 50, unit: "GB/s", color: "#0369a1", note: "Inter-node — external fabric" },
-            { label: "PCIe Gen5 x16 (host interface)", bw: 128, unit: "GB/s", color: "#374151", note: "NIC to GPU — bidirectional" },
-          ].map(row => (
-            <div key={row.label}>
-              <div className="flex justify-between text-xs mb-1">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-400">Bandwidth comparison using one direction convention at a time:</p>
+            <div className="flex gap-2" role="group" aria-label="Bandwidth comparison convention">
+              {(["direction", "bidirectional"] as const).map((mode) => (
+                <button key={mode} type="button" aria-pressed={directionMode === mode} onClick={() => setDirectionMode(mode)}
+                  className="rounded-lg px-3 py-1.5 text-xs"
+                  style={{ backgroundColor: directionMode === mode ? "#082f49" : "#0f172a", border: `1px solid ${directionMode === mode ? "#38bdf8" : "#1e293b"}`, color: directionMode === mode ? "#bae6fd" : "#94a3b8" }}>
+                  {mode === "direction" ? "Per direction" : "Aggregate bidirectional"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {(directionMode === "direction" ? [
+          { label: "NVLink gen4 per direction", bw: 450, unit: "GB/s", color: "#15803d", note: "900 GB/s aggregate bidirectional endpoint bandwidth" },
+            { label: "400G external per direction", bw: 50, unit: "GB/s", color: "#1d4ed8", note: "400 Gb/s ÷ 8 = 50 GB/s line-rate conversion" },
+            { label: "PCIe Gen5 x16 per direction", bw: 63, unit: "GB/s", color: "#374151", note: "approximate payload-rate figure before transaction-level overhead" },
+          ] : [
+          { label: "NVLink gen4 aggregate bidirectional", bw: 900, unit: "GB/s", color: "#15803d", note: "450 GB/s per direction" },
+            { label: "400G external aggregate bidirectional", bw: 100, unit: "GB/s", color: "#1d4ed8", note: "50 GB/s per direction" },
+            { label: "PCIe Gen5 x16 aggregate bidirectional", bw: 126, unit: "GB/s", color: "#374151", note: "approximately 63 GB/s per direction before overhead" },
+          ]).map(row => (
+            <div key={row.label} data-testid={`bandwidth-row-${row.bw}`}>
+              <div className="flex flex-wrap justify-between gap-x-3 text-xs mb-1">
                 <span className="text-slate-300">{row.label}</span>
                 <span className="text-slate-400">{row.note}</span>
               </div>
-              <div className="h-6 rounded-full bg-slate-800 overflow-hidden">
-                <div className="h-full rounded-full flex items-center px-3"
-                  style={{ width: `${(row.bw / 900) * 100}%`, backgroundColor: row.color, minWidth: 60 }}>
-                  <span className="text-white text-xs font-bold">{row.bw} {row.unit}</span>
-                </div>
+              <div className="relative h-6 rounded-full bg-slate-800 overflow-hidden">
+                <div className="h-full rounded-full" data-testid={`bandwidth-bar-${row.bw}`}
+                  style={{ width: `${(row.bw / (directionMode === "direction" ? 450 : 900)) * 100}%`, backgroundColor: row.color }} />
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-white text-xs font-bold drop-shadow">{row.bw} {row.unit}</span>
               </div>
             </div>
           ))}
           <p className="text-xs text-slate-500 mt-2">
-            NVLink is 18× faster than InfiniBand NDR. This is why tensor parallelism (which requires constant all-to-all communication) runs within a single chassis, never across nodes.
+            The comparison convention is explicit and homogeneous. Per direction, 450 GB/s NVLink versus 50 GB/s for 400G is 9:1. Aggregating both directions gives 900 GB/s versus 100 GB/s, also 9:1. Bar widths are proportional to the displayed numerical values; labels are overlaid rather than inflating small bars.
           </p>
         </div>
       )}

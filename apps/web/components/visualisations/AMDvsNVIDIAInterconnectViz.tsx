@@ -4,55 +4,45 @@ import { useState } from "react"
 
 type PlatformId = "h100" | "mi325x" | "mi350x" | "b200"
 
-const palette = {
-  bg: "#0a0f1a",
-  panel: "#111827",
-  border: "#1e293b",
-  text: "#f1f5f9",
-  muted: "#94a3b8",
-  faint: "#475569",
-  nv: "#76b900",
-  amd: "#ed6c02",
-  future: "#7c3aed",
-  ok: "#22c55e",
-} as const
-
 const platforms = [
   {
     id: "h100" as const,
-    label: "DGX H100",
+    label: "DGX/HGX H100",
     vendor: "NVIDIA",
-    color: palette.nv,
+    color: "#76b900",
     scaleUp: 900,
-    memory: "80 GB HBM2e",
-    memBw: "3.35 TB/s",
-    topology: "NVSwitch hub",
-    detail: "18 NVLink 4.0 links per GPU routed through NVSwitch crossbars.",
-    scaleOut: "ConnectX-7 IB/RoCEv2",
+    scaleMetric: "NVLink 4 endpoint bandwidth per GPU, aggregate bidirectional",
+    memory: "80 GB HBM3 per GPU in DGX H100",
+    memBw: "Up to 3.35 TB/s HBM bandwidth per GPU",
+    topology: "8 GPUs connected through 4 third-generation NVSwitch chips",
+    detail: "The 900 GB/s figure is the GPU endpoint aggregate across both directions. The system bisection metric is different and should not be substituted for endpoint bandwidth.",
+    scaleOut: "ConnectX-7 adapters; native InfiniBand or Ethernet depending on SKU/configuration",
   },
   {
     id: "mi325x" as const,
-    label: "MI325X",
+    label: "Instinct MI325X platform",
     vendor: "AMD",
-    color: palette.amd,
-    scaleUp: 336,
-    memory: "256 GB HBM3E",
-    memBw: "6 TB/s",
-    topology: "Fully meshed xGMI",
-    detail: "8 xGMI links per GPU. Production RCCL often lands around 310-330 GB/s.",
-    scaleOut: "Pollara 400 RoCEv2/UEC",
+    color: "#f97316",
+    scaleUp: 896,
+    scaleMetric: "P2P ring aggregate bandwidth per GPU, vendor aggregate metric",
+    memory: "256 GB HBM3E per OAM",
+    memBw: "6 TB/s peak memory bandwidth per OAM",
+    topology: "8 OAM GPUs fully connected through direct Infinity Fabric/xGMI peer links",
+    detail: "AMD documents 896 GB/s as P2P ring aggregate bandwidth, derived in the comparison model as 7 fully connected peer scale-up links × 128 GB/s. This is a peak architectural figure, not a guaranteed RCCL algorithm or bus-bandwidth measurement.",
+    scaleOut: "Platform-dependent compatible NICs; Pollara is one AMD option, not a universal requirement",
   },
   {
     id: "mi350x" as const,
-    label: "MI350X",
+    label: "Instinct MI350X platform",
     vendor: "AMD",
-    color: "#f97316",
-    scaleUp: 1075,
-    memory: "288 GB HBM3E",
-    memBw: "8 TB/s",
-    topology: "Gen4 xGMI mesh",
-    detail: "7 Gen4 xGMI links and 5.5 TB/s intra-package Infinity Fabric.",
-    scaleOut: "Pollara 400 RoCEv2/UEC",
+    color: "#ef4444",
+    scaleUp: 1075.2,
+    scaleMetric: "P2P ring aggregate bandwidth per GPU, vendor aggregate metric",
+    memory: "288 GB HBM3E per OAM",
+    memBw: "8 TB/s peak memory bandwidth per OAM",
+    topology: "CDNA 4 GPU mesh using redesigned Infinity Fabric links",
+    detail: "AMD ROCm documentation lists 1,075.2 GB/s for MI350X/MI355X P2P ring aggregate bandwidth, corresponding to 7 fully connected peer scale-up links × 153.6 GB/s under the comparison model. AMD product pages can use broader total-I/O metrics; compare only matching scopes.",
+    scaleOut: "Platform-dependent compatible NICs and fabric design",
   },
   {
     id: "b200" as const,
@@ -60,197 +50,127 @@ const platforms = [
     vendor: "NVIDIA",
     color: "#60a5fa",
     scaleUp: 1800,
-    memory: "192 GB HBM3E",
-    memBw: "8 TB/s",
-    topology: "NVSwitch hub",
-    detail: "NVLink 5.0 doubles H100-era scale-up bandwidth.",
-    scaleOut: "ConnectX-8 / BlueField-3",
+    scaleMetric: "NVLink 5 endpoint bandwidth per GPU, aggregate bidirectional",
+    memory: "180 GB HBM3E per GPU; 1,440 GB system total",
+    memBw: "8 TB/s class HBM bandwidth per GPU",
+    topology: "8 GPUs connected through 2 fifth-generation NVLink switch chips",
+    detail: "DGX B200 is an eight-GPU system. It is not the same architecture as rack-scale GB200 NVL72, even though both use Blackwell-generation NVLink.",
+    scaleOut: "ConnectX-7 compute cards plus BlueField-3 storage/in-band cards in the documented DGX B200 configuration",
   },
 ]
 
-function meshLines(color: string) {
+function topologyDiagram(type: "mesh" | "switch", color: string) {
   const points = [
-    [70, 50],
-    [150, 50],
-    [230, 50],
-    [310, 50],
-    [70, 150],
-    [150, 150],
-    [230, 150],
-    [310, 150],
+    [52, 42], [132, 42], [212, 42], [292, 42],
+    [52, 134], [132, 134], [212, 134], [292, 134],
   ]
-
+  if (type === "mesh") {
+    return (
+      <svg viewBox="0 0 344 178" className="h-auto w-full" role="img" aria-label="Simplified direct GPU mesh">
+        {points.map((a, i) => points.slice(i + 1).map((b, j) => (
+          <line key={`${i}-${j}`} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={color} strokeOpacity="0.18" />
+        )))}
+        {points.map(([x, y], i) => (
+          <g key={i}>
+            <circle cx={x} cy={y} r="17" fill="#0f172a" stroke={color} strokeWidth="1.6" />
+            <text x={x} y={y + 3} textAnchor="middle" fill={color} fontSize="9" fontFamily="monospace">G{i}</text>
+          </g>
+        ))}
+      </svg>
+    )
+  }
   return (
-    <>
-      {points.map((a, index) =>
-        points.slice(index + 1).map((b, inner) => (
-          <line
-            key={`${index}-${inner}`}
-            x1={a[0]}
-            y1={a[1]}
-            x2={b[0]}
-            y2={b[1]}
-            stroke={color}
-            strokeOpacity={0.28}
-            strokeWidth={1}
-          />
-        )),
-      )}
-      {points.map((point, index) => (
-        <g key={`gpu-${index}`}>
-          <circle cx={point[0]} cy={point[1]} r={18} fill="#0f1929" stroke={color} strokeWidth={1.6} />
-          <text x={point[0]} y={point[1] + 1} textAnchor="middle" dominantBaseline="middle" fill={color} fontSize={10} fontFamily="monospace">
-            G{index}
-          </text>
+    <svg viewBox="0 0 344 178" className="h-auto w-full" role="img" aria-label="Simplified switch-centered GPU topology">
+      <rect x="132" y="67" width="80" height="42" rx="10" fill="#111827" stroke={color} strokeWidth="1.7" />
+      <text x="172" y="84" textAnchor="middle" fill={color} fontSize="9" fontWeight="700">NVSwitch</text>
+      <text x="172" y="98" textAnchor="middle" fill={color} fontSize="8">system chips</text>
+      {points.map(([x, y], i) => (
+        <g key={i}>
+          <line x1="172" y1="88" x2={x} y2={y} stroke={color} strokeOpacity="0.35" strokeWidth="1.3" />
+          <circle cx={x} cy={y} r="17" fill="#0f172a" stroke={color} strokeWidth="1.6" />
+          <text x={x} y={y + 3} textAnchor="middle" fill={color} fontSize="9" fontFamily="monospace">G{i}</text>
         </g>
       ))}
-    </>
-  )
-}
-
-function nvswitchLines(color: string) {
-  const gpus = [
-    [70, 50],
-    [150, 50],
-    [230, 50],
-    [310, 50],
-    [70, 150],
-    [150, 150],
-    [230, 150],
-    [310, 150],
-  ]
-
-  return (
-    <>
-      <circle cx={190} cy={100} r={38} fill="#162033" stroke={color} strokeWidth={1.8} strokeOpacity={0.8} />
-      <text x={190} y={95} textAnchor="middle" fill={color} fontSize={15} fontWeight="700" fontFamily="monospace">
-        NVS
-      </text>
-      <text x={190} y={111} textAnchor="middle" fill={color} fontSize={11} fontFamily="monospace">
-        x4
-      </text>
-      {gpus.map((point, index) => (
-        <g key={`gpu-${index}`}>
-          <line x1={190} y1={100} x2={point[0]} y2={point[1]} stroke={color} strokeOpacity={0.45} strokeWidth={1.4} />
-          <circle cx={point[0]} cy={point[1]} r={18} fill="#0f1929" stroke={color} strokeWidth={1.6} />
-          <text x={point[0]} y={point[1] + 1} textAnchor="middle" dominantBaseline="middle" fill={color} fontSize={10} fontFamily="monospace">
-            G{index}
-          </text>
-        </g>
-      ))}
-    </>
+    </svg>
   )
 }
 
 export function AMDvsNVIDIAInterconnectViz() {
   const [selected, setSelected] = useState<PlatformId>("h100")
   const current = platforms.find((item) => item.id === selected) ?? platforms[0]
+  const max = 1800
 
   return (
-    <div className="my-8 overflow-x-auto">
-      <div style={{ minWidth: 820, borderRadius: 18, border: `1px solid ${palette.border}`, background: palette.bg, padding: 24, color: palette.text }}>
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ marginBottom: 6, fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: palette.faint }}>
-            Ch0 · Hardware Foundations
-          </div>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Intra-node interconnect: NVIDIA vs AMD</h3>
-          <p style={{ margin: "8px 0 0", fontSize: 12, lineHeight: 1.7, color: palette.muted }}>
-            This compares scale-up bandwidth inside one GPU server. The external Ethernet fabric remains the same operational problem across both vendors.
-          </p>
+    <div className="my-8 rounded-2xl border border-white/10 bg-[#0a0f1a] p-5 text-slate-100">
+      <p className="mb-1 text-xs uppercase tracking-widest text-slate-500">Scale-up interconnect comparison — consistently scoped peak metrics</p>
+      <p className="mb-4 text-xs leading-5 text-slate-500">
+        All values in the bar chart are aggregate bidirectional per-GPU scale-up bandwidth using the vendor-documented metric named in each card. They are not measured collective-library throughput.
+      </p>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {platforms.map((item) => (
+          <button key={item.id} type="button" onClick={() => setSelected(item.id)}
+            className="rounded-full px-3 py-2 text-xs transition"
+            style={{
+              border: `1px solid ${selected === item.id ? item.color : "#1e293b"}`,
+              backgroundColor: selected === item.id ? `${item.color}18` : "#0f172a",
+              color: selected === item.id ? item.color : "#94a3b8",
+            }}>
+            {item.vendor} · {item.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <div className="rounded-xl border border-white/10 bg-slate-950/70 p-4">
+          <div className="mb-2 text-[10px] uppercase tracking-widest text-slate-500">Simplified topology shape</div>
+          {topologyDiagram(current.vendor === "AMD" ? "mesh" : "switch", current.color)}
+          <p className="mt-2 text-xs leading-5 text-slate-400">{current.topology}</p>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        <div className="rounded-xl border border-white/10 bg-slate-950/70 p-4">
+          <div className="mb-3 text-[10px] uppercase tracking-widest text-slate-500">Per-GPU scale-up bandwidth — GB/s aggregate bidirectional</div>
           {platforms.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setSelected(item.id)}
-              style={{
-                borderRadius: 999,
-                border: `1px solid ${selected === item.id ? item.color : palette.border}`,
-                background: selected === item.id ? `${item.color}18` : "transparent",
-                color: selected === item.id ? item.color : palette.muted,
-                padding: "8px 14px",
-                fontFamily: "monospace",
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              {item.vendor} · {item.label}
-            </button>
+            <div key={item.id} className="mb-3">
+              <div className="mb-1 flex flex-wrap justify-between gap-2 text-xs">
+                <span style={{ color: item.id === selected ? item.color : "#94a3b8" }}>{item.label}</span>
+                <span className="font-mono font-semibold" style={{ color: item.id === selected ? item.color : "#94a3b8" }}>{item.scaleUp} GB/s</span>
+              </div>
+              <div className="h-3 overflow-hidden rounded-full bg-slate-800">
+                <div className="h-full rounded-full" style={{ width: `${(item.scaleUp / max) * 100}%`, backgroundColor: item.id === selected ? item.color : "#475569" }} />
+              </div>
+            </div>
           ))}
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 16 }}>
-          <div style={{ borderRadius: 14, border: `1px solid ${palette.border}`, background: palette.panel, padding: 18 }}>
-            <div style={{ marginBottom: 10, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: palette.faint }}>
-              Topology shape
-            </div>
-            <svg viewBox="0 0 380 200" style={{ width: "100%", height: "auto" }}>
-              {current.vendor === "NVIDIA" ? nvswitchLines(current.color) : meshLines(current.color)}
-            </svg>
-            <div style={{ marginTop: 10, fontSize: 11, color: current.color }}>{current.topology}</div>
-          </div>
-
-          <div style={{ display: "grid", gap: 16 }}>
-            <div style={{ borderRadius: 14, border: `1px solid ${palette.border}`, background: palette.panel, padding: 18 }}>
-              <div style={{ marginBottom: 12, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: palette.faint }}>
-                Scale-up bandwidth
-              </div>
-              {platforms.map((item) => (
-                <div key={item.id} style={{ marginBottom: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12 }}>
-                    <span style={{ color: item.id === selected ? item.color : palette.muted }}>{item.label}</span>
-                    <span style={{ color: item.id === selected ? item.color : palette.muted, fontFamily: "monospace", fontWeight: 700 }}>
-                      {item.scaleUp} GB/s
-                    </span>
-                  </div>
-                  <div style={{ height: 10, overflow: "hidden", borderRadius: 999, background: "#1f2937" }}>
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${(item.scaleUp / 1800) * 100}%`,
-                        borderRadius: 999,
-                        background: item.id === selected ? item.color : "#334155",
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ borderRadius: 14, border: `1px solid ${palette.border}`, background: palette.panel, padding: 18 }}>
-              <div style={{ marginBottom: 12, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: palette.faint }}>
-                Selected platform
-              </div>
-              {[
-                ["Memory / GPU", current.memory],
-                ["Memory bandwidth", current.memBw],
-                ["Scale-up topology", current.topology],
-                ["External NIC", current.scaleOut],
-              ].map(([label, value]) => (
-                <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${palette.border}`, fontSize: 12 }}>
-                  <span style={{ color: palette.faint }}>{label}</span>
-                  <span style={{ color: palette.text, fontWeight: 600 }}>{value}</span>
-                </div>
-              ))}
-              <p style={{ margin: "12px 0 0", fontSize: 12, lineHeight: 1.7, color: palette.muted }}>{current.detail}</p>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 16, borderRadius: 14, border: `1px solid ${palette.border}`, background: palette.panel, padding: 18 }}>
-          <div style={{ marginBottom: 10, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: palette.faint }}>
-            External fabric view
-          </div>
-          <p style={{ margin: 0, fontSize: 12, lineHeight: 1.8, color: palette.muted }}>
-            Switches still see the same kind of scale-out problem: 400GbE ports, RoCEv2 transport, PFC-protected lossless queues, and ECN feedback. The switch does not care whether traffic originated from ConnectX-7 or Pollara 400.
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            These peak figures do not predict that one platform's tensor parallelism is universally faster. Achieved collective performance depends on algorithm, message sizes, topology use, software, memory behavior, and workload.
           </p>
-          <div style={{ marginTop: 12, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 11 }}>
-            <span style={{ color: palette.ok }}>Same DSCP / QoS intent on Ethernet fabrics</span>
-            <span style={{ color: palette.ok }}>Same RoCEv2 operational tuning</span>
-            <span style={{ color: palette.future }}>UALink is AMD&apos;s future multi-node scale-up direction</span>
-          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-slate-950/70 p-4">
+          <div className="mb-2 text-[10px] uppercase tracking-widest text-slate-500">Selected platform</div>
+          <dl className="space-y-2 text-xs">
+            {[
+              ["Metric scope", current.scaleMetric],
+              ["Memory", current.memory],
+              ["Memory bandwidth", current.memBw],
+              ["Scale-out networking", current.scaleOut],
+            ].map(([term, value]) => (
+              <div key={term} className="grid gap-1 sm:grid-cols-[130px_1fr]">
+                <dt className="text-slate-500">{term}</dt>
+                <dd className="text-slate-200">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-3 text-xs leading-5 text-slate-400">{current.detail}</p>
+        </div>
+
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+          <div className="mb-2 text-[10px] uppercase tracking-widest text-cyan-300">Network-engineer takeaway</div>
+          <p className="text-sm leading-7 text-slate-300">
+            Scale-up interconnect and scale-out Ethernet are separate resources. AMD nodes do not require one mandatory AMD NIC model; platform vendors choose compatible NICs, drivers, transports, switches, QoS, congestion-control behavior, and telemetry. RoCEv2 and Ultra Ethernet are not interchangeable names. UALink is a scale-up accelerator interconnect initiative; UEC is a scale-out networking initiative.
+          </p>
         </div>
       </div>
     </div>

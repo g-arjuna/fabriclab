@@ -100,9 +100,9 @@ export const SOLUTION_GUIDES: Record<string, SolutionGuide> = {
     title: "Step-by-step command guide",
     steps: [
       {
-        title: "Identify the failed rail and interface mapping in UFM",
-        details: "Use the UFM topology view to map Rail 3 to leaf-rail3 swp5 and DGX mlx5_3 / eth3.",
-        commands: [{ deviceId: "ufm-server", command: "show ufm topology" }],
+        title: "Identify the failed rail and interface mapping in the fabric inventory",
+        details: "Use the fabric-inventory topology view to map Rail 3 to leaf-rail3 swp5 and DGX mlx5_3 / eth3.",
+        commands: [{ deviceId: "ufm-server", command: "show rail topology" }],
       },
       {
         title: "Confirm the DGX-side RDMA and NIC view",
@@ -114,7 +114,7 @@ export const SOLUTION_GUIDES: Record<string, SolutionGuide> = {
       },
       {
         title: "Inspect leaf-rail3 swp5 with NVUE",
-        details: "Use the rail-to-port mapping from UFM to inspect the Cumulus leaf interface and confirm the linkflap/protodown fault.",
+        details: "Use the rail-to-port mapping from the inventory server to inspect the Cumulus leaf interface and confirm the linkflap/protodown fault.",
         commands: [{ deviceId: "leaf-rail3", command: "nv show interface swp5 link" }],
       },
     ],

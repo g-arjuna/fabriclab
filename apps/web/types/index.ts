@@ -1,9 +1,20 @@
 export interface RailState {
   id: number
   nicName: string
+  netdevName?: string
+  leafId?: string
+  leafInterface?: string
+  adminState?: 'up' | 'down'
   nicState: 'up' | 'down'
+  carrierState?: 'up' | 'down'
+  rdmaPortState?: 'active' | 'down'
   switchPort: 'up' | 'down' | 'error-disabled' | 'admin-down'
+  switchAdminState?: 'up' | 'down'
+  switchCarrierState?: 'up' | 'down'
+  protodownReason?: 'linkflap' | null
+  speedGbps?: number
   guid: string
+  portGuid?: string
 }
 
 export interface TopologyState {

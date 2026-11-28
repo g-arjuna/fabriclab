@@ -25,7 +25,7 @@ export function TopologyView({ compact = false }: { compact?: boolean }) {
     }
 
     if (labId === "lab0-failed-rail" && rails && rails.length > 0) {
-      return <RailTopologyDiagram rails={rails} compact={compact} />;
+      return <RailTopologyDiagram rails={rails} compact={compact} faultLabel="protodown" />;
     }
 
     if (labId === "lab3-uneven-spine" || labId === "lab5-nccl-diagnosis") {
@@ -430,7 +430,7 @@ function SpineLoadBalancingDiagram({
   );
 }
 
-function RailTopologyDiagram({ rails, compact = false }: { rails: RailState[]; compact?: boolean }) {
+function RailTopologyDiagram({ rails, compact = false, faultLabel = "error-disabled" }: { rails: RailState[]; compact?: boolean; faultLabel?: "error-disabled" | "protodown" }) {
   const svgWidth = 560;
   const svgHeight = 320;
   const railColors = {
@@ -540,11 +540,11 @@ function RailTopologyDiagram({ rails, compact = false }: { rails: RailState[]; c
                   Leaf {rail.id}
                 </text>
                 <text x={switchX + 24} y={223} textAnchor="middle" fill={switchColor} fontSize="5">
-                  {rail.switchPort === "up" ? "UP" : "ERR"}
+                  {rail.switchPort === "up" ? "UP" : faultLabel === "protodown" ? "PROTO" : "ERR"}
                 </text>
                 {isDegraded ? (
                   <text x={switchX + 24} y={232} textAnchor="middle" fill="#ef4444" fontSize="5">
-                    DISABLED
+                    DOWN
                   </text>
                 ) : null}
               </g>
@@ -557,7 +557,7 @@ function RailTopologyDiagram({ rails, compact = false }: { rails: RailState[]; c
           </text>
           <circle cx="175" cy="260" r="4" fill="#ef4444" />
           <text x="183" y="264" fill="#64748b" fontSize="8">
-            Error-disabled
+            {faultLabel === "protodown" ? "Protodown/linkflap" : "Error-disabled"}
           </text>
           <line
             x1="260"
@@ -591,7 +591,7 @@ function RailTopologyDiagram({ rails, compact = false }: { rails: RailState[]; c
                 >
                   <div style={{ color: isActive ? "#4ade80" : "#f87171" }}>Rail {rail.id}</div>
                   <div className="text-[9px] text-slate-600">
-                    {isActive ? "OK" : "ERR-DISABLED"}
+                    {isActive ? "OK" : faultLabel === "protodown" ? "PROTDOWN" : "ERR-DISABLED"}
                   </div>
                 </div>
               );

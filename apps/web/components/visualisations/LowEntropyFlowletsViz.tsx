@@ -2,173 +2,132 @@
 
 import { useState } from "react"
 
-type ScenarioId = "high_entropy" | "low_entropy"
+type Mode = "static" | "sufficient" | "insufficient"
 
-const scenarios = [
-  {
-    id: "high_entropy" as const,
-    label: "High entropy (normal web traffic)",
-    caption: "Many different 5-tuples -> different hash outputs -> even distribution",
-    spineUtil: [25, 24, 27, 24],
-    spineColors: ["#22c55e", "#22c55e", "#22c55e", "#22c55e"],
-    tupleLines: [
-      "Clients 10.0.x.x -> services 172.16.x.x",
-      "src ports: varied",
-      "dst ports: 80, 443, 5432, 6379",
-      "hash output: evenly spread",
+const modeInfo: Record<Mode, {
+  label: string
+  title: string
+  detail: string
+  spineUtil: number[]
+  packets: { id: string; time: number; path: 1 | 3; state: "ordered" | "moved" | "reordered" }[]
+}> = {
+  static: {
+    label: "Static ECMP",
+    title: "One flow remains pinned to one hash-selected member",
+    detail: "Flow A and Flow B are distinct five-tuples, but the illustrative hash maps both to Spine 1. Their offered traffic collides while Spine 3 has spare capacity. ECMP does not split the continuous Flow A burst merely because utilization is unequal.",
+    spineUtil: [100, 12, 8, 10],
+    packets: [
+      { id: "A1", time: 10, path: 1, state: "ordered" }, { id: "A2", time: 20, path: 1, state: "ordered" }, { id: "A3", time: 30, path: 1, state: "ordered" },
+      { id: "A4", time: 68, path: 1, state: "ordered" }, { id: "A5", time: 78, path: 1, state: "ordered" },
     ],
-    leftNodes: ["Client A", "Client B", "Client C", "Client D"],
-    rightNodes: ["Web 1", "API 2", "DB 3", "Cache 4"],
   },
-  {
-    id: "low_entropy" as const,
-    label: "Low entropy (RoCEv2 AllReduce)",
-    caption: "Similar 5-tuples -> same hash output -> hot links + idle links",
-    spineUtil: [92, 88, 8, 4],
-    spineColors: ["#ef4444", "#ef4444", "#334155", "#334155"],
-    tupleLines: [
-      "DGX 10.1.0.x <-> DGX 10.1.0.y",
-      "protocol: UDP",
-      "dst port: 4791 always",
-      "src port: small QP-derived range",
+  sufficient: {
+    label: "Sufficient flowlet gap",
+    title: "A sufficiently large idle gap creates a flowlet boundary",
+    detail: "Packets A1–A3 form one flowlet within Flow A. After a gap large enough for the implementation and differential path delay, packets A4–A5 may form a second flowlet of the same flow and be placed on another eligible path. Because earlier packets have had time to drain, reordering is unlikely in this simplified example.",
+    spineUtil: [72, 12, 62, 10],
+    packets: [
+      { id: "A1", time: 10, path: 1, state: "ordered" }, { id: "A2", time: 20, path: 1, state: "ordered" }, { id: "A3", time: 30, path: 1, state: "ordered" },
+      { id: "A4", time: 68, path: 3, state: "moved" }, { id: "A5", time: 78, path: 3, state: "moved" },
     ],
-    leftNodes: ["DGX A", "DGX B", "DGX C", "DGX D"],
-    rightNodes: ["DGX E", "DGX F", "DGX G", "DGX H"],
   },
-]
-
-const flowletPanels = [
-  {
-    title: "Simultaneous flowlets",
-    summary: "GPU A->B and GPU C->B can look identical to the switch at the IP/UDP header level.",
-    detail:
-      "The switch cannot distinguish the flows well enough to spread them. Both get pinned to the same path, one spine link saturates, and neighbouring links remain underused.",
-    accent: "#60a5fa",
+  insufficient: {
+    label: "Insufficient gap",
+    title: "Changing paths inside a continuous burst can reorder packets",
+    detail: "If the gap is smaller than the safe flowlet threshold for the implementation and differential path delay, A4 can be moved while A3 is still effectively in flight. A shorter or less congested new path can deliver A4 before A3. Transport or receiver hardware must then tolerate or repair reordering.",
+    spineUtil: [76, 12, 58, 10],
+    packets: [
+      { id: "A1", time: 10, path: 1, state: "ordered" }, { id: "A2", time: 20, path: 1, state: "ordered" }, { id: "A3", time: 30, path: 1, state: "reordered" },
+      { id: "A4", time: 37, path: 3, state: "reordered" }, { id: "A5", time: 47, path: 3, state: "moved" },
+    ],
   },
-  {
-    title: "Sequential flowlets",
-    summary: "Job 1 ends on A->B. Job 2 starts on the same pair with the same headers.",
-    detail:
-      "The switch keeps the new traffic pinned to the old path because it never sees a meaningfully new flow. Congestion persists even after the workload has changed.",
-    accent: "#f59e0b",
-  },
-]
+}
 
 export function LowEntropyFlowletsViz() {
-  const [activeScenario, setActiveScenario] = useState<ScenarioId>("low_entropy")
-  const scenario = scenarios.find((item) => item.id === activeScenario) ?? scenarios[0]
+  const [mode, setMode] = useState<Mode>("sufficient")
+  const current = modeInfo[mode]
 
   return (
-    <div className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-lg shadow-slate-950/30">
-      <p className="mb-4 text-xs uppercase tracking-[0.28em] text-slate-500">
-        Entropy, ECMP, and flowlets
-      </p>
-
-      <div className="mb-5 flex flex-wrap gap-2">
-        {scenarios.map((item) => {
-          const isActive = item.id === activeScenario
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setActiveScenario(item.id)}
-              className="w-full rounded-xl px-3 py-2 text-left text-xs transition sm:w-auto"
-              style={{
-                backgroundColor: isActive ? "#13243b" : "#0f172a",
-                border: `1px solid ${isActive ? "#38bdf8" : "#1e293b"}`,
-                color: isActive ? "#e0f2fe" : "#94a3b8",
-              }}
-            >
-              <div className="font-semibold">{item.label}</div>
-              <div className="mt-0.5 text-[10px] opacity-75">{item.caption}</div>
-            </button>
-          )
-        })}
+    <div data-testid="flowlet-viz" className="my-8 rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-lg shadow-slate-950/30">
+      <p className="mb-4 text-xs uppercase tracking-[0.28em] text-slate-500">Entropy, ECMP, and flowlets — concrete mechanism</p>
+      <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Flowlet mode">
+        {(Object.keys(modeInfo) as Mode[]).map((id) => (
+          <button key={id} type="button" aria-pressed={id === mode} onClick={() => setMode(id)}
+            className="rounded-xl px-3 py-2 text-left text-xs transition"
+            style={{ backgroundColor: id === mode ? "#13243b" : "#0f172a", border: `1px solid ${id === mode ? "#38bdf8" : "#1e293b"}`, color: id === mode ? "#e0f2fe" : "#94a3b8" }}>
+            {modeInfo[id].label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_0.9fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
-          <p className="mb-3 text-[10px] uppercase tracking-[0.28em] text-slate-500">
-            ECMP distribution view
-          </p>
-
-          <div className="flex flex-col gap-4 md:grid md:grid-cols-[1fr_auto_1fr] md:items-center">
-            <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
-              {scenario.leftNodes.map((node) => (
-                <div
-                  key={node}
-                  className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100"
-                >
-                  {node}
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-2">
-              {scenario.spineUtil.map((util, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <span className="w-14 text-[10px] text-slate-500">Spine {index + 1}</span>
-                  <div className="h-10 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-800 md:w-24 md:flex-none">
-                    <div
-                      className="flex h-full items-center justify-center text-[10px] font-semibold text-white transition-all duration-500"
-                      style={{
-                        width: `${Math.max(util, 16)}%`,
-                        backgroundColor: scenario.spineColors[index],
-                      }}
-                    >
-                      {util}%
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
-              {scenario.rightNodes.map((node) => (
-                <div
-                  key={node}
-                  className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100"
-                >
-                  {node}
-                </div>
-              ))}
+          <div className="rounded-xl border border-white/8 bg-slate-900/70 p-3">
+            <p className="mb-2 text-[10px] uppercase tracking-[0.28em] text-slate-500">Illustrative hash inputs</p>
+            <div className="space-y-1 font-mono text-[11px] leading-5 text-slate-300" data-testid="flowlet-hash-example">
+              <p>Flow A: UDP 10.1.0.11:50001 → 10.1.0.22:4791 → hash bucket Spine 1</p>
+              <p>Flow B: UDP 10.1.0.12:50002 → 10.1.0.23:4791 → hash bucket Spine 1</p>
+              <p className="text-slate-500">Distinct five-tuples, same compressed ECMP member: a hash collision.</p>
             </div>
           </div>
 
           <div className="mt-4 rounded-xl border border-white/8 bg-slate-900/70 p-3">
-            <p className="mb-2 text-[10px] uppercase tracking-[0.28em] text-slate-500">
-              Representative 5-tuple characteristics
-            </p>
-            <div className="space-y-1">
-              {scenario.tupleLines.map((line) => (
-                <p key={line} className="break-all font-mono text-[11px] text-slate-300">
-                  {line}
-                </p>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500">Flow A packet timeline</p>
+              <p className="text-[10px] text-slate-500">time increases left to right; long blank interval is the flowlet gap</p>
+            </div>
+            <svg viewBox="0 0 540 150" className="w-full" role="img" aria-label={`Flowlet timeline: ${current.label}`} data-testid={`flowlet-timeline-${mode}`}>
+              <line x1="35" y1="72" x2="510" y2="72" stroke="#334155" strokeWidth="2" />
+              <line x1="35" y1="35" x2="510" y2="35" stroke="#1e293b" strokeDasharray="4 4" />
+              <line x1="35" y1="112" x2="510" y2="112" stroke="#1e293b" strokeDasharray="4 4" />
+              <text x="8" y="39" fill="#64748b" fontSize="9">S1</text>
+              <text x="8" y="116" fill="#64748b" fontSize="9">S3</text>
+              {current.packets.map((packet) => {
+                const x = 45 + packet.time * 5.7
+                const y = packet.path === 1 ? 35 : 112
+                const color = packet.state === "reordered" ? "#ef4444" : packet.state === "moved" ? "#38bdf8" : "#22c55e"
+                return (
+                  <g key={packet.id} data-testid={`flowlet-packet-${packet.id}`} data-path={`spine-${packet.path}`} data-state={packet.state}>
+                    <line x1={x} y1={72} x2={x} y2={y} stroke={color} strokeWidth="1.4" opacity="0.7" />
+                    <rect x={x - 16} y={y - 12} width="32" height="24" rx="6" fill="#0f172a" stroke={color} strokeWidth="1.5" />
+                    <text x={x} y={y + 4} textAnchor="middle" fill={color} fontSize="9" fontWeight="700">{packet.id}</text>
+                  </g>
+                )
+              })}
+              <path d="M220 74 C270 88 320 88 370 74" fill="none" stroke="#f59e0b" strokeDasharray="5 4" />
+              <text x="295" y="94" textAnchor="middle" fill="#fbbf24" fontSize="8">inter-packet gap → possible flowlet boundary</text>
+            </svg>
+            <p className="mt-2 text-xs leading-6 text-slate-400">Packets 1–3 form one flowlet. Packets 4–5 can form another flowlet of the same five-tuple flow when the gap is sufficient. A flowlet is not a different network flow.</p>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-white/8 bg-slate-900/70 p-3">
+            <p className="mb-3 text-[10px] uppercase tracking-[0.28em] text-slate-500">Illustrative carried utilization</p>
+            <div className="space-y-2">
+              {current.spineUtil.map((util, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="w-14 text-[10px] text-slate-500">Spine {index + 1}</span>
+                  <div className="relative h-5 flex-1 overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full" data-testid={`flowlet-util-spine-${index + 1}`} data-width-pct={util} style={{ width: `${util}%`, backgroundColor: util >= 90 ? "#ef4444" : util >= 60 ? "#f59e0b" : "#334155" }} />
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-white drop-shadow">{util}%</span>
+                  </div>
+                </div>
               ))}
             </div>
+            <p className="mt-2 text-[10px] leading-5 text-slate-500">Bar widths are proportional to the stated percentages. These values are illustrative, not measurements.</p>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
-          <p className="mb-3 text-[10px] uppercase tracking-[0.28em] text-slate-500">
-            Why the hash behaves this way
-          </p>
-          <p className="text-sm leading-7 text-slate-300">{scenario.caption}</p>
-
-          <div className="mt-4 space-y-3">
-            {flowletPanels.map((panel) => (
-              <div
-                key={panel.title}
-                className="rounded-xl border bg-slate-900/70 p-3"
-                style={{ borderColor: `${panel.accent}33` }}
-              >
-                <p className="text-xs font-semibold" style={{ color: panel.accent }}>
-                  {panel.title}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-300">{panel.summary}</p>
-                <p className="mt-2 text-xs leading-6 text-slate-400">{panel.detail}</p>
-              </div>
-            ))}
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
+            <h3 className="text-sm font-semibold text-sky-200">{current.title}</h3>
+            <p className="mt-3 text-sm leading-7 text-slate-300">{current.detail}</p>
+          </div>
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+            <p className="text-xs font-semibold text-blue-200">Flowlet routing is not packet spraying</p>
+            <p className="mt-2 text-sm leading-7 text-slate-300">Flowlet routing changes path only at selected burst boundaries within a flow. Packet spraying distributes individual packets or controlled packet groups much more aggressively and therefore creates a stronger reordering requirement. Both are different from conventional static per-flow ECMP.</p>
+          </div>
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+            <p className="text-sm leading-7 text-amber-100">A safe flowlet gap depends on differential path delay, implementation timers, queueing, and transport reordering tolerance. There is no universal microsecond value.</p>
           </div>
         </div>
       </div>

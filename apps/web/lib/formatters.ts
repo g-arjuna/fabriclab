@@ -1,6 +1,8 @@
 export function formatConditionLabel(key: string): string {
   const labels: Record<string, string> = {
     railIdentified: "Rail identified",
+    rdmaEvidence: "RDMA port evidence inspected",
+    nicEvidence: "NIC counter evidence inspected",
     ufmRailMapChecked: "UFM rail map checked",
     hcaInventoryChecked: "DGX HCA inventory checked",
     rdmaNetdevMapChecked: "RDMA to netdev mapping checked",
